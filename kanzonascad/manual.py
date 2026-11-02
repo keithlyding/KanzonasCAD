@@ -129,7 +129,8 @@ white lines.</li>
 <li><b>Undo</b> (Ctrl+Z) and <b>Redo</b> (Ctrl+Y or Ctrl+Shift+Z): every change, including
 sheet and layer changes, can be undone.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
-insertion point (the copied objects' lower left corner lands there). Works between projects.</li>
+insertion point (the copied objects' lower left corner lands there). Works between projects,
+and after KanzonasCAD is closed and started again.</li>
 <li><b>Delete</b> erases the selection.</li>
 </ul>
 

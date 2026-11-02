@@ -204,6 +204,13 @@ class InteractionTest(unittest.TestCase):
         self.assertEqual(len(ents(v)), 2)
         new = [e for e in ents(v) if e.id != ln.id][0]
         self.assertEqual(new.p1, (5.0, 5.0))
+        # handed over as text before quitting, it still pastes
+        from kanzonascad.main_window import hand_over_clipboard
+        hand_over_clipboard()
+        self.win.paste()
+        self.assertIsInstance(v.cmd, C.PasteCmd)
+        type_in(v, "7,7")
+        self.assertEqual(len(ents(v)), 3)
 
     def test_sheets_and_layers_from_the_window(self):
         w, v = self.win, self.v
@@ -299,7 +306,8 @@ class FileTest(unittest.TestCase):
             ed.add_sheet(M.Sheet(title="Two", size="ANSI A (11 x 8.5)"))
         path = os.path.join(tempfile.mkdtemp(), "out.pdf")
         self.assertEqual(fileio.export_pdf(p, path), 2)
-        data = open(path, "rb").read()
+        with open(path, "rb") as f:
+            data = f.read()
         self.assertTrue(data.startswith(b"%PDF"))
         boxes = re.findall(rb"/MediaBox\s*\[\s*0 0 ([\d.]+) ([\d.]+)", data)
         sizes = sorted((round(float(w)), round(float(h))) for w, h in boxes)

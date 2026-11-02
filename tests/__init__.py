@@ -30,6 +30,8 @@ def _shutdown_qt():
     app = QApplication.instance()
     if app is None:
         return
+    from kanzonascad.main_window import hand_over_clipboard
+    hand_over_clipboard()
     for _ in range(3):              # timers the tests left queued run while views exist
         app.processEvents()
     for w in QApplication.topLevelWidgets():

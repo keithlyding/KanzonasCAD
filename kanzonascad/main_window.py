@@ -23,7 +23,19 @@ from .view import CadView
 
 APP = "KanzonasCAD"
 CLIP_MIME = "application/x-kanzonascad-entities"
+CLIP_TEXT = "KanzonasCAD objects:"      # the same data as plain text (see hand_over_clipboard)
 MAX_RECENT = 10
+
+
+def hand_over_clipboard():
+    """Before quitting: put objects this app copied back on the clipboard as plain text that
+    Qt itself owns. Qt for Python crashes at exit while the clipboard holds data made in
+    Python (seen on Linux and Windows); the text keeps the objects pasteable in a
+    KanzonasCAD started later (paste reads it)."""
+    cb = QGuiApplication.clipboard()
+    mime = cb.mimeData()
+    if mime is not None and mime.hasFormat(CLIP_MIME):
+        cb.setText(CLIP_TEXT + bytes(mime.data(CLIP_MIME)).decode("utf-8"))
 
 
 class Document(QWidget):
@@ -398,6 +410,7 @@ class MainWindow(QMainWindow):
                 return
         self.settings.setValue("geometry", self.saveGeometry())
         self.settings.setValue("window_state", self.saveState())
+        hand_over_clipboard()
         e.accept()
 
     # ---- opening and saving ----------------------------------------------------------------
@@ -625,12 +638,19 @@ class MainWindow(QMainWindow):
     def paste(self):
         v = self.view()
         mime = QGuiApplication.clipboard().mimeData()
-        if v is None or mime is None or not mime.hasFormat(CLIP_MIME):
+        if v is None or mime is None:
+            return
+        if mime.hasFormat(CLIP_MIME):
+            raw = bytes(mime.data(CLIP_MIME)).decode("utf-8")
+        elif mime.hasText() and mime.text().startswith(CLIP_TEXT):
+            raw = mime.text()[len(CLIP_TEXT):]
+        else:
             return
         try:
-            data = json.loads(bytes(mime.data(CLIP_MIME)).decode("utf-8"))
+            data = json.loads(raw)
             ents = [M.Entity.from_dict(d) for d in data["entities"]]
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError) as ex:
+            self.statusBar().showMessage("The clipboard's objects can't be read: %s" % ex, 5000)
             return
         for e in ents:
             v.project.ensure_layer(e.layer)
