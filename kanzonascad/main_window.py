@@ -724,10 +724,10 @@ class MainWindow(QMainWindow):
         v = self.view()
         if v is None:
             return
-        text, ok = QInputDialog.getText(self, "Edit text", "Text:", text=ent.text)
-        if ok and text != ent.text and text.strip():
+        new = dialogs.edit_text_dialog(self, ent)
+        if new is not None:
             with v.project.edit("Edit text") as ed:
-                ed.change(v.sheet(), ent.copy(text=text))
+                ed.change(v.sheet(), new)
 
     def _view_menu(self, gpos):
         v = self.view()

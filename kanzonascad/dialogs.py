@@ -1,6 +1,8 @@
 """Dialogs: sheet properties, project properties (title block fields), layers, drafting
 settings. Every change they make goes through one undoable Edit."""
 
+import math
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QSpinBox,
@@ -339,3 +341,55 @@ def drafting_settings(parent, view):
     view.crosshair_full = full.isChecked()
     view.update()
     return True
+
+
+def edit_text_dialog(parent, ent):
+    """A text's wording, height, angle and justification. Returns the changed Text, or None."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Edit text")
+    form = QFormLayout(dlg)
+    text = QLineEdit(ent.text)
+    text.selectAll()
+    height = QDoubleSpinBox()
+    height.setDecimals(4)
+    height.setRange(0.001, 100)
+    height.setSuffix(" in")
+    height.setValue(ent.height)
+    angle = QDoubleSpinBox()
+    angle.setDecimals(2)
+    angle.setRange(-360, 360)
+    angle.setSuffix(" \u00b0")
+    angle.setValue(ent.angle)
+    just = QComboBox()
+    names = {"L": "Left (baseline)", "C": "Center (baseline)", "R": "Right (baseline)",
+             "TL": "Top left", "TC": "Top center", "TR": "Top right",
+             "ML": "Middle left", "MC": "Middle center", "MR": "Middle right",
+             "BL": "Bottom left", "BC": "Bottom center", "BR": "Bottom right"}
+    for code in ("TL", "TC", "TR", "ML", "MC", "MR", "BL", "BC", "BR", "L", "C", "R"):
+        just.addItem("%s  (%s)" % (names[code], code), code)
+    just.setCurrentIndex(just.findData(M.justify_code(ent.align, ent.valign)))
+    keep = QCheckBox("Keep the text where it is on the drawing")
+    keep.setChecked(True)
+    keep.setToolTip("Changing the justification moves the insertion point instead of the text")
+    form.addRow("Text", text)
+    form.addRow("Height", height)
+    form.addRow("Angle", angle)
+    form.addRow("Justification", just)
+    form.addRow("", keep)
+    form.addRow(_buttons(dlg))
+    if dlg.exec() != QDialog.Accepted or not text.text().strip():
+        return None
+    align, valign = M.JUSTIFY[just.currentData()]
+    new = ent.copy(text=text.text(), height=height.value(), angle=angle.value() % 360.0,
+                   align=align, valign=valign)
+    if keep.isChecked() and (align, valign) != (ent.align, ent.valign):
+        # move the insertion point by the change of offset, so the text's box stays put
+        same = new.copy(align=ent.align, valign=ent.valign)
+        (ox, oy), (nx, ny) = same.offset(), new.offset()
+        dx, dy = ox - nx, oy - ny
+        a = math.radians(new.angle)
+        new = new.copy(pos=[ent.pos[0] + dx * math.cos(a) - dy * math.sin(a),
+                            ent.pos[1] + dx * math.sin(a) + dy * math.cos(a)])
+    if new.to_dict() == ent.to_dict():
+        return None
+    return new

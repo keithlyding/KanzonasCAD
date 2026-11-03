@@ -593,3 +593,41 @@ class CrosshairTest(unittest.TestCase):
             w.settings.setValue("crosshair_full", False)
             v.project.saved_at = len(v.project.undo_stack)
             w.close()
+
+
+class TextJustifyTest(unittest.TestCase):
+    def test_justifications_place_the_box(self):
+        t = M.Text((0, 0), "ABC", 0.2, 0, "center", "middle")
+        x0, y0, x1, y1 = t.bbox()
+        self.assertAlmostEqual((x0 + x1) / 2, 0)
+        self.assertAlmostEqual((y0 + y1) / 2, 0)
+        top = M.Text((0, 0), "ABC", 0.2, 0, "right", "top")
+        self.assertAlmostEqual(top.bbox()[2], 0)
+        self.assertAlmostEqual(top.bbox()[3], 0)
+        d = top.to_dict()
+        self.assertEqual(M.Entity.from_dict(d).valign, "top")
+        self.assertNotIn("valign", M.Text((0, 0), "x").to_dict())       # old files unchanged
+
+    def test_text_command_justify_option(self):
+        w, v = window()
+        try:
+            v.snap_on = v.osnap_on = False
+            v.run(C.TextCmd)
+            type_in(v, "J", "MC", "5,5", "0.2", "0", "CR601", "")
+            t = [e for e in v.sheet().entities.values()][0]
+            self.assertEqual((t.align, t.valign, t.pos), ("center", "middle", (5.0, 5.0)))
+            self.assertEqual(v.text_justify, ("center", "middle"))
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            w.close()
+
+    def test_dxf_keeps_justification(self):
+        p = M.Project.new()
+        with p.edit("t") as ed:
+            ed.add(p.sheets[0], M.Text((5, 5), "TOP", 0.2, 0, "right", "top"))
+            ed.add(p.sheets[0], M.Text((6, 6), "MID", 0.2, 30, "center", "middle"))
+        path = os.path.join(tempfile.mkdtemp(), "j.dxf")
+        fileio.export_dxf(p, p.sheets[0], path, include_frame=False)
+        ents, _r = fileio.read_dxf(path)
+        got = sorted((e.text, e.align, e.valign, round(e.pos[0], 6)) for e in ents)
+        self.assertEqual(got, [("MID", "center", "middle", 6.0), ("TOP", "right", "top", 5.0)])

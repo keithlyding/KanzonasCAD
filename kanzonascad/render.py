@@ -54,12 +54,11 @@ def text_path(t):
     p = QPainterPath()
     p.addText(QPointF(0, 0), f, t.text)
     k = t.height / _font_cache["cap"]
-    w = _font_cache["fm"].horizontalAdvance(t.text) * k
-    dx = {"left": 0.0, "center": -w / 2, "right": -w}[t.align]
+    dx, dy = t.offset()
     tr = QTransform()
     tr.translate(t.pos[0], t.pos[1])
     tr.rotate(t.angle)
-    tr.translate(dx, 0)
+    tr.translate(dx, dy)
     tr.scale(k, -k)                 # glyphs are y-down; the drawing is y-up
     return tr.map(p)
 

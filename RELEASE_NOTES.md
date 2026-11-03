@@ -17,6 +17,8 @@ build fails without them.
   parts link a manufacturer and catalog number to both.
 - Scale by Reference brings a manufacturer's drawing to its real size; lengths can be typed in
   millimeters (45mm).
+- Text justification like AutoCAD's (top, middle, bottom; left, center, right), and
+  double-click a text to change its wording, height, angle or justification.
 
 ## 0.1
 

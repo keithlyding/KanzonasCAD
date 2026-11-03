@@ -440,39 +440,71 @@ class Arc(Entity):
                          end=e % 360.0)
 
 
+# where a text's insertion point sits, as AutoCAD's justifications (TEXT, Justify):
+# align: left, center, right; valign: baseline, bottom (under the descenders), middle (half
+# the capital height), top (the capitals' top)
+VALIGNS = ("baseline", "bottom", "middle", "top")
+DESCENT = 0.3           # descenders reach this share of the text height under the baseline
+JUSTIFY = {             # AutoCAD's letters -> (align, valign)
+    "L": ("left", "baseline"), "C": ("center", "baseline"), "R": ("right", "baseline"),
+    "TL": ("left", "top"), "TC": ("center", "top"), "TR": ("right", "top"),
+    "ML": ("left", "middle"), "MC": ("center", "middle"), "MR": ("right", "middle"),
+    "BL": ("left", "bottom"), "BC": ("center", "bottom"), "BR": ("right", "bottom"),
+}
+
+
+def justify_code(align, valign):
+    for k, v in JUSTIFY.items():
+        if v == (align, valign):
+            return k
+    return "L"
+
+
 @_register
 class Text(Entity):
-    """One line of text. pos is the insertion point on the baseline; align: left, center or
-    right of pos."""
+    """One line of text. pos is the insertion point; align (left, center, right) and valign
+    (baseline, bottom, middle, top) say where the text sits around it."""
     kind = "text"
-    __slots__ = ("pos", "text", "height", "angle", "align")
+    __slots__ = ("pos", "text", "height", "angle", "align", "valign")
 
-    def __init__(self, pos, text, height=0.125, angle=0.0, align="left", **kw):
+    def __init__(self, pos, text, height=0.125, angle=0.0, align="left", valign="baseline",
+                 **kw):
         super().__init__(**kw)
         self.pos = _pt(pos)
         self.text = str(text)
         self.height = float(height)
         self.angle = float(angle) % 360.0
         self.align = align if align in ("left", "center", "right") else "left"
+        self.valign = valign if valign in VALIGNS else "baseline"
 
     def _data(self):
-        return {"pos": list(self.pos), "text": self.text, "height": self.height,
-                "angle": self.angle, "align": self.align}
+        d = {"pos": list(self.pos), "text": self.text, "height": self.height,
+             "angle": self.angle, "align": self.align}
+        if self.valign != "baseline":
+            d["valign"] = self.valign
+        return d
 
     @classmethod
     def _from(cls, d):
         return cls(d["pos"], d.get("text", ""), d.get("height", 0.125), d.get("angle", 0.0),
-                   d.get("align", "left"), layer=d.get("layer", "0"), color=d.get("color"),
-                   id=d.get("id"))
+                   d.get("align", "left"), d.get("valign", "baseline"),
+                   layer=d.get("layer", "0"), color=d.get("color"), id=d.get("id"))
 
     def width(self):
         return text_width(self.text, self.height)
 
+    def offset(self):
+        """(dx, dy) from the insertion point to the start of the baseline, before turning."""
+        w, h = self.width(), self.height
+        dx = {"left": 0.0, "center": -w / 2, "right": -w}[self.align]
+        dy = {"baseline": 0.0, "bottom": DESCENT * h, "middle": -h / 2, "top": -h}[self.valign]
+        return dx, dy
+
     def corners(self):
         """The text's box (baseline to cap height), rotated."""
         w, h = self.width(), self.height
-        x0 = {"left": 0.0, "center": -w / 2, "right": -w}[self.align]
-        local = [(x0, 0.0), (x0 + w, 0.0), (x0 + w, h), (x0, h)]
+        x0, y0 = self.offset()
+        local = [(x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h)]
         return [G.rotate_point((self.pos[0] + x, self.pos[1] + y), self.pos, self.angle)
                 for x, y in local]
 

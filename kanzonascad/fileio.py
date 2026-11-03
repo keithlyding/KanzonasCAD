@@ -79,9 +79,9 @@ def _write(msp, e):
         from ezdxf.enums import TextEntityAlignment
         attribs.update(height=e.height, rotation=e.angle)
         ent = msp.add_text(e.text, dxfattribs=attribs)
-        align = {"left": TextEntityAlignment.LEFT, "center": TextEntityAlignment.CENTER,
-                 "right": TextEntityAlignment.RIGHT}[e.align]
-        ent.set_placement(e.pos, align=align)
+        h = {"left": "LEFT", "center": "CENTER", "right": "RIGHT"}[e.align]
+        v = {"baseline": "", "bottom": "BOTTOM_", "middle": "MIDDLE_", "top": "TOP_"}[e.valign]
+        ent.set_placement(e.pos, align=TextEntityAlignment[v + h])
     if ent is not None and e.color not in (None, M.ADAPTIVE):
         try:
             ent.rgb = _true_color(e.color)
@@ -182,14 +182,18 @@ def _read(de, k, out, skipped, depth):
             pos = de.dxf.insert
             align = "left"
             halign = de.dxf.get("halign", 0)
+            vnum = de.dxf.get("valign", 0)
             if halign in (1, 4):
                 align = "center"
             elif halign == 2:
                 align = "right"
-            if halign in (1, 2, 4) and de.dxf.hasattr("align_point"):
+            valign = {1: "bottom", 2: "middle", 3: "top"}.get(vnum, "baseline")
+            if halign == 4:                         # AutoCAD's "Middle": centered both ways
+                valign = "middle"
+            if (halign in (1, 2, 4) or vnum) and de.dxf.hasattr("align_point"):
                 pos = de.dxf.align_point
             out.append(M.Text(P(pos), de.plain_text(), de.dxf.get("height", 0.125) * k,
-                              de.dxf.get("rotation", 0.0), align, **kw))
+                              de.dxf.get("rotation", 0.0), align, valign, **kw))
         elif t == "MTEXT":
             h = de.dxf.get("char_height", 0.125) * k
             ang = math.degrees(math.atan2(*reversed(de.get_text_direction()[:2])))

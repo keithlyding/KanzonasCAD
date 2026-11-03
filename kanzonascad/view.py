@@ -66,6 +66,7 @@ class CadView(QWidget):
         self.snap_spacing = 0.125
         self.current_layer = "0"
         self._text_height = 0.125
+        self.text_justify = ("left", "baseline")     # TEXT's justification (align, valign)
         self._pan = None
         # while selecting with a window or a lasso: {"start", "pressed" (the button is still
         # down from the first click), "lasso" (points, once dragged), "crossing"}

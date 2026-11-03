@@ -326,12 +326,22 @@ class ArcCmd(Command):
 class TextCmd(Command):
     name, title = "TEXT", "Text"
 
+    JUSTIFY_PROMPT = "Justification: L, C, R (on the baseline); TL, TC, TR (top); ML, MC, MR " \
+                     "(middle); BL, BC, BR (bottom)"
+
     def begin(self):
         self.pos = None
+        self._start_prompt()
+
+    def _start_prompt(self):
         self.step = "pos"
-        self.ctx.prompt("Specify start point of text")
+        code = M.justify_code(*self.ctx.text_justify)
+        self.ctx.prompt("Specify %s point of text (justification %s)" % (
+            "start" if code in ("L", "BL") else "insertion", code), [("Justify", "J")])
 
     def point(self, p):
+        if self.step == "justify":
+            return
         if self.step == "pos":
             self.pos = self.base = self.last = p
             self.step = "height"
@@ -358,12 +368,27 @@ class TextCmd(Command):
         return self.step == "text"
 
     def text(self, s):
+        k = s.strip().upper()
+        if self.step == "pos" and k == "J":
+            self.step = "justify"
+            self.ctx.prompt(self.JUSTIFY_PROMPT,
+                            [(code, code) for code in ("TL", "TC", "TR", "ML", "MC", "MR",
+                                                       "BL", "BC", "BR", "L", "C", "R")])
+            return True
+        if self.step == "justify":
+            if k in M.JUSTIFY:
+                self.ctx.text_justify = M.JUSTIFY[k]
+                self._start_prompt()
+                return True
+            return False
         if self.step != "text":
             return False
         if not s:
             self.finish()
             return True
-        t = M.Text(self.pos, s, self.ctx.text_height(), self.angle, layer=self.ctx.layer())
+        align, valign = self.ctx.text_justify
+        t = M.Text(self.pos, s, self.ctx.text_height(), self.angle, align, valign,
+                   layer=self.ctx.layer())
         with self.ctx.edit("Text") as ed:
             ed.add(self.ctx.sheet(), t)
         # the next line goes below, as AutoCAD's TEXT does
@@ -383,7 +408,7 @@ class TextCmd(Command):
 
     def preview(self, p):
         if self.step == "pos":
-            return [M.Text(p, "Text", self.ctx.text_height())]
+            return [M.Text(p, "Text", self.ctx.text_height(), 0.0, *self.ctx.text_justify)]
         if self.step in ("height", "angle"):
             return [M.Line(self.pos, p)]
         return []
