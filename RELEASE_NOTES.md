@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.3.1
+
+**New**
+- The Library opens as a popup (Insert symbol, Insert footprint) instead of taking room at
+  the side of the drawing, as AutoCAD Electrical's icon menu does.
+
 ## 0.3
 
 **New**

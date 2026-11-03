@@ -100,11 +100,16 @@ class MainWindow(QMainWindow):
         self.library = Library(self.settings.value("library_folder", "") or None)
         self.library_panel = LibraryPanel(self.library)
         self.library_panel.insertRequested.connect(self.insert_block)
-        ld = self.library_dock = QDockWidget("Library", self)
-        ld.setObjectName("library")
-        ld.setWidget(self.library_panel)
-        self.addDockWidget(Qt.RightDockWidgetArea, ld)
-        self.resizeDocks([ld], [280], Qt.Horizontal)
+        # a popup, as AutoCAD Electrical's icon menu: the drawing keeps the whole width
+        dlg = self.library_dialog = QDialog(self, Qt.Tool)
+        dlg.setWindowTitle("Library")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(4, 4, 4, 4)
+        lay.addWidget(self.library_panel)
+        dlg.resize(520, 620)
+        geo = self.settings.value("library_geometry")
+        if isinstance(geo, QByteArray):
+            dlg.restoreGeometry(geo)
 
         self._build_actions()
         self._build_menus()
@@ -257,8 +262,12 @@ class MainWindow(QMainWindow):
           icon="sheet_props", label="Schematic settings")
         A("panel_settings", "Pa&nel settings...", lambda: self.project_properties(2),
           icon="sheet_props", label="Panel settings")
-        A("library_panel", "&Library panel", self._toggle_library, checkable=True,
-          icon="library", label="Library panel")
+        A("insert_symbol", "Insert &symbol...", lambda: self.show_library(0), icon="library",
+          label="Insert symbol")
+        A("insert_footprint", "Insert &footprint...", lambda: self.show_library(1),
+          icon="library", label="Insert footprint")
+        A("library_panel", "&Library...", lambda: self.show_library(None), icon="library",
+          label="Library")
         A("new_part", "New &part...", lambda: self.library_panel.edit_part(new=True),
           icon="part", label="New part")
         A("library_folder", "Library &folder...", self.choose_library_folder, icon="open",
@@ -294,8 +303,7 @@ class MainWindow(QMainWindow):
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
                   "osnap", "polar", "drafting", None, "black", "command_line", "sheets",
-                  "library_panel", "collapse",
-                  "group_names"):
+                  "collapse", "group_names"):
             m.addSeparator() if k is None else m.addAction(a[k])
         tm = m.addMenu("&Theme")
         for mode in ("light", "dark", "system"):
@@ -312,8 +320,8 @@ class MainWindow(QMainWindow):
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
-        for k in ("library_panel", None, "make_block", "explode", None, "new_part",
-                  "library_folder"):
+        for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
+                  "explode", None, "new_part", "library_folder"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Help")
         m.addAction(a["manual"])
@@ -340,13 +348,13 @@ class MainWindow(QMainWindow):
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
             ("Draw", "large", [a["wire"]]),
-            ("Symbols", "large", [a["library_panel"], a["make_block"], a["explode"]]),
+            ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
             ("Settings", "large", [a["schematic_settings"]]),
         ])
         r.add_tab("Panel", [
-            ("Footprints", "large", [a["library_panel"], a["make_block"], a["explode"]]),
+            ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"]]),
             ("Real size", "large", [a["scale"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
@@ -367,8 +375,7 @@ class MainWindow(QMainWindow):
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
             ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["polar"],
                                         a["osnap"], a["drafting"]]),
-            ("Panels", "small", [a["command_line"], a["sheets"], a["library_panel"],
-                                 a["black"]]),
+            ("Panels", "small", [a["command_line"], a["sheets"], a["black"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
             ("Ribbon", "small", [a["collapse"], a["group_names"]]),
         ])
@@ -1034,8 +1041,16 @@ class MainWindow(QMainWindow):
                     ed.change(v.sheet(), e.copy(color=color))
 
     # ---- library -----------------------------------------------------------------------------
-    def _toggle_library(self, on):
-        self.library_dock.setVisible(on)
+    def show_library(self, tab=None):
+        """The Library popup: tab 0 symbols, 1 footprints, 2 parts, None: as it was."""
+        if tab is not None:
+            self.library_panel.tabs.setCurrentIndex(tab)
+        self.library_panel.refresh()
+        self.library_dialog.show()
+        self.library_dialog.raise_()
+        self.library_dialog.activateWindow()
+        self.library_panel.search.setFocus()
+        self.library_panel.search.selectAll()
 
     def choose_library_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Library folder", self.library.folder)
@@ -1050,6 +1065,9 @@ class MainWindow(QMainWindow):
         v = self.view()
         if v is None:
             return
+        # out of the way while it is placed (it opens again where it was next time)
+        self.settings.setValue("library_geometry", self.library_dialog.saveGeometry())
+        self.library_dialog.hide()
         v.run(C.InsertCmd, defn, attrs)
         v.setFocus()
 
@@ -1227,9 +1245,6 @@ class MainWindow(QMainWindow):
         a["sheets"].blockSignals(True)
         a["sheets"].setChecked(not self.sheet_dock.isHidden())
         a["sheets"].blockSignals(False)
-        a["library_panel"].blockSignals(True)
-        a["library_panel"].setChecked(not self.library_dock.isHidden())
-        a["library_panel"].blockSignals(False)
         for k in ("make_block", "explode", "wire"):
             a[k].setEnabled(has)
         d = self.doc()
