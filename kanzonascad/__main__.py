@@ -32,6 +32,8 @@ def main(argv=None):
         opened = True
     if not opened:
         win.new_project()
+    from PySide6.QtCore import QTimer
+    QTimer.singleShot(5000, win.start_update_check)     # (once the window is up)
     return app.exec()
 
 

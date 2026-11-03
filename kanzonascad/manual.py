@@ -343,6 +343,23 @@ black on white (layer colors are for the screen).</li>
 
 <h2>Help</h2>
 <p><b>User manual</b> (F1) opens this page. <b>About KanzonasCAD</b> shows the version.</p>
+
+<h2>Updates</h2>
+<p>KanzonasCAD asks GitHub for new versions by itself, at most once a day (also while it stays
+open), quietly: nothing shows unless there is one. Then a box tells you what changed in every
+version since yours, with three buttons: <b>Update now</b>, <b>Skip this version</b> (you're
+not told about it again; a newer one still shows) and <b>Later</b>.</p>
+<ul>
+<li>Run from source (the README's way): Update now gets the new version (git pull) and what it
+needs, shows what it did, and offers to start the new version.</li>
+<li>The Windows download: Update now downloads the new version, uses it only if it matches the
+release exactly (its sha256), and replaces this copy when KanzonasCAD closes, then starts it
+again.</li>
+<li>Either way you're asked to save any changes first, and your projects and library are never
+touched.</li>
+</ul>
+<p><b>Check for updates...</b> (Help menu) checks now. <b>Check for updates automatically</b>
+turns the daily check on or off.</p>
 """
 
 

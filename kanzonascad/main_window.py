@@ -126,6 +126,8 @@ class MainWindow(QMainWindow):
         state = self.settings.value("window_state")
         if isinstance(state, QByteArray):
             self.restoreState(state)
+        self.acts["auto_updates"].setChecked(
+            self.settings.value("update_check", "true") not in (False, "false"))
         self._update_ui()
         self.autosave_timer = QTimer(self, interval=AUTOSAVE_MINUTES * 60 * 1000)
         self.autosave_timer.timeout.connect(self.autosave)
@@ -281,6 +283,10 @@ class MainWindow(QMainWindow):
         A("library_folder", "Library &folder...", self.choose_library_folder, icon="open",
           label="Library folder")
         A("manual", "&User manual", self.show_manual, "F1", label="Manual")
+        A("check_updates", "Check for &updates...", lambda: self.check_updates(True),
+          icon="updates", label="Updates")
+        A("auto_updates", "Check for updates &automatically", self._toggle_auto_updates,
+          checkable=True, icon="updates", label="Automatic updates")
         A("about", "&About KanzonasCAD", self.about, label="About")
 
         for a in self.acts.values():
@@ -340,6 +346,10 @@ class MainWindow(QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Help")
         m.addAction(a["manual"])
+        m.addSeparator()
+        m.addAction(a["check_updates"])
+        m.addAction(a["auto_updates"])
+        m.addSeparator()
         m.addAction(a["about"])
 
     CIRCLE_KEYS = ("circle", "circle_d", "circle_2p", "circle_3p", "circle_ttr")
@@ -1275,6 +1285,160 @@ class MainWindow(QMainWindow):
         if d is not None:
             title = "%s%s - %s" % (d.name(), "*" if d.project.is_modified() else "", APP)
         self.setWindowTitle(title)
+
+    # ---- updates ---------------------------------------------------------------------------
+    def _checker(self):
+        if getattr(self, "_update_checker", None) is None:
+            from .updates import UpdateChecker
+            c = self._update_checker = UpdateChecker(self.settings, self)
+            c.found.connect(self._update_found)
+            c.result.connect(lambda t: QMessageBox.information(self, "Check for updates", t))
+        return self._update_checker
+
+    def start_update_check(self):
+        """At start-up, and every few hours while it stays open: at most once a day."""
+        self._checker().check_if_due()
+        if getattr(self, "_update_timer", None) is None:
+            self._update_timer = QTimer(self, interval=6 * 3600 * 1000)
+            self._update_timer.timeout.connect(lambda: self._checker().check_if_due())
+            self._update_timer.start()
+
+    def check_updates(self, manual=True):
+        self.statusBar().showMessage("Checking for updates...", 4000)
+        self._checker().check(manual)
+
+    def _toggle_auto_updates(self, on):
+        self.settings.setValue("update_check", "true" if on else "false")
+
+    def _update_found(self, release, since):
+        from . import updates
+        v = str(release["tag_name"]).lstrip("vV")
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Update available")
+        dlg.resize(560, 460)
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel("<b>KanzonasCAD %s is available.</b> You have %s." %
+                             (v, __version__)))
+        notes = QTextBrowser()
+        notes.setOpenExternalLinks(True)
+        md = []
+        for ver, text, page in since:
+            md.append("### %s\n\n%s\n\n[Release page](%s)" % (
+                ver, text or "(no notes)", page))
+        notes.setMarkdown("\n\n".join(md))
+        lay.addWidget(notes, 1)
+        how = updates.how()
+        hint = {"source": "Update now gets the new version (git pull) and what it needs, then "
+                          "starts KanzonasCAD again. Your projects and library aren't touched.",
+                "windows": "Update now downloads it, checks it against the release, and "
+                           "replaces this copy when KanzonasCAD closes (you'll be asked to save "
+                           "first). Your projects and library aren't touched.",
+                "tell": "Update now opens the release page to download it."}[how]
+        h = QLabel(hint)
+        h.setWordWrap(True)
+        h.setStyleSheet("color: gray;")
+        lay.addWidget(h)
+        box = QDialogButtonBox()
+        now = box.addButton("Update now", QDialogButtonBox.AcceptRole)
+        skip = box.addButton("Skip this version", QDialogButtonBox.DestructiveRole)
+        box.addButton("Later", QDialogButtonBox.RejectRole)
+        lay.addWidget(box)
+        choice = []
+        box.clicked.connect(lambda b: (choice.append(b), dlg.accept()))
+        dlg.exec()
+        if not choice:
+            return
+        if choice[0] is skip:
+            self.settings.setValue("update_skip", v)
+        elif choice[0] is now:
+            self.update_now(release, how)
+
+    def update_now(self, release, how):
+        from . import updates
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        v = str(release["tag_name"]).lstrip("vV")
+        if how == "source":
+            self._run_source_update(updates.source_folder())
+        elif how == "windows":
+            got = updates.asset(release, updates.windows_asset_name(v))
+            if got is None:
+                QMessageBox.warning(self, "Update", "This release has no checked Windows "
+                                    "download. Opening the release page instead.")
+                QDesktopServices.openUrl(QUrl(updates.page(release)))
+                return
+            self._run_zip_update(got[0], got[1], updates.app_folder())
+        else:
+            QDesktopServices.openUrl(QUrl(updates.page(release)))
+
+    def _progress_dialog(self, title):
+        dlg = QDialog(self)
+        dlg.setWindowTitle(title)
+        dlg.resize(620, 360)
+        lay = QVBoxLayout(dlg)
+        out = QTextBrowser()
+        lay.addWidget(out, 1)
+        box = QDialogButtonBox(QDialogButtonBox.Close)
+        box.rejected.connect(dlg.reject)
+        box.setEnabled(False)
+        lay.addWidget(box)
+        return dlg, out, box
+
+    def _run_source_update(self, root):
+        from .updates import SourceUpdater
+        dlg, out, box = self._progress_dialog("Updating KanzonasCAD")
+        up = SourceUpdater(root, dlg)
+        up.line.connect(lambda t: t and out.append(t))
+
+        def done(ok, text):
+            out.append("\n" + text)
+            box.setEnabled(True)
+            if ok and QMessageBox.question(
+                    dlg, "Updated", "KanzonasCAD is updated. Start the new version now? (You'll "
+                    "be asked to save any changes first.)") == QMessageBox.Yes:
+                dlg.accept()
+                self._restart()
+        up.finished.connect(done)
+        up.start()
+        dlg.exec()
+
+    def _run_zip_update(self, url, sha, app_dir):
+        from .updates import ZipUpdater, start_swap
+        dlg, out, box = self._progress_dialog("Updating KanzonasCAD")
+        out.append("Downloading...")
+        up = ZipUpdater(url, sha, app_dir, dlg)
+        up.progress.connect(lambda a, b: self.statusBar().showMessage(
+            "Downloading the update: %d of %d MB" % (a // 1000000, max(b, 0) // 1000000)))
+
+        def ready(new):
+            out.append("Downloaded and checked.")
+            box.setEnabled(True)
+            if QMessageBox.question(dlg, "Update", "Close KanzonasCAD and finish the update "
+                                    "now? (You'll be asked to save any changes first.)"
+                                    ) == QMessageBox.Yes:
+                dlg.accept()
+                if self.close():
+                    start_swap(new, app_dir)
+                    QApplication.instance().quit()
+
+        def failed(text):
+            out.append(text)
+            box.setEnabled(True)
+        up.ready.connect(ready)
+        up.failed.connect(failed)
+        box.rejected.connect(up.cancel)
+        up.start()
+        dlg.exec()
+
+    def _restart(self):
+        """Close (asking to save), then start KanzonasCAD again."""
+        from .updates import restart_command
+        from PySide6.QtCore import QProcess
+        if not self.close():
+            return
+        prog, args = restart_command()
+        QProcess.startDetached(prog, args)
+        QApplication.instance().quit()
 
     # ---- help ------------------------------------------------------------------------------
     def show_manual(self):

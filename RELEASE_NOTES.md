@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.3.2
+
+**New**
+- KanzonasCAD now updates itself: it checks for new versions once a day, shows what changed,
+  and Update now installs it (Help > Check for updates...).
+- Each new version is published on the Releases page with a Windows download.
+
 ## 0.3.1
 
 **New**

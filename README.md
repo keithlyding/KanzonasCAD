@@ -141,8 +141,8 @@ constraints.txt`.
 Each version is published on the **[Releases page](https://github.com/keithlyding/KanzonasCAD/releases)**
 with its notes. Download `KanzonasCAD-v<version>-windows.zip`, unzip it and run
 `KanzonasCAD\KanzonasCAD.exe`. Windows may warn about an unknown publisher (the app isn't
-code-signed): **More info** > **Run anyway**. Versions 0.x are marked pre-release: they work,
-but KanzonasCAD isn't finished yet.
+code-signed): **More info** > **Run anyway**. KanzonasCAD then tells you about new versions and updates
+itself (Help > Check for updates...).
 
 ---
 
