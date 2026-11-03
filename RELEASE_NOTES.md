@@ -18,5 +18,7 @@ build fails without them.
   tracking at the angles you choose, grid snap, grips, undo and redo.
 - Selecting like AutoCAD: the object under the cursor lights up, window and crossing
   selection, and the lasso (hold the button and draw around objects).
+- Drag selected objects to move them (hold Ctrl to copy); the cursor shows a move arrow
+  when you are over something you can drag.
 - Layers, copy and paste, DXF import and export, PDF export.
 - The same look as KanzonasPDF: menus, ribbon tabs and light or dark theme.

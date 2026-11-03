@@ -519,3 +519,54 @@ class PolarTest(unittest.TestCase):
         w.acts["polar"].setChecked(True)
         self.assertFalse(w.acts["ortho"].isChecked())
         w.acts["polar"].setChecked(False)
+
+
+class DragMoveTest(unittest.TestCase):
+    def setUp(self):
+        self.win, self.v = window()
+        self.v.osnap_on = False
+        with self.v.project.edit("seed") as ed:
+            self.a = ed.add(self.v.sheet(), M.Line((2, 2), (4, 2)))
+
+    def tearDown(self):
+        self.v.project.saved_at = len(self.v.project.undo_stack)
+        self.win.close()
+
+    def hover(self, world):
+        pos = self.v.to_screen(world)
+        APP.sendEvent(self.v, QMouseEvent(QEvent.MouseMove, pos, self.v.mapToGlobal(pos),
+                                          Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+
+    def test_cursor_tells_what_a_click_does(self):
+        v = self.v
+        self.hover((6, 6))
+        self.assertIsNone(v.cursor_hint())
+        self.hover((2.6, 2))
+        self.assertEqual(v.cursor_hint(), "pick")
+        v.set_selection({self.a.id})
+        self.hover((2.6, 2))
+        self.assertEqual(v.cursor_hint(), "move")
+        self.hover((4, 2))
+        self.assertEqual(v.cursor_hint(), "grip")
+        v.repaint()
+
+    def test_drag_moves_and_ctrl_drag_copies(self):
+        v = self.v
+        v.set_selection({self.a.id})
+        drag(v, [(2.5, 2), (3.0, 2.6), (3.5, 3.0)])
+        moved = v.sheet().entities[self.a.id]
+        self.assertEqual(moved.p1, (3.0, 3.0))          # +1, +1 on the 1/8 snap grid
+        self.assertEqual(len(v.sheet().entities), 1)
+        drag(v, [(3.5, 3), (4.0, 3.5), (4.5, 4.0)], mods=Qt.ControlModifier)
+        self.assertEqual(len(v.sheet().entities), 2)
+        self.assertEqual(v.sheet().entities[self.a.id].p1, (3.0, 3.0))   # original stays
+        v.project.undo()
+        v.project.undo()
+        self.assertEqual(v.sheet().entities[self.a.id].p1, (2.0, 2.0))
+
+    def test_a_click_on_a_selected_object_keeps_it_selected(self):
+        v = self.v
+        v.set_selection({self.a.id})
+        click(v, (3, 2))
+        self.assertEqual(v.sel, {self.a.id})
+        self.assertEqual(v.sheet().entities[self.a.id].p1, (2.0, 2.0))

@@ -7,7 +7,7 @@ import math
 
 from PySide6.QtCore import Qt, QPointF, QRectF, Signal, QTimer
 from PySide6.QtGui import (QPainter, QPen, QColor, QBrush, QTransform, QPainterPath,
-                           QPolygonF)
+                           QPolygonF, QGuiApplication)
 from PySide6.QtWidgets import QWidget
 
 from . import geometry as G
@@ -65,6 +65,9 @@ class CadView(QWidget):
         # down from the first click), "lasso" (points, once dragged), "crossing"}
         self._window = None
         self._preview = set()           # what the window or lasso would select now
+        # pressing on a selected object: {"start", "ents", "moved"} until the button is let go
+        # (dragged: the selection moves, or with Ctrl a copy goes, where it is dropped)
+        self._drag = None
         self._hover = None
         self._hot_grip = None
         self._sel_cache = None
@@ -167,6 +170,7 @@ class CadView(QWidget):
             if self.cmd is cmd:         # a command that didn't end itself
                 self.done(cmd)
             self.messaged.emit("*Cancel*")
+        self._drag = None
         self._window = None
         self._preview = set()
         self.update()
@@ -470,6 +474,37 @@ class CadView(QWidget):
         self._preview = set()
         self.set_selection(self.sel | found)
 
+    def _drag_delta(self, d, p):
+        """How far a dragged selection goes: from where it was grabbed to p, on the snap grid
+        and straight across or up and down with Ortho, as a Move would."""
+        s = d["start"]
+        dx, dy = p[0] - s[0], p[1] - s[1]
+        if self.ortho_on:
+            if abs(dx) >= abs(dy):
+                dy = 0.0
+            else:
+                dx = 0.0
+        if self.snap_on:
+            k = self.snap_spacing
+            dx, dy = round(dx / k) * k, round(dy / k) * k
+        return dx, dy
+
+    def cursor_hint(self):
+        """What a click here would do, shown on the cursor: "grip" (stretch), "move" (a
+        selected object: drag it), "pick" (an object to select) or None."""
+        if self._drag is not None:
+            return "move"
+        if self._window is not None or self.cursor is None:
+            return None
+        if self.cmd is None and self._hot_grip is not None:
+            return "grip"
+        h = self._hover
+        if h is None or h.id not in self.sheet().entities:
+            return None
+        if self.cmd is None and h.id in self.sel:
+            return "move"
+        return "pick"
+
     def select_all(self):
         ids = {e.id for e in self.sheet().entities.values()
                if self.layer_visible(e.layer) and not self.layer_locked(e.layer)}
@@ -486,6 +521,15 @@ class CadView(QWidget):
             return
         self.cursor = self.to_world(pos)
         pt = self.resolve(self.cursor)
+        d = self._drag
+        if d is not None and e.buttons() & Qt.LeftButton:
+            if not d["moved"] and G.dist(self.to_screen(d["start"]).toTuple(),
+                                         pos.toTuple()) > 5:
+                d["moved"] = True
+            self.cursorMoved.emit(self.cursor[0], self.cursor[1],
+                                  self.project.zone_text(self.sheet(), *self.cursor))
+            self.update()
+            return
         w = self._window
         if w is not None:
             if w["pressed"] and e.buttons() & Qt.LeftButton:
@@ -550,6 +594,10 @@ class CadView(QWidget):
         if ent is not None:
             if e.modifiers() & Qt.ShiftModifier:
                 self.set_selection(self.sel - {ent.id})
+            elif cmd is None and ent.id in self.sel:
+                ents = self.sheet().entities
+                self._drag = {"start": p, "moved": False,
+                              "ents": [ents[i] for i in self.sel if i in ents]}
             else:
                 self.set_selection(self.sel | {ent.id})
             return
@@ -561,6 +609,29 @@ class CadView(QWidget):
         if e.button() == Qt.MiddleButton and self._pan is not None:
             self._pan = None
             self.setCursor(Qt.BlankCursor)
+            return
+        d = self._drag
+        if e.button() == Qt.LeftButton and d is not None:
+            self._drag = None
+            if d["moved"]:
+                dx, dy = self._drag_delta(d, self.to_world(e.position()))
+                copy = bool(e.modifiers() & Qt.ControlModifier)
+                if abs(dx) > 1e-12 or abs(dy) > 1e-12:
+                    sheet = self.sheet()
+                    with self.edit("Copy" if copy else "Move") as ed:
+                        new = set()
+                        for ent in d["ents"]:
+                            c = ent.moved(dx, dy)
+                            if copy:
+                                c.id = None
+                                ed.add(sheet, c)
+                            else:
+                                ed.change(sheet, c)
+                            new.add(c.id)
+                    self.set_selection(new)
+                    self.messaged.emit("%s %d object(s)" % ("Copied" if copy else "Moved",
+                                                            len(new)))
+            self.update()
             return
         w = self._window
         if e.button() == Qt.LeftButton and w is not None and w["pressed"]:
@@ -599,8 +670,16 @@ class CadView(QWidget):
         self.update()
 
     # ---- keys ------------------------------------------------------------------------------
+    def keyReleaseEvent(self, e):
+        if e.key() == Qt.Key_Control and self._drag is not None:
+            self.update()                   # the copy + goes
+        super().keyReleaseEvent(e)
+
     def keyPressEvent(self, e):
         k = e.key()
+        if k == Qt.Key_Control and self._drag is not None:
+            self.update()                   # the copy + shows
+            return
         if k == Qt.Key_Escape:
             if self.cmd is not None or self._window is not None:
                 self.cancel()
@@ -647,6 +726,18 @@ class CadView(QWidget):
                 p.setPen(Qt.NoPen)
                 p.setBrush(pal.select)
                 p.drawPath(fills)
+        d = self._drag
+        if d is not None and d["moved"] and self.cursor is not None:
+            dx, dy = self._drag_delta(d, self.cursor)
+            strokes, fills = entities_path([e.moved(dx, dy) for e in d["ents"]])
+            pen = QPen(pal.select, 0)
+            pen.setCosmetic(True)
+            p.setPen(pen)
+            p.setBrush(Qt.NoBrush)
+            p.drawPath(strokes)
+            p.setPen(Qt.NoPen)
+            p.setBrush(pal.select)
+            p.drawPath(fills)
         p.restore()
         self._paint_grips(p, pal)
         self._paint_window(p)
@@ -826,6 +917,45 @@ class CadView(QWidget):
         p.drawLine(QPointF(0, c.y()), QPointF(self.width(), c.y()))
         p.drawLine(QPointF(c.x(), 0), QPointF(c.x(), self.height()))
         wants_point = cmd is not None and not cmd.selecting() and not cmd.picking
-        if not wants_point:
+        if wants_point:
+            return
+        hint = self.cursor_hint()
+        if hint == "grip":
+            # the square jumps onto the grip: a click there stretches it
+            g = self._hot_grip
+            c = self.to_screen(g[0].grips()[g[1]])
+        box = QRectF(c.x() - PICKBOX, c.y() - PICKBOX, 2 * PICKBOX, 2 * PICKBOX)
+        if hint is None:
             p.setBrush(Qt.NoBrush)
-            p.drawRect(QRectF(c.x() - PICKBOX, c.y() - PICKBOX, 2 * PICKBOX, 2 * PICKBOX))
+            p.drawRect(box)
+            return
+        # over something a click would act on: a filled, larger square
+        big = box.adjusted(-2, -2, 2, 2)
+        p.setPen(QPen(QColor(150, 210, 255), 1.5))
+        p.setBrush(QColor(80, 170, 255, 150))
+        p.drawRect(big)
+        if hint in ("move", "grip"):
+            self._paint_move_badge(p, QPointF(big.right() + 11, big.bottom() + 11),
+                                   copy=hint == "move" and self._drag is not None
+                                   and bool(QGuiApplication.keyboardModifiers()
+                                            & Qt.ControlModifier))
+
+    def _paint_move_badge(self, p, c, copy=False):
+        """A four-way arrow (and a + when Ctrl makes it a copy) beside the cursor."""
+        p.setRenderHint(QPainter.Antialiasing, True)
+        col = QColor(150, 210, 255)
+        p.setPen(QPen(col, 1.6))
+        r, h = 7.0, 3.0
+        x, y = c.x(), c.y()
+        p.drawLine(QPointF(x - r, y), QPointF(x + r, y))
+        p.drawLine(QPointF(x, y - r), QPointF(x, y + r))
+        p.setBrush(col)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            tip = QPointF(x + dx * r, y + dy * r)
+            nx, ny = -dy, dx
+            p.drawPolygon(QPolygonF([tip, QPointF(tip.x() - dx * h + nx * h, tip.y() - dy * h + ny * h),
+                                     QPointF(tip.x() - dx * h - nx * h, tip.y() - dy * h - ny * h)]))
+        if copy:
+            p.setPen(QPen(QColor(120, 230, 120), 2))
+            p.drawLine(QPointF(x + 10, y - 9), QPointF(x + 18, y - 9))
+            p.drawLine(QPointF(x + 14, y - 13), QPointF(x + 14, y - 5))

@@ -132,8 +132,14 @@ angles (all kept for next time).</li>
 
 <h2>Selecting and grips</h2>
 <ul>
-<li>The object under the cursor <b>lights up</b> (a bright line with a blue glow): that is what a
-click selects.</li>
+<li>The object under the cursor <b>lights up</b> (a bright line with a blue glow) and the
+cursor's square fills in: that is what a click selects.</li>
+<li>Over an object that is <b>already selected</b>, a four-way arrow shows beside the square:
+press there and <b>drag</b> to move the selection, and let go where it goes (on the snap grid,
+and straight with Ortho). Hold <b>Ctrl</b> when you let go to leave the originals and drop a
+<b>copy</b> (a + shows). Undo puts it back. For exact distances use Move or Copy objects.</li>
+<li>Over a <b>grip</b> of a selected object, the square jumps onto the grip and the arrow shows:
+a click there starts stretching it.</li>
 <li>Click an object to add it to the selection; <b>Shift</b>+click removes it.</li>
 <li><b>Window</b>: click in an empty spot, move, and click again. <b>Left to right</b> (blue)
 selects what is wholly inside; <b>right to left</b> (green, dashed) also selects what it
