@@ -9,7 +9,7 @@ list of commands. US practice: JIC/NFPA symbols, US device tags (CR1, M1), grid-
 cross-references (6-D1), wire numbers that start with the page number (6001). Drawings are in
 inches on ANSI sheets. It shares its look (menus, ribbon, theme, icons) with KanzonasPDF.
 
-`.github/workflows/build.yml` builds a Windows folder (job `windows`) and a Linux folder (job
+`.github/workflows/build.yml` builds a Windows folder (job `build`, the check the rule protecting `main` requires) and a Linux folder (job
 `linux`), each running the unit tests and its own `--selftest`. There is no release job yet:
 publishing releases starts when the owner asks for it.
 
