@@ -244,8 +244,9 @@ def import_dxf(project, sheet, path):
 # ============================================================================================
 # PDF
 # ============================================================================================
-def export_pdf(project, path, sheets=None, line_width=0.008):
-    """One page per sheet at its real size, white paper. Returns the page count."""
+def export_pdf(project, path, sheets=None, line_width=0.008, mono=True):
+    """One page per sheet at its real size: black on white paper (mono False keeps the
+    layers' colors). Returns the page count."""
     from PySide6.QtCore import QMarginsF, QSizeF
     from PySide6.QtGui import QPainter, QPageSize, QPageLayout, QPdfWriter
     from .render import SheetRenderer
@@ -272,7 +273,8 @@ def export_pdf(project, path, sheets=None, line_width=0.008):
             painter.resetTransform()
             painter.translate(0, h * dpi)
             painter.scale(dpi, -dpi)
-            SheetRenderer(project, s, dark=False).paint(painter, pen_width=line_width)
+            SheetRenderer(project, s, dark=False, mono=mono).paint(painter,
+                                                                   pen_width=line_width)
     finally:
         if painter is not None:
             painter.end()

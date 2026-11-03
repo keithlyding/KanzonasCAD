@@ -31,6 +31,7 @@ class CadView(QWidget):
     commandChanged = Signal()
     sheetChanged = Signal()
     editTextRequested = Signal(object)
+    titleBlockDoubleClicked = Signal()
     contextMenuWanted = Signal(object)          # global QPoint
     typed = Signal(object)                      # a key typed over the drawing (QKeyEvent)
 
@@ -39,7 +40,7 @@ class CadView(QWidget):
         self.project = project
         self.sheet_id = project.sheets[0].id
         self.renderers = {}
-        self.dark = False
+        self.dark = True                # black drawing area (printing is always black on white)
         self.scale = 50.0               # pixels per inch
         self.center = (8.5, 5.5)        # drawing point at the middle of the view
         self.sel = set()
@@ -482,11 +483,19 @@ class CadView(QWidget):
             self.zoom("extents")
             return
         if e.button() == Qt.LeftButton and self.cmd is None:
-            ent = self.pick_entity(self.to_world(e.position()))
+            p = self.to_world(e.position())
+            ent = self.pick_entity(p)
             if isinstance(ent, M.Text):
                 self._window = None
                 self.editTextRequested.emit(ent)
                 return
+            if ent is None and self.sheet() is not self.project.title_block:
+                from .sheetframe import title_block_rect
+                r = title_block_rect(self.project, self.sheet())
+                if r is not None and r[0] <= p[0] <= r[2] and r[1] <= p[1] <= r[3]:
+                    self._window = None
+                    self.titleBlockDoubleClicked.emit()
+                    return
         self.mousePressEvent(e)
 
     def wheelEvent(self, e):

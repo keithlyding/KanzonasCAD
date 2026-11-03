@@ -15,7 +15,7 @@ from PySide6.QtGui import (QPainterPath, QPen, QColor, QBrush, QFont, QFontMetri
 
 from . import model as M
 from . import geometry as G
-from .sheetframe import frame_entities
+from .sheetframe import border_entities, title_block_entities
 
 CHUNK = 256
 FONT_PX = 100.0                 # glyphs are made at this size, then scaled to the text height
@@ -89,16 +89,19 @@ def add_entity(path, e):
 
 
 class Palette:
-    def __init__(self, dark):
+    def __init__(self, dark, mono=False):
         self.dark = dark
+        self.mono = mono            # every object in the ink color (printing black on white)
         self.ink = QColor("#f0f0f0") if dark else QColor("#000000")
-        self.paper = QColor("#1b1b1d") if dark else QColor("#ffffff")
+        self.paper = QColor("#000000") if dark else QColor("#ffffff")
         self.backdrop = QColor("#2d2d30") if dark else QColor("#9a9da3")
         self.frame = QColor("#9a9a9a") if dark else QColor("#000000")
         self.select = QColor("#3399ff")
         self.grid = QColor(255, 255, 255, 38) if dark else QColor(0, 0, 0, 30)
 
     def color(self, project, e):
+        if self.mono:
+            return self.ink
         c = e.color if e.color is not None else project.layer_color(e.layer)
         if c in (None, M.ADAPTIVE):
             return self.ink
@@ -121,10 +124,10 @@ class _Chunk:
 class SheetRenderer:
     """Keeps one sheet's paths; call paint() with the painter set to drawing units."""
 
-    def __init__(self, project, sheet, dark=False):
+    def __init__(self, project, sheet, dark=False, mono=False):
         self.project = project
         self.sheet = sheet
-        self.pal = Palette(dark)
+        self.pal = Palette(dark, mono)
         self.chunks = {}
         self._sig = None
         self._frame = None
@@ -158,45 +161,54 @@ class SheetRenderer:
             k = eid // CHUNK
             if k in by_chunk:
                 by_chunk[k].append(e)
-        layers = self.project.layers
         for k, ents in by_chunk.items():
             ch = _Chunk()
-            for e in ents:
-                lay = layers.get(e.layer)
-                if lay is not None and not lay.visible:
-                    continue
-                key = self.pal.color(self.project, e).rgba()
-                if isinstance(e, M.Text):
-                    p = ch.fills.get(key)
-                    if p is None:
-                        p = ch.fills[key] = QPainterPath()
-                        p.setFillRule(Qt.WindingFill)
-                    p.addPath(text_path(e))
-                else:
-                    p = ch.strokes.get(key)
-                    if p is None:
-                        p = ch.strokes[key] = QPainterPath()
-                    add_entity(p, e)
+            self._fill_chunk(ch, ents)
             if ch.strokes or ch.fills:
                 self.chunks[k] = ch
             else:
                 self.chunks.pop(k, None)
 
     def _frame_paths(self):
+        """(border lines, border texts, title block chunk): the border in the frame color,
+        the title block in its own layers' colors (like any drawing)."""
         p = self.project
         s = self.sheet
         sig = (s.size, s.cols, s.rows, s.title, p.sheet_number(s), len(p.sheets),
-               tuple(sorted(p.fields.items())), self.pal.dark)
+               tuple(sorted(p.fields.items())), p.title_block.version, self._layer_sig(),
+               self.pal.dark)
         if sig != self._frame_sig:
             self._frame_sig = sig
             lines, texts = QPainterPath(), QPainterPath()
-            for e in frame_entities(p, s):
+            for e in border_entities(s):
                 if isinstance(e, M.Text):
                     texts.addPath(text_path(e))
                 else:
                     add_entity(lines, e)
-            self._frame = (lines, texts)
+            tb = _Chunk()
+            if s is not p.title_block:
+                self._fill_chunk(tb, title_block_entities(p, s))
+            self._frame = (lines, texts, tb)
         return self._frame
+
+    def _fill_chunk(self, ch, ents):
+        layers = self.project.layers
+        for e in ents:
+            lay = layers.get(e.layer)
+            if lay is not None and not lay.visible:
+                continue
+            key = self.pal.color(self.project, e).rgba()
+            if isinstance(e, M.Text):
+                p = ch.fills.get(key)
+                if p is None:
+                    p = ch.fills[key] = QPainterPath()
+                    p.setFillRule(Qt.WindingFill)
+                p.addPath(text_path(e))
+            else:
+                p = ch.strokes.get(key)
+                if p is None:
+                    p = ch.strokes[key] = QPainterPath()
+                add_entity(p, e)
 
     def paint(self, painter, pen_width=0.0, paper=True, under=None):
         """pen_width 0: cosmetic one-pixel lines (screen); a number: that width in inches
@@ -208,7 +220,7 @@ class SheetRenderer:
             painter.fillRect(QRectF(0, 0, w, h), pal.paper)
         if under is not None:
             under(painter)              # (the grid dots: under the drawing, not over it)
-        lines, texts = self._frame_paths()
+        lines, texts, tb = self._frame_paths()
         pen = QPen(pal.frame, pen_width)
         pen.setCosmetic(pen_width == 0)
         painter.setPen(pen)
@@ -217,7 +229,7 @@ class SheetRenderer:
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(pal.frame))
         painter.drawPath(texts)
-        for ch in self.chunks.values():
+        for ch in [tb] + list(self.chunks.values()):
             painter.setBrush(Qt.NoBrush)
             for rgba, path in ch.strokes.items():
                 pen = QPen(QColor.fromRgba(rgba), pen_width)

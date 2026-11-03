@@ -571,6 +571,9 @@ class SpatialIndex:
         return out
 
 
+TITLE_BLOCK_ID = 0          # the project's title block is kept as a sheet with this id
+
+
 class Sheet:
     def __init__(self, title="", size=DEFAULT_SIZE, cols=10, rows=6, number=None, id=None,
                  fields=None):
@@ -591,14 +594,16 @@ class Sheet:
     def paper(self):
         return SHEET_SIZES[self.size]
 
-    MARGIN = 0.375                      # paper edge to the zone strip
-    STRIP = 0.25                        # width of the zone label strip
+    MARGIN = 0.375                      # paper edge to the border
+    STRIP = 0.25                        # height/width of the zone label strips (top, left)
 
     def frame(self):
-        """(x0, y0, x1, y1) of the drawing area inside the zone strips."""
+        """(x0, y0, x1, y1) of the drawing area: inside the border, below the column strip
+        along the top and right of the row strip down the left (none on the right or
+        bottom: they would only take room)."""
         w, h = self.paper()
-        m = self.MARGIN + self.STRIP
-        return (m, m, w - m, h - m)
+        m, s = self.MARGIN, self.STRIP
+        return (m + s, m, w - m, h - m - s)
 
     def zone_at(self, x, y):
         """(row letter, column number) of a point, or None outside the drawing area. Columns
@@ -774,6 +779,9 @@ class Project:
             self.layers[name] = Layer(name, color)
         self.sheets = []
         self._next_sheet = 1
+        # the title block: a drawing of its own (lines and texts, edited like any sheet with
+        # Edit title block), drawn on every sheet with its {fields} filled in
+        self.title_block = Sheet(title="Title block", id=TITLE_BLOCK_ID)
         self.undo_stack = []
         self.redo_stack = []
         self.saved_at = 0           # len(undo_stack) when last saved (or -1: never matches)
@@ -784,7 +792,15 @@ class Project:
         p = cls()
         s = Sheet(title="Sheet 1", id=p.new_sheet_id())
         p.sheets.append(s)
+        p._default_title_block()
         return p
+
+    def _default_title_block(self):
+        from .sheetframe import default_title_block
+        tb = self.title_block
+        for e in default_title_block(tb):
+            tb._put(e)
+        tb.touched = set()
 
     def new_sheet_id(self):
         n = self._next_sheet
@@ -793,6 +809,8 @@ class Project:
 
     # ---- sheets ----------------------------------------------------------------------------
     def sheet_by_id(self, sid):
+        if sid == TITLE_BLOCK_ID:
+            return self.title_block
         for s in self.sheets:
             if s.id == sid:
                 return s
@@ -800,11 +818,15 @@ class Project:
 
     def sheet_number(self, sheet):
         """The sheet's page number: its own if set, else its position (1, 2, ...)."""
+        if sheet is self.title_block:
+            return ""
         if sheet.number not in (None, ""):
             return str(sheet.number)
         return str(self.sheets.index(sheet) + 1)
 
     def zone_text(self, sheet, x, y):
+        if sheet is self.title_block:
+            return ""
         z = sheet.zone_at(x, y)
         if z is None:
             return ""
@@ -828,7 +850,7 @@ class Project:
             if name != lay.name:
                 self.layers.pop(name, None)
             self.layers[lay.name] = lay
-        for s in self.sheets:
+        for s in self.sheets + [self.title_block]:
             s.version += 1
 
     # ---- editing ---------------------------------------------------------------------------
@@ -923,6 +945,7 @@ class Project:
         return {"format": FORMAT, "version": FORMAT_VERSION, "fields": dict(self.fields),
                 "zone_format": self.zone_format,
                 "layers": [lay.to_dict() for lay in self.layers.values()],
+                "title_block": [e.to_dict() for e in self.title_block.entities.values()],
                 "sheets": [s.to_dict() for s in self.sheets]}
 
     @classmethod
@@ -949,6 +972,14 @@ class Project:
                 p.ensure_layer(e.layer)
         if not p.sheets:
             p.sheets.append(Sheet(title="Sheet 1", id=p.new_sheet_id()))
+        if "title_block" in d:
+            for ed in d["title_block"]:
+                e = Entity.from_dict(ed)
+                p.title_block._put(e)
+                p.ensure_layer(e.layer)
+            p.title_block.touched = set()
+        else:
+            p._default_title_block()
         return p
 
     def save(self, path):

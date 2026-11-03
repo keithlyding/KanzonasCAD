@@ -63,11 +63,24 @@ def project_properties(parent, project):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Project properties")
     form = QFormLayout(dlg)
+    from .sheetframe import fields_used, SHEET_FIELDS
     edits = {}
-    for k in M.PROJECT_FIELDS:
+    # the usual fields, then any other the title block uses ({Job number}...), then any kept
+    # from before (a field the title block no longer shows keeps its value)
+    names = list(M.PROJECT_FIELDS)
+    for k in fields_used(project) + list(project.fields):
+        if k not in names and k not in SHEET_FIELDS:
+            names.append(k)
+    for k in names:
         e = QLineEdit(project.fields.get(k, ""))
         edits[k] = e
         form.addRow(k, e)
+    note = QLabel("These fill the title block's {Field} texts on every sheet. {Sheet}, "
+                  "{Sheets} and {Sheet title} come from each sheet. Sheets > Edit title "
+                  "block changes its layout and adds fields of your own.")
+    note.setWordWrap(True)
+    note.setStyleSheet("color: gray;")
+    form.addRow(note)
     zf = QLineEdit(project.zone_format)
     zf.setToolTip("{sheet}, {row} and {col} are replaced: {sheet}-{row}{col} gives 6-D1")
     form.addRow("Grid reference format", zf)

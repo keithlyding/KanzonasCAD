@@ -96,6 +96,9 @@ class MainWindow(QMainWindow):
         self._build_menus()
         self._build_ribbon()
         self._build_status()
+        self.acts["black"].blockSignals(True)
+        self.acts["black"].setChecked(self.settings.value("black_drawing", True) in (True, "true"))
+        self.acts["black"].blockSignals(False)
         self._apply_theme(self.settings.value("theme", "light"), save=False)
 
         geo = self.settings.value("geometry")
@@ -211,6 +214,13 @@ class MainWindow(QMainWindow):
         A("sheet_props", "&Sheet properties...", self.sheet_properties, label="Sheet")
         A("project_props", "&Project properties...", self.project_properties, label="Project")
         A("layers", "&Layers...", self.layers_dialog, label="Layers")
+        A("edit_tb", "Edit &title block", self._toggle_title_block, checkable=True,
+          icon="title_block", label="Edit title block",
+          tip="Draw and change the title block (lines and texts; {Field} in a text shows "
+              "that field's value). Click it again to go back to the sheets.")
+        A("black", "&Black drawing background", self._set_black, checkable=True,
+          icon="black_bg", label="Black background",
+          tip="Draw on black, as in AutoCAD. PDF export always prints black on white.")
 
         A("manual", "&User manual", self.show_manual, "F1", label="Manual")
         A("about", "&About KanzonasCAD", self.about, label="About")
@@ -240,7 +250,8 @@ class MainWindow(QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
-                  "osnap", "drafting", None, "command_line", "sheets", "collapse", "group_names"):
+                  "osnap", "drafting", None, "black", "command_line", "sheets", "collapse",
+                  "group_names"):
             m.addSeparator() if k is None else m.addAction(a[k])
         tm = m.addMenu("&Theme")
         for mode in ("light", "dark", "system"):
@@ -253,7 +264,7 @@ class MainWindow(QMainWindow):
             m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "sheet_props",
-                  "project_props", "layers"):
+                  "project_props", "edit_tb", "layers"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Help")
         m.addAction(a["manual"])
@@ -281,6 +292,7 @@ class MainWindow(QMainWindow):
             ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
             ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
             ("Properties", "large", [a["sheet_props"], a["project_props"], a["layers"]]),
+            ("Title block", "large", [a["edit_tb"]]),
         ])
         r.add_tab("Output", [
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
@@ -291,7 +303,7 @@ class MainWindow(QMainWindow):
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
             ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["osnap"],
                                         a["drafting"]]),
-            ("Panels", "small", [a["command_line"], a["sheets"]]),
+            ("Panels", "small", [a["command_line"], a["sheets"], a["black"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
             ("Ribbon", "small", [a["collapse"], a["group_names"]]),
         ])
@@ -339,7 +351,7 @@ class MainWindow(QMainWindow):
     def add_document(self, project):
         d = Document(project)
         v = d.view
-        v.set_dark(theme.is_dark())
+        v.set_dark(self.acts["black"].isChecked())
         for key, attr in (("grid", "grid_on"), ("snap", "snap_on"), ("ortho", "ortho_on"),
                           ("osnap", "osnap_on")):
             setattr(v, attr, self.settings.value("aid_" + attr, getattr(v, attr)) in
@@ -349,6 +361,7 @@ class MainWindow(QMainWindow):
         v.sheetChanged.connect(self._fill_sheets)
         v.commandChanged.connect(self._update_ui)
         v.editTextRequested.connect(self.edit_text)
+        v.titleBlockDoubleClicked.connect(self.project_properties)
         v.contextMenuWanted.connect(self._view_menu)
         v.typed.connect(self.cmdline.take_key)
         project.listeners.append(lambda d=d: self._project_changed(d))
@@ -751,6 +764,7 @@ class MainWindow(QMainWindow):
     def _sheet_clicked(self, item):
         v = self.view()
         if v is not None:
+            self._leave_title_block(v)
             v.show_sheet(item.data(Qt.UserRole))
             self._fill_sheets()
             self._update_ui()
@@ -766,6 +780,7 @@ class MainWindow(QMainWindow):
         if v is None:
             return
         p = v.project
+        self._leave_title_block(v)
         cur = v.sheet()
         s = M.Sheet(title="Sheet %d" % (len(p.sheets) + 1), size=cur.size, cols=cur.cols,
                     rows=cur.rows)
@@ -815,6 +830,37 @@ class MainWindow(QMainWindow):
         if v is not None:
             dialogs.project_properties(self, v.project)
 
+    def _toggle_title_block(self, on):
+        v = self.view()
+        if v is None:
+            return
+        if on:
+            if v.sheet() is not v.project.title_block:
+                self._tb_return = v.sheet_id
+                v.show_sheet(M.TITLE_BLOCK_ID)
+                self.cmdline.add_history(
+                    "Editing the title block. Draw and change it like any drawing; a text with "
+                    "{Customer}, {Sheet}, {Sheets}, {Sheet title}... shows that field's value on "
+                    "the sheets. Click Edit title block again when done.")
+        else:
+            self._leave_title_block(v)
+        self._fill_sheets()
+        self._update_ui()
+
+    def _leave_title_block(self, v):
+        if v.sheet() is v.project.title_block:
+            back = getattr(self, "_tb_return", None)
+            if v.project.sheet_by_id(back) is None or back == M.TITLE_BLOCK_ID:
+                back = v.project.sheets[0].id
+            v.show_sheet(back)
+
+    def _set_black(self, on):
+        self.settings.setValue("black_drawing", bool(on))
+        for i in range(self.tabs.count()):
+            d = self.tabs.widget(i)
+            if isinstance(d, Document):
+                d.view.set_dark(on)
+
     def drafting_settings(self):
         v = self.view()
         if v is not None:
@@ -860,8 +906,6 @@ class MainWindow(QMainWindow):
             a.setIcon(theme.icon(a.property("icon_key")))
         for i in range(self.tabs.count()):
             d = self.tabs.widget(i)
-            if isinstance(d, Document):
-                d.view.set_dark(theme.is_dark())
         if save:
             self.settings.setValue("theme", mode)
 
@@ -884,9 +928,16 @@ class MainWindow(QMainWindow):
         sel = bool(has and v.sel)
         for k in ("cut", "copy_clip", "delete"):
             a[k].setEnabled(sel)
-        a["sheet_del"].setEnabled(bool(has and len(p.sheets) > 1))
-        a["sheet_up"].setEnabled(bool(has and p.sheets.index(v.sheet()) > 0))
-        a["sheet_down"].setEnabled(bool(has and p.sheets.index(v.sheet()) < len(p.sheets) - 1))
+        on_tb = bool(has and v.sheet() is p.title_block)
+        pos = p.sheets.index(v.sheet()) if has and not on_tb else -1
+        a["sheet_up"].setEnabled(pos > 0)
+        a["sheet_down"].setEnabled(0 <= pos < len(p.sheets) - 1)
+        a["sheet_del"].setEnabled(bool(has and not on_tb and len(p.sheets) > 1))
+        a["sheet_props"].setEnabled(bool(has and not on_tb))
+        a["edit_tb"].setEnabled(has)
+        a["edit_tb"].blockSignals(True)
+        a["edit_tb"].setChecked(on_tb)
+        a["edit_tb"].blockSignals(False)
         if has:
             for key, attr in (("grid", "grid_on"), ("snap", "snap_on"), ("ortho", "ortho_on"),
                               ("osnap", "osnap_on")):

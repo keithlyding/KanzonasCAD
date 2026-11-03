@@ -30,8 +30,9 @@ show it, double-click to open its properties, right-click for more.</li>
 
 <h2>Projects and sheets</h2>
 <p>A project (a <code>.kzcad</code> file) holds all its sheets. Each sheet is drawn on an
-ANSI sheet (A, B, C or D) with a border, a <b>grid of zones</b> (columns 1, 2, 3 ... across
-the top, rows A, B, C ... down the side) and a <b>title block</b> in the lower right corner.</p>
+ANSI sheet (A, B, C or D) with a border, a <b>grid of zones</b> (columns 1, 2, 3 ... along
+the top, rows A, B, C ... down the left side; nothing on the right or bottom, so the drawing
+gets that room) and a <b>title block</b> in the lower right corner.</p>
 <p>The <b>page number</b> of a sheet is its position in the project unless you type one in
 <b>Sheet properties...</b>. It is the first part of every grid reference (6-D1) and, later,
 of every wire number (6001, 6002 ...).</p>
@@ -41,13 +42,35 @@ of every wire number (6001, 6002 ...).</p>
 <li><b>Move sheet up</b> and <b>Move sheet down</b> change the order (and so the automatic
 page numbers).</li>
 <li><b>Sheet properties...</b>: title, page number, size, number of zone columns and rows.</li>
-<li><b>Project properties...</b>: the title block fields (customer, project, drawing number,
-drawn by, checked by, date, revision) and the <b>grid reference format</b>
+<li><b>Project properties...</b> (or double-click the title block): the title block fields
+(customer, project, drawing number, drawn by, checked by, date, revision, and any field of
+your own the title block uses) and the <b>grid reference format</b>
 (<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1).</li>
+<li><b>Edit title block</b>: see below.</li>
 <li><b>Layers...</b>: add, rename, recolor, switch off and lock layers, and choose the current
 layer. The Layer box on the Home tab picks the current layer; with objects selected, picking
 a layer moves them to it.</li>
 </ul>
+
+<h2>The title block</h2>
+<p>The title block is a small drawing of its own, the same on every sheet of the project.
+<b>Edit title block</b> (Sheets menu and Sheets tab) shows it by itself: draw, move, trim,
+erase and type text there with the usual commands, or <b>Import DXF into this sheet...</b>
+to bring in your company's title block and move it into the lower right corner. Click
+<b>Edit title block</b> again (or click a sheet in the Sheets panel) to go back.</p>
+<p>A text that contains a field name in braces shows that field's value on every sheet:</p>
+<ul>
+<li><code>{{Customer}}</code>, <code>{{Project}}</code>, <code>{{Drawing number}}</code>,
+<code>{{Drawn by}}</code>, <code>{{Checked by}}</code>, <code>{{Date}}</code>,
+<code>{{Revision}}</code> - from Project properties.</li>
+<li><code>{{Sheet}}</code> (the page number), <code>{{Sheets}}</code> (how many sheets) and
+<code>{{Sheet title}}</code> - from each sheet. <code>{{Sheet}} OF {{Sheets}}</code> gives
+"6 OF 12".</li>
+<li>Any other name, like <code>{{Job number}}</code>, becomes a field of your own: it appears
+in Project properties to fill in.</li>
+</ul>
+<p>A name in braces that isn't a field shows as typed, so a typo is easy to spot. Undo works
+on title block changes like on any other.</p>
 
 <h2>Drawing</h2>
 <p>Start a command from the ribbon, the <b>Draw</b> and <b>Modify</b> menus, or by typing its
@@ -119,8 +142,10 @@ the modify commands.</li>
 middle button for <b>Zoom extents</b>.</li>
 <li><b>Zoom extents</b> (Ctrl+Shift+E), <b>Zoom to sheet</b> (Ctrl+0), <b>Zoom in</b> (Ctrl+=),
 <b>Zoom out</b> (Ctrl+-).</li>
-<li><b>Theme</b>: Light, Dark or Same as system. The dark theme draws the sheet dark with
-white lines.</li>
+<li><b>Black drawing background</b> (on to start, as in AutoCAD): the sheet is drawn black with
+white lines. Turn it off for a white sheet. <b>Export to PDF...</b> always prints black on
+white either way.</li>
+<li><b>Theme</b>: Light, Dark or Same as system: the menus, ribbon and panels.</li>
 <li><b>Command line</b> and <b>Sheets panel</b> show or hide those panels.</li>
 </ul>
 
@@ -145,7 +170,8 @@ converted to inches. AutoCAD DWG files: save them as DXF first (in AutoCAD, or w
 ODA File Converter).</li>
 <li><b>Export this sheet to DXF...</b> and <b>Export all sheets to DXF...</b>: AutoCAD 2013 DXF
 in inches, one file per sheet, border and title block on layer BORDER.</li>
-<li><b>Export to PDF...</b>: every sheet at its real size, black on white, vector lines.</li>
+<li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
+black on white (layer colors are for the screen).</li>
 </ul>
 
 <h2>Keyboard shortcuts</h2>

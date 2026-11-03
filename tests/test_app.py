@@ -337,3 +337,83 @@ class StaticTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TitleBlockTest(unittest.TestCase):
+    def test_fields_fill_in_and_edits_undo(self):
+        from kanzonascad.sheetframe import title_block_entities, fields_used
+        p = M.Project.new()
+        with p.edit("seed") as ed:
+            ed.sheet_meta(p.sheets[0], title="Motor control", number="6")
+            ed.add_sheet(M.Sheet(title="Two"))
+            ed.project_fields(dict(p.fields, Customer="ACME"))
+        texts = [e.text for e in title_block_entities(p, p.sheets[0]) if e.kind == "text"]
+        self.assertIn("ACME", texts)
+        self.assertIn("6 OF 2", texts)
+        self.assertIn("Motor control", texts)
+        # a field of your own, added by editing the title block
+        tb = p.title_block
+        with p.edit("Text") as ed:
+            ed.add(tb, M.Text((10, 1), "JOB {Job number}", 0.1))
+        self.assertIn("Job number", fields_used(p))
+        with p.edit("Fields") as ed:
+            ed.project_fields(dict(p.fields, **{"Job number": "J-77"}))
+        texts = [e.text for e in title_block_entities(p, p.sheets[1]) if e.kind == "text"]
+        self.assertIn("JOB J-77", texts)
+        p.undo()
+        p.undo()
+        self.assertNotIn("Job number", fields_used(p))
+
+    def test_title_block_follows_sheet_size_and_saves(self):
+        from kanzonascad.sheetframe import title_block_rect
+        p = M.Project.new()
+        with p.edit("seed") as ed:
+            ed.add_sheet(M.Sheet(title="D size", size="ANSI D (34 x 22)"))
+        rb = title_block_rect(p, p.sheets[0])
+        rd = title_block_rect(p, p.sheets[1])
+        self.assertAlmostEqual(rb[2], p.sheets[0].frame()[2])     # in the lower right corner
+        self.assertAlmostEqual(rd[2], p.sheets[1].frame()[2])
+        self.assertAlmostEqual(rd[2] - rd[0], rb[2] - rb[0])
+        path = os.path.join(tempfile.mkdtemp(), "tb.kzcad")
+        with p.edit("Erase a line") as ed:
+            ed.remove(p.title_block, next(iter(p.title_block.entities)))
+        p.save(path)
+        q = M.Project.load(path)
+        self.assertEqual(len(q.title_block.entities), len(p.title_block.entities))
+
+    def test_zone_strips_only_top_and_left(self):
+        s = M.Sheet()
+        w, h = s.paper()
+        x0, y0, x1, y1 = s.frame()
+        self.assertAlmostEqual(x1, w - s.MARGIN)        # no strip on the right
+        self.assertAlmostEqual(y0, s.MARGIN)            # none along the bottom
+        self.assertAlmostEqual(x0, s.MARGIN + s.STRIP)
+        self.assertAlmostEqual(y1, h - s.MARGIN - s.STRIP)
+
+    def test_edit_title_block_mode_in_the_window(self):
+        w, v = window()
+        try:
+            w.acts["edit_tb"].trigger()
+            self.assertIs(v.sheet(), v.project.title_block)
+            self.assertFalse(w.acts["sheet_del"].isEnabled())
+            v.snap_on = v.osnap_on = False
+            v.run(C.TextCmd)
+            type_in(v, "1,1", "0.1", "0", "{Customer}", "")
+            w.acts["edit_tb"].trigger()
+            self.assertIs(v.sheet(), v.project.sheets[0])
+            self.assertTrue(w.acts["black"].isChecked())
+            self.assertTrue(v.dark)
+            v.repaint()
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            w.close()
+
+
+class PrintColorTest(unittest.TestCase):
+    def test_pdf_palette_prints_every_layer_black(self):
+        from kanzonascad.render import Palette
+        p = M.Project.new()
+        wire = M.Line((0, 0), (1, 0), layer="WIRES")       # red on screen
+        self.assertEqual(Palette(False, mono=True).color(p, wire).name(), "#000000")
+        self.assertNotEqual(Palette(True).color(p, wire).name(), "#000000")
+        self.assertEqual(Palette(True).paper.name(), "#000000")
