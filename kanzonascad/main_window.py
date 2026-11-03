@@ -223,7 +223,13 @@ class MainWindow(QMainWindow):
         self._cmd_act("line", "&Line", C.LineCmd, "Line")
         self._cmd_act("polyline", "&Polyline", C.PolylineCmd, "Polyline")
         self._cmd_act("rect", "&Rectangle", C.RectangleCmd, "Rectangle")
-        self._cmd_act("circle", "&Circle", C.CircleCmd, "Circle")
+        self._cmd_act("circle", "Center, &radius", C.CircleCmd, "Circle")
+        self._cmd_act("circle_d", "Center, &diameter", C.CircleDiameterCmd, "Circle")
+        self._cmd_act("circle_2p", "&2-Point", C.Circle2PCmd, "2-Point")
+        self._cmd_act("circle_3p", "&3-Point", C.Circle3PCmd, "3-Point")
+        self._cmd_act("circle_ttr", "&Tan, tan, radius", C.CircleTTRCmd, "Tan, tan, radius")
+        for k in ("circle_d", "circle_2p", "circle_3p", "circle_ttr"):
+            self.acts[k].setProperty("icon_key", "circle")
         self._cmd_act("arc", "&Arc (3 points)", C.ArcCmd, "Arc")
         self._cmd_act("text", "&Text", C.TextCmd, "Text")
         self._cmd_act("move", "&Move", C.MoveCmd, "Move")
@@ -251,6 +257,8 @@ class MainWindow(QMainWindow):
 
         self._cmd_act("wire", "&Wire", C.WireCmd, "Wire")
         self.acts["wire"].setProperty("icon_key", "wire")
+        self._cmd_act("bus", "&Bus", C.BusCmd, "Bus")
+        self.acts["bus"].setProperty("icon_key", "bus")
         self._cmd_act("make_block", "&Make block", C.MakeBlockCmd, "Make block")
         self.acts["make_block"].setProperty("icon_key", "make_block")
         self._cmd_act("explode", "E&xplode", C.ExplodeCmd, "Explode")
@@ -309,8 +317,15 @@ class MainWindow(QMainWindow):
         for mode in ("light", "dark", "system"):
             tm.addAction(a["theme_" + mode])
         m = mb.addMenu("&Draw")
-        for k in ("line", "polyline", "rect", "circle", "arc", "text", None, "wire"):
-            m.addSeparator() if k is None else m.addAction(a[k])
+        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus"):
+            if k == "CIRCLE":
+                cm = m.addMenu("&Circle")
+                for ck in self.CIRCLE_KEYS:
+                    cm.addAction(a[ck])
+                cm.menuAction().setIcon(theme.icon("circle"))
+                self.circle_menu = cm
+            else:
+                m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
                   "object_color"):
@@ -327,18 +342,25 @@ class MainWindow(QMainWindow):
         m.addAction(a["manual"])
         m.addAction(a["about"])
 
+    CIRCLE_KEYS = ("circle", "circle_d", "circle_2p", "circle_3p", "circle_ttr")
+
     def _build_ribbon(self):
-        from .ribbon import Ribbon
+        from .ribbon import Ribbon, split_button
         a = self.acts
         self.layer_box = QComboBox()
         self.layer_box.setMinimumWidth(130)
         self.layer_box.setToolTip("Current layer (new objects go on it). With objects "
                                   "selected, picking a layer moves them to it.")
         self.layer_box.activated.connect(self._layer_picked)
+        # Circle, with its other ways beside it: the face shows the one used last
+        self.circle_button = split_button([a[k] for k in self.CIRCLE_KEYS])
+        for k in self.CIRCLE_KEYS:              # (also when picked from the Draw menu)
+            a[k].triggered.connect(lambda _c=False, act=a[k]:
+                                   self.circle_button.setDefaultAction(act))
         r = self.ribbon = Ribbon()
         r.add_tab("Home", [
-            ("Draw", "large", [a["line"], a["polyline"], a["rect"], a["circle"], a["arc"],
-                               a["text"]]),
+            ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
+                               a["arc"], a["text"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
                                  a["erase"], a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
@@ -347,7 +369,7 @@ class MainWindow(QMainWindow):
         ])
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
-            ("Draw", "large", [a["wire"]]),
+            ("Draw", "large", [a["wire"], a["bus"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
@@ -1215,7 +1237,8 @@ class MainWindow(QMainWindow):
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color",
-                  "line", "polyline", "rect", "circle", "arc", "text", "move", "copy", "rotate",
+                  "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
+                  "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste"):
             a[k].setEnabled(has)
         a["undo"].setEnabled(bool(has and p.undo_stack))
@@ -1245,7 +1268,7 @@ class MainWindow(QMainWindow):
         a["sheets"].blockSignals(True)
         a["sheets"].setChecked(not self.sheet_dock.isHidden())
         a["sheets"].blockSignals(False)
-        for k in ("make_block", "explode", "wire"):
+        for k in ("make_block", "explode", "wire", "bus"):
             a[k].setEnabled(has)
         d = self.doc()
         title = APP

@@ -250,44 +250,202 @@ class RectangleCmd(Command):
 
 
 class CircleCmd(Command):
+    """CIRCLE: center, then radius (D for a diameter). At the first prompt 3P, 2P and TTR
+    switch to those ways, as AutoCAD's CIRCLE does."""
     name, title = "CIRCLE", "Circle"
+    diameter_first = False
 
     def begin(self):
         self.center = None
-        self.ctx.prompt("Specify center point")
+        self.diameter = self.diameter_first
+        self.ctx.prompt("Specify center point", [("3P", "3P"), ("2P", "2P"),
+                                                 ("Tan, tan, radius", "TTR")])
 
-    def _make(self, r):
+    def _make(self, center, r):
         if r <= 1e-9:
             return
         with self.ctx.edit("Circle") as ed:
-            ed.add(self.ctx.sheet(), M.Circle(self.center, r, layer=self.ctx.layer()))
+            ed.add(self.ctx.sheet(), M.Circle(center, r, layer=self.ctx.layer()))
         self.finish()
 
     def point(self, p):
         if self.center is None:
             self.center = self.base = self.last = p
-            self.ctx.prompt("Specify radius (point or number)", [("Diameter", "D")])
-            self.diameter = False
+            if self.diameter:
+                self.ctx.prompt("Specify diameter (point or number)", [("Radius", "R")])
+            else:
+                self.ctx.prompt("Specify radius (point or number)", [("Diameter", "D")])
             return
-        self._make(G.dist(self.center, p))
+        d = G.dist(self.center, p)
+        self._make(self.center, d / 2 if self.diameter else d)
 
     def number(self, v):
         if self.center is None:
             return False
-        self._make(v / 2 if self.diameter else v)
+        self._make(self.center, v / 2 if self.diameter else v)
         return True
 
     def text(self, s):
-        if self.center is not None and s.strip().upper() == "D":
-            self.diameter = True
-            self.ctx.prompt("Specify diameter")
+        k = s.strip().upper()
+        if self.center is None:
+            other = {"3P": Circle3PCmd, "2P": Circle2PCmd, "TTR": CircleTTRCmd,
+                     "T": CircleTTRCmd}.get(k)
+            if other is not None:
+                self.ctx.switch_to(other)
+                return True
+            return False
+        if k in ("D", "R"):
+            self.diameter = k == "D"
+            self.ctx.prompt("Specify diameter" if self.diameter else "Specify radius")
             return True
         return False
 
     def preview(self, p):
         if self.center is None:
             return []
-        return [M.Circle(self.center, G.dist(self.center, p)), M.Line(self.center, p)]
+        d = G.dist(self.center, p)
+        return [M.Circle(self.center, d / 2 if self.diameter else d), M.Line(self.center, p)]
+
+
+class CircleDiameterCmd(CircleCmd):
+    name, title = "CIRCLE", "Circle (center, diameter)"
+    diameter_first = True
+
+
+class Circle2PCmd(Command):
+    """2-Point: the two ends of a diameter."""
+    name, title = "CIRCLE", "Circle (2-point)"
+
+    def begin(self):
+        self.first = None
+        self.ctx.prompt("Specify first end point of circle's diameter")
+
+    def point(self, p):
+        if self.first is None:
+            self.first = self.base = self.last = p
+            self.ctx.prompt("Specify second end point of circle's diameter")
+            return
+        if G.dist(self.first, p) < 1e-9:
+            return
+        c = ((self.first[0] + p[0]) / 2, (self.first[1] + p[1]) / 2)
+        with self.ctx.edit("Circle") as ed:
+            ed.add(self.ctx.sheet(), M.Circle(c, G.dist(self.first, p) / 2,
+                                              layer=self.ctx.layer()))
+        self.finish()
+
+    def preview(self, p):
+        if self.first is None or G.dist(self.first, p) < 1e-9:
+            return []
+        c = ((self.first[0] + p[0]) / 2, (self.first[1] + p[1]) / 2)
+        return [M.Circle(c, G.dist(self.first, p) / 2), M.Line(self.first, p)]
+
+
+class Circle3PCmd(Command):
+    """3-Point: three points on the circle."""
+    name, title = "CIRCLE", "Circle (3-point)"
+
+    def begin(self):
+        self.points = []
+        self.ctx.prompt("Specify first point on circle")
+
+    def point(self, p):
+        self.points.append(p)
+        self.base = self.last = p
+        if len(self.points) == 1:
+            self.ctx.prompt("Specify second point on circle")
+        elif len(self.points) == 2:
+            self.ctx.prompt("Specify third point on circle")
+        else:
+            r = G.circle_from_3_points(*self.points)
+            if r is None:
+                self.points.pop()
+                self.ctx.message("The three points are in line: pick another.")
+                return
+            with self.ctx.edit("Circle") as ed:
+                ed.add(self.ctx.sheet(), M.Circle(r[0], r[1], layer=self.ctx.layer()))
+            self.finish()
+
+    def preview(self, p):
+        if len(self.points) == 2:
+            r = G.circle_from_3_points(self.points[0], self.points[1], p)
+            if r:
+                return [M.Circle(r[0], r[1])]
+        if self.points:
+            return [M.Line(self.points[-1], p)]
+        return []
+
+
+def _tangent_shape(ent):
+    """A line, circle or arc as the shape a tangent circle can touch, or None."""
+    if isinstance(ent, M.Line):
+        return ("line", ent.p1, ent.p2)
+    if isinstance(ent, (M.Circle, M.Arc)):
+        return ("circle", ent.center, ent.radius)
+    if isinstance(ent, M.Polyline):
+        return None
+    return None
+
+
+class CircleTTRCmd(Command):
+    """Tan, tan, radius: pick two lines, circles or arcs near where the circle should touch
+    them, then its radius. Of the circles that fit, the one touching nearest the picks."""
+    name, title = "CIRCLE", "Circle (tan, tan, radius)"
+
+    def begin(self):
+        self.picks = []
+        self.picking = True
+        self.ctx.prompt("Specify point on object for first tangent of circle")
+
+    def pick(self, p):
+        ent = self.ctx.pick_entity(p)
+        if ent is None:
+            return
+        if isinstance(ent, M.Polyline):
+            # the segment of a polyline nearest the pick
+            seg = min(ent.segments(), key=lambda s: G.dist_to_segment(p, *s))
+            shape = ("line", seg[0], seg[1])
+        else:
+            shape = _tangent_shape(ent)
+        if shape is None:
+            self.ctx.message("Pick a line, polyline, circle or arc.")
+            return
+        self.picks.append((shape, p))
+        if len(self.picks) == 1:
+            self.ctx.prompt("Specify point on object for second tangent of circle")
+        else:
+            self.picking = False
+            self.ctx.prompt("Specify radius of circle <%s>" % _fmt(
+                getattr(self.ctx, "_last_ttr", 0.25)))
+
+    def number(self, v):
+        if len(self.picks) < 2 or v <= 0:
+            return False
+        return self._make(v)
+
+    def point(self, p):
+        # a picked radius: from the last point picked to this one
+        if len(self.picks) == 2:
+            self._make(G.dist(self.picks[1][1], p))
+
+    def enter(self):
+        if len(self.picks) == 2:
+            self._make(getattr(self.ctx, "_last_ttr", 0.25))
+        else:
+            self.finish()
+
+    def _make(self, r):
+        (a, pa), (b, pb) = self.picks
+        cands = G.tangent_circles(a, b, r)
+        if not cands:
+            self.ctx.message("Circle does not exist: no circle of that radius touches both.")
+            return True
+        best = min(cands, key=lambda c: G.dist(G.tangent_point(a, c), pa)
+                   + G.dist(G.tangent_point(b, c), pb))
+        self.ctx._last_ttr = r
+        with self.ctx.edit("Circle") as ed:
+            ed.add(self.ctx.sheet(), M.Circle(best, r, layer=self.ctx.layer()))
+        self.finish()
+        return True
 
 
 class ArcCmd(Command):
@@ -865,6 +1023,140 @@ class WireCmd(Command):
         return [M.Wire(self.points + self._route(p))]
 
 
+def bus_paths(points, count, spacing, flip=False):
+    """The wires of a bus following the path `points` (straight across / up and down):
+    the first runs along the path, the others beside it, each `spacing` further to the right
+    of the direction of travel (to the left with flip); corners stay square, so every wire
+    turns with the path and the spacing holds through each turn."""
+    pts = M._tidy([list(p) for p in points])
+    if len(pts) < 2:
+        return []
+    side = -1.0 if flip else 1.0
+    normals = []
+    for a, b in zip(pts, pts[1:]):
+        L = G.dist(a, b)
+        ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+        normals.append((uy * side, -ux * side))       # right of travel
+    out = []
+    for k in range(count):
+        d = k * spacing
+        line = [(pts[0][0] + d * normals[0][0], pts[0][1] + d * normals[0][1])]
+        for j in range(1, len(pts) - 1):
+            n1, n2 = normals[j - 1], normals[j]
+            line.append((pts[j][0] + d * (n1[0] + n2[0]), pts[j][1] + d * (n1[1] + n2[1])))
+        line.append((pts[-1][0] + d * normals[-1][0], pts[-1][1] + d * normals[-1][1]))
+        out.append(line)
+    return out
+
+
+class BusCmd(Command):
+    """BUS: several wires side by side (three phases, say). How many and how far apart, then
+    click the path as for a wire: it runs straight across and up or down, turning 90 degrees
+    at each click as many times as needed, all the wires turning together. F puts the other
+    wires on the other side; Enter (or Esc) ends it."""
+    name, title = "BUS", "Bus"
+
+    def begin(self):
+        self.count = int(getattr(self.ctx, "_bus_count", 3))
+        self.spacing = float(getattr(self.ctx, "_bus_spacing", 0.5))
+        self.flip = False
+        self.points = []
+        self.hfirst = None
+        self.step = "count"
+        self.ctx.prompt("Number of wires <%d>" % self.count)
+
+    def number(self, v):
+        if self.step == "count":
+            if v < 2 or v != int(v) or v > 50:
+                self.ctx.message("A bus has 2 to 50 wires.")
+                return True
+            self.count = int(v)
+            self._ask_spacing()
+            return True
+        if self.step == "spacing":
+            if v <= 0:
+                return False
+            self.spacing = v
+            self._ask_start()
+            return True
+        return False
+
+    def _ask_spacing(self):
+        self.step = "spacing"
+        self.ctx.prompt("Spacing between wires <%s> (inches, or 12mm)" % _fmt(self.spacing))
+
+    def _ask_start(self):
+        self.step = "path"
+        self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.spacing
+        self.ctx.prompt("Specify start of the first wire (%d wires, %s apart)"
+                        % (self.count, _fmt(self.spacing)), [("Other side", "F")])
+
+    def enter(self):
+        if self.step == "count":
+            self._ask_spacing()
+        elif self.step == "spacing":
+            self._ask_start()
+        else:
+            self._make()
+
+    def cancel(self):
+        self._make()
+
+    def _route(self, p):
+        a = self.points[-1]
+        h = self.hfirst
+        if h is None:
+            h = abs(p[0] - a[0]) >= abs(p[1] - a[1])
+        from .wires import route
+        return route(a, p, h)
+
+    def point(self, p):
+        if self.step != "path":
+            return
+        if not self.points:
+            self.points = [p]
+            self.base = self.last = p
+            self.ctx.prompt("Specify next corner (Enter ends the bus)",
+                            [("Other side", "F"), ("Undo", "U")])
+            return
+        if G.dist(self.points[-1], p) < 1e-9:
+            return
+        self.points += self._route(p)
+        self.base = self.last = p
+
+    def text(self, s):
+        k = s.strip().upper()
+        if self.step == "path" and k == "F":
+            self.flip = not self.flip
+            return True
+        if self.step == "path" and k == "U" and len(self.points) > 1:
+            self.points.pop()
+            self.base = self.last = self.points[-1]
+            return True
+        return False
+
+    def _make(self):
+        made = 0
+        if self.step == "path" and len(self.points) >= 2:
+            paths = bus_paths(self.points, self.count, self.spacing, self.flip)
+            with self.ctx.edit("Bus") as ed:
+                for pts in paths:
+                    ed.add(self.ctx.sheet(), M.Wire(pts))
+                    made += 1
+        if made:
+            self.ctx.message("Bus of %d wires" % made)
+        self.finish()
+
+    def preview(self, p):
+        if self.step != "path":
+            return []
+        if not self.points:
+            return [M.Wire(q) for q in bus_paths([p, (p[0] + 0.25, p[1])], self.count,
+                                                 self.spacing, self.flip)]
+        return [M.Wire(q) for q in bus_paths(self.points + self._route(p), self.count,
+                                             self.spacing, self.flip)]
+
+
 class MakeBlockCmd(Command):
     """BLOCK: selected objects become a symbol or footprint in your library: base point, the
     details (name, kind...), then for a symbol its pins in order and where its tag goes."""
@@ -1059,6 +1351,7 @@ COMMANDS = {
     "ZOOM": (ZoomCmd, ["Z"]),
     "BLOCK": (MakeBlockCmd, ["B"]),
     "WIRE": (WireCmd, ["W"]),
+    "BUS": (BusCmd, ["BU"]),
     "EXPLODE": (ExplodeCmd, ["X"]),
 }
 

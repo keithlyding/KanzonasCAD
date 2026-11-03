@@ -733,3 +733,66 @@ class ZoneLabelsTest(unittest.TestCase):
         self.assertNotIn("I", labels)
         p.undo()
         self.assertEqual(s.col_start, 1)
+
+
+class CircleWaysTest(unittest.TestCase):
+    def setUp(self):
+        self.win, self.v = window()
+        self.v.osnap_on = self.v.snap_on = False
+
+    def tearDown(self):
+        self.v.project.saved_at = len(self.v.project.undo_stack)
+        self.win.close()
+
+    def last(self):
+        return list(self.v.sheet().entities.values())[-1]
+
+    def test_two_three_point_and_diameter(self):
+        v = self.v
+        v.run(C.Circle2PCmd)
+        type_in(v, "1,1", "3,1")
+        c = self.last()
+        self.assertEqual((c.center, c.radius), ((2.0, 1.0), 1.0))
+        v.run(C.Circle3PCmd)
+        type_in(v, "5,0", "6,1", "7,0")
+        c = self.last()
+        self.assertAlmostEqual(c.center[0], 6)
+        self.assertAlmostEqual(c.radius, 1)
+        v.run(C.CircleDiameterCmd)
+        type_in(v, "8,8", "1")
+        self.assertAlmostEqual(self.last().radius, 0.5)
+        v.run(C.CircleCmd)                      # typed: C, then 3P
+        type_in(v, "3P")
+        self.assertIsInstance(v.cmd, C.Circle3PCmd)
+        v.cancel()
+
+    def test_tan_tan_radius(self):
+        v = self.v
+        with v.project.edit("seed") as ed:
+            ed.add(v.sheet(), M.Line((1, 1), (5, 1)))
+            ed.add(v.sheet(), M.Line((1, 1), (1, 5)))
+        v.run(C.CircleTTRCmd)
+        click(v, (3, 1))
+        click(v, (1, 3))
+        type_in(v, "0.5")
+        c = self.last()
+        self.assertAlmostEqual(c.center[0], 1.5)
+        self.assertAlmostEqual(c.center[1], 1.5)
+        # touching a circle and a line
+        with v.project.edit("seed") as ed:
+            ed.add(v.sheet(), M.Circle((8, 3), 1))
+            ed.add(v.sheet(), M.Line((6, 1), (10, 1)))
+        v.run(C.CircleTTRCmd)
+        click(v, (8, 2))                        # the circle's bottom
+        click(v, (8, 1))                        # the line under it
+        type_in(v, "")                           # Enter: the last radius, 0.5
+        c = self.last()
+        self.assertAlmostEqual(c.radius, 0.5)
+        self.assertAlmostEqual(G.dist(c.center, (8, 3)), 1.5)    # outside, touching
+        self.assertAlmostEqual(c.center[1], 1.5)                 # and resting on the line
+
+    def test_split_button_shows_the_last_way(self):
+        w = self.win
+        w.acts["circle_3p"].trigger()
+        self.assertIs(w.circle_button.defaultAction(), w.acts["circle_3p"])
+        self.v.cancel()

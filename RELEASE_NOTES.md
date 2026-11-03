@@ -11,6 +11,10 @@ build fails without them.
 **New**
 - The Library opens as a popup (Insert symbol, Insert footprint) instead of taking room at
   the side of the drawing, as AutoCAD Electrical's icon menu does.
+- Circle has AutoCAD's other ways: center and diameter, 2-point, 3-point, tangent to two
+  objects with a radius; the ribbon button shows the one used last.
+- Bus: several wires side by side, as many turns as you need, all turning together.
+- Lines on screen are drawn crisp, as in AutoCAD.
 
 ## 0.3
 

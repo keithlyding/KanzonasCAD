@@ -131,6 +131,11 @@ class CadView(QWidget):
     def set_text_height(self, v):
         self.project.settings["text_height"] = float(v)
 
+    def switch_to(self, cls):
+        """A command handing over to another way of doing it (CIRCLE's 3P, 2P, TTR)."""
+        self.cmd = None             # (the old one just stops: nothing of it to keep)
+        self.run(cls)
+
     def cursor_point(self):
         return self.cursor
 

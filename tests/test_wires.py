@@ -114,3 +114,34 @@ class WireKeptTest(unittest.TestCase):
         finally:
             v.project.saved_at = len(v.project.undo_stack)
             w.close()
+
+
+class BusTest(unittest.TestCase):
+    def test_paths_keep_spacing_through_turns(self):
+        paths = C.bus_paths([(0, 5), (4, 5), (4, 1)], 3, 0.5)
+        self.assertEqual(paths[0], [(0.0, 5.0), (4.0, 5.0), (4.0, 1.0)])
+        # going right, the others are below; turning down, they stay on the inside
+        self.assertEqual(paths[1], [(0.0, 4.5), (3.5, 4.5), (3.5, 1.0)])
+        self.assertEqual(paths[2], [(0.0, 4.0), (3.0, 4.0), (3.0, 1.0)])
+        flipped = C.bus_paths([(0, 5), (4, 5)], 2, 0.5, flip=True)
+        self.assertEqual(flipped[1], [(0.0, 5.5), (4.0, 5.5)])
+
+    def test_bus_command(self):
+        w, v = window()
+        try:
+            v.osnap_on = v.snap_on = False
+            v.run(C.BusCmd)
+            type_in(v, "4", "12mm", "1,8", "6,8", "6,3", "9,3", "")
+            ws = wires_of(v)
+            self.assertEqual(len(ws), 4)
+            gap = 12 / 25.4
+            ys = sorted(round(x.points[0][1], 6) for x in ws)
+            self.assertAlmostEqual(ys[-1] - ys[-2], gap, 5)
+            self.assertTrue(all(len(x.points) == 4 for x in ws))      # two turns each
+            v.run(C.BusCmd)                       # it remembers 4 and 12 mm
+            type_in(v, "", "", "1,1", "3,1")
+            v.cancel()                            # Esc keeps it
+            self.assertEqual(len(wires_of(v)), 8)
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            w.close()

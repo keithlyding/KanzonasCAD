@@ -260,3 +260,59 @@ def outline_touches_polygon(outline, poly):
         if polyline_crosses_polygon(pts, poly):
             return True
     return False
+
+
+def tangent_circles(a, b, r):
+    """Centers of the circles of radius r tangent to both a and b. a, b: ("line", p, q) (the
+    infinite line through p and q) or ("circle", center, radius)."""
+    def offsets(s):
+        if s[0] == "line":
+            p, q = s[1], s[2]
+            L = dist(p, q)
+            if L < EPS:
+                return []
+            nx, ny = -(q[1] - p[1]) / L, (q[0] - p[0]) / L
+            return [("line", (p[0] + k * nx * r, p[1] + k * ny * r),
+                     (q[0] + k * nx * r, q[1] + k * ny * r)) for k in (1, -1)]
+        c, R = s[1], s[2]
+        out = [("circle", c, R + r)]
+        if abs(R - r) > EPS:
+            out.append(("circle", c, abs(R - r)))
+        return out
+
+    def meet(u, v):
+        if u[0] == "line" and v[0] == "line":
+            p1, p2, p3, p4 = u[1], u[2], v[1], v[2]
+            d = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0])
+            if abs(d) < EPS:
+                return []
+            t = ((p1[0] - p3[0]) * (p3[1] - p4[1]) - (p1[1] - p3[1]) * (p3[0] - p4[0])) / d
+            return [(p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1]))]
+        if u[0] == "circle" and v[0] == "line":
+            u, v = v, u
+        if u[0] == "line":
+            return line_circle_intersections(u[1], u[2], v[1], v[2], segment=False)
+        return circle_circle_intersections(u[1], u[2], v[1], v[2])
+
+    out = []
+    for u in offsets(a):
+        for v in offsets(b):
+            for c in meet(u, v):
+                if not any(dist(c, o) < 1e-7 for o in out):
+                    out.append(c)
+    return out
+
+
+def tangent_point(shape, center):
+    """Where a circle centered at center touches the shape."""
+    if shape[0] == "line":
+        p, q = shape[1], shape[2]
+        dx, dy = q[0] - p[0], q[1] - p[1]
+        d2 = dx * dx + dy * dy
+        t = ((center[0] - p[0]) * dx + (center[1] - p[1]) * dy) / d2
+        return (p[0] + t * dx, p[1] + t * dy)
+    c, R = shape[1], shape[2]
+    d = dist(c, center)
+    if d < EPS:
+        return (c[0] + R, c[1])
+    return (c[0] + (center[0] - c[0]) * R / d, c[1] + (center[1] - c[1]) * R / d)
