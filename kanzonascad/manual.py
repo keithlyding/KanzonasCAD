@@ -42,7 +42,11 @@ of every wire number (6001, 6002 ...).</p>
 <li><b>Delete sheet</b> removes the sheet shown (Undo brings it back).</li>
 <li><b>Move sheet up</b> and <b>Move sheet down</b> change the order (and so the automatic
 page numbers).</li>
-<li><b>Sheet properties...</b>: title, page number, size, number of zone columns and rows.</li>
+<li><b>Sheet properties...</b>: title, page number, size, and the zones: how many columns along
+the top (10 to start) and the first one's number (1 to start; 11 makes a sheet continue
+11 to 20), how many rows down the left (8 to start: A to H) and the first one's letter.
+Grid references follow the zones as they are set: change them and every reference updates. Tick "Use this size and these zones on every sheet" to change
+them on all the project's sheets at once (one Undo puts them back).</li>
 <li><b>Project properties...</b> (or double-click the title block): the title block fields
 (customer, project, drawing number, drawn by, checked by, date, revision, and any field of
 your own the title block uses) and the <b>grid reference format</b>
@@ -74,7 +78,7 @@ in Project properties to fill in.</li>
 on title block changes like on any other.</p>
 
 <h2>Symbols, footprints and parts (the library)</h2>
-<p>Your <b>library</b> is a folder of its own (<code>Documents\KanzonasCAD Library</code> to
+<p>Your <b>library</b> is a folder of its own (<code>Documents\\KanzonasCAD Library</code> to
 start; <b>Library folder...</b> picks another, a OneDrive folder say). It is kept apart from
 the program and from projects, so it lasts through updates and serves every project. Each
 project also keeps its own copy of the blocks it uses, so it opens the same anywhere, whatever

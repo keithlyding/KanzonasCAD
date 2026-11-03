@@ -809,10 +809,10 @@ class Layer:
                    d.get("locked", False))
 
 
-def row_letters(n):
-    """A, B, ... Z, AA, AB ... for n rows."""
+def row_letters(n, start=0):
+    """A, B, ... Z, AA, AB ... for n rows, the first being letter number start (0 = A)."""
     out = []
-    for i in range(n):
+    for i in range(start, start + n):
         s, k = "", i
         while True:
             s = string.ascii_uppercase[k % 26] + s
@@ -867,14 +867,16 @@ TITLE_BLOCK_ID = 0          # the project's title block is kept as a sheet with 
 
 
 class Sheet:
-    def __init__(self, title="", size=DEFAULT_SIZE, cols=10, rows=6, number=None, id=None,
-                 fields=None):
+    def __init__(self, title="", size=DEFAULT_SIZE, cols=10, rows=8, number=None, id=None,
+                 fields=None, col_start=1, row_start=0):
         self.id = id
         self.title = title
         self.size = size if size in SHEET_SIZES else DEFAULT_SIZE
         self.cols = int(cols)
         self.rows = int(rows)
         self.number = number            # None: its position in the project
+        self.col_start = int(col_start)     # the first column's number (1 to start)
+        self.row_start = int(row_start)     # the first row's letter: 0 = A, 1 = B...
         self.fields = dict(fields or {})
         self.entities = {}              # id -> Entity, in drawing order
         self._next = 1
@@ -899,13 +901,19 @@ class Sheet:
 
     def zone_at(self, x, y):
         """(row letter, column number) of a point, or None outside the drawing area. Columns
-        count left to right from 1, rows top to bottom from A."""
+        count left to right from col_start, rows top to bottom from the row_start letter."""
         x0, y0, x1, y1 = self.frame()
         if not (x0 <= x <= x1 and y0 <= y <= y1):
             return None
-        col = min(self.cols, int((x - x0) / ((x1 - x0) / self.cols)) + 1)
+        col = min(self.cols - 1, int((x - x0) / ((x1 - x0) / self.cols)))
         row = min(self.rows - 1, int((y1 - y) / ((y1 - y0) / self.rows)))
-        return row_letters(self.rows)[row], col
+        return self.row_labels()[row], self.col_labels()[col]
+
+    def col_labels(self):
+        return [self.col_start + i for i in range(self.cols)]
+
+    def row_labels(self):
+        return row_letters(self.rows, self.row_start)
 
     # ---- entities --------------------------------------------------------------------------
     def new_id(self):
@@ -947,7 +955,8 @@ class Sheet:
     # ---- storing ---------------------------------------------------------------------------
     def meta_dict(self):
         return {"id": self.id, "title": self.title, "size": self.size, "cols": self.cols,
-                "rows": self.rows, "number": self.number, "fields": dict(self.fields)}
+                "rows": self.rows, "col_start": self.col_start, "row_start": self.row_start,
+                "number": self.number, "fields": dict(self.fields)}
 
     def to_dict(self):
         d = self.meta_dict()
@@ -960,7 +969,9 @@ class Sheet:
         if self.size not in SHEET_SIZES:
             self.size = DEFAULT_SIZE
         self.cols = int(d.get("cols", 10))
-        self.rows = int(d.get("rows", 6))
+        self.rows = int(d.get("rows", 8))
+        self.col_start = int(d.get("col_start", 1))
+        self.row_start = int(d.get("row_start", 0))
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         self.version += 1

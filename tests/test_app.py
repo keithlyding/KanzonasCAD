@@ -631,3 +631,48 @@ class TextJustifyTest(unittest.TestCase):
         ents, _r = fileio.read_dxf(path)
         got = sorted((e.text, e.align, e.valign, round(e.pos[0], 6)) for e in ents)
         self.assertEqual(got, [("MID", "center", "middle", 6.0), ("TOP", "right", "top", 5.0)])
+
+
+class SheetLayoutTest(unittest.TestCase):
+    def test_zones_on_every_sheet_at_once(self):
+        from PySide6.QtWidgets import QDialog, QCheckBox, QSpinBox
+        from kanzonascad import dialogs
+        p = M.Project.new()
+        with p.edit("seed") as ed:
+            ed.add_sheet(M.Sheet(title="Two", rows=6))
+        self.assertEqual(p.sheets[0].rows, 8)          # A to H to start
+
+        def accept(dlg):
+            dlg.findChild(QSpinBox, "rows").setValue(10)    # rows A to J
+            dlg.findChildren(QCheckBox)[0].setChecked(True)
+            return QDialog.Accepted
+        old = QDialog.exec
+        QDialog.exec = accept
+        try:
+            self.assertTrue(dialogs.sheet_properties(None, p, p.sheets[0]))
+        finally:
+            QDialog.exec = old
+        self.assertEqual([s.rows for s in p.sheets], [10, 10])
+        p.undo()
+        self.assertEqual([s.rows for s in p.sheets], [8, 6])
+
+
+class ZoneLabelsTest(unittest.TestCase):
+    def test_editable_labels_move_references(self):
+        p = M.Project.new()
+        s = p.sheets[0]
+        x0, y0, x1, y1 = s.frame()
+        pt = (x0 + (x1 - x0) / s.cols * 0.5, y1 - (y1 - y0) / s.rows * 0.5)    # first zone
+        self.assertEqual(p.zone_text(s, *pt), "1-A1")
+        with p.edit("zones") as ed:
+            ed.sheet_meta(s, cols=12, col_start=11, row_start=2, rows=6)
+        x0, y0, x1, y1 = s.frame()
+        pt = (x0 + (x1 - x0) / 12 * 0.5, y1 - (y1 - y0) / 6 * 0.5)
+        self.assertEqual(p.zone_text(s, *pt), "1-C11")
+        from kanzonascad.sheetframe import border_entities
+        labels = [e.text for e in border_entities(s) if e.kind == "text"]
+        self.assertEqual(labels[:2], ["11", "12"])
+        self.assertIn("H", labels)
+        self.assertNotIn("I", labels)
+        p.undo()
+        self.assertEqual(s.col_start, 1)

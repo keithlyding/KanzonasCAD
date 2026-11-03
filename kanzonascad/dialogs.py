@@ -36,13 +36,43 @@ def sheet_properties(parent, project, sheet):
     cols.setRange(1, 40)
     cols.setValue(sheet.cols)
     rows = QSpinBox()
+    rows.setObjectName("rows")
     rows.setRange(1, 26)
     rows.setValue(sheet.rows)
     form.addRow("Title", title)
     form.addRow("Page number", number)
     form.addRow("Size", size)
-    form.addRow("Zone columns (1, 2, 3 ... across)", cols)
-    form.addRow("Zone rows (A, B, C ... down)", rows)
+    col_start = QSpinBox()
+    col_start.setRange(0, 9999)
+    col_start.setValue(sheet.col_start)
+    row_start = QComboBox()
+    for i, letter in enumerate(M.row_letters(26)):
+        row_start.addItem(letter, i)
+    row_start.setCurrentIndex(max(0, min(25, sheet.row_start)))
+    shown = QLabel()
+    shown.setStyleSheet("color: gray;")
+
+    def show_labels():
+        c0, n = col_start.value(), cols.value()
+        letters = M.row_letters(rows.value(), row_start.currentData())
+        shown.setText("Along the top: %d to %d.  Down the left: %s to %s."
+                      % (c0, c0 + n - 1, letters[0], letters[-1]))
+    for w in (cols, rows, col_start):
+        w.valueChanged.connect(show_labels)
+    row_start.currentIndexChanged.connect(show_labels)
+    show_labels()
+    form.addRow("Zone columns along the top", cols)
+    form.addRow("First column number", col_start)
+    form.addRow("Zone rows down the left", rows)
+    form.addRow("First row letter", row_start)
+    form.addRow("", shown)
+    all_sheets = QCheckBox("Use this size and these zones on every sheet of the project")
+    note2 = QLabel("Grid references (6-D1), and the cross-references to come, follow the "
+                   "zones as they are set here: change them and every reference updates.")
+    note2.setWordWrap(True)
+    note2.setStyleSheet("color: gray;")
+    form.addRow("", all_sheets)
+    form.addRow(note2)
     note = QLabel("The page number starts each wire number (page 6: 6001, 6002 ...) and "
                   "each grid reference (6-D1). Leave it empty to number by position.")
     note.setWordWrap(True)
@@ -52,13 +82,19 @@ def sheet_properties(parent, project, sheet):
     if dlg.exec() != QDialog.Accepted:
         return False
     num = number.text().strip() or None
-    changes = dict(title=title.text().strip(), number=num, size=size.currentText(),
-                   cols=cols.value(), rows=rows.value())
-    before = sheet.meta_dict()
-    if all(before.get(k) == v for k, v in changes.items()):
+    layout = dict(size=size.currentText(), cols=cols.value(), rows=rows.value(),
+                  col_start=col_start.value(), row_start=row_start.currentData())
+    changes = dict(title=title.text().strip(), number=num, **layout)
+    targets = [(sheet, changes)]
+    if all_sheets.isChecked():
+        targets += [(s, layout) for s in project.sheets if s is not sheet]
+    todo = [(s, ch) for s, ch in targets
+            if any(s.meta_dict().get(k) != v for k, v in ch.items())]
+    if not todo:
         return False
     with project.edit("Sheet properties") as ed:
-        ed.sheet_meta(sheet, **changes)
+        for s, ch in todo:
+            ed.sheet_meta(s, **ch)
     return True
 
 

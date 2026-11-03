@@ -10,7 +10,7 @@ every sheet's drawing area, with every {Field} in its texts replaced by that fie
 
 import re
 
-from .model import Line, Text, row_letters
+from .model import Line, Text
 
 FRAME_LAYER = "BORDER"
 
@@ -128,9 +128,9 @@ def border_entities(sheet):
         if i:
             xx = x0 + i * cw
             out.append(Line((xx, y1), (xx, y1 + s), layer=FRAME_LAYER))
-        out.append(Text((x0 + (i + 0.5) * cw, y1 + (s - th) / 2), str(i + 1), th,
+        out.append(Text((x0 + (i + 0.5) * cw, y1 + (s - th) / 2), str(sheet.col_labels()[i]), th,
                         align="center", layer=FRAME_LAYER))
-    letters = row_letters(sheet.rows)
+    letters = sheet.row_labels()
     for j in range(sheet.rows):
         if j:
             yy = y1 - j * rh

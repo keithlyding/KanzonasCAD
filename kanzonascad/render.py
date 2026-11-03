@@ -177,7 +177,8 @@ class SheetRenderer:
         the title block in its own layers' colors (like any drawing)."""
         p = self.project
         s = self.sheet
-        sig = (s.size, s.cols, s.rows, s.title, p.sheet_number(s), len(p.sheets),
+        sig = (s.size, s.cols, s.rows, s.col_start, s.row_start, s.title, p.sheet_number(s),
+               len(p.sheets),
                tuple(sorted(p.fields.items())), p.title_block.version, self._layer_sig(),
                self.pal.dark)
         if sig != self._frame_sig:
