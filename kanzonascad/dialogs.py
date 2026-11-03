@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QSpin
                                QDialogButtonBox, QVBoxLayout, QTableWidget, QTableWidgetItem,
                                QHBoxLayout, QPushButton, QColorDialog, QInputDialog,
                                QMessageBox, QDoubleSpinBox, QLabel, QHeaderView,
-                               QCheckBox)
+                               QCheckBox, QTabWidget, QWidget)
 
 from . import model as M
 
@@ -21,88 +21,162 @@ def _buttons(dlg):
     return b
 
 
+class _LayoutBoxes:
+    """Size and zone fields (Sheet properties and Project properties share them)."""
+
+    def __init__(self, form, values):
+        self.size = QComboBox()
+        self.size.addItems(list(M.SHEET_SIZES))
+        self.size.setCurrentText(values["size"])
+        self.cols = QSpinBox()
+        self.cols.setObjectName("cols")
+        self.cols.setRange(1, 40)
+        self.cols.setValue(values["cols"])
+        self.col_start = QSpinBox()
+        self.col_start.setRange(0, 9999)
+        self.col_start.setValue(values["col_start"])
+        self.rows = QSpinBox()
+        self.rows.setObjectName("rows")
+        self.rows.setRange(1, 26)
+        self.rows.setValue(values["rows"])
+        self.row_start = QComboBox()
+        for i, letter in enumerate(M.row_letters(26)):
+            self.row_start.addItem(letter, i)
+        self.row_start.setCurrentIndex(max(0, min(25, values["row_start"])))
+        self.shown = QLabel()
+        self.shown.setStyleSheet("color: gray;")
+        for w in (self.cols, self.rows, self.col_start):
+            w.valueChanged.connect(self._show)
+        self.row_start.currentIndexChanged.connect(self._show)
+        self._show()
+        self.rows_widgets = [("Size", self.size), ("Zone columns along the top", self.cols),
+                             ("First column number", self.col_start),
+                             ("Zone rows down the left", self.rows),
+                             ("First row letter", self.row_start), ("", self.shown)]
+        for label, w in self.rows_widgets:
+            form.addRow(label, w)
+        self.form = form
+
+    def _show(self):
+        c0, n = self.col_start.value(), self.cols.value()
+        letters = M.row_letters(self.rows.value(), self.row_start.currentData())
+        self.shown.setText("Along the top: %d to %d.  Down the left: %s to %s."
+                           % (c0, c0 + n - 1, letters[0], letters[-1]))
+
+    def values(self):
+        return {"size": self.size.currentText(), "cols": self.cols.value(),
+                "rows": self.rows.value(), "col_start": self.col_start.value(),
+                "row_start": self.row_start.currentData()}
+
+    def set_values(self, values):
+        self.size.setCurrentText(values["size"])
+        self.cols.setValue(values["cols"])
+        self.rows.setValue(values["rows"])
+        self.col_start.setValue(values["col_start"])
+        self.row_start.setCurrentIndex(values["row_start"])
+
+    def set_enabled(self, on):
+        for label, w in self.rows_widgets:
+            w.setEnabled(on)
+            lab = self.form.labelForField(w)
+            if lab is not None:
+                lab.setEnabled(on)
+
+
+def _gray(text):
+    lab = QLabel(text)
+    lab.setWordWrap(True)
+    lab.setStyleSheet("color: gray;")
+    return lab
+
+
 def sheet_properties(parent, project, sheet):
-    """Title, page number, size and zones of a sheet. True when changed."""
+    """What belongs to one sheet: title, page number, its own revision, and its size and
+    zones (the project's unless it has its own). True when changed."""
     dlg = QDialog(parent)
     dlg.setWindowTitle("Sheet properties")
     form = QFormLayout(dlg)
     title = QLineEdit(sheet.title)
     number = QLineEdit("" if sheet.number in (None, "") else str(sheet.number))
     number.setPlaceholderText("automatic: %d" % (project.sheets.index(sheet) + 1))
-    size = QComboBox()
-    size.addItems(list(M.SHEET_SIZES))
-    size.setCurrentText(sheet.size)
-    cols = QSpinBox()
-    cols.setRange(1, 40)
-    cols.setValue(sheet.cols)
-    rows = QSpinBox()
-    rows.setObjectName("rows")
-    rows.setRange(1, 26)
-    rows.setValue(sheet.rows)
+    rev = QLineEdit(sheet.fields.get("Revision", ""))
+    rev.setPlaceholderText("the project's: %s" % (project.fields.get("Revision") or "(none)"))
     form.addRow("Title", title)
     form.addRow("Page number", number)
-    form.addRow("Size", size)
-    col_start = QSpinBox()
-    col_start.setRange(0, 9999)
-    col_start.setValue(sheet.col_start)
-    row_start = QComboBox()
-    for i, letter in enumerate(M.row_letters(26)):
-        row_start.addItem(letter, i)
-    row_start.setCurrentIndex(max(0, min(25, sheet.row_start)))
-    shown = QLabel()
-    shown.setStyleSheet("color: gray;")
+    form.addRow("Revision", rev)
+    form.addRow(_gray("The page number starts each wire number (page 6: 6001, 6002 ...) and "
+                      "each grid reference (6-D1). Leave it, or the revision, empty to use "
+                      "the automatic number or the project's revision."))
+    own = QCheckBox("This sheet has its own size and zones (not the project's)")
+    own.setChecked(sheet.own_layout)
+    form.addRow(own)
+    layout = _LayoutBoxes(form, sheet.meta_dict())
+    project_layout = {k: project.settings[k] for k in M.LAYOUT_KEYS}
 
-    def show_labels():
-        c0, n = col_start.value(), cols.value()
-        letters = M.row_letters(rows.value(), row_start.currentData())
-        shown.setText("Along the top: %d to %d.  Down the left: %s to %s."
-                      % (c0, c0 + n - 1, letters[0], letters[-1]))
-    for w in (cols, rows, col_start):
-        w.valueChanged.connect(show_labels)
-    row_start.currentIndexChanged.connect(show_labels)
-    show_labels()
-    form.addRow("Zone columns along the top", cols)
-    form.addRow("First column number", col_start)
-    form.addRow("Zone rows down the left", rows)
-    form.addRow("First row letter", row_start)
-    form.addRow("", shown)
-    all_sheets = QCheckBox("Use this size and these zones on every sheet of the project")
-    note2 = QLabel("Grid references (6-D1), and the cross-references to come, follow the "
-                   "zones as they are set here: change them and every reference updates.")
-    note2.setWordWrap(True)
-    note2.setStyleSheet("color: gray;")
-    form.addRow("", all_sheets)
-    form.addRow(note2)
-    note = QLabel("The page number starts each wire number (page 6: 6001, 6002 ...) and "
-                  "each grid reference (6-D1). Leave it empty to number by position.")
-    note.setWordWrap(True)
-    note.setStyleSheet("color: gray;")
-    form.addRow(note)
+    def own_changed(on):
+        layout.set_enabled(on)
+        if not on:
+            layout.set_values(project_layout)
+    own.toggled.connect(own_changed)
+    own_changed(own.isChecked())
+    form.addRow(_gray("Grid references (6-D1), and the cross-references to come, follow the "
+                      "zones as they are set: change them and every reference updates. The "
+                      "project's size and zones are set in Project properties."))
     form.addRow(_buttons(dlg))
     if dlg.exec() != QDialog.Accepted:
         return False
-    num = number.text().strip() or None
-    layout = dict(size=size.currentText(), cols=cols.value(), rows=rows.value(),
-                  col_start=col_start.value(), row_start=row_start.currentData())
-    changes = dict(title=title.text().strip(), number=num, **layout)
-    targets = [(sheet, changes)]
-    if all_sheets.isChecked():
-        targets += [(s, layout) for s in project.sheets if s is not sheet]
-    todo = [(s, ch) for s, ch in targets
-            if any(s.meta_dict().get(k) != v for k, v in ch.items())]
-    if not todo:
+    fields = dict(sheet.fields)
+    if rev.text().strip():
+        fields["Revision"] = rev.text().strip()
+    else:
+        fields.pop("Revision", None)
+    changes = dict(title=title.text().strip(), number=number.text().strip() or None,
+                   own_layout=own.isChecked(), fields=fields)
+    changes.update(layout.values() if own.isChecked() else project_layout)
+    before = sheet.meta_dict()
+    if all(before.get(k) == v for k, v in changes.items()):
         return False
     with project.edit("Sheet properties") as ed:
-        for s, ch in todo:
-            ed.sheet_meta(s, **ch)
+        ed.sheet_meta(sheet, **changes)
     return True
 
 
-def project_properties(parent, project):
+def _color_button(color):
+    """A button showing a color; clicking it picks another. .color holds the choice."""
+    b = QPushButton()
+
+    def show():
+        b.setText("by theme (black/white)" if b.color in (None, M.ADAPTIVE) else b.color)
+        b.setIcon(_swatch(b.color))
+
+    def pick():
+        start = QColor("#000000" if b.color in (None, M.ADAPTIVE) else b.color)
+        c = QColorDialog.getColor(start, b, "Color")
+        if c.isValid():
+            b.color = c.name()
+            show()
+    b.color = color
+    b.clicked.connect(pick)
+    show()
+    return b
+
+
+def project_properties(parent, project, tab=0):
+    """What belongs to the whole project, in three tabs: General (title block fields,
+    revision, grid references, text size), Schematic (sheet size and zones, tags, wires),
+    Panel (footprints, dimensions). True when changed."""
+    from .sheetframe import fields_used, SHEET_FIELDS
     dlg = QDialog(parent)
     dlg.setWindowTitle("Project properties")
-    form = QFormLayout(dlg)
-    from .sheetframe import fields_used, SHEET_FIELDS
+    dlg.resize(520, 520)
+    outer = QVBoxLayout(dlg)
+    tabs = QTabWidget()
+    outer.addWidget(tabs)
+    st = project.settings
+
+    # ---- General ---------------------------------------------------------------------------
+    page = QWidget()
+    form = QFormLayout(page)
     edits = {}
     # the usual fields, then any other the title block uses ({Job number}...), then any kept
     # from before (a field the title block no longer shows keeps its value)
@@ -114,31 +188,86 @@ def project_properties(parent, project):
         e = QLineEdit(project.fields.get(k, ""))
         edits[k] = e
         form.addRow(k, e)
-    note = QLabel("These fill the title block's {Field} texts on every sheet. {Sheet}, "
-                  "{Sheets} and {Sheet title} come from each sheet. Sheets > Edit title "
-                  "block changes its layout and adds fields of your own.")
-    note.setWordWrap(True)
-    note.setStyleSheet("color: gray;")
-    form.addRow(note)
+    form.addRow(_gray("These fill the title block's {Field} texts on every sheet. {Sheet}, "
+                      "{Sheets} and {Sheet title} come from each sheet, and a sheet can have "
+                      "its own revision (Sheet properties). Sheets > Edit title block changes "
+                      "the title block's layout and adds fields of your own."))
     zf = QLineEdit(project.zone_format)
     zf.setToolTip("{sheet}, {row} and {col} are replaced: {sheet}-{row}{col} gives 6-D1")
     form.addRow("Grid reference format", zf)
-    form.addRow(_buttons(dlg))
-    if dlg.exec() != QDialog.Accepted:
-        return False
+    text_h = QDoubleSpinBox()
+    text_h.setDecimals(4)
+    text_h.setRange(0.01, 5)
+    text_h.setSuffix(" in")
+    text_h.setValue(float(st["text_height"]))
+    form.addRow("Text height (new text)", text_h)
+    tabs.addTab(page, "General")
+
+    # ---- Schematic -------------------------------------------------------------------------
+    page = QWidget()
+    form = QFormLayout(page)
+    form.addRow(_gray("Sheets use this size and these zones unless a sheet has its own "
+                      "(Sheet properties)."))
+    layout = _LayoutBoxes(form, st)
+    tag_h = QDoubleSpinBox()
+    tag_h.setDecimals(4)
+    tag_h.setRange(0.01, 5)
+    tag_h.setSuffix(" in")
+    tag_h.setValue(float(st["tag_height"]))
+    form.addRow("Device tag height", tag_h)
+    wire_color = _color_button(project.layer_color("WIRES"))
+    form.addRow("Wire color (layer WIRES)", wire_color)
+    sym_color = _color_button(project.layer_color("SYMBOLS"))
+    form.addRow("Symbol color (layer SYMBOLS)", sym_color)
+    tabs.addTab(page, "Schematic")
+
+    # ---- Panel -----------------------------------------------------------------------------
+    page = QWidget()
+    form = QFormLayout(page)
+    fp_color = _color_button(project.layer_color("PANEL"))
+    form.addRow("Footprint color (layer PANEL)", fp_color)
+    dim_color = _color_button(project.layer_color("DIMENSIONS"))
+    form.addRow("Dimension color (layer DIMENSIONS)", dim_color)
+    form.addRow(_gray("Objects take their layer's color (ByLayer), as in AutoCAD, unless you "
+                      "give them their own (Modify > Color...). Panel scale and dimension "
+                      "settings come with the dimension tools."))
+    tabs.addTab(page, "Panel")
+    tabs.setCurrentIndex(tab)
+    outer.addWidget(_buttons(dlg))
+
+    while True:
+        if dlg.exec() != QDialog.Accepted:
+            return False
+        fmt = zf.text().strip() or "{sheet}-{row}{col}"
+        try:
+            fmt.format(sheet="6", row="D", col=1)
+            break
+        except (KeyError, IndexError, ValueError):
+            QMessageBox.warning(parent, "Project properties",
+                                "The grid reference format can only use {sheet}, {row} and "
+                                "{col}.")
     fields = {k: e.text().strip() for k, e in edits.items()}
-    fmt = zf.text().strip() or "{sheet}-{row}{col}"
-    try:
-        fmt.format(sheet="6", row="D", col=1)
-    except (KeyError, IndexError, ValueError):
-        QMessageBox.warning(parent, "Project properties",
-                            "The grid reference format can only use {sheet}, {row} and {col}.")
-        fmt = project.zone_format
-    changed = fields != project.fields or fmt != project.zone_format
-    if not changed:
+    settings = dict(st)
+    settings.update(layout.values())
+    settings["text_height"] = text_h.value()
+    settings["tag_height"] = tag_h.value()
+    colors = {"WIRES": wire_color.color, "SYMBOLS": sym_color.color, "PANEL": fp_color.color,
+              "DIMENSIONS": dim_color.color}
+    changed_colors = {n: c for n, c in colors.items() if c != project.layer_color(n)
+                      or n not in project.layers}
+    if fields == project.fields and fmt == project.zone_format and settings == st \
+            and not changed_colors:
         return False
     with project.edit("Project properties") as ed:
-        ed.project_fields(fields, fmt)
+        if fields != project.fields or fmt != project.zone_format:
+            ed.project_fields(fields, fmt)
+        if settings != st:
+            ed.project_settings(settings)
+        for name, color in changed_colors.items():
+            lay = project.layers.get(name)
+            before = lay.to_dict() if lay else None
+            after = dict(before or M.Layer(name).to_dict(), color=color)
+            ed.layer(name, before, after)
     return True
 
 
@@ -321,11 +450,6 @@ def drafting_settings(parent, view):
     grid.setRange(0.01, 10)
     grid.setSuffix(" in")
     grid.setValue(view.grid_spacing)
-    th = QDoubleSpinBox()
-    th.setDecimals(4)
-    th.setRange(0.01, 5)
-    th.setSuffix(" in")
-    th.setValue(view.text_height())
     cross = QSpinBox()
     cross.setRange(1, 100)
     cross.setSuffix(" % of the view")
@@ -343,7 +467,6 @@ def drafting_settings(parent, view):
     extra.setPlaceholderText("for example: 60, 120")
     form.addRow("Snap spacing", snap)
     form.addRow("Grid spacing (dots)", grid)
-    form.addRow("Text height", th)
     form.addRow("Crosshair size", cross)
     form.addRow("", full)
     form.addRow("Polar tracking: every (degrees)", inc)
@@ -370,7 +493,6 @@ def drafting_settings(parent, view):
                                 "ones separated by commas." % ex)
     view.snap_spacing = snap.value()
     view.grid_spacing = grid.value()
-    view.set_text_height(th.value())
     view.polar_inc = step
     view.polar_extra = angles
     view.crosshair_size = cross.value()

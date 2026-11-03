@@ -240,6 +240,13 @@ class MainWindow(QMainWindow):
         self.acts["make_block"].setProperty("icon_key", "make_block")
         self._cmd_act("explode", "E&xplode", C.ExplodeCmd, "Explode")
         self.acts["explode"].setProperty("icon_key", "explode")
+        A("object_color", "C&olor...", self.object_color, icon="color", label="Color",
+          tip="Give the selected objects a color of their own, or back to ByLayer (their "
+              "layer's color)")
+        A("schematic_settings", "&Schematic settings...", lambda: self.project_properties(1),
+          icon="sheet_props", label="Schematic settings")
+        A("panel_settings", "Pa&nel settings...", lambda: self.project_properties(2),
+          icon="sheet_props", label="Panel settings")
         A("library_panel", "&Library panel", self._toggle_library, checkable=True,
           icon="library", label="Library panel")
         A("new_part", "New &part...", lambda: self.library_panel.edit_part(new=True),
@@ -285,11 +292,12 @@ class MainWindow(QMainWindow):
         for k in ("line", "polyline", "rect", "circle", "arc", "text"):
             m.addAction(a[k])
         m = mb.addMenu("&Modify")
-        for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim"):
-            m.addAction(a[k])
+        for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
+                  "object_color"):
+            m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "sheet_props",
-                  "project_props", "edit_tb", "layers"):
+                  "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
         for k in ("library_panel", None, "make_block", "explode", None, "new_part",
@@ -317,10 +325,19 @@ class MainWindow(QMainWindow):
             ("Layers", "small", [self.layer_box, a["layers"]]),
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
         ])
-        r.add_tab("Library", [
-            ("Blocks", "large", [a["make_block"], a["explode"]]),
-            ("Library", "large", [a["library_panel"], a["new_part"], a["library_folder"]]),
-            ("Resize", "large", [a["scale"]]),
+        # schematic and panel work, both always there (any sheet can hold either)
+        r.add_tab("Schematic", [
+            ("Symbols", "large", [a["library_panel"], a["make_block"], a["explode"]]),
+            ("Parts", "large", [a["new_part"]]),
+            ("Look", "small", [a["object_color"], a["layers"]]),
+            ("Settings", "large", [a["schematic_settings"]]),
+        ])
+        r.add_tab("Panel", [
+            ("Footprints", "large", [a["library_panel"], a["make_block"], a["explode"]]),
+            ("Real size", "large", [a["scale"]]),
+            ("Parts", "large", [a["new_part"]]),
+            ("Look", "small", [a["object_color"], a["layers"]]),
+            ("Settings", "large", [a["panel_settings"]]),
         ])
         r.add_tab("Sheets", [
             ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
@@ -827,8 +844,7 @@ class MainWindow(QMainWindow):
         p = v.project
         self._leave_title_block(v)
         cur = v.sheet()
-        s = M.Sheet(title="Sheet %d" % (len(p.sheets) + 1), size=cur.size, cols=cur.cols,
-                    rows=cur.rows)
+        s = p.make_sheet("Sheet %d" % (len(p.sheets) + 1))
         with p.edit("New sheet") as ed:
             ed.add_sheet(s, p.sheets.index(cur) + 1)
         v.show_sheet(s.id)
@@ -870,10 +886,36 @@ class MainWindow(QMainWindow):
         if v is not None and dialogs.sheet_properties(self, v.project, v.sheet()):
             self._fill_sheets()
 
-    def project_properties(self):
+    def project_properties(self, tab=0):
         v = self.view()
         if v is not None:
-            dialogs.project_properties(self, v.project)
+            dialogs.project_properties(self, v.project, tab if isinstance(tab, int) else 0)
+
+    def object_color(self):
+        v = self.view()
+        ents = self._selected()
+        if v is None:
+            return
+        if not ents:
+            self.statusBar().showMessage("Color: select the objects first.", 4000)
+            return
+        pick, ok = QInputDialog.getItem(
+            self, "Color", "Color of the %d selected object(s):" % len(ents),
+            ["ByLayer (the layer's color)", "Choose a color..."], 0, False)
+        if not ok:
+            return
+        color = None
+        if pick.startswith("Choose"):
+            from PySide6.QtGui import QColor
+            from PySide6.QtWidgets import QColorDialog
+            c = QColorDialog.getColor(QColor("#ffffff"), self, "Color")
+            if not c.isValid():
+                return
+            color = c.name()
+        with v.project.edit("Color") as ed:
+            for e in ents:
+                if e.color != color:
+                    ed.change(v.sheet(), e.copy(color=color))
 
     # ---- library -----------------------------------------------------------------------------
     def _toggle_library(self, on):
@@ -957,7 +999,6 @@ class MainWindow(QMainWindow):
             st = self.settings
             st.setValue("snap_spacing", v.snap_spacing)
             st.setValue("grid_spacing", v.grid_spacing)
-            st.setValue("text_height", v.text_height())
             st.setValue("polar_inc", v.polar_inc)
             st.setValue("polar_extra", json.dumps(v.polar_extra))
             st.setValue("crosshair_size", v.crosshair_size)
@@ -973,7 +1014,6 @@ class MainWindow(QMainWindow):
         try:
             v.snap_spacing = float(st.value("snap_spacing", v.snap_spacing))
             v.grid_spacing = float(st.value("grid_spacing", v.grid_spacing))
-            v.set_text_height(float(st.value("text_height", v.text_height())))
             v.polar_inc = float(st.value("polar_inc", v.polar_inc))
             v.polar_extra = [float(a) for a in json.loads(st.value("polar_extra", "[]"))]
             v.crosshair_size = int(st.value("crosshair_size", v.crosshair_size))
@@ -1040,6 +1080,7 @@ class MainWindow(QMainWindow):
         for k in ("save", "save_as", "import_dxf", "export_dxf", "export_dxf_all", "export_pdf",
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
+                  "schematic_settings", "panel_settings", "object_color",
                   "line", "polyline", "rect", "circle", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste"):
             a[k].setEnabled(has)

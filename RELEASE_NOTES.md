@@ -18,7 +18,12 @@ build fails without them.
 - Scale by Reference brings a manufacturer's drawing to its real size; lengths can be typed in
   millimeters (45mm).
 - Sheets start with rows A to H; the zones along the top and down the left are editable
-  (how many, and where they start), on one sheet or all, and references follow them.
+  (how many, and where they start), and references follow them.
+- Project properties (General, Schematic, Panel) and Sheet properties, as in AutoCAD
+  Electrical: sheets follow the project's size and zones unless they have their own, and can
+  have their own revision.
+- Schematic and Panel ribbon tabs; objects take their layer's color unless you give them
+  their own (Color...); wire, symbol, footprint and dimension colors in Project properties.
 - Text justification like AutoCAD's (top, middle, bottom; left, center, right), and
   double-click a text to change its wording, height, angle or justification.
 

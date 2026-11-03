@@ -914,8 +914,10 @@ class InsertCmd(Command):
 
     def _make(self, p, defn):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
+        tag_h = self.ctx.project.settings.get("tag_height") if self.defn.kind == "symbol" \
+            else None
         return M.Insert(self.defn.name, p, self.angle, 1.0, self.mirror, self.attrs, defn,
-                        layer=layer)
+                        tag_h, layer=layer)
 
     def preview(self, p):
         return [self._make(p, self.defn)]

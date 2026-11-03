@@ -634,17 +634,36 @@ class TextJustifyTest(unittest.TestCase):
 
 
 class SheetLayoutTest(unittest.TestCase):
-    def test_zones_on_every_sheet_at_once(self):
-        from PySide6.QtWidgets import QDialog, QCheckBox, QSpinBox
-        from kanzonascad import dialogs
+    def test_project_settings_reach_sheets_that_follow_them(self):
         p = M.Project.new()
         with p.edit("seed") as ed:
-            ed.add_sheet(M.Sheet(title="Two", rows=6))
-        self.assertEqual(p.sheets[0].rows, 8)          # A to H to start
+            ed.add_sheet(p.make_sheet("Two"))
+            ed.add_sheet(p.make_sheet("Own"))
+            ed.sheet_meta(p.sheets[2], own_layout=True, rows=6)
+        self.assertEqual([s.rows for s in p.sheets], [8, 8, 6])        # A to H to start
+        with p.edit("Project properties") as ed:
+            ed.project_settings({"rows": 10, "size": "ANSI D (34 x 22)"})
+        self.assertEqual([s.rows for s in p.sheets], [10, 10, 6])      # its own stays
+        self.assertEqual(p.sheets[1].size, "ANSI D (34 x 22)")
+        self.assertEqual(p.make_sheet().rows, 10)                      # new sheets follow
+        p.undo()
+        self.assertEqual([s.rows for s in p.sheets], [8, 8, 6])
+        self.assertEqual(p.settings["rows"], 8)
+
+    def test_sheet_properties_own_layout_and_revision(self):
+        from PySide6.QtWidgets import QDialog, QCheckBox, QSpinBox, QLineEdit
+        from kanzonascad import dialogs
+        from kanzonascad.sheetframe import title_block_entities
+        p = M.Project.new()
+        with p.edit("rev") as ed:
+            ed.project_fields(dict(p.fields, Revision="B"))
+        texts = [e.text for e in title_block_entities(p, p.sheets[0]) if e.kind == "text"]
+        self.assertIn("B", texts)
 
         def accept(dlg):
-            dlg.findChild(QSpinBox, "rows").setValue(10)    # rows A to J
-            dlg.findChildren(QCheckBox)[0].setChecked(True)
+            dlg.findChildren(QCheckBox)[0].setChecked(True)            # its own zones
+            dlg.findChild(QSpinBox, "rows").setValue(5)
+            dlg.findChildren(QLineEdit)[2].setText("C")                 # its own revision
             return QDialog.Accepted
         old = QDialog.exec
         QDialog.exec = accept
@@ -652,9 +671,47 @@ class SheetLayoutTest(unittest.TestCase):
             self.assertTrue(dialogs.sheet_properties(None, p, p.sheets[0]))
         finally:
             QDialog.exec = old
-        self.assertEqual([s.rows for s in p.sheets], [10, 10])
+        s = p.sheets[0]
+        self.assertEqual((s.own_layout, s.rows, s.fields["Revision"]), (True, 5, "C"))
+        texts = [e.text for e in title_block_entities(p, s) if e.kind == "text"]
+        self.assertIn("C", texts)
+        self.assertNotIn("B", texts)
         p.undo()
-        self.assertEqual([s.rows for s in p.sheets], [8, 6])
+        self.assertEqual((s.own_layout, s.rows), (False, 8))
+
+    def test_tag_height_and_object_color(self):
+        w, v = window()
+        try:
+            v.snap_on = v.osnap_on = False
+            coil = w.library.get("symbol", "Relay coil")
+            v.run(C.InsertCmd, coil, {"TAG": "CR601"})
+            type_in(v, "5,5")
+            ins = list(v.sheet().entities.values())[0]
+            self.assertAlmostEqual(ins.tag_text().height, 0.1)
+            with v.project.edit("Project properties") as ed:
+                ed.project_settings({"tag_height": 0.15})
+            ins = v.sheet().entities[ins.id]
+            self.assertAlmostEqual(ins.tag_text().height, 0.15)
+            v.project.undo()
+            self.assertAlmostEqual(v.sheet().entities[ins.id].tag_text().height, 0.1)
+            # an object's own color, then back to ByLayer
+            from PySide6.QtWidgets import QInputDialog
+            v.set_selection({ins.id})
+            old = QInputDialog.getItem
+            QInputDialog.getItem = staticmethod(lambda *a, **k: ("ByLayer (the layer's color)",
+                                                                 True))
+            try:
+                with v.project.edit("c") as ed:
+                    ed.change(v.sheet(), v.sheet().entities[ins.id].copy(color="#00ff00"))
+                self.assertEqual(v.sheet().entities[ins.id].color, "#00ff00")
+                w.object_color()
+            finally:
+                QInputDialog.getItem = old
+            self.assertIsNone(v.sheet().entities[ins.id].color)
+            self.assertAlmostEqual(v.text_height(), 0.125)
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            w.close()
 
 
 class ZoneLabelsTest(unittest.TestCase):

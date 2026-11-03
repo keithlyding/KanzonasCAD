@@ -42,20 +42,38 @@ of every wire number (6001, 6002 ...).</p>
 <li><b>Delete sheet</b> removes the sheet shown (Undo brings it back).</li>
 <li><b>Move sheet up</b> and <b>Move sheet down</b> change the order (and so the automatic
 page numbers).</li>
-<li><b>Sheet properties...</b>: title, page number, size, and the zones: how many columns along
-the top (10 to start) and the first one's number (1 to start; 11 makes a sheet continue
-11 to 20), how many rows down the left (8 to start: A to H) and the first one's letter.
-Grid references follow the zones as they are set: change them and every reference updates. Tick "Use this size and these zones on every sheet" to change
-them on all the project's sheets at once (one Undo puts them back).</li>
-<li><b>Project properties...</b> (or double-click the title block): the title block fields
-(customer, project, drawing number, drawn by, checked by, date, revision, and any field of
-your own the title block uses) and the <b>grid reference format</b>
-(<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1).</li>
+<li><b>Sheet properties...</b> (or double-click the sheet in the Sheets panel): what belongs to
+one sheet: its title, page number and, if it differs from the project's, its own revision.
+Its size and zones are the project's unless you tick "This sheet has its own size and zones";
+then set how many columns run along the top and the first one's number (11 makes a sheet
+continue 11 to 20), and how many rows run down the left and the first one's letter. Grid
+references follow the zones as they are set: change them and every reference updates.</li>
+<li><b>Project properties...</b> (or double-click the title block): what belongs to the whole
+project, in three tabs:
+<ul>
+<li><b>General</b>: the title block fields (customer, project, drawing number, drawn by, checked
+by, date, revision, and any field of your own the title block uses), the <b>grid reference
+format</b> (<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1) and the height of new text.</li>
+<li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
+uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
+(changing it resizes every tag), and the wire and symbol colors.</li>
+<li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors.</li>
+</ul></li>
 <li><b>Edit title block</b>: see below.</li>
 <li><b>Layers...</b>: add, rename, recolor, switch off and lock layers, and choose the current
 layer. The Layer box on the Home tab picks the current layer; with objects selected, picking
 a layer moves them to it.</li>
 </ul>
+
+<h2>Colors and layers</h2>
+<p>As in AutoCAD, every object takes its <b>layer's color</b> (ByLayer) unless you give it its
+own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel tabs) to pick a
+color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
+layer it sits on, or its own color if you gave it one. Wires go on layer WIRES, symbols on
+SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
+Project properties set those colors, which recolors everything on them.</p>
+<p>The ribbon's <b>Schematic</b> and <b>Panel</b> tabs gather the tools for each kind of work.
+Both are always there: any sheet can hold a schematic, a panel layout, or both.</p>
 
 <h2>The title block</h2>
 <p>The title block is a small drawing of its own, the same on every sheet of the project.
@@ -184,7 +202,7 @@ every 45 degrees to start; <b>Drafting settings...</b> chooses the step (90, 45,
 tracking can't be on together: turning one on turns the other off.</li>
 <li><b>Snap to grid</b> (F9, SNAP): points snap to the snap spacing (1/8 inch to start); along a
 polar direction, the distance snaps to it.</li>
-<li><b>Drafting settings...</b>: snap spacing, grid spacing, text height, the polar tracking
+<li><b>Drafting settings...</b>: snap spacing, grid spacing, the polar tracking
 angles and the crosshair (all kept for next time).</li>
 <li><b>Crosshair</b>: short, as in AutoCAD (each line 5% of the view to start). In Drafting
 settings, <b>Crosshair size</b> makes it longer or shorter (1 to 100%), and <b>Full-screen

@@ -65,7 +65,6 @@ class CadView(QWidget):
         self.grid_spacing = 0.5
         self.snap_spacing = 0.125
         self.current_layer = "0"
-        self._text_height = 0.125
         self.text_justify = ("left", "baseline")     # TEXT's justification (align, valign)
         self._pan = None
         # while selecting with a window or a lasso: {"start", "pressed" (the button is still
@@ -125,10 +124,12 @@ class CadView(QWidget):
         return self.current_layer
 
     def text_height(self):
-        return self._text_height
+        """New text's height: the project's (Project properties; TEXT's height prompt sets it
+        too, as AutoCAD's TEXTSIZE)."""
+        return float(self.project.settings["text_height"])
 
     def set_text_height(self, v):
-        self._text_height = float(v)
+        self.project.settings["text_height"] = float(v)
 
     def layer_visible(self, name):
         lay = self.project.layers.get(name)

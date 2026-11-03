@@ -38,7 +38,19 @@ DEFAULT_LAYERS = [
     ("SYMBOLS", ADAPTIVE),
     ("TEXT", ADAPTIVE),
     ("NOTES", "#00a0ff"),
+    ("PANEL", ADAPTIVE),
+    ("DIMENSIONS", "#00c8c8"),
 ]
+
+# the project's own settings (Project properties); sheets that follow the project take the
+# layout ones (size, zones) from here
+DEFAULT_SETTINGS = {
+    "text_height": 0.125,       # new text
+    "tag_height": 0.1,          # device tags on symbols
+    "size": "ANSI B (17 x 11)",
+    "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
+}
+LAYOUT_KEYS = ("size", "cols", "rows", "col_start", "row_start")
 
 # text width per character as a share of the text height, used for hit tests and boxes when
 # no font measure is set (the app sets TEXT_MEASURE from the font it draws with)
@@ -624,10 +636,10 @@ class Insert(Entity):
     (mirror: the block's own y turned over before turning), with its attributes (TAG, DESC,
     MFR, CAT and the part it is). defn is the BlockDef it shows (the project's copy)."""
     kind = "insert"
-    __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "_world")
+    __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "_world")
 
     def __init__(self, block, pos, angle=0.0, scale=1.0, mirror=False, attrs=None, defn=None,
-                 **kw):
+                 tag_h=None, **kw):
         super().__init__(**kw)
         self.block = str(block)
         self.pos = _pt(pos)
@@ -636,6 +648,7 @@ class Insert(Entity):
         self.mirror = bool(mirror)
         self.attrs = {k: str(v) for k, v in (attrs or {}).items()}
         self.defn = defn
+        self.tag_h = float(tag_h) if tag_h else None    # tag height (None: the block's)
         self._world = None
 
     def _data(self):
@@ -643,13 +656,16 @@ class Insert(Entity):
              "scale": self.scale, "attrs": dict(self.attrs)}
         if self.mirror:
             d["mirror"] = True
+        if self.tag_h:
+            d["tag_h"] = self.tag_h
         return d
 
     @classmethod
     def _from(cls, d, blocks):
         return cls(d["block"], d["pos"], d.get("angle", 0.0), d.get("scale", 1.0),
                    d.get("mirror", False), d.get("attrs", {}), blocks.get(d["block"]),
-                   layer=d.get("layer", "0"), color=d.get("color"), id=d.get("id"))
+                   d.get("tag_h"), layer=d.get("layer", "0"), color=d.get("color"),
+                   id=d.get("id"))
 
     def copy(self, **changes):
         d = self.to_dict()
@@ -678,7 +694,7 @@ class Insert(Entity):
             return None
         tag = self.attrs.get("TAG", "")
         return Text(self.to_world(d.tag_pos), tag or (d.prefix + "?" if d.prefix else "?"),
-                    d.tag_height * self.scale, 0.0, "center")
+                    (self.tag_h or d.tag_height) * self.scale, 0.0, "center")
 
     def world_entities(self):
         """The block's content placed on the sheet, plus the tag text."""
@@ -875,6 +891,7 @@ class Sheet:
         self.cols = int(cols)
         self.rows = int(rows)
         self.number = number            # None: its position in the project
+        self.own_layout = False             # True: its size and zones aren't the project's
         self.col_start = int(col_start)     # the first column's number (1 to start)
         self.row_start = int(row_start)     # the first row's letter: 0 = A, 1 = B...
         self.fields = dict(fields or {})
@@ -956,6 +973,7 @@ class Sheet:
     def meta_dict(self):
         return {"id": self.id, "title": self.title, "size": self.size, "cols": self.cols,
                 "rows": self.rows, "col_start": self.col_start, "row_start": self.row_start,
+                "own_layout": self.own_layout,
                 "number": self.number, "fields": dict(self.fields)}
 
     def to_dict(self):
@@ -972,6 +990,7 @@ class Sheet:
         self.rows = int(d.get("rows", 8))
         self.col_start = int(d.get("col_start", 1))
         self.row_start = int(d.get("row_start", 0))
+        self.own_layout = bool(d.get("own_layout", False))
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         self.version += 1
@@ -1063,6 +1082,24 @@ class Edit:
             s.version += 1
         self.ops.append(["fields", before, after])
 
+    def project_settings(self, settings):
+        """Change the project's settings. Sheets that follow the project take its new size
+        and zones, and tags take its new tag height (each change undoable with this step)."""
+        p = self.project
+        before, after = dict(p.settings), dict(p.settings)
+        after.update(settings)
+        p.settings = dict(after)
+        self.ops.append(["settings", before, after])
+        layout = {k: after[k] for k in LAYOUT_KEYS}
+        for s in p.sheets:
+            if not s.own_layout and any(s.meta_dict().get(k) != v for k, v in layout.items()):
+                self.sheet_meta(s, **layout)
+        if after["tag_height"] != before["tag_height"]:
+            for s in p.sheets:
+                for e in list(s.entities.values()):
+                    if isinstance(e, Insert) and e.defn is not None and e.defn.kind == "symbol":
+                        self.change(s, e.copy(tag_h=after["tag_height"]))
+
     def block(self, defn):
         """Put a block definition in the project (or replace the one of that name); block
         references to it then show it."""
@@ -1085,6 +1122,7 @@ class Project:
         self.path = None
         self.fields = {k: "" for k in PROJECT_FIELDS}
         self.zone_format = "{sheet}-{row}{col}"
+        self.settings = dict(DEFAULT_SETTINGS)
         self.layers = {}
         for name, color in DEFAULT_LAYERS:
             self.layers[name] = Layer(name, color)
@@ -1101,10 +1139,17 @@ class Project:
         self.saved_at = 0           # len(undo_stack) when last saved (or -1: never matches)
         self.listeners = []         # called with no arguments after each change
 
+    def make_sheet(self, title=""):
+        """A new sheet laid out as the project says (not yet in the project)."""
+        st = self.settings
+        return Sheet(title=title, size=st["size"], cols=st["cols"], rows=st["rows"],
+                     col_start=st["col_start"], row_start=st["row_start"])
+
     @classmethod
     def new(cls):
         p = cls()
-        s = Sheet(title="Sheet 1", id=p.new_sheet_id())
+        s = p.make_sheet("Sheet 1")
+        s.id = p.new_sheet_id()
         p.sheets.append(s)
         p._default_title_block()
         return p
@@ -1241,6 +1286,8 @@ class Project:
                 self.fields, self.zone_format = dict(f), z
                 for s in self.sheets:
                     s.version += 1
+            elif kind == "settings":
+                self.settings = dict(op[1] if undo else op[2])
             elif kind == "block":
                 _k, name, before, after = op
                 self._set_block(name, before if undo else after)
@@ -1276,7 +1323,7 @@ class Project:
     # ---- storing ---------------------------------------------------------------------------
     def to_dict(self):
         return {"format": FORMAT, "version": FORMAT_VERSION, "fields": dict(self.fields),
-                "zone_format": self.zone_format,
+                "zone_format": self.zone_format, "settings": dict(self.settings),
                 "layers": [lay.to_dict() for lay in self.layers.values()],
                 "title_block": [e.to_dict() for e in self.title_block.entities.values()],
                 "blocks": [b.to_dict() for b in self.blocks.values()],
@@ -1291,6 +1338,7 @@ class Project:
         p = cls()
         p.fields.update(d.get("fields", {}) or {})
         p.zone_format = d.get("zone_format", p.zone_format)
+        p.settings.update(d.get("settings", {}) or {})
         if d.get("layers"):
             p.layers = {}
             for ld in d["layers"]:

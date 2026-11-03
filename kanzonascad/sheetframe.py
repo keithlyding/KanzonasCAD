@@ -68,6 +68,10 @@ def field_values(project, sheet):
     v["Sheet"] = project.sheet_number(sheet)
     v["Sheets"] = str(len(project.sheets))
     v["Sheet title"] = sheet.title
+    # a sheet's own value of a field (its own revision, say) wins over the project's
+    for k, val in sheet.fields.items():
+        if str(val).strip():
+            v[k] = str(val)
     return v
 
 
