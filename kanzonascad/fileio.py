@@ -43,7 +43,10 @@ def export_dxf(project, sheet, path, include_frame=True):
     l0 = doc.layers.get("0")
     _layer_color(l0, project.layer_color("0"))
     msp = doc.modelspace()
-    ents = list(sheet.entities.values())
+    ents = []
+    for e in sheet.entities.values():
+        # block references go out as their lines and texts, on the reference's layer
+        ents.extend(e.exploded() if isinstance(e, M.Insert) else [e])
     if include_frame:
         ents = frame_entities(project, sheet) + ents
     for e in ents:

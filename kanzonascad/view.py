@@ -32,12 +32,14 @@ class CadView(QWidget):
     sheetChanged = Signal()
     editTextRequested = Signal(object)
     titleBlockDoubleClicked = Signal()
+    attributesRequested = Signal(object)        # a block reference double-clicked
     contextMenuWanted = Signal(object)          # global QPoint
     typed = Signal(object)                      # a key typed over the drawing (QKeyEvent)
 
     def __init__(self, project, parent=None):
         super().__init__(parent)
         self.project = project
+        self.host = None                # the main window: dialogs commands need (Make block)
         self.sheet_id = project.sheets[0].id
         self.renderers = {}
         self.dark = True                # black drawing area (printing is always black on white)
@@ -654,6 +656,10 @@ class CadView(QWidget):
             if isinstance(ent, M.Text):
                 self._window = None
                 self.editTextRequested.emit(ent)
+                return
+            if isinstance(ent, M.Insert):
+                self._window = None
+                self.attributesRequested.emit(ent)
                 return
             if ent is None and self.sheet() is not self.project.title_block:
                 from .sheetframe import title_block_rect

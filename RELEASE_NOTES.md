@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.2
+
+**New**
+- Your own library of schematic symbols, panel footprints and parts, kept in a folder outside
+  the program (Documents\KanzonasCAD Library), for every project from now on.
+- 27 built-in JIC/NFPA symbols: coils, contacts, pushbuttons, switches, fuses, breakers,
+  overloads, lights, motor and more.
+- Make block (B) turns a drawing into a symbol (with pins and a tag) or a panel footprint;
+  parts link a manufacturer and catalog number to both.
+- Scale by Reference brings a manufacturer's drawing to its real size; lengths can be typed in
+  millimeters (45mm).
+
 ## 0.1
 
 **New**

@@ -23,6 +23,7 @@ and reports come next.</i></p>
 <li><b>Project tabs</b>: each open project has its own tab.</li>
 <li><b>Sheets panel</b> on the left: the project's sheets with their page numbers. Click one to
 show it, double-click to open its properties, right-click for more.</li>
+<li><b>Library panel</b> on the right: your symbols, footprints and parts (see below).</li>
 <li><b>Command line</b> along the bottom (Ctrl+9 shows or hides it).</li>
 <li><b>Status bar</b>: the cursor's X and Y in inches and its <b>zone</b> (for example
 6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches.</li>
@@ -72,6 +73,51 @@ in Project properties to fill in.</li>
 <p>A name in braces that isn't a field shows as typed, so a typo is easy to spot. Undo works
 on title block changes like on any other.</p>
 
+<h2>Symbols, footprints and parts (the library)</h2>
+<p>Your <b>library</b> is a folder of its own (<code>Documents\KanzonasCAD Library</code> to
+start; <b>Library folder...</b> picks another, a OneDrive folder say). It is kept apart from
+the program and from projects, so it lasts through updates and serves every project. Each
+project also keeps its own copy of the blocks it uses, so it opens the same anywhere, whatever
+happens to the library later.</p>
+<ul>
+<li><b>Schematic symbols</b>: blocks with <b>pins</b> (where wires attach) and a <b>tag</b>.
+A starter set of JIC/NFPA symbols is built in (relay, contactor and timer coils, NO/NC and
+timed contacts, pushbuttons, E-stop, selector, limit/pressure/temperature/float switches,
+fuse, breaker, disconnect, overload heater and contact, pilot light, motor, solenoid, control
+transformer, terminal, ground). A symbol of yours with the same name replaces a built-in one.</li>
+<li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.</li>
+<li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
+footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
+</ul>
+<p>The <b>Library panel</b> (Library menu) lists them under Symbols, Footprints and Parts.
+Type in its search box to find one. Double-click a symbol or footprint (or select it and click
+<b>Insert</b>) to place it: click where it goes; type R to turn it 90 degrees or F to flip it
+first. In the Parts tab, Insert asks whether to place the part's symbol or its footprint.</p>
+<h3>Making your own</h3>
+<ol>
+<li>Draw it, or open the manufacturer's DXF and copy the view you want into your drawing
+(Copy, then Paste).</li>
+<li>A footprint must be real size: <b>Scale</b>, pick a base point, type R (Reference), pick
+the two ends of a dimension you know (the part's width say) and type its real length
+(<code>45mm</code> or <code>1.77</code>).</li>
+<li>Select it and use <b>Make block</b> (B). Pick the <b>base point</b> (the point it is placed
+by), then fill in the name, kind (schematic symbol or panel footprint), category and
+description. For a symbol also: its part in cross-references (a device on its own, a coil or
+operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...)
+and the pin names.</li>
+<li>For a symbol, click each <b>pin</b> in order and press Enter, then click where the
+<b>tag</b> goes (Enter puts it above).</li>
+</ol>
+<p>It is saved to your library and, unless you untick it, the selected objects become the
+block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
+footprint.</p>
+<p>Double-click a placed symbol or footprint to change its tag, description, manufacturer and
+catalog number, or pick one of the library's parts for it. <b>Explode</b> (X) turns placed
+blocks back into plain lines and texts. Delete in the Library panel removes your own symbols,
+footprints and parts (the built-in symbols stay).</p>
+<p><i>Coming next: wires that stay attached to the pins, tags numbered by page (CR601), and
+cross-references between coils and their contacts.</i></p>
+
 <h2>Drawing</h2>
 <p>Start a command from the ribbon, the <b>Draw</b> and <b>Modify</b> menus, or by typing its
 name or alias on the command line and pressing <b>Enter</b> or <b>Space</b>. Enter on an
@@ -92,7 +138,10 @@ press Enter; Enter on an empty line ends. Double-click a text to change it.</td>
 <tr><td>Copy objects</td><td>COPY, CO, CP</td><td>Select, base point, then as many copies as
 you place (Enter ends).</td></tr>
 <tr><td>Rotate</td><td>ROTATE, RO</td><td>Select, base point, angle (a point or degrees).</td></tr>
-<tr><td>Scale</td><td>SCALE, SC</td><td>Select, base point, factor.</td></tr>
+<tr><td>Scale</td><td>SCALE, SC</td><td>Select, base point, factor. Or <b>Reference</b> (R): pick
+two points of a length as drawn (or type it), then type the length it should be: this brings a
+manufacturer's drawing to its real size. Lengths can be typed in millimeters:
+<code>45mm</code>.</td></tr>
 <tr><td>Mirror</td><td>MIRROR, MI</td><td>Select, two points of the mirror line, keep or erase
 the originals. Text stays readable.</td></tr>
 <tr><td>Erase</td><td>ERASE, E, or Delete</td><td>Removes the selected objects.</td></tr>

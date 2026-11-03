@@ -22,6 +22,8 @@ from PySide6.QtCore import QCoreApplication, QEvent, QSettings  # noqa: E402  (b
 from PySide6.QtWidgets import QApplication, QMainWindow, QToolBar, QMenu
 
 _SETTINGS_DIR = tempfile.mkdtemp(prefix="kanzonascad-test-settings-")
+# the library (symbols, footprints, parts) in a scratch folder, never the developer's own
+os.environ["KANZONASCAD_LIBRARY"] = tempfile.mkdtemp(prefix="kanzonascad-test-library-")
 for _fmt in (QSettings.NativeFormat, QSettings.IniFormat):
     QSettings.setPath(_fmt, QSettings.UserScope, _SETTINGS_DIR)
 

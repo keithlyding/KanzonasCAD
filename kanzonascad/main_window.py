@@ -92,6 +92,17 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, sd)
         self.resizeDocks([sd], [200], Qt.Horizontal)
 
+        from .library import Library
+        from .library_panel import LibraryPanel
+        self.library = Library(self.settings.value("library_folder", "") or None)
+        self.library_panel = LibraryPanel(self.library)
+        self.library_panel.insertRequested.connect(self.insert_block)
+        ld = self.library_dock = QDockWidget("Library", self)
+        ld.setObjectName("library")
+        ld.setWidget(self.library_panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, ld)
+        self.resizeDocks([ld], [280], Qt.Horizontal)
+
         self._build_actions()
         self._build_menus()
         self._build_ribbon()
@@ -225,6 +236,16 @@ class MainWindow(QMainWindow):
           icon="black_bg", label="Black background",
           tip="Draw on black, as in AutoCAD. PDF export always prints black on white.")
 
+        self._cmd_act("make_block", "&Make block", C.MakeBlockCmd, "Make block")
+        self.acts["make_block"].setProperty("icon_key", "make_block")
+        self._cmd_act("explode", "E&xplode", C.ExplodeCmd, "Explode")
+        self.acts["explode"].setProperty("icon_key", "explode")
+        A("library_panel", "&Library panel", self._toggle_library, checkable=True,
+          icon="library", label="Library panel")
+        A("new_part", "New &part...", lambda: self.library_panel.edit_part(new=True),
+          icon="part", label="New part")
+        A("library_folder", "Library &folder...", self.choose_library_folder, icon="open",
+          label="Library folder")
         A("manual", "&User manual", self.show_manual, "F1", label="Manual")
         A("about", "&About KanzonasCAD", self.about, label="About")
 
@@ -253,7 +274,8 @@ class MainWindow(QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
-                  "osnap", "polar", "drafting", None, "black", "command_line", "sheets", "collapse",
+                  "osnap", "polar", "drafting", None, "black", "command_line", "sheets",
+                  "library_panel", "collapse",
                   "group_names"):
             m.addSeparator() if k is None else m.addAction(a[k])
         tm = m.addMenu("&Theme")
@@ -268,6 +290,10 @@ class MainWindow(QMainWindow):
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "sheet_props",
                   "project_props", "edit_tb", "layers"):
+            m.addSeparator() if k is None else m.addAction(a[k])
+        m = mb.addMenu("&Library")
+        for k in ("library_panel", None, "make_block", "explode", None, "new_part",
+                  "library_folder"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Help")
         m.addAction(a["manual"])
@@ -291,6 +317,11 @@ class MainWindow(QMainWindow):
             ("Layers", "small", [self.layer_box, a["layers"]]),
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
         ])
+        r.add_tab("Library", [
+            ("Blocks", "large", [a["make_block"], a["explode"]]),
+            ("Library", "large", [a["library_panel"], a["new_part"], a["library_folder"]]),
+            ("Resize", "large", [a["scale"]]),
+        ])
         r.add_tab("Sheets", [
             ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
             ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
@@ -306,7 +337,8 @@ class MainWindow(QMainWindow):
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
             ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["polar"],
                                         a["osnap"], a["drafting"]]),
-            ("Panels", "small", [a["command_line"], a["sheets"], a["black"]]),
+            ("Panels", "small", [a["command_line"], a["sheets"], a["library_panel"],
+                                 a["black"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
             ("Ribbon", "small", [a["collapse"], a["group_names"]]),
         ])
@@ -366,6 +398,8 @@ class MainWindow(QMainWindow):
         v.commandChanged.connect(self._update_ui)
         v.editTextRequested.connect(self.edit_text)
         v.titleBlockDoubleClicked.connect(self.project_properties)
+        v.attributesRequested.connect(self.edit_attributes)
+        v.host = self
         v.contextMenuWanted.connect(self._view_menu)
         v.typed.connect(self.cmdline.take_key)
         project.listeners.append(lambda d=d: self._project_changed(d))
@@ -640,7 +674,10 @@ class MainWindow(QMainWindow):
         from . import geometry as G
         for e in ents:
             bb = G.bbox_union(bb, e.bbox())
-        data = {"base": [bb[0], bb[1]], "entities": [e.to_dict() for e in ents]}
+        blocks = {e.block: e.defn.to_dict() for e in ents
+                  if isinstance(e, M.Insert) and e.defn is not None}
+        data = {"base": [bb[0], bb[1]], "entities": [e.to_dict() for e in ents],
+                "blocks": list(blocks.values())}
         mime = QMimeData()
         mime.setData(CLIP_MIME, json.dumps(data).encode("utf-8"))
         mime.setText("%d KanzonasCAD object(s)" % len(ents))
@@ -665,13 +702,17 @@ class MainWindow(QMainWindow):
             return
         try:
             data = json.loads(raw)
-            ents = [M.Entity.from_dict(d) for d in data["entities"]]
+            # a block the project already has keeps its own drawing; others come along
+            blocks = {b["name"]: M.BlockDef.from_dict(b) for b in data.get("blocks", [])}
+            for name, b in v.project.blocks.items():
+                blocks[name] = b
+            ents = [M.Entity.from_dict(d, blocks) for d in data["entities"]]
         except (ValueError, KeyError, TypeError) as ex:
             self.statusBar().showMessage("The clipboard's objects can't be read: %s" % ex, 5000)
             return
         for e in ents:
             v.project.ensure_layer(e.layer)
-        v.run(C.PasteCmd, ents, tuple(data["base"]))
+        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks)
         v.setFocus()
 
     def select_all(self):
@@ -834,6 +875,51 @@ class MainWindow(QMainWindow):
         if v is not None:
             dialogs.project_properties(self, v.project)
 
+    # ---- library -----------------------------------------------------------------------------
+    def _toggle_library(self, on):
+        self.library_dock.setVisible(on)
+
+    def choose_library_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Library folder", self.library.folder)
+        if not folder:
+            return
+        self.library.folder = folder
+        self.settings.setValue("library_folder", folder)
+        self.library_panel.refresh()
+        self.statusBar().showMessage("Library: %s" % folder, 5000)
+
+    def insert_block(self, defn, attrs):
+        v = self.view()
+        if v is None:
+            return
+        v.run(C.InsertCmd, defn, attrs)
+        v.setFocus()
+
+    def ask_block_details(self, ents):
+        """Make block asks this after its base point (see commands.MakeBlockCmd)."""
+        from .library_panel import block_details_dialog
+        return block_details_dialog(self, self.library, "symbol")
+
+    def save_block_to_library(self, defn):
+        try:
+            self.library.save_block(defn)
+        except OSError as ex:
+            QMessageBox.warning(self, APP, "Couldn't save %s to the library (%s):\n%s"
+                                % (defn.name, self.library.folder, ex))
+            return False
+        self.library_panel.refresh()
+        return True
+
+    def edit_attributes(self, ins):
+        v = self.view()
+        if v is None:
+            return
+        from .library_panel import attributes_dialog
+        attrs = attributes_dialog(self, self.library, ins)
+        if attrs is not None and attrs != ins.attrs:
+            with v.project.edit("Attributes") as ed:
+                ed.change(v.sheet(), ins.copy(attrs=attrs))
+
     def _toggle_title_block(self, on):
         v = self.view()
         if v is None:
@@ -984,6 +1070,11 @@ class MainWindow(QMainWindow):
         a["sheets"].blockSignals(True)
         a["sheets"].setChecked(not self.sheet_dock.isHidden())
         a["sheets"].blockSignals(False)
+        a["library_panel"].blockSignals(True)
+        a["library_panel"].setChecked(not self.library_dock.isHidden())
+        a["library_panel"].blockSignals(False)
+        for k in ("make_block", "explode"):
+            a[k].setEnabled(has)
         d = self.doc()
         title = APP
         if d is not None:
