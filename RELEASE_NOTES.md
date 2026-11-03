@@ -22,6 +22,9 @@ build fails without them.
 - Project properties (General, Schematic, Panel) and Sheet properties, as in AutoCAD
   Electrical: sheets follow the project's size and zones unless they have their own, and can
   have their own revision.
+- Automatic backups: each Save keeps the version before it (the last 10), and unsaved work
+  is autosaved every 5 minutes and offered back if KanzonasCAD didn't close normally.
+- Sheets have a type (Schematic, Panel, Report, Other) that brings up the matching ribbon tab.
 - Schematic and Panel ribbon tabs; objects take their layer's color unless you give them
   their own (Color...); wire, symbol, footprint and dimension colors in Project properties.
 - Text justification like AutoCAD's (top, middle, bottom; left, center, right), and

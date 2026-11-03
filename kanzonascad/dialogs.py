@@ -101,7 +101,12 @@ def sheet_properties(parent, project, sheet):
     number.setPlaceholderText("automatic: %d" % (project.sheets.index(sheet) + 1))
     rev = QLineEdit(sheet.fields.get("Revision", ""))
     rev.setPlaceholderText("the project's: %s" % (project.fields.get("Revision") or "(none)"))
+    kind = QComboBox()
+    for key, label in M.SHEET_KINDS.items():
+        kind.addItem(label, key)
+    kind.setCurrentIndex(kind.findData(sheet.kind))
     form.addRow("Title", title)
+    form.addRow("Type", kind)
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
     form.addRow(_gray("The page number starts each wire number (page 6: 6001, 6002 ...) and "
@@ -131,7 +136,7 @@ def sheet_properties(parent, project, sheet):
     else:
         fields.pop("Revision", None)
     changes = dict(title=title.text().strip(), number=number.text().strip() or None,
-                   own_layout=own.isChecked(), fields=fields)
+                   own_layout=own.isChecked(), fields=fields, kind=kind.currentData())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     if all(before.get(k) == v for k, v in changes.items()):

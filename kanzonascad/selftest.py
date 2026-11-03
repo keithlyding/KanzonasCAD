@@ -116,6 +116,7 @@ def run(log_path):
     tmp = tempfile.mkdtemp(prefix="kzcad-selftest-")
     # a scratch library: the self-test never touches the user's own
     os.environ["KANZONASCAD_LIBRARY"] = os.path.join(tmp, "library")
+    os.environ["KANZONASCAD_RECOVERY"] = os.path.join(tmp, "recovery")
     state = {}
 
     def start():

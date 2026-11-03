@@ -879,6 +879,7 @@ class SpatialIndex:
         return out
 
 
+SHEET_KINDS = {"schematic": "Schematic", "panel": "Panel", "report": "Report", "other": "Other"}
 TITLE_BLOCK_ID = 0          # the project's title block is kept as a sheet with this id
 
 
@@ -892,6 +893,7 @@ class Sheet:
         self.rows = int(rows)
         self.number = number            # None: its position in the project
         self.own_layout = False             # True: its size and zones aren't the project's
+        self.kind = "schematic"             # schematic, panel, report or other (defaults only)
         self.col_start = int(col_start)     # the first column's number (1 to start)
         self.row_start = int(row_start)     # the first row's letter: 0 = A, 1 = B...
         self.fields = dict(fields or {})
@@ -973,7 +975,7 @@ class Sheet:
     def meta_dict(self):
         return {"id": self.id, "title": self.title, "size": self.size, "cols": self.cols,
                 "rows": self.rows, "col_start": self.col_start, "row_start": self.row_start,
-                "own_layout": self.own_layout,
+                "own_layout": self.own_layout, "kind": self.kind,
                 "number": self.number, "fields": dict(self.fields)}
 
     def to_dict(self):
@@ -991,6 +993,7 @@ class Sheet:
         self.col_start = int(d.get("col_start", 1))
         self.row_start = int(d.get("row_start", 0))
         self.own_layout = bool(d.get("own_layout", False))
+        self.kind = d.get("kind", "schematic") if d.get("kind") in SHEET_KINDS else "schematic"
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         self.version += 1
@@ -1367,8 +1370,12 @@ class Project:
             p._default_title_block()
         return p
 
-    def save(self, path):
+    def save(self, path, backups=None):
+        """Write the project to path (a whole new file swapped in, so a crash can't leave
+        half a file). backups: how many earlier saves to keep beside it (backup.KEEP)."""
+        from . import backup
         data = json.dumps(self.to_dict(), separators=(",", ":"))
+        backup.make_backup(path, backup.KEEP if backups is None else backups)
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             f.write(data)

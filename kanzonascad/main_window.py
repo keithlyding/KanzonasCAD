@@ -25,6 +25,7 @@ APP = "KanzonasCAD"
 CLIP_MIME = "application/x-kanzonascad-entities"
 CLIP_TEXT = "KanzonasCAD objects:"      # the same data as plain text (see hand_over_clipboard)
 MAX_RECENT = 10
+AUTOSAVE_MINUTES = 5
 
 
 def hand_over_clipboard():
@@ -44,6 +45,8 @@ class Document(QWidget):
     def __init__(self, project):
         super().__init__()
         self.project = project
+        import uuid
+        self.autosave_key = "untitled-" + uuid.uuid4().hex     # (its path once saved)
         self.view = CadView(project)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -119,6 +122,9 @@ class MainWindow(QMainWindow):
         if isinstance(state, QByteArray):
             self.restoreState(state)
         self._update_ui()
+        self.autosave_timer = QTimer(self, interval=AUTOSAVE_MINUTES * 60 * 1000)
+        self.autosave_timer.timeout.connect(self.autosave)
+        self.autosave_timer.start()
 
     # ============================================================================================
     # actions
@@ -166,6 +172,8 @@ class MainWindow(QMainWindow):
         A("export_dxf_all", "Export all sheets to DX&F...", self.export_dxf_all, icon="dxf_out",
           label="All to DXF")
         A("export_pdf", "Export to &PDF...", self.export_pdf, icon="pdf", label="PDF")
+        A("backups", "Open &backups folder", self.open_backups_folder, icon="open",
+          label="Backups")
         A("close", "&Close project", lambda: self.close_tab(self.tabs.currentIndex()), "Ctrl+W",
           icon="delete")
         A("quit", "E&xit", self.close, "Ctrl+Q", icon="delete")
@@ -273,6 +281,8 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         for k in ("import_dxf", "export_dxf", "export_dxf_all", "export_pdf"):
             m.addAction(a[k])
+        m.addSeparator()
+        m.addAction(a["backups"])
         m.addSeparator()
         m.addAction(a["close"])
         m.addAction(a["quit"])
@@ -412,6 +422,7 @@ class MainWindow(QMainWindow):
         v.cursorMoved.connect(self._cursor_moved)
         v.selectionChanged.connect(self._update_ui)
         v.sheetChanged.connect(self._fill_sheets)
+        v.sheetChanged.connect(lambda v=v: self._ribbon_for_sheet(v))
         v.commandChanged.connect(self._update_ui)
         v.editTextRequested.connect(self.edit_text)
         v.titleBlockDoubleClicked.connect(self.project_properties)
@@ -454,6 +465,7 @@ class MainWindow(QMainWindow):
             return True
         if not self._maybe_save(w):
             return False
+        self._drop_autosave(w)
         self.tabs.removeTab(index)
         w.view.cancel()
         w.deleteLater()
@@ -542,10 +554,96 @@ class MainWindow(QMainWindow):
         except OSError as ex:
             QMessageBox.warning(self, APP, "Couldn't save %s:\n%s" % (path, ex))
             return False
+        self._drop_autosave(d)
+        d.autosave_key = path
         self._remember(path)
         self._project_changed(d)
         self.statusBar().showMessage("Saved %s" % path, 4000)
         return True
+
+    # ---- autosave and recovery ----------------------------------------------------------------
+    def _drop_autosave(self, d):
+        from . import backup
+        try:
+            backup.remove_autosave(d.autosave_key)
+        except OSError as ex:
+            self.statusBar().showMessage("Couldn't remove the autosave copy: %s" % ex, 5000)
+
+    def autosave(self):
+        """Write every project with unsaved changes to the recovery folder (never over your
+        own file)."""
+        from . import backup
+        n = 0
+        for i in range(self.tabs.count()):
+            d = self.tabs.widget(i)
+            if isinstance(d, Document) and d.project.is_modified():
+                try:
+                    backup.write_autosave(d.project, d.autosave_key)
+                    n += 1
+                except OSError as ex:
+                    self.statusBar().showMessage("Autosave failed: %s" % ex, 8000)
+                    return n
+        if n:
+            self.statusBar().showMessage("Autosaved %d project(s)" % n, 3000)
+        return n
+
+    def offer_recovery(self):
+        """At start-up: projects that didn't close normally (a crash, a power cut) left their
+        autosave copies; offer to open them. Returns how many were opened."""
+        from . import backup
+        left = backup.leftovers()
+        if not left:
+            return 0
+        import time
+        lines = []
+        for _p, orig, t in left:
+            when = time.strftime("%Y-%m-%d %H:%M", time.localtime(t))
+            lines.append("%s (autosaved %s)" % (orig or "an unsaved project", when))
+        r = QMessageBox.question(
+            self, APP, "KanzonasCAD didn't close normally last time. Recover these projects "
+            "from their autosave copies?\n\n" + "\n".join(lines) + "\n\nNo deletes the "
+            "copies.", QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+        if r == QMessageBox.Cancel:
+            return 0
+        opened = 0
+        for p, orig, _t in left:
+            if r == QMessageBox.Yes:
+                try:
+                    proj = M.Project.load(p)
+                except (OSError, ValueError, KeyError) as ex:
+                    QMessageBox.warning(self, APP, "Couldn't recover %s:\n%s" % (p, ex))
+                    continue
+                proj.path = orig or None
+                proj.saved_at = -1              # recovered: not saved yet
+                d = self.add_document(proj)
+                d.autosave_key = orig or d.autosave_key
+                self._project_changed(d)
+                opened += 1
+            try:
+                os.remove(p)
+            except OSError as ex:
+                self.statusBar().showMessage("Couldn't remove the autosave copy %s: %s"
+                                             % (p, ex), 8000)
+        if r == QMessageBox.Yes:
+            self.statusBar().showMessage("Recovered %d project(s): save them to keep them."
+                                         % opened, 8000)
+        return opened
+
+    def open_backups_folder(self):
+        from . import backup
+        d = self.doc()
+        if d is None or not d.project.path:
+            QMessageBox.information(self, APP, "Save the project first: its backups go in a "
+                                    "folder beside it.")
+            return
+        folder = backup.backup_folder(d.project.path)
+        if not os.path.isdir(folder):
+            QMessageBox.information(self, APP, "No backups yet. Each Save keeps the version "
+                                    "before it in:\n%s" % folder)
+            return
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _last_dir(self):
         return self.settings.value("last_dir", os.path.expanduser("~"))
@@ -816,12 +914,26 @@ class MainWindow(QMainWindow):
         if v is not None:
             p = v.project
             for s in p.sheets:
-                it = QListWidgetItem("%s   %s" % (p.sheet_number(s), s.title or "(untitled)"))
+                kind = "" if s.kind == "schematic" else "  [%s]" % M.SHEET_KINDS[s.kind]
+                it = QListWidgetItem("%s   %s%s" % (p.sheet_number(s), s.title or "(untitled)",
+                                                    kind))
                 it.setData(Qt.UserRole, s.id)
                 lst.addItem(it)
                 if s.id == v.sheet_id:
                     lst.setCurrentItem(it)
         lst.blockSignals(False)
+
+    def _ribbon_for_sheet(self, v):
+        """Showing a sheet brings up its kind's ribbon tab (Schematic or Panel)."""
+        if v is not self.view():
+            return
+        title = {"schematic": "Schematic", "panel": "Panel"}.get(v.sheet().kind)
+        if title is None:
+            return
+        for i in range(self.ribbon.count()):
+            if self.ribbon.tabText(i) == title:
+                self.ribbon.setCurrentIndex(i)
+                break
 
     def _sheet_clicked(self, item):
         v = self.view()
@@ -845,6 +957,7 @@ class MainWindow(QMainWindow):
         self._leave_title_block(v)
         cur = v.sheet()
         s = p.make_sheet("Sheet %d" % (len(p.sheets) + 1))
+        s.kind = cur.kind if cur is not p.title_block else "schematic"
         with p.edit("New sheet") as ed:
             ed.add_sheet(s, p.sheets.index(cur) + 1)
         v.show_sheet(s.id)

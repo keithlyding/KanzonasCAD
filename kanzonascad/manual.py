@@ -43,7 +43,9 @@ of every wire number (6001, 6002 ...).</p>
 <li><b>Move sheet up</b> and <b>Move sheet down</b> change the order (and so the automatic
 page numbers).</li>
 <li><b>Sheet properties...</b> (or double-click the sheet in the Sheets panel): what belongs to
-one sheet: its title, page number and, if it differs from the project's, its own revision.
+one sheet: its title, its <b>type</b> (Schematic, Panel, Report or Other: every tool works on
+every sheet; the type brings up the matching ribbon tab and shows in the Sheets panel), page
+number and, if it differs from the project's, its own revision.
 Its size and zones are the project's unless you tick "This sheet has its own size and zones";
 then set how many columns run along the top and the first one's number (11 makes a sheet
 continue 11 to 20), and how many rows run down the left and the first one's letter. Grid
@@ -270,6 +272,12 @@ converted to inches. AutoCAD DWG files: save them as DXF first (in AutoCAD, or w
 ODA File Converter).</li>
 <li><b>Export this sheet to DXF...</b> and <b>Export all sheets to DXF...</b>: AutoCAD 2013 DXF
 in inches, one file per sheet, border and title block on layer BORDER.</li>
+<li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,
+"<i>name</i> backups", stamped with the date and time (the newest 10 are kept). <b>Open backups
+folder</b> opens it; to go back to one, open it like any project and Save as.</li>
+<li><b>Autosave</b>: every 5 minutes, projects with unsaved changes are copied to a recovery
+folder (never over your own file). If KanzonasCAD doesn't close normally (a crash, a power
+cut), it offers to recover them the next time it starts.</li>
 <li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
 black on white (layer colors are for the screen).</li>
 </ul>
