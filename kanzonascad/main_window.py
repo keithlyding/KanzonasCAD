@@ -1,0 +1,1013 @@
+"""The main window: menus and the ribbon (the same look as KanzonasPDF), one tab per open
+project, the Sheets panel, the command line and the status bar with the drafting aids."""
+
+import json
+import os
+
+from PySide6.QtCore import Qt, QSettings, QMimeData, QSize, QTimer, QByteArray
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QGuiApplication
+from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QListWidget,
+                               QListWidgetItem, QFileDialog, QMessageBox, QLabel, QToolBar,
+                               QToolButton, QComboBox, QInputDialog, QMenu, QApplication,
+                               QDialog, QVBoxLayout, QTextBrowser, QDialogButtonBox, QWidget)
+
+from . import __version__
+from . import commands as C
+from . import dialogs
+from . import fileio
+from . import model as M
+from . import theme
+from .commandline import CommandLine
+from .render import install_text_measure
+from .view import CadView
+
+APP = "KanzonasCAD"
+CLIP_MIME = "application/x-kanzonascad-entities"
+CLIP_TEXT = "KanzonasCAD objects:"      # the same data as plain text (see hand_over_clipboard)
+MAX_RECENT = 10
+
+
+def hand_over_clipboard():
+    """Before quitting: put objects this app copied back on the clipboard as plain text that
+    Qt itself owns. Qt for Python crashes at exit while the clipboard holds data made in
+    Python (seen on Linux and Windows); the text keeps the objects pasteable in a
+    KanzonasCAD started later (paste reads it)."""
+    cb = QGuiApplication.clipboard()
+    mime = cb.mimeData()
+    if mime is not None and mime.hasFormat(CLIP_MIME):
+        cb.setText(CLIP_TEXT + bytes(mime.data(CLIP_MIME)).decode("utf-8"))
+
+
+class Document(QWidget):
+    """One open project in a tab."""
+
+    def __init__(self, project):
+        super().__init__()
+        self.project = project
+        self.view = CadView(project)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.view)
+
+    def name(self):
+        if self.project.path:
+            return os.path.splitext(os.path.basename(self.project.path))[0]
+        return "Untitled"
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        install_text_measure()
+        self.settings = QSettings(APP, APP)
+        self.setWindowTitle(APP)
+        self.resize(1400, 900)
+        self._untitled = 0
+
+        self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+        self.tabs.setTabsClosable(True)
+        self.tabs.setMovable(True)
+        self.tabs.tabCloseRequested.connect(self.close_tab)
+        self.tabs.currentChanged.connect(self._tab_changed)
+        self.setCentralWidget(self.tabs)
+
+        self.cmdline = CommandLine()
+        self.cmdline.otherCommand.connect(self._other_command)
+        dock = self.cmd_dock = QDockWidget("Command line", self)
+        dock.setObjectName("command_line")
+        dock.setWidget(self.cmdline)
+        dock.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetMovable)
+        dock.setTitleBarWidget(QWidget())
+        self.addDockWidget(Qt.BottomDockWidgetArea, dock)
+
+        self.sheet_list = QListWidget()
+        self.sheet_list.itemClicked.connect(self._sheet_clicked)
+        self.sheet_list.itemDoubleClicked.connect(lambda _i: self.sheet_properties())
+        self.sheet_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.sheet_list.customContextMenuRequested.connect(self._sheet_menu)
+        sd = self.sheet_dock = QDockWidget("Sheets", self)
+        sd.setObjectName("sheets")
+        sd.setWidget(self.sheet_list)
+        self.addDockWidget(Qt.LeftDockWidgetArea, sd)
+        self.resizeDocks([sd], [200], Qt.Horizontal)
+
+        self._build_actions()
+        self._build_menus()
+        self._build_ribbon()
+        self._build_status()
+        self.acts["black"].blockSignals(True)
+        self.acts["black"].setChecked(self.settings.value("black_drawing", True) in (True, "true"))
+        self.acts["black"].blockSignals(False)
+        self._apply_theme(self.settings.value("theme", "light"), save=False)
+
+        geo = self.settings.value("geometry")
+        if isinstance(geo, QByteArray):
+            self.restoreGeometry(geo)
+        state = self.settings.value("window_state")
+        if isinstance(state, QByteArray):
+            self.restoreState(state)
+        self._update_ui()
+
+    # ============================================================================================
+    # actions
+    # ============================================================================================
+    def _act(self, key, text, slot=None, shortcut=None, icon=None, checkable=False, tip=None,
+             local=False, label=None):
+        a = QAction(text, self)
+        if shortcut:
+            a.setShortcuts([QKeySequence(s) for s in
+                            (shortcut if isinstance(shortcut, (list, tuple)) else [shortcut])])
+            if local:
+                # only while the drawing has focus (the command line keeps its own Ctrl+C...)
+                a.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+                self.tabs.addAction(a)
+            else:
+                self.addAction(a)
+        a.setCheckable(checkable)
+        if slot is not None:
+            (a.toggled if checkable else a.triggered).connect(slot)
+        if tip:
+            a.setToolTip(tip)
+        a.setProperty("icon_key", icon or key)
+        if label:
+            a.setIconText(label)
+        self.acts[key] = a
+        return a
+
+    def _cmd_act(self, key, text, cls, label=None):
+        name = cls.name
+        aliases = C.COMMANDS[name][1]
+        tip = "%s (%s)" % (text.replace("&", ""), ", ".join([name] + aliases))
+        return self._act(key, text, lambda: self._run(cls), tip=tip, label=label)
+
+    def _build_actions(self):
+        self.acts = {}
+        A = self._act
+        A("new", "&New project", self.new_project, "Ctrl+N", label="New")
+        A("open", "&Open...", self.open_dialog, "Ctrl+O", label="Open")
+        A("save", "&Save", self.save, "Ctrl+S", label="Save")
+        A("save_as", "Save &as...", self.save_as, "Ctrl+Shift+S", label="Save as")
+        A("import_dxf", "&Import DXF into this sheet...", self.import_dxf, icon="dxf_in",
+          label="Import DXF")
+        A("export_dxf", "Export this sheet to &DXF...", self.export_dxf, icon="dxf_out",
+          label="Sheet to DXF")
+        A("export_dxf_all", "Export all sheets to DX&F...", self.export_dxf_all, icon="dxf_out",
+          label="All to DXF")
+        A("export_pdf", "Export to &PDF...", self.export_pdf, icon="pdf", label="PDF")
+        A("close", "&Close project", lambda: self.close_tab(self.tabs.currentIndex()), "Ctrl+W",
+          icon="delete")
+        A("quit", "E&xit", self.close, "Ctrl+Q", icon="delete")
+
+        A("undo", "&Undo", self.undo, "Ctrl+Z", label="Undo")
+        A("redo", "&Redo", self.redo, ["Ctrl+Y", "Ctrl+Shift+Z"], label="Redo")
+        A("cut", "Cu&t", self.cut, "Ctrl+X", local=True, label="Cut")
+        A("copy_clip", "&Copy", self.copy_clip, "Ctrl+C", local=True, label="Copy")
+        A("paste", "&Paste", self.paste, "Ctrl+V", local=True, label="Paste")
+        A("select_all", "Select &all", self.select_all, "Ctrl+A", local=True, label="Select all")
+        A("delete", "&Delete", lambda: self._run(C.EraseCmd), icon="delete", label="Delete")
+
+        A("zoom_ext", "Zoom &extents", lambda: self._zoom("extents"), "Ctrl+Shift+E",
+          label="Extents")
+        A("zoom_sheet", "Zoom to &sheet", lambda: self._zoom("sheet"), "Ctrl+0", label="Sheet")
+        A("zoom_in", "Zoom &in", lambda: self._zoom("in"), "Ctrl+=", label="In")
+        A("zoom_out", "Zoom &out", lambda: self._zoom("out"), "Ctrl+-", label="Out")
+        A("grid", "&Grid display", self._aid("grid_on"), "F7", checkable=True, label="Grid")
+        A("snap", "&Snap to grid", self._aid("snap_on"), "F9", checkable=True, label="Snap")
+        A("ortho", "&Ortho mode", self._aid("ortho_on"), "F8", checkable=True, label="Ortho")
+        A("osnap", "Object s&nap", self._aid("osnap_on"), "F3", checkable=True, label="Osnap")
+        A("polar", "&Polar tracking", self._aid("polar_on"), "F10", checkable=True, label="Polar",
+          icon="polar", tip="Lock the cursor to set angles (every 45 degrees to start; "
+                             "Drafting settings chooses them)")
+        A("drafting", "&Drafting settings...", self.drafting_settings, icon="snap",
+          label="Settings")
+        A("command_line", "&Command line", self._toggle_cmdline, "Ctrl+9", checkable=True,
+          label="Command line")
+        A("sheets", "S&heets panel", self._toggle_sheets, checkable=True, label="Sheets panel")
+        A("collapse", "Co&llapse ribbon", self._toggle_collapse, "Ctrl+F1", checkable=True,
+          label="Collapse")
+        A("group_names", "Ribbon &group names", self._toggle_group_names, checkable=True,
+          label="Group names")
+        self.theme_group = QActionGroup(self)
+        for mode, text in (("light", "&Light"), ("dark", "&Dark"), ("system", "Same as &system")):
+            a = A("theme_" + mode, text, None, checkable=True, icon="theme",
+                  label=text.replace("&", ""))
+            # (triggered, not toggled: the group unchecking the old one must not apply it)
+            a.triggered.connect(lambda _c=False, m=mode: self._apply_theme(m))
+            self.theme_group.addAction(a)
+
+        self._cmd_act("line", "&Line", C.LineCmd, "Line")
+        self._cmd_act("polyline", "&Polyline", C.PolylineCmd, "Polyline")
+        self._cmd_act("rect", "&Rectangle", C.RectangleCmd, "Rectangle")
+        self._cmd_act("circle", "&Circle", C.CircleCmd, "Circle")
+        self._cmd_act("arc", "&Arc (3 points)", C.ArcCmd, "Arc")
+        self._cmd_act("text", "&Text", C.TextCmd, "Text")
+        self._cmd_act("move", "&Move", C.MoveCmd, "Move")
+        self._cmd_act("copy", "&Copy objects", C.CopyCmd, "Copy")
+        self._cmd_act("rotate", "&Rotate", C.RotateCmd, "Rotate")
+        self._cmd_act("scale", "&Scale", C.ScaleCmd, "Scale")
+        self._cmd_act("mirror", "M&irror", C.MirrorCmd, "Mirror")
+        self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
+        self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
+
+        A("sheet_add", "&New sheet", self.add_sheet, label="New sheet")
+        A("sheet_del", "&Delete sheet", self.delete_sheet, label="Delete sheet")
+        A("sheet_up", "Move sheet &up", lambda: self.move_sheet(-1), label="Move up")
+        A("sheet_down", "Move sheet do&wn", lambda: self.move_sheet(1), label="Move down")
+        A("sheet_props", "&Sheet properties...", self.sheet_properties, label="Sheet")
+        A("project_props", "&Project properties...", self.project_properties, label="Project")
+        A("layers", "&Layers...", self.layers_dialog, label="Layers")
+        A("edit_tb", "Edit &title block", self._toggle_title_block, checkable=True,
+          icon="title_block", label="Edit title block",
+          tip="Draw and change the title block (lines and texts; {Field} in a text shows "
+              "that field's value). Click it again to go back to the sheets.")
+        A("black", "&Black drawing background", self._set_black, checkable=True,
+          icon="black_bg", label="Black background",
+          tip="Draw on black, as in AutoCAD. PDF export always prints black on white.")
+
+        A("manual", "&User manual", self.show_manual, "F1", label="Manual")
+        A("about", "&About KanzonasCAD", self.about, label="About")
+
+        for a in self.acts.values():
+            a.setIcon(theme.icon(a.property("icon_key")))
+
+    def _build_menus(self):
+        mb = self.menuBar()
+        a = self.acts
+        m = mb.addMenu("&File")
+        for k in ("new", "open"):
+            m.addAction(a[k])
+        self.recent_menu = m.addMenu("Open &recent")
+        self.recent_menu.aboutToShow.connect(self._fill_recent)
+        m.addSeparator()
+        for k in ("save", "save_as"):
+            m.addAction(a[k])
+        m.addSeparator()
+        for k in ("import_dxf", "export_dxf", "export_dxf_all", "export_pdf"):
+            m.addAction(a[k])
+        m.addSeparator()
+        m.addAction(a["close"])
+        m.addAction(a["quit"])
+        m = mb.addMenu("&Edit")
+        for k in ("undo", "redo", None, "cut", "copy_clip", "paste", "delete", None, "select_all"):
+            m.addSeparator() if k is None else m.addAction(a[k])
+        m = mb.addMenu("&View")
+        for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
+                  "osnap", "polar", "drafting", None, "black", "command_line", "sheets", "collapse",
+                  "group_names"):
+            m.addSeparator() if k is None else m.addAction(a[k])
+        tm = m.addMenu("&Theme")
+        for mode in ("light", "dark", "system"):
+            tm.addAction(a["theme_" + mode])
+        m = mb.addMenu("&Draw")
+        for k in ("line", "polyline", "rect", "circle", "arc", "text"):
+            m.addAction(a[k])
+        m = mb.addMenu("&Modify")
+        for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim"):
+            m.addAction(a[k])
+        m = mb.addMenu("&Sheets")
+        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "sheet_props",
+                  "project_props", "edit_tb", "layers"):
+            m.addSeparator() if k is None else m.addAction(a[k])
+        m = mb.addMenu("&Help")
+        m.addAction(a["manual"])
+        m.addAction(a["about"])
+
+    def _build_ribbon(self):
+        from .ribbon import Ribbon
+        a = self.acts
+        self.layer_box = QComboBox()
+        self.layer_box.setMinimumWidth(130)
+        self.layer_box.setToolTip("Current layer (new objects go on it). With objects "
+                                  "selected, picking a layer moves them to it.")
+        self.layer_box.activated.connect(self._layer_picked)
+        r = self.ribbon = Ribbon()
+        r.add_tab("Home", [
+            ("Draw", "large", [a["line"], a["polyline"], a["rect"], a["circle"], a["arc"],
+                               a["text"]]),
+            ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
+                                 a["erase"], a["trim"]]),
+            ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
+            ("Layers", "small", [self.layer_box, a["layers"]]),
+            ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
+        ])
+        r.add_tab("Sheets", [
+            ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
+            ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
+            ("Properties", "large", [a["sheet_props"], a["project_props"], a["layers"]]),
+            ("Title block", "large", [a["edit_tb"]]),
+        ])
+        r.add_tab("Output", [
+            ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
+            ("Import", "large", [a["import_dxf"]]),
+            ("Project", "large", [a["save"], a["save_as"]]),
+        ])
+        r.add_tab("View", [
+            ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
+            ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["polar"],
+                                        a["osnap"], a["drafting"]]),
+            ("Panels", "small", [a["command_line"], a["sheets"], a["black"]]),
+            ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
+            ("Ribbon", "small", [a["collapse"], a["group_names"]]),
+        ])
+        tb = self.ribbon_bar = QToolBar("Ribbon")
+        tb.setObjectName("ribbon")
+        tb.setMovable(False)
+        tb.setFloatable(False)
+        tb.addWidget(r)
+        tb.setContentsMargins(0, 0, 0, 0)
+        self.addToolBar(Qt.TopToolBarArea, tb)
+        names = self.settings.value("ribbon_group_names", "false") in (True, "true")
+        a["group_names"].setChecked(names)
+        r.set_group_names(names)
+        r.setMaximumHeight(r.expanded_height())
+        r.collapsedChanged.connect(lambda on: a["collapse"].setChecked(on))
+
+    def _build_status(self):
+        sb = self.statusBar()
+        self.coords = QLabel()
+        self.coords.setMinimumWidth(300)
+        sb.addWidget(self.coords)
+        for key in ("grid", "snap", "ortho", "polar", "osnap"):
+            b = QToolButton()
+            b.setDefaultAction(self.acts[key])
+            b.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            b.setAutoRaise(True)
+            b.setText(self.acts[key].iconText().upper())
+            b.setToolTip("%s (%s)" % (self.acts[key].text().replace("&", ""),
+                                      self.acts[key].shortcut().toString()))
+            sb.addPermanentWidget(b)
+        self.layer_label = QLabel()
+        sb.addPermanentWidget(self.layer_label)
+
+    # ============================================================================================
+    # documents
+    # ============================================================================================
+    def doc(self):
+        w = self.tabs.currentWidget()
+        return w if isinstance(w, Document) else None
+
+    def view(self):
+        d = self.doc()
+        return d.view if d else None
+
+    def add_document(self, project):
+        d = Document(project)
+        v = d.view
+        v.set_dark(self.acts["black"].isChecked())
+        self._load_drafting(v)
+        for key, attr in (("grid", "grid_on"), ("snap", "snap_on"), ("ortho", "ortho_on"),
+                          ("osnap", "osnap_on"), ("polar", "polar_on")):
+            setattr(v, attr, self.settings.value("aid_" + attr, getattr(v, attr)) in
+                    (True, "true"))
+        v.cursorMoved.connect(self._cursor_moved)
+        v.selectionChanged.connect(self._update_ui)
+        v.sheetChanged.connect(self._fill_sheets)
+        v.commandChanged.connect(self._update_ui)
+        v.editTextRequested.connect(self.edit_text)
+        v.titleBlockDoubleClicked.connect(self.project_properties)
+        v.contextMenuWanted.connect(self._view_menu)
+        v.typed.connect(self.cmdline.take_key)
+        project.listeners.append(lambda d=d: self._project_changed(d))
+        i = self.tabs.addTab(d, d.name())
+        self.tabs.setCurrentIndex(i)
+        v.setFocus()
+        return d
+
+    def new_project(self):
+        p = M.Project.new()
+        self._untitled += 1
+        return self.add_document(p)
+
+    def _project_changed(self, d):
+        i = self.tabs.indexOf(d)
+        if i >= 0:
+            self.tabs.setTabText(i, d.name() + ("*" if d.project.is_modified() else ""))
+        if d is self.doc():
+            self._fill_sheets()
+            self._fill_layers()
+            self._update_ui()
+
+    def _tab_changed(self, _i):
+        v = self.view()
+        self.cmdline.attach(v)
+        self._fill_sheets()
+        self._fill_layers()
+        self._update_ui()
+        if v is not None:
+            v.setFocus()
+
+    def close_tab(self, index):
+        w = self.tabs.widget(index)
+        if not isinstance(w, Document):
+            return True
+        if not self._maybe_save(w):
+            return False
+        self.tabs.removeTab(index)
+        w.view.cancel()
+        w.deleteLater()
+        return True
+
+    def _maybe_save(self, d):
+        if not d.project.is_modified():
+            return True
+        self.tabs.setCurrentWidget(d)
+        r = QMessageBox.question(self, APP, "Save changes to %s?" % d.name(),
+                                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
+        if r == QMessageBox.Cancel:
+            return False
+        if r == QMessageBox.Save:
+            return self.save()
+        return True
+
+    def closeEvent(self, e):
+        for i in reversed(range(self.tabs.count())):
+            if not self.close_tab(i):
+                e.ignore()
+                return
+        self.settings.setValue("geometry", self.saveGeometry())
+        self.settings.setValue("window_state", self.saveState())
+        hand_over_clipboard()
+        e.accept()
+
+    # ---- opening and saving ----------------------------------------------------------------
+    def open_dialog(self):
+        path, _f = QFileDialog.getOpenFileName(
+            self, "Open", self._last_dir(),
+            "Projects and drawings (*.kzcad *.dxf);;KanzonasCAD project (*.kzcad);;DXF (*.dxf)")
+        if path:
+            self.open_path(path)
+
+    def open_path(self, path):
+        path = os.path.abspath(path)
+        for i in range(self.tabs.count()):
+            d = self.tabs.widget(i)
+            if isinstance(d, Document) and d.project.path == path:
+                self.tabs.setCurrentIndex(i)
+                return d
+        try:
+            if path.lower().endswith(".dxf"):
+                p = M.Project.new()
+                p.sheets[0].title = os.path.splitext(os.path.basename(path))[0]
+                rep = fileio.import_dxf(p, p.sheets[0], path)
+                p.undo_stack.clear()
+                p.saved_at = -1
+                d = self.add_document(p)
+                self._dxf_report(rep)
+                d.view.zoom("extents")
+            else:
+                p = M.Project.load(path)
+                d = self.add_document(p)
+        except Exception as ex:
+            QMessageBox.warning(self, APP, "Couldn't open %s:\n%s" % (path, ex))
+            return None
+        self._remember(path)
+        return d
+
+    def save(self):
+        d = self.doc()
+        if d is None:
+            return False
+        if not d.project.path:
+            return self.save_as()
+        return self._save_to(d, d.project.path)
+
+    def save_as(self):
+        d = self.doc()
+        if d is None:
+            return False
+        start = d.project.path or os.path.join(self._last_dir(), d.name() + M.FILE_SUFFIX)
+        path, _f = QFileDialog.getSaveFileName(self, "Save project", start,
+                                               "KanzonasCAD project (*.kzcad)")
+        if not path:
+            return False
+        if not path.lower().endswith(M.FILE_SUFFIX):
+            path += M.FILE_SUFFIX
+        return self._save_to(d, path)
+
+    def _save_to(self, d, path):
+        try:
+            d.project.save(path)
+        except OSError as ex:
+            QMessageBox.warning(self, APP, "Couldn't save %s:\n%s" % (path, ex))
+            return False
+        self._remember(path)
+        self._project_changed(d)
+        self.statusBar().showMessage("Saved %s" % path, 4000)
+        return True
+
+    def _last_dir(self):
+        return self.settings.value("last_dir", os.path.expanduser("~"))
+
+    def _remember(self, path):
+        self.settings.setValue("last_dir", os.path.dirname(path))
+        recent = [p for p in self._recent() if p != path]
+        recent.insert(0, path)
+        self.settings.setValue("recent", json.dumps(recent[:MAX_RECENT]))
+
+    def _recent(self):
+        try:
+            r = json.loads(self.settings.value("recent", "[]"))
+            return [p for p in r if isinstance(p, str)]
+        except (TypeError, ValueError):
+            return []
+
+    def _fill_recent(self):
+        m = self.recent_menu
+        m.clear()
+        recent = [p for p in self._recent() if os.path.exists(p)]
+        if not recent:
+            a = m.addAction("(none)")
+            a.setEnabled(False)
+        for p in recent:
+            m.addAction(p, lambda p=p: self.open_path(p))
+
+    # ---- DXF and PDF -----------------------------------------------------------------------
+    def import_dxf(self):
+        d = self.doc()
+        if d is None:
+            return
+        path, _f = QFileDialog.getOpenFileName(self, "Import DXF", self._last_dir(), "DXF (*.dxf)")
+        if not path:
+            return
+        try:
+            rep = fileio.import_dxf(d.project, d.view.sheet(), path)
+        except Exception as ex:
+            QMessageBox.warning(self, APP, "Couldn't read %s:\n%s" % (path, ex))
+            return
+        self._dxf_report(rep)
+        d.view.zoom("extents")
+
+    def _dxf_report(self, rep):
+        msg = "Imported %d object(s); drawing units: %s." % (rep["count"], rep["units"])
+        if rep["skipped"]:
+            msg += " Skipped: " + ", ".join("%s x%d" % kv for kv in sorted(rep["skipped"].items()))
+        self.cmdline.add_history(msg)
+        self.statusBar().showMessage(msg, 8000)
+
+    def export_dxf(self):
+        d = self.doc()
+        if d is None:
+            return
+        s = d.view.sheet()
+        name = "%s-%s.dxf" % (d.name(), d.project.sheet_number(s))
+        path, _f = QFileDialog.getSaveFileName(self, "Export sheet to DXF",
+                                               os.path.join(self._last_dir(), name), "DXF (*.dxf)")
+        if not path:
+            return
+        try:
+            fileio.export_dxf(d.project, s, path)
+        except Exception as ex:
+            QMessageBox.warning(self, APP, "Couldn't write %s:\n%s" % (path, ex))
+            return
+        self.statusBar().showMessage("Exported %s" % path, 5000)
+
+    def export_dxf_all(self):
+        d = self.doc()
+        if d is None:
+            return
+        folder = QFileDialog.getExistingDirectory(self, "Export all sheets to DXF: folder",
+                                                  self._last_dir())
+        if not folder:
+            return
+        n = 0
+        try:
+            for s in d.project.sheets:
+                fileio.export_dxf(d.project, s, os.path.join(
+                    folder, "%s-%s.dxf" % (d.name(), d.project.sheet_number(s))))
+                n += 1
+        except Exception as ex:
+            QMessageBox.warning(self, APP, "Export stopped:\n%s" % ex)
+        self.statusBar().showMessage("Exported %d sheet(s) to %s" % (n, folder), 5000)
+
+    def export_pdf(self):
+        d = self.doc()
+        if d is None:
+            return
+        path, _f = QFileDialog.getSaveFileName(self, "Export to PDF",
+                                               os.path.join(self._last_dir(), d.name() + ".pdf"),
+                                               "PDF (*.pdf)")
+        if not path:
+            return
+        try:
+            n = fileio.export_pdf(d.project, path)
+        except Exception as ex:
+            QMessageBox.warning(self, APP, "Couldn't write %s:\n%s" % (path, ex))
+            return
+        self.statusBar().showMessage("Exported %d sheet(s) to %s" % (n, path), 5000)
+
+    # ============================================================================================
+    # editing
+    # ============================================================================================
+    def _run(self, cls):
+        v = self.view()
+        if v is not None:
+            v.run(cls)
+            v.setFocus()
+
+    def _other_command(self, what):
+        {"undo": self.undo, "redo": self.redo, "save": self.save, "open": self.open_dialog,
+         "new": self.new_project, "quit": self.close}[what]()
+
+    def undo(self):
+        d = self.doc()
+        if d is None:
+            return
+        d.view.cancel()
+        name = d.project.undo()
+        self.cmdline.add_history("Undo %s" % name if name else "Nothing to undo")
+
+    def redo(self):
+        d = self.doc()
+        if d is None:
+            return
+        d.view.cancel()
+        name = d.project.redo()
+        self.cmdline.add_history("Redo %s" % name if name else "Nothing to redo")
+
+    def _selected(self):
+        v = self.view()
+        if v is None:
+            return []
+        ents = v.sheet().entities
+        return [ents[i] for i in sorted(v.sel) if i in ents]
+
+    def copy_clip(self):
+        ents = self._selected()
+        if not ents:
+            return False
+        bb = None
+        from . import geometry as G
+        for e in ents:
+            bb = G.bbox_union(bb, e.bbox())
+        data = {"base": [bb[0], bb[1]], "entities": [e.to_dict() for e in ents]}
+        mime = QMimeData()
+        mime.setData(CLIP_MIME, json.dumps(data).encode("utf-8"))
+        mime.setText("%d KanzonasCAD object(s)" % len(ents))
+        QGuiApplication.clipboard().setMimeData(mime)
+        self.statusBar().showMessage("Copied %d object(s)" % len(ents), 3000)
+        return True
+
+    def cut(self):
+        if self.copy_clip():
+            self._run(C.EraseCmd)
+
+    def paste(self):
+        v = self.view()
+        mime = QGuiApplication.clipboard().mimeData()
+        if v is None or mime is None:
+            return
+        if mime.hasFormat(CLIP_MIME):
+            raw = bytes(mime.data(CLIP_MIME)).decode("utf-8")
+        elif mime.hasText() and mime.text().startswith(CLIP_TEXT):
+            raw = mime.text()[len(CLIP_TEXT):]
+        else:
+            return
+        try:
+            data = json.loads(raw)
+            ents = [M.Entity.from_dict(d) for d in data["entities"]]
+        except (ValueError, KeyError, TypeError) as ex:
+            self.statusBar().showMessage("The clipboard's objects can't be read: %s" % ex, 5000)
+            return
+        for e in ents:
+            v.project.ensure_layer(e.layer)
+        v.run(C.PasteCmd, ents, tuple(data["base"]))
+        v.setFocus()
+
+    def select_all(self):
+        v = self.view()
+        if v is not None:
+            v.select_all()
+
+    def edit_text(self, ent):
+        v = self.view()
+        if v is None:
+            return
+        text, ok = QInputDialog.getText(self, "Edit text", "Text:", text=ent.text)
+        if ok and text != ent.text and text.strip():
+            with v.project.edit("Edit text") as ed:
+                ed.change(v.sheet(), ent.copy(text=text))
+
+    def _view_menu(self, gpos):
+        v = self.view()
+        if v is None:
+            return
+        m = QMenu(self)
+        if v.last_cmd is not None:
+            m.addAction("Repeat %s" % v.last_cmd.title, v.enter)
+            m.addSeparator()
+        a = self.acts
+        for k in ("cut", "copy_clip", "paste"):
+            m.addAction(a[k])
+        if v.sel:
+            m.addSeparator()
+            for k in ("erase", "move", "copy", "rotate", "scale", "mirror"):
+                m.addAction(a[k])
+            m.addAction("Deselect all", lambda: v.set_selection(set()))
+        m.addSeparator()
+        m.addAction(a["select_all"])
+        m.addAction(a["zoom_ext"])
+        m.exec(gpos)
+
+    # ---- layers ----------------------------------------------------------------------------
+    def _fill_layers(self):
+        v = self.view()
+        box = self.layer_box
+        box.blockSignals(True)
+        box.clear()
+        if v is not None:
+            for name, lay in v.project.layers.items():
+                box.addItem(dialogs._swatch(lay.color), name)
+            box.setCurrentText(v.layer())
+        box.blockSignals(False)
+        self.layer_label.setText("Layer: %s" % (v.layer() if v else ""))
+
+    def _layer_picked(self, i):
+        v = self.view()
+        if v is None:
+            return
+        name = self.layer_box.itemText(i)
+        ents = self._selected()
+        if ents:
+            with v.project.edit("Change layer") as ed:
+                for e in ents:
+                    if e.layer != name:
+                        ed.change(v.sheet(), e.copy(layer=name))
+            self._fill_layers()
+        else:
+            v.current_layer = name
+            self._fill_layers()
+        v.setFocus()
+
+    def layers_dialog(self):
+        v = self.view()
+        if v is None:
+            return
+        dlg = dialogs.LayersDialog(self, v.project, v.layer())
+        dlg.exec()
+        v.current_layer = dlg.current if dlg.current in v.project.layers else "0"
+        self._fill_layers()
+        v.update()
+
+    # ---- sheets ----------------------------------------------------------------------------
+    def _fill_sheets(self):
+        lst = self.sheet_list
+        lst.blockSignals(True)
+        lst.clear()
+        v = self.view()
+        if v is not None:
+            p = v.project
+            for s in p.sheets:
+                it = QListWidgetItem("%s   %s" % (p.sheet_number(s), s.title or "(untitled)"))
+                it.setData(Qt.UserRole, s.id)
+                lst.addItem(it)
+                if s.id == v.sheet_id:
+                    lst.setCurrentItem(it)
+        lst.blockSignals(False)
+
+    def _sheet_clicked(self, item):
+        v = self.view()
+        if v is not None:
+            self._leave_title_block(v)
+            v.show_sheet(item.data(Qt.UserRole))
+            self._fill_sheets()
+            self._update_ui()
+
+    def _sheet_menu(self, pos):
+        m = QMenu(self)
+        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_props"):
+            m.addAction(self.acts[k])
+        m.exec(self.sheet_list.mapToGlobal(pos))
+
+    def add_sheet(self):
+        v = self.view()
+        if v is None:
+            return
+        p = v.project
+        self._leave_title_block(v)
+        cur = v.sheet()
+        s = M.Sheet(title="Sheet %d" % (len(p.sheets) + 1), size=cur.size, cols=cur.cols,
+                    rows=cur.rows)
+        with p.edit("New sheet") as ed:
+            ed.add_sheet(s, p.sheets.index(cur) + 1)
+        v.show_sheet(s.id)
+        self._fill_sheets()
+
+    def delete_sheet(self):
+        v = self.view()
+        if v is None:
+            return
+        p = v.project
+        if len(p.sheets) < 2:
+            QMessageBox.information(self, APP, "A project keeps at least one sheet.")
+            return
+        s = v.sheet()
+        if s.entities and QMessageBox.question(
+                self, APP, "Delete sheet %s (%s) and its %d object(s)? Undo brings it back." %
+                (p.sheet_number(s), s.title, len(s.entities))) != QMessageBox.Yes:
+            return
+        i = p.sheets.index(s)
+        with p.edit("Delete sheet") as ed:
+            ed.remove_sheet(s)
+        v.show_sheet(p.sheets[max(0, i - 1)].id)
+        self._fill_sheets()
+
+    def move_sheet(self, step):
+        v = self.view()
+        if v is None:
+            return
+        p = v.project
+        i = p.sheets.index(v.sheet())
+        j = i + step
+        if 0 <= j < len(p.sheets):
+            with p.edit("Move sheet") as ed:
+                ed.move_sheet(i, j)
+            self._fill_sheets()
+
+    def sheet_properties(self):
+        v = self.view()
+        if v is not None and dialogs.sheet_properties(self, v.project, v.sheet()):
+            self._fill_sheets()
+
+    def project_properties(self):
+        v = self.view()
+        if v is not None:
+            dialogs.project_properties(self, v.project)
+
+    def _toggle_title_block(self, on):
+        v = self.view()
+        if v is None:
+            return
+        if on:
+            if v.sheet() is not v.project.title_block:
+                self._tb_return = v.sheet_id
+                v.show_sheet(M.TITLE_BLOCK_ID)
+                self.cmdline.add_history(
+                    "Editing the title block. Draw and change it like any drawing; a text with "
+                    "{Customer}, {Sheet}, {Sheets}, {Sheet title}... shows that field's value on "
+                    "the sheets. Click Edit title block again when done.")
+        else:
+            self._leave_title_block(v)
+        self._fill_sheets()
+        self._update_ui()
+
+    def _leave_title_block(self, v):
+        if v.sheet() is v.project.title_block:
+            back = getattr(self, "_tb_return", None)
+            if v.project.sheet_by_id(back) is None or back == M.TITLE_BLOCK_ID:
+                back = v.project.sheets[0].id
+            v.show_sheet(back)
+
+    def _set_black(self, on):
+        self.settings.setValue("black_drawing", bool(on))
+        for i in range(self.tabs.count()):
+            d = self.tabs.widget(i)
+            if isinstance(d, Document):
+                d.view.set_dark(on)
+
+    def drafting_settings(self):
+        v = self.view()
+        if v is not None and dialogs.drafting_settings(self, v):
+            st = self.settings
+            st.setValue("snap_spacing", v.snap_spacing)
+            st.setValue("grid_spacing", v.grid_spacing)
+            st.setValue("text_height", v.text_height())
+            st.setValue("polar_inc", v.polar_inc)
+            st.setValue("polar_extra", json.dumps(v.polar_extra))
+            st.setValue("crosshair_size", v.crosshair_size)
+            st.setValue("crosshair_full", bool(v.crosshair_full))
+            for i in range(self.tabs.count()):
+                d = self.tabs.widget(i)
+                if isinstance(d, Document) and d.view is not v:
+                    self._load_drafting(d.view)
+
+    def _load_drafting(self, v):
+        """The drafting settings kept from last time (Drafting settings...)."""
+        st = self.settings
+        try:
+            v.snap_spacing = float(st.value("snap_spacing", v.snap_spacing))
+            v.grid_spacing = float(st.value("grid_spacing", v.grid_spacing))
+            v.set_text_height(float(st.value("text_height", v.text_height())))
+            v.polar_inc = float(st.value("polar_inc", v.polar_inc))
+            v.polar_extra = [float(a) for a in json.loads(st.value("polar_extra", "[]"))]
+            v.crosshair_size = int(st.value("crosshair_size", v.crosshair_size))
+            v.crosshair_full = st.value("crosshair_full", False) in (True, "true")
+        except (TypeError, ValueError) as ex:
+            self.statusBar().showMessage("Drafting settings reset (couldn't read them: %s)" % ex,
+                                         5000)
+
+    # ============================================================================================
+    # view, theme, status
+    # ============================================================================================
+    def _zoom(self, how):
+        v = self.view()
+        if v is not None:
+            v.zoom(how)
+
+    def _aid(self, attr):
+        def toggle(on):
+            v = self.view()
+            if v is not None:
+                setattr(v, attr, on)
+                v.update()
+            self.settings.setValue("aid_" + attr, bool(on))
+            # Ortho and Polar tracking exclude each other, as in AutoCAD
+            other = {"ortho_on": "polar", "polar_on": "ortho"}.get(attr)
+            if on and other and self.acts[other].isChecked():
+                self.acts[other].setChecked(False)
+        return toggle
+
+    def _toggle_cmdline(self, on):
+        self.cmd_dock.setVisible(on)
+
+    def _toggle_sheets(self, on):
+        self.sheet_dock.setVisible(on)
+
+    def _toggle_collapse(self, on):
+        if self.ribbon._collapsed != on:
+            self.ribbon.set_collapsed(on)
+
+    def _toggle_group_names(self, on):
+        self.ribbon.set_group_names(on)
+        self.settings.setValue("ribbon_group_names", bool(on))
+
+    def _apply_theme(self, mode, save=True):
+        if mode not in ("light", "dark", "system"):
+            mode = "light"
+        theme.apply(QApplication.instance(), mode)
+        self.acts["theme_" + mode].setChecked(True)
+        for a in self.acts.values():
+            a.setIcon(theme.icon(a.property("icon_key")))
+        for i in range(self.tabs.count()):
+            d = self.tabs.widget(i)
+        if save:
+            self.settings.setValue("theme", mode)
+
+    def _cursor_moved(self, x, y, zone):
+        self.coords.setText("X %.4f   Y %.4f%s" % (x, y, ("    Zone " + zone) if zone else ""))
+
+    def _update_ui(self):
+        v = self.view()
+        has = v is not None
+        p = v.project if has else None
+        a = self.acts
+        for k in ("save", "save_as", "import_dxf", "export_dxf", "export_dxf_all", "export_pdf",
+                  "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
+                  "sheet_add", "sheet_props", "project_props", "layers", "drafting",
+                  "line", "polyline", "rect", "circle", "arc", "text", "move", "copy", "rotate",
+                  "scale", "mirror", "erase", "trim", "paste"):
+            a[k].setEnabled(has)
+        a["undo"].setEnabled(bool(has and p.undo_stack))
+        a["redo"].setEnabled(bool(has and p.redo_stack))
+        sel = bool(has and v.sel)
+        for k in ("cut", "copy_clip", "delete"):
+            a[k].setEnabled(sel)
+        on_tb = bool(has and v.sheet() is p.title_block)
+        pos = p.sheets.index(v.sheet()) if has and not on_tb else -1
+        a["sheet_up"].setEnabled(pos > 0)
+        a["sheet_down"].setEnabled(0 <= pos < len(p.sheets) - 1)
+        a["sheet_del"].setEnabled(bool(has and not on_tb and len(p.sheets) > 1))
+        a["sheet_props"].setEnabled(bool(has and not on_tb))
+        a["edit_tb"].setEnabled(has)
+        a["edit_tb"].blockSignals(True)
+        a["edit_tb"].setChecked(on_tb)
+        a["edit_tb"].blockSignals(False)
+        if has:
+            for key, attr in (("grid", "grid_on"), ("snap", "snap_on"), ("ortho", "ortho_on"),
+                              ("osnap", "osnap_on"), ("polar", "polar_on")):
+                a[key].blockSignals(True)
+                a[key].setChecked(getattr(v, attr))
+                a[key].blockSignals(False)
+        a["command_line"].blockSignals(True)
+        a["command_line"].setChecked(not self.cmd_dock.isHidden())
+        a["command_line"].blockSignals(False)
+        a["sheets"].blockSignals(True)
+        a["sheets"].setChecked(not self.sheet_dock.isHidden())
+        a["sheets"].blockSignals(False)
+        d = self.doc()
+        title = APP
+        if d is not None:
+            title = "%s%s - %s" % (d.name(), "*" if d.project.is_modified() else "", APP)
+        self.setWindowTitle(title)
+
+    # ---- help ------------------------------------------------------------------------------
+    def show_manual(self):
+        from . import manual
+        dlg = QDialog(self)
+        dlg.setWindowTitle("KanzonasCAD user manual")
+        dlg.resize(820, 700)
+        lay = QVBoxLayout(dlg)
+        tb = QTextBrowser()
+        tb.setOpenExternalLinks(True)
+        tb.setHtml(manual.html())
+        lay.addWidget(tb)
+        b = QDialogButtonBox(QDialogButtonBox.Close)
+        b.rejected.connect(dlg.accept)
+        lay.addWidget(b)
+        dlg.exec()
+
+    def about(self):
+        QMessageBox.about(self, "About KanzonasCAD",
+                          "<b>KanzonasCAD %s</b><br>Free electrical CAD for Windows and Linux."
+                          "<br>Source: <a href='https://github.com/keithlyding/KanzonasCAD'>"
+                          "github.com/keithlyding/KanzonasCAD</a><br>MIT License." % __version__)
