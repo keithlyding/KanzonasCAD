@@ -124,7 +124,7 @@ class _GlyphEngine(QIconEngine):
 def icon_named(name):
     """Icon by Material Design Icons name, tinted for the current theme (empty icon if the
     icon font isn't available)."""
-    color = "#e6e6e6" if is_dark() else "#303030"
+    color = _icon_color()
     if _load_font():
         code = _font["chars"].get(name)
         if code:
@@ -143,6 +143,51 @@ def icon(key):
     return icon_named(name) if name else QIcon()
 
 
+def _icon_color():
+    """The color icons are drawn in: the window's own text color, so they always stand out
+    from what is actually behind them (whatever the system or the theme did)."""
+    app = QGuiApplication.instance()
+    if app is not None:
+        c = app.palette().color(QPalette.Active, QPalette.WindowText)
+        if c.isValid():
+            return c.name()
+    return "#e6e6e6" if is_dark() else "#303030"
+
+
+def _light_palette():
+    """A light palette made here, not the style's own: on Windows the style's palette turns
+    dark when Windows is in dark mode, even when KanzonasCAD is set to Light."""
+    window, base, text = QColor(240, 240, 240), QColor(255, 255, 255), QColor(20, 20, 20)
+    p = QPalette()
+    for role, c in ((QPalette.Window, window), (QPalette.WindowText, text),
+                    (QPalette.Base, base), (QPalette.AlternateBase, QColor(245, 245, 245)),
+                    (QPalette.ToolTipBase, QColor(255, 255, 220)), (QPalette.ToolTipText, text),
+                    (QPalette.Text, text), (QPalette.Button, window),
+                    (QPalette.ButtonText, text), (QPalette.BrightText, QColor(200, 0, 0)),
+                    (QPalette.Highlight, QColor(0, 120, 215)),
+                    (QPalette.HighlightedText, QColor(255, 255, 255)),
+                    (QPalette.Link, QColor(0, 90, 200)),
+                    (QPalette.PlaceholderText, QColor(120, 120, 120)),
+                    (QPalette.Light, QColor(255, 255, 255)), (QPalette.Midlight, QColor(227, 227, 227)),
+                    (QPalette.Mid, QColor(160, 160, 160)), (QPalette.Dark, QColor(160, 160, 160)),
+                    (QPalette.Shadow, QColor(105, 105, 105))):
+        p.setColor(role, c)
+    for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+        p.setColor(QPalette.Disabled, role, QColor(150, 150, 150))
+    return p
+
+
+def _ask_scheme(mode):
+    """Tell Qt which scheme to use (Qt 6.8+), so its own drawing follows the choice too."""
+    try:
+        hints = QGuiApplication.styleHints()
+        scheme = {"light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark}.get(
+            mode, Qt.ColorScheme.Unknown)
+        hints.setColorScheme(scheme)
+    except AttributeError:
+        pass                            # (older Qt: the palette below does it)
+
+
 def _system_prefers_dark():
     try:
         return QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
@@ -153,7 +198,9 @@ def _system_prefers_dark():
 def apply(app, mode):
     """mode: 'light' | 'dark' | 'system'."""
     global _mode
+    _ask_scheme("system")               # (to read what the system itself prefers)
     _mode = "dark" if mode == "dark" or (mode == "system" and _system_prefers_dark()) else "light"
+    _ask_scheme(_mode)
     import sys
     if not (sys.platform.startswith("linux") and app.style() is not None
             and app.style().name().lower() == "fusion"):
@@ -161,7 +208,7 @@ def apply(app, mode):
         # style's own: the ribbon, which has none, grew 4 pixels at each theme change)
         app.setStyle("Fusion")
     if _mode == "light":
-        app.setPalette(app.style().standardPalette())
+        app.setPalette(_light_palette())
         return
     p = QPalette()
     base, window, text = QColor(37, 37, 38), QColor(45, 45, 48), QColor(230, 230, 230)

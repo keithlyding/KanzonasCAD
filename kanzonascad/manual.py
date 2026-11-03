@@ -286,7 +286,9 @@ middle button for <b>Zoom extents</b>.</li>
 <li><b>Black drawing background</b> (on to start, as in AutoCAD): the sheet is drawn black with
 white lines. Turn it off for a white sheet. <b>Export to PDF...</b> always prints black on
 white either way.</li>
-<li><b>Theme</b>: Light, Dark or Same as system: the menus, ribbon and panels.</li>
+<li><b>Theme</b>: Light, Dark or Same as system: the menus, ribbon and panels. Light stays
+light and Dark stays dark whatever Windows is set to; Same as system follows Windows, also when
+it switches while KanzonasCAD is open.</li>
 <li><b>Command line</b> and <b>Sheets panel</b> show or hide those panels.</li>
 </ul>
 
