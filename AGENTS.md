@@ -75,6 +75,10 @@ On a 60,000-line sheet: opened and drawn < 5 s, ten zoomed repaints < 2 s, 1,000
 one edit each < 2 s, 1,000 lines moved in one edit < 2 s, a mouse move < 30 ms, peak memory
 < 800 MB. Typical today: 0.6 s, 0.2 s, 0.4 s, 0.06 s, 0.5 ms, 180 MB.
 
+## Plans and decisions
+The order of work and the owner's decisions are in docs/ROADMAP.md: read it before starting a
+feature, and update it when a decision changes.
+
 ## Credits
 KanzonasCAD's electrical features (cross-references, device tags, terminals, reports) will
 draw on ideas and, where it fits, code from KatieCAD (https://github.com/Merecete/KatieCAD,
