@@ -25,7 +25,8 @@ env:
     --exclude-module PySide6.QtNetwork --icon assets/kanzonascad.ico --name KanzonasCAD
 
 jobs:
-  windows:
+  # (named build, as in KanzonasPDF: the rule protecting main requires a check called build)
+  build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
