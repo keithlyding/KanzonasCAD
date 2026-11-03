@@ -212,6 +212,9 @@ class PolylineCmd(Command):
     def enter(self):
         self._make(False)
 
+    def cancel(self):
+        self._make(False)           # keeps what is drawn so far, as AutoCAD's PLINE
+
     def preview(self, p):
         if self.points:
             return [M.Polyline(self.points + [p], False)]
@@ -792,6 +795,76 @@ class ZoomCmd(Command):
         return True
 
 
+class WireCmd(Command):
+    """WIRE: click where it starts (a pin, a wire, or anywhere), then where it goes: it runs
+    straight across and up or down, turning one corner per click (F flips which way the
+    corner goes). It ends by itself on a pin or another wire; Enter ends it anywhere."""
+    name, title = "WIRE", "Wire"
+
+    def begin(self):
+        self.points = []
+        self.hfirst = None              # None: the corner follows the cursor
+        self.ctx.prompt("Specify start of wire (a pin, a wire, or a point)")
+
+    def _route(self, p):
+        a = self.points[-1]
+        h = self.hfirst
+        if h is None:
+            h = abs(p[0] - a[0]) >= abs(p[1] - a[1])
+        from .wires import route
+        return route(a, p, h)
+
+    def point(self, p):
+        from .wires import connects_at
+        if not self.points:
+            self.points = [p]
+            self.base = self.last = p
+            self.ctx.prompt("Specify next point (ends by itself on a pin or wire; Enter "
+                            "ends here)", [("Flip corner", "F"), ("Undo", "U")])
+            return
+        if G.dist(self.points[-1], p) < 1e-9:
+            return
+        self.points += self._route(p)
+        self.base = self.last = p
+        if connects_at(self.ctx.sheet(), p):
+            self._make()
+
+    def text(self, s):
+        k = s.strip().upper()
+        if k == "F" and self.points:
+            last = self.ctx.cursor_point() if hasattr(self.ctx, "cursor_point") else None
+            if self.hfirst is None and last is not None:
+                a = self.points[-1]
+                self.hfirst = not (abs(last[0] - a[0]) >= abs(last[1] - a[1]))
+            else:
+                self.hfirst = not bool(self.hfirst)
+            return True
+        if k == "U" and len(self.points) > 1:
+            self.points.pop()
+            self.base = self.last = self.points[-1]
+            return True
+        return False
+
+    def _make(self):
+        pts = M._tidy(self.points)
+        if len(pts) >= 2:
+            with self.ctx.edit("Wire") as ed:
+                ed.add(self.ctx.sheet(), M.Wire(pts))
+        self.finish()
+
+    def enter(self):
+        self._make()
+
+    def cancel(self):
+        # Esc, or starting another command, keeps what is drawn so far (as AutoCAD's PLINE)
+        self._make()
+
+    def preview(self, p):
+        if not self.points:
+            return []
+        return [M.Wire(self.points + self._route(p))]
+
+
 class MakeBlockCmd(Command):
     """BLOCK: selected objects become a symbol or footprint in your library: base point, the
     details (name, kind...), then for a symbol its pins in order and where its tag goes."""
@@ -933,6 +1006,11 @@ class InsertCmd(Command):
             if ins.layer not in project.layers:
                 ed.layer(ins.layer, None, M.Layer(ins.layer, M.ADAPTIVE).to_dict())
             ed.add(sheet, ins)
+            if self.defn.kind == "symbol":
+                # placed on a wire: the wire is cut between its pins
+                from .wires import break_under
+                if break_under(ed, sheet, ins):
+                    self.ctx.message("Wire cut to fit %s" % self.defn.name)
         self.ctx.set_selection(set())
         self.finish()
 
@@ -980,6 +1058,7 @@ COMMANDS = {
     "TRIM": (TrimCmd, ["TR"]),
     "ZOOM": (ZoomCmd, ["Z"]),
     "BLOCK": (MakeBlockCmd, ["B"]),
+    "WIRE": (WireCmd, ["W"]),
     "EXPLODE": (ExplodeCmd, ["X"]),
 }
 

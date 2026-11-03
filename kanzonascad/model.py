@@ -298,6 +298,66 @@ class Polyline(Entity):
 
 
 @_register
+class Wire(Polyline):
+    """A wire: a polyline on layer WIRES whose ends attach to symbol pins, wire ends or other
+    wires. What it connects is worked out from where its ends are (wires.py), never stored, so
+    it can't go stale; moving a symbol drags the ends that sat on its pins."""
+    kind = "wire"
+
+    def __init__(self, points, closed=False, **kw):
+        kw.setdefault("layer", "WIRES")
+        super().__init__(points, False, **kw)
+
+    def end_moved(self, i, p):
+        """A copy with end i (0 or -1) at p, kept straight across / up and down: the next
+        corner slides along with it, or a jog is added to a two-point wire."""
+        pts = [list(q) for q in self.points]
+        n = len(pts)
+        j = 0 if i == 0 else n - 1
+        k = 1 if j == 0 else n - 2
+        old = pts[j]
+        dx, dy = p[0] - old[0], p[1] - old[1]
+        horiz = abs(pts[k][1] - old[1]) < 1e-9
+        vert = abs(pts[k][0] - old[0]) < 1e-9
+        if n >= 3:
+            if horiz and not vert:
+                pts[k][1] += dy
+            elif vert and not horiz:
+                pts[k][0] += dx
+            pts[j] = list(p)
+        else:
+            a, b = (list(p), pts[1]) if j == 0 else (pts[0], list(p))
+            if abs(a[0] - b[0]) < 1e-9 or abs(a[1] - b[1]) < 1e-9:
+                pts = [a, b]
+            elif horiz or not vert:
+                xm = (a[0] + b[0]) / 2
+                pts = [a, [xm, a[1]], [xm, b[1]], b]
+            else:
+                ym = (a[1] + b[1]) / 2
+                pts = [a, [a[0], ym], [b[0], ym], b]
+        return self.copy(points=_tidy(pts))
+
+
+def _tidy(pts):
+    """Points without repeats, and without middle points of straight runs."""
+    out = []
+    for q in pts:
+        if out and abs(out[-1][0] - q[0]) < 1e-9 and abs(out[-1][1] - q[1]) < 1e-9:
+            continue
+        out.append(list(q))
+    i = 1
+    while 0 < i < len(out) - 1:
+        a, b, c = out[i - 1], out[i], out[i + 1]
+        cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+        dot = (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1])
+        if abs(cross) < 1e-12 and dot >= 0:
+            del out[i]
+        else:
+            i += 1
+    return out
+
+
+@_register
 class Circle(Entity):
     kind = "circle"
     __slots__ = ("center", "radius")
@@ -1019,6 +1079,7 @@ class Edit:
         self.name = name
         self.ops = []           # ("ent", sheet_id, eid, before, after) | ("sheet", ...)
         self._seen = {}
+        self.pin_moves = []     # (sheet, {pin: old point}, {pin: new point}) of moved symbols
 
     def _remember(self, sheet, eid):
         key = (sheet.id, eid)
@@ -1032,6 +1093,9 @@ class Edit:
     def add(self, sheet, ent):
         if ent.id is None:
             ent.id = sheet.new_id()
+        old = sheet.entities.get(ent.id)
+        if isinstance(old, Insert) and isinstance(ent, Insert):
+            self.pin_moves.append((sheet, dict(old.pin_points()), dict(ent.pin_points())))
         op = self._remember(sheet, ent.id)
         sheet._put(ent)
         op[4] = ent.to_dict()
@@ -1405,5 +1469,12 @@ class _EditContext:
             # put back what this failed step had already changed
             self.ed.project._apply(self.ed.ops, undo=True)
             return False
+        if self.ed.pin_moves:
+            try:
+                from .wires import follow_pins
+                follow_pins(self.ed)
+            except Exception:
+                self.ed.project._apply(self.ed.ops, undo=True)
+                raise
         self.ed.project._commit(self.ed)
         return False

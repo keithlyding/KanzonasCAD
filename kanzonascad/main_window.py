@@ -244,6 +244,8 @@ class MainWindow(QMainWindow):
           icon="black_bg", label="Black background",
           tip="Draw on black, as in AutoCAD. PDF export always prints black on white.")
 
+        self._cmd_act("wire", "&Wire", C.WireCmd, "Wire")
+        self.acts["wire"].setProperty("icon_key", "wire")
         self._cmd_act("make_block", "&Make block", C.MakeBlockCmd, "Make block")
         self.acts["make_block"].setProperty("icon_key", "make_block")
         self._cmd_act("explode", "E&xplode", C.ExplodeCmd, "Explode")
@@ -299,8 +301,8 @@ class MainWindow(QMainWindow):
         for mode in ("light", "dark", "system"):
             tm.addAction(a["theme_" + mode])
         m = mb.addMenu("&Draw")
-        for k in ("line", "polyline", "rect", "circle", "arc", "text"):
-            m.addAction(a[k])
+        for k in ("line", "polyline", "rect", "circle", "arc", "text", None, "wire"):
+            m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
                   "object_color"):
@@ -337,6 +339,7 @@ class MainWindow(QMainWindow):
         ])
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
+            ("Draw", "large", [a["wire"]]),
             ("Symbols", "large", [a["library_panel"], a["make_block"], a["explode"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
@@ -1227,7 +1230,7 @@ class MainWindow(QMainWindow):
         a["library_panel"].blockSignals(True)
         a["library_panel"].setChecked(not self.library_dock.isHidden())
         a["library_panel"].blockSignals(False)
-        for k in ("make_block", "explode"):
+        for k in ("make_block", "explode", "wire"):
             a[k].setEnabled(has)
         d = self.doc()
         title = APP

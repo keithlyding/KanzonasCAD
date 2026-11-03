@@ -139,8 +139,28 @@ footprint.</p>
 catalog number, or pick one of the library's parts for it. <b>Explode</b> (X) turns placed
 blocks back into plain lines and texts. Delete in the Library panel removes your own symbols,
 footprints and parts (the built-in symbols stay).</p>
-<p><i>Coming next: wires that stay attached to the pins, tags numbered by page (CR601), and
-cross-references between coils and their contacts.</i></p>
+
+
+<h2>Wires</h2>
+<p><b>Wire</b> (W; Draw menu and the Schematic tab) draws a wire on layer WIRES. Click where it
+starts (a symbol's pin, another wire, or anywhere), then where it goes: it runs straight across
+and up or down, with one corner per click; the corner follows the cursor, and F flips it the
+other way. The wire <b>ends by itself</b> when you click a pin or another wire; Enter ends it
+anywhere; so does Esc or starting another command (what is drawn is kept). U takes back
+the last click.</p>
+<ul>
+<li><b>Connections</b> are worked out from where wire ends are, never stored: a wire end on a
+pin, on another wire's end, or on the middle of another wire connects there. A wire ending on
+the middle of another (a T), or three or more wire ends at one point, get a <b>dot</b>.</li>
+<li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
+Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
+where needed). Select the wires too and they move with it instead.</li>
+<li><b>Placing a symbol on a wire</b> cuts the wire between the symbol's pins, as AutoCAD
+Electrical does: drop a contact onto a rung and it is wired in.</li>
+<li>Wires are ordinary objects otherwise: grips stretch their corners, Trim and Erase work on
+them, and they print and export (DXF) as polylines.</li>
+</ul>
+<p><i>Coming next: device tags by page number, cross-references, then wire numbers.</i></p>
 
 <h2>Drawing</h2>
 <p>Start a command from the ribbon, the <b>Draw</b> and <b>Modify</b> menus, or by typing its

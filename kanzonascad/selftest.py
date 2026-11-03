@@ -193,6 +193,31 @@ def run(log_path):
         return "%d built-in symbols; insert, pins and library folder" % len(syms)
     log.check("symbol library", library)
 
+    def wiring():
+        from .library import Library
+        from . import wires
+        v = state["view"]
+        v.osnap_on = v.snap_on = False
+        before = len(v.sheet().entities)
+        v.run(C.WireCmd)
+        for t in ("1,3", "8,3", ""):
+            assert v.input_text(t)
+        v.run(C.InsertCmd, Library().get("symbol", "Contact NO"), {})
+        assert v.input_text("4,3")
+        ws = [e for e in v.sheet().entities.values() if isinstance(e, M.Wire)]
+        assert sorted(w.points[0][0] for w in ws) == [1.0, 4.25], [w.points for w in ws]
+        ins = [e for e in v.sheet().entities.values() if isinstance(e, M.Insert)][-1]
+        with v.project.edit("Move") as ed:
+            ed.change(v.sheet(), ins.moved(0, 0.5))
+        ws = [e for e in v.sheet().entities.values() if isinstance(e, M.Wire)]
+        assert any(w.points[-1] == (3.75, 3.5) for w in ws), [w.points for w in ws]
+        v.project.undo()
+        assert wires.junctions(v.sheet()) == []
+        v.repaint()
+        return "wire, cut under a symbol, follows a moved symbol (%d objects)" % (
+            len(v.sheet().entities) - before)
+    log.check("wires", wiring)
+
     def manual():
         gaps = manual_gaps(state["win"])
         assert not gaps, "missing from the manual: %s" % gaps

@@ -131,6 +131,9 @@ class CadView(QWidget):
     def set_text_height(self, v):
         self.project.settings["text_height"] = float(v)
 
+    def cursor_point(self):
+        return self.cursor
+
     def layer_visible(self, name):
         lay = self.project.layers.get(name)
         return lay is None or lay.visible

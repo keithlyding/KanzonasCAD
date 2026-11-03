@@ -35,7 +35,7 @@ ICONS = {
     "project_props": "folder-cog-outline", "layers": "layers-outline", "title_block": "table-edit",
     "black_bg": "invert-colors",
     "make_block": "shape-plus", "explode": "shape-outline", "library": "bookshelf",
-    "part": "tag-plus-outline", "color": "palette-outline", "sheets": "file-multiple-outline",
+    "part": "tag-plus-outline", "color": "palette-outline", "wire": "vector-polyline-edit", "sheets": "file-multiple-outline",
     # help
     "manual": "help-circle-outline", "about": "information-outline", "shortcuts": "keyboard-outline",
 }
