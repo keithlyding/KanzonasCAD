@@ -114,6 +114,9 @@ def run(log_path):
                                                           sys.platform))
     app = QApplication.instance()
     tmp = tempfile.mkdtemp(prefix="kzcad-selftest-")
+    # a scratch library: the self-test never touches the user's own
+    os.environ["KANZONASCAD_LIBRARY"] = os.path.join(tmp, "library")
+    os.environ["KANZONASCAD_RECOVERY"] = os.path.join(tmp, "recovery")
     state = {}
 
     def start():
@@ -171,6 +174,24 @@ def run(log_path):
         assert open(pdf, "rb").read(4) == b"%PDF"
         return "project, DXF out and in, PDF"
     log.check("save, open, DXF and PDF", files)
+
+    def library():
+        from .library import Library
+        lib = Library()
+        syms, bad = lib.blocks("symbol")
+        assert not bad, bad
+        assert len(syms) >= 25, "only %d built-in symbols" % len(syms)
+        v = state["view"]
+        v.osnap_on = v.snap_on = False
+        v.run(C.InsertCmd, syms["Relay coil"], {"TAG": "CR601"})
+        assert v.input_text("6,6")
+        ins = [e for e in v.sheet().entities.values() if isinstance(e, M.Insert)]
+        assert ins and ins[0].pin_points()[0][1] == (5.75, 6.0), ins[0].pin_points()
+        lib.save_block(M.BlockDef("Self-test footprint", "footprint", [M.Circle((0, 0), 1)]))
+        assert Library().get("footprint", "Self-test footprint") is not None
+        v.repaint()
+        return "%d built-in symbols; insert, pins and library folder" % len(syms)
+    log.check("symbol library", library)
 
     def manual():
         gaps = manual_gaps(state["win"])

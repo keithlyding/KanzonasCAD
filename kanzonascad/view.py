@@ -32,12 +32,14 @@ class CadView(QWidget):
     sheetChanged = Signal()
     editTextRequested = Signal(object)
     titleBlockDoubleClicked = Signal()
+    attributesRequested = Signal(object)        # a block reference double-clicked
     contextMenuWanted = Signal(object)          # global QPoint
     typed = Signal(object)                      # a key typed over the drawing (QKeyEvent)
 
     def __init__(self, project, parent=None):
         super().__init__(parent)
         self.project = project
+        self.host = None                # the main window: dialogs commands need (Make block)
         self.sheet_id = project.sheets[0].id
         self.renderers = {}
         self.dark = True                # black drawing area (printing is always black on white)
@@ -63,7 +65,7 @@ class CadView(QWidget):
         self.grid_spacing = 0.5
         self.snap_spacing = 0.125
         self.current_layer = "0"
-        self._text_height = 0.125
+        self.text_justify = ("left", "baseline")     # TEXT's justification (align, valign)
         self._pan = None
         # while selecting with a window or a lasso: {"start", "pressed" (the button is still
         # down from the first click), "lasso" (points, once dragged), "crossing"}
@@ -122,10 +124,12 @@ class CadView(QWidget):
         return self.current_layer
 
     def text_height(self):
-        return self._text_height
+        """New text's height: the project's (Project properties; TEXT's height prompt sets it
+        too, as AutoCAD's TEXTSIZE)."""
+        return float(self.project.settings["text_height"])
 
     def set_text_height(self, v):
-        self._text_height = float(v)
+        self.project.settings["text_height"] = float(v)
 
     def layer_visible(self, name):
         lay = self.project.layers.get(name)
@@ -654,6 +658,10 @@ class CadView(QWidget):
             if isinstance(ent, M.Text):
                 self._window = None
                 self.editTextRequested.emit(ent)
+                return
+            if isinstance(ent, M.Insert):
+                self._window = None
+                self.attributesRequested.emit(ent)
                 return
             if ent is None and self.sheet() is not self.project.title_block:
                 from .sheetframe import title_block_rect

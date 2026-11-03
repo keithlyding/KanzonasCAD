@@ -127,9 +127,9 @@ class ProjectTest(unittest.TestCase):
         p = M.Project.new()
         s = p.sheets[0]
         x0, y0, x1, y1 = s.frame()
-        # top left zone is A1, bottom right is F10 on a 10 x 6 grid
+        # top left zone is A1, bottom right is H10 on the 10 x 8 grid a sheet starts with
         self.assertEqual(s.zone_at(x0 + 0.01, y1 - 0.01), ("A", 1))
-        self.assertEqual(s.zone_at(x1 - 0.01, y0 + 0.01), ("F", 10))
+        self.assertEqual(s.zone_at(x1 - 0.01, y0 + 0.01), ("H", 10))
         self.assertIsNone(s.zone_at(0, 0))
         with p.edit("Number") as ed:
             ed.sheet_meta(s, number="6")

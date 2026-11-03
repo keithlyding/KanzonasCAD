@@ -27,9 +27,11 @@ def main(argv=None):
     for f in args.files:
         if os.path.exists(f) and win.open_path(f) is not None:
             opened = True
+    win.show()
+    if win.offer_recovery():
+        opened = True
     if not opened:
         win.new_project()
-    win.show()
     return app.exec()
 
 

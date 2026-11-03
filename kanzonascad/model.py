@@ -38,7 +38,19 @@ DEFAULT_LAYERS = [
     ("SYMBOLS", ADAPTIVE),
     ("TEXT", ADAPTIVE),
     ("NOTES", "#00a0ff"),
+    ("PANEL", ADAPTIVE),
+    ("DIMENSIONS", "#00c8c8"),
 ]
+
+# the project's own settings (Project properties); sheets that follow the project take the
+# layout ones (size, zones) from here
+DEFAULT_SETTINGS = {
+    "text_height": 0.125,       # new text
+    "tag_height": 0.1,          # device tags on symbols
+    "size": "ANSI B (17 x 11)",
+    "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
+}
+LAYOUT_KEYS = ("size", "cols", "rows", "col_start", "row_start")
 
 # text width per character as a share of the text height, used for hit tests and boxes when
 # no font measure is set (the app sets TEXT_MEASURE from the font it draws with)
@@ -90,10 +102,13 @@ class Entity:
         return {}
 
     @staticmethod
-    def from_dict(d):
+    def from_dict(d, blocks=None):
+        """blocks: {name: BlockDef} the block references among them point to."""
         cls = _KINDS.get(d.get("kind"))
         if cls is None:
             raise ValueError("unknown entity kind %r" % d.get("kind"))
+        if cls is Insert:
+            return cls._from(d, blocks or {})
         return cls._from(d)
 
     def copy(self, **changes):
@@ -437,39 +452,71 @@ class Arc(Entity):
                          end=e % 360.0)
 
 
+# where a text's insertion point sits, as AutoCAD's justifications (TEXT, Justify):
+# align: left, center, right; valign: baseline, bottom (under the descenders), middle (half
+# the capital height), top (the capitals' top)
+VALIGNS = ("baseline", "bottom", "middle", "top")
+DESCENT = 0.3           # descenders reach this share of the text height under the baseline
+JUSTIFY = {             # AutoCAD's letters -> (align, valign)
+    "L": ("left", "baseline"), "C": ("center", "baseline"), "R": ("right", "baseline"),
+    "TL": ("left", "top"), "TC": ("center", "top"), "TR": ("right", "top"),
+    "ML": ("left", "middle"), "MC": ("center", "middle"), "MR": ("right", "middle"),
+    "BL": ("left", "bottom"), "BC": ("center", "bottom"), "BR": ("right", "bottom"),
+}
+
+
+def justify_code(align, valign):
+    for k, v in JUSTIFY.items():
+        if v == (align, valign):
+            return k
+    return "L"
+
+
 @_register
 class Text(Entity):
-    """One line of text. pos is the insertion point on the baseline; align: left, center or
-    right of pos."""
+    """One line of text. pos is the insertion point; align (left, center, right) and valign
+    (baseline, bottom, middle, top) say where the text sits around it."""
     kind = "text"
-    __slots__ = ("pos", "text", "height", "angle", "align")
+    __slots__ = ("pos", "text", "height", "angle", "align", "valign")
 
-    def __init__(self, pos, text, height=0.125, angle=0.0, align="left", **kw):
+    def __init__(self, pos, text, height=0.125, angle=0.0, align="left", valign="baseline",
+                 **kw):
         super().__init__(**kw)
         self.pos = _pt(pos)
         self.text = str(text)
         self.height = float(height)
         self.angle = float(angle) % 360.0
         self.align = align if align in ("left", "center", "right") else "left"
+        self.valign = valign if valign in VALIGNS else "baseline"
 
     def _data(self):
-        return {"pos": list(self.pos), "text": self.text, "height": self.height,
-                "angle": self.angle, "align": self.align}
+        d = {"pos": list(self.pos), "text": self.text, "height": self.height,
+             "angle": self.angle, "align": self.align}
+        if self.valign != "baseline":
+            d["valign"] = self.valign
+        return d
 
     @classmethod
     def _from(cls, d):
         return cls(d["pos"], d.get("text", ""), d.get("height", 0.125), d.get("angle", 0.0),
-                   d.get("align", "left"), layer=d.get("layer", "0"), color=d.get("color"),
-                   id=d.get("id"))
+                   d.get("align", "left"), d.get("valign", "baseline"),
+                   layer=d.get("layer", "0"), color=d.get("color"), id=d.get("id"))
 
     def width(self):
         return text_width(self.text, self.height)
 
+    def offset(self):
+        """(dx, dy) from the insertion point to the start of the baseline, before turning."""
+        w, h = self.width(), self.height
+        dx = {"left": 0.0, "center": -w / 2, "right": -w}[self.align]
+        dy = {"baseline": 0.0, "bottom": DESCENT * h, "middle": -h / 2, "top": -h}[self.valign]
+        return dx, dy
+
     def corners(self):
         """The text's box (baseline to cap height), rotated."""
         w, h = self.width(), self.height
-        x0 = {"left": 0.0, "center": -w / 2, "right": -w}[self.align]
-        local = [(x0, 0.0), (x0 + w, 0.0), (x0 + w, h), (x0, h)]
+        x0, y0 = self.offset()
+        local = [(x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h)]
         return [G.rotate_point((self.pos[0] + x, self.pos[1] + y), self.pos, self.angle)
                 for x, y in local]
 
@@ -522,6 +569,243 @@ class Text(Entity):
 
 
 # ============================================================================================
+# Blocks: symbols (schematic, with pins and a tag) and footprints (panel outlines)
+# ============================================================================================
+BLOCK_KINDS = ("symbol", "footprint")
+# a symbol's part in cross-references (worked out in a later version):
+#   device - stands alone (fuse, pilot light, motor...)
+#   parent - has contacts elsewhere (relay/contactor coil, pushbutton or switch operator)
+#   child  - a contact of a parent (takes the parent's tag)
+ROLES = ("device", "parent", "child")
+CONTACTS = ("", "NO", "NC", "NOTC", "NCTO", "NOTO", "NCTC")
+ATTR_NAMES = ["TAG", "DESC", "MFR", "CAT"]       # what every block reference can carry
+
+
+class BlockDef:
+    """A block: entities drawn around the base point (0, 0), and for a schematic symbol its
+    pins (where wires attach) and where its tag goes. Footprints are drawn at real size."""
+
+    def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
+                 category="", description="", role="device", contact="", prefix="",
+                 builtin=False):
+        self.name = str(name)
+        self.kind = kind if kind in BLOCK_KINDS else "symbol"
+        self.entities = list(entities)
+        self.pins = [{"name": str(p["name"]), "pos": _pt(p["pos"])} for p in pins]
+        self.tag_pos = _pt(tag_pos) if tag_pos is not None else None
+        self.tag_height = float(tag_height)
+        self.category = category
+        self.description = description
+        self.role = role if role in ROLES else "device"
+        self.contact = contact if contact in CONTACTS else ""
+        self.prefix = prefix            # tag prefix: CR, M, PB... (page-number tags, later)
+        self.builtin = bool(builtin)    # one of the program's own (not in your library folder)
+
+    def to_dict(self):
+        return {"name": self.name, "kind": self.kind, "category": self.category,
+                "description": self.description, "role": self.role, "contact": self.contact,
+                "prefix": self.prefix, "tag_height": self.tag_height,
+                "tag_pos": list(self.tag_pos) if self.tag_pos is not None else None,
+                "pins": [{"name": p["name"], "pos": list(p["pos"])} for p in self.pins],
+                "entities": [e.to_dict() for e in self.entities]}
+
+    @classmethod
+    def from_dict(cls, d, builtin=False):
+        return cls(d["name"], d.get("kind", "symbol"),
+                   [Entity.from_dict(e) for e in d.get("entities", [])], d.get("pins", []),
+                   d.get("tag_pos"), d.get("tag_height", 0.1), d.get("category", ""),
+                   d.get("description", ""), d.get("role", "device"), d.get("contact", ""),
+                   d.get("prefix", ""), builtin)
+
+    def same_as(self, other):
+        a, b = self.to_dict(), other.to_dict()
+        return a == b
+
+    def extents(self):
+        bb = None
+        for e in self.entities:
+            bb = G.bbox_union(bb, e.bbox())
+        for p in self.pins:
+            bb = G.bbox_union(bb, (p["pos"][0], p["pos"][1], p["pos"][0], p["pos"][1]))
+        return bb or (0.0, 0.0, 0.0, 0.0)
+
+
+@_register
+class Insert(Entity):
+    """A block placed on a sheet: at pos, turned by angle, sized by scale, optionally flipped
+    (mirror: the block's own y turned over before turning), with its attributes (TAG, DESC,
+    MFR, CAT and the part it is). defn is the BlockDef it shows (the project's copy)."""
+    kind = "insert"
+    __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "_world")
+
+    def __init__(self, block, pos, angle=0.0, scale=1.0, mirror=False, attrs=None, defn=None,
+                 tag_h=None, **kw):
+        super().__init__(**kw)
+        self.block = str(block)
+        self.pos = _pt(pos)
+        self.angle = float(angle) % 360.0
+        self.scale = float(scale) or 1.0
+        self.mirror = bool(mirror)
+        self.attrs = {k: str(v) for k, v in (attrs or {}).items()}
+        self.defn = defn
+        self.tag_h = float(tag_h) if tag_h else None    # tag height (None: the block's)
+        self._world = None
+
+    def _data(self):
+        d = {"block": self.block, "pos": list(self.pos), "angle": self.angle,
+             "scale": self.scale, "attrs": dict(self.attrs)}
+        if self.mirror:
+            d["mirror"] = True
+        if self.tag_h:
+            d["tag_h"] = self.tag_h
+        return d
+
+    @classmethod
+    def _from(cls, d, blocks):
+        return cls(d["block"], d["pos"], d.get("angle", 0.0), d.get("scale", 1.0),
+                   d.get("mirror", False), d.get("attrs", {}), blocks.get(d["block"]),
+                   d.get("tag_h"), layer=d.get("layer", "0"), color=d.get("color"),
+                   id=d.get("id"))
+
+    def copy(self, **changes):
+        d = self.to_dict()
+        d.update(changes)
+        e = Insert._from(d, {self.block: self.defn} if self.defn is not None else {})
+        return e
+
+    # ---- placing the block's content -----------------------------------------------------
+    def to_world(self, q):
+        x, y = q[0] * self.scale, q[1] * self.scale
+        if self.mirror:
+            y = -y
+        x, y = G.rotate_point((x, y), (0.0, 0.0), self.angle)
+        return (x + self.pos[0], y + self.pos[1])
+
+    def pin_points(self):
+        """[(pin name, world point)]."""
+        if self.defn is None:
+            return []
+        return [(p["name"], self.to_world(p["pos"])) for p in self.defn.pins]
+
+    def tag_text(self):
+        """The tag shown on the sheet (None for a footprint or a symbol without a tag spot)."""
+        d = self.defn
+        if d is None or d.kind != "symbol" or d.tag_pos is None:
+            return None
+        tag = self.attrs.get("TAG", "")
+        return Text(self.to_world(d.tag_pos), tag or (d.prefix + "?" if d.prefix else "?"),
+                    (self.tag_h or d.tag_height) * self.scale, 0.0, "center")
+
+    def world_entities(self):
+        """The block's content placed on the sheet, plus the tag text."""
+        if self._world is None:
+            out = []
+            d = self.defn
+            if d is None:
+                # its block is missing from the project: show an X where it sits
+                r = 0.1
+                out = [Line((self.pos[0] - r, self.pos[1] - r), (self.pos[0] + r, self.pos[1] + r)),
+                       Line((self.pos[0] - r, self.pos[1] + r), (self.pos[0] + r, self.pos[1] - r))]
+            else:
+                for e in d.entities:
+                    w = e._map(self.to_world, rot=self.angle, factor=self.scale,
+                               mirror=None)
+                    if self.mirror:
+                        w = _mirror_fix(e, w, self)
+                    out.append(w)
+                t = self.tag_text()
+                if t is not None:
+                    out.append(t)
+            for w in out:
+                w.layer, w.color = self.layer, self.color
+            self._world = out
+        return self._world
+
+    def _compute_bbox(self):
+        bb = None
+        for e in self.world_entities():
+            bb = G.bbox_union(bb, e.bbox())
+        for _n, p in self.pin_points():
+            bb = G.bbox_union(bb, (p[0], p[1], p[0], p[1]))
+        return bb or (self.pos[0], self.pos[1], self.pos[0], self.pos[1])
+
+    def distance(self, p):
+        ds = [e.distance(p) for e in self.world_entities()]
+        return min(ds) if ds else G.dist(p, self.pos)
+
+    def crosses(self, rect):
+        return any(e.crosses(rect) for e in self.world_entities())
+
+    def pieces(self):
+        out = []
+        for e in self.world_entities():
+            out.extend(e.pieces())
+        return out
+
+    def outline(self):
+        out = []
+        for e in self.world_entities():
+            out.extend(e.outline())
+        return out
+
+    def _compute_snaps(self):
+        out = [("insert", self.pos)]
+        out += [("end", p) for _n, p in self.pin_points()]
+        return out
+
+    def grips(self):
+        return [self.pos]
+
+    def with_grip(self, i, p):
+        return self.copy(pos=list(p))
+
+    def moved(self, dx, dy):
+        return self.copy(pos=[self.pos[0] + dx, self.pos[1] + dy])
+
+    def rotated(self, center, angle):
+        return self.copy(pos=list(G.rotate_point(self.pos, center, angle)),
+                         angle=(self.angle + angle) % 360.0)
+
+    def scaled(self, base, factor):
+        return self.copy(pos=list(G.scale_point(self.pos, base, factor)),
+                         scale=self.scale * abs(factor))
+
+    def mirrored(self, a, b):
+        # reflecting across a line at angle phi: turned to 2*phi - angle, flip toggled
+        phi = G.angle_of(a, b)
+        return self.copy(pos=list(G.mirror_point(self.pos, a, b)),
+                         angle=(2 * phi - self.angle) % 360.0, mirror=not self.mirror)
+
+    def exploded(self):
+        """Its content as plain lines, arcs and texts (EXPLODE)."""
+        out = []
+        for w in self.world_entities():
+            c = w.copy()
+            c.id = None
+            out.append(c)
+        return out
+
+
+def _mirror_fix(src, mapped, ins):
+    """A block entity placed by a flipped reference: points were mapped through to_world
+    (which flips), but arcs need their angles and texts their readability fixed."""
+    if isinstance(src, Arc):
+        # the arc's ends, flipped, swap order (counterclockwise becomes clockwise)
+        a = ins.to_world(G.polar(src.center, src.radius, src.start))
+        b = ins.to_world(G.polar(src.center, src.radius, src.end))
+        c = mapped.center
+        return mapped.copy(start=G.angle_of(c, b), end=G.angle_of(c, a))
+    if isinstance(src, Text):
+        ang = (-src.angle + ins.angle) % 360.0
+        align = src.align
+        if 90.0 + 1e-6 < ang <= 270.0 + 1e-6:
+            ang = (ang + 180.0) % 360.0
+            align = {"left": "right", "right": "left", "center": "center"}[align]
+        return mapped.copy(angle=ang, align=align)
+    return mapped
+
+
+# ============================================================================================
 # Layers, sheets, project
 # ============================================================================================
 class Layer:
@@ -541,10 +825,10 @@ class Layer:
                    d.get("locked", False))
 
 
-def row_letters(n):
-    """A, B, ... Z, AA, AB ... for n rows."""
+def row_letters(n, start=0):
+    """A, B, ... Z, AA, AB ... for n rows, the first being letter number start (0 = A)."""
     out = []
-    for i in range(n):
+    for i in range(start, start + n):
         s, k = "", i
         while True:
             s = string.ascii_uppercase[k % 26] + s
@@ -595,18 +879,23 @@ class SpatialIndex:
         return out
 
 
+SHEET_KINDS = {"schematic": "Schematic", "panel": "Panel", "report": "Report", "other": "Other"}
 TITLE_BLOCK_ID = 0          # the project's title block is kept as a sheet with this id
 
 
 class Sheet:
-    def __init__(self, title="", size=DEFAULT_SIZE, cols=10, rows=6, number=None, id=None,
-                 fields=None):
+    def __init__(self, title="", size=DEFAULT_SIZE, cols=10, rows=8, number=None, id=None,
+                 fields=None, col_start=1, row_start=0):
         self.id = id
         self.title = title
         self.size = size if size in SHEET_SIZES else DEFAULT_SIZE
         self.cols = int(cols)
         self.rows = int(rows)
         self.number = number            # None: its position in the project
+        self.own_layout = False             # True: its size and zones aren't the project's
+        self.kind = "schematic"             # schematic, panel, report or other (defaults only)
+        self.col_start = int(col_start)     # the first column's number (1 to start)
+        self.row_start = int(row_start)     # the first row's letter: 0 = A, 1 = B...
         self.fields = dict(fields or {})
         self.entities = {}              # id -> Entity, in drawing order
         self._next = 1
@@ -631,13 +920,19 @@ class Sheet:
 
     def zone_at(self, x, y):
         """(row letter, column number) of a point, or None outside the drawing area. Columns
-        count left to right from 1, rows top to bottom from A."""
+        count left to right from col_start, rows top to bottom from the row_start letter."""
         x0, y0, x1, y1 = self.frame()
         if not (x0 <= x <= x1 and y0 <= y <= y1):
             return None
-        col = min(self.cols, int((x - x0) / ((x1 - x0) / self.cols)) + 1)
+        col = min(self.cols - 1, int((x - x0) / ((x1 - x0) / self.cols)))
         row = min(self.rows - 1, int((y1 - y) / ((y1 - y0) / self.rows)))
-        return row_letters(self.rows)[row], col
+        return self.row_labels()[row], self.col_labels()[col]
+
+    def col_labels(self):
+        return [self.col_start + i for i in range(self.cols)]
+
+    def row_labels(self):
+        return row_letters(self.rows, self.row_start)
 
     # ---- entities --------------------------------------------------------------------------
     def new_id(self):
@@ -679,7 +974,9 @@ class Sheet:
     # ---- storing ---------------------------------------------------------------------------
     def meta_dict(self):
         return {"id": self.id, "title": self.title, "size": self.size, "cols": self.cols,
-                "rows": self.rows, "number": self.number, "fields": dict(self.fields)}
+                "rows": self.rows, "col_start": self.col_start, "row_start": self.row_start,
+                "own_layout": self.own_layout, "kind": self.kind,
+                "number": self.number, "fields": dict(self.fields)}
 
     def to_dict(self):
         d = self.meta_dict()
@@ -692,17 +989,21 @@ class Sheet:
         if self.size not in SHEET_SIZES:
             self.size = DEFAULT_SIZE
         self.cols = int(d.get("cols", 10))
-        self.rows = int(d.get("rows", 6))
+        self.rows = int(d.get("rows", 8))
+        self.col_start = int(d.get("col_start", 1))
+        self.row_start = int(d.get("row_start", 0))
+        self.own_layout = bool(d.get("own_layout", False))
+        self.kind = d.get("kind", "schematic") if d.get("kind") in SHEET_KINDS else "schematic"
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         self.version += 1
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d, blocks=None):
         s = cls(id=d.get("id"))
         s.set_meta(d)
         for ed in d.get("entities", []):
-            s._put(Entity.from_dict(ed))
+            s._put(Entity.from_dict(ed, blocks))
         return s
 
 
@@ -784,6 +1085,32 @@ class Edit:
             s.version += 1
         self.ops.append(["fields", before, after])
 
+    def project_settings(self, settings):
+        """Change the project's settings. Sheets that follow the project take its new size
+        and zones, and tags take its new tag height (each change undoable with this step)."""
+        p = self.project
+        before, after = dict(p.settings), dict(p.settings)
+        after.update(settings)
+        p.settings = dict(after)
+        self.ops.append(["settings", before, after])
+        layout = {k: after[k] for k in LAYOUT_KEYS}
+        for s in p.sheets:
+            if not s.own_layout and any(s.meta_dict().get(k) != v for k, v in layout.items()):
+                self.sheet_meta(s, **layout)
+        if after["tag_height"] != before["tag_height"]:
+            for s in p.sheets:
+                for e in list(s.entities.values()):
+                    if isinstance(e, Insert) and e.defn is not None and e.defn.kind == "symbol":
+                        self.change(s, e.copy(tag_h=after["tag_height"]))
+
+    def block(self, defn):
+        """Put a block definition in the project (or replace the one of that name); block
+        references to it then show it."""
+        p = self.project
+        old = p.blocks.get(defn.name)
+        self.ops.append(["block", defn.name, old.to_dict() if old else None, defn.to_dict()])
+        p._set_block(defn.name, defn.to_dict())
+
     def layer(self, name, before, after):
         """before/after: a Layer's dict, or None (added / removed)."""
         self.project._set_layer(name, after)
@@ -798,6 +1125,7 @@ class Project:
         self.path = None
         self.fields = {k: "" for k in PROJECT_FIELDS}
         self.zone_format = "{sheet}-{row}{col}"
+        self.settings = dict(DEFAULT_SETTINGS)
         self.layers = {}
         for name, color in DEFAULT_LAYERS:
             self.layers[name] = Layer(name, color)
@@ -806,15 +1134,25 @@ class Project:
         # the title block: a drawing of its own (lines and texts, edited like any sheet with
         # Edit title block), drawn on every sheet with its {fields} filled in
         self.title_block = Sheet(title="Title block", id=TITLE_BLOCK_ID)
+        # the blocks (symbols, footprints) this project uses: its own copies, so it opens the
+        # same anywhere, whatever happens to the library later
+        self.blocks = {}
         self.undo_stack = []
         self.redo_stack = []
         self.saved_at = 0           # len(undo_stack) when last saved (or -1: never matches)
         self.listeners = []         # called with no arguments after each change
 
+    def make_sheet(self, title=""):
+        """A new sheet laid out as the project says (not yet in the project)."""
+        st = self.settings
+        return Sheet(title=title, size=st["size"], cols=st["cols"], rows=st["rows"],
+                     col_start=st["col_start"], row_start=st["row_start"])
+
     @classmethod
     def new(cls):
         p = cls()
-        s = Sheet(title="Sheet 1", id=p.new_sheet_id())
+        s = p.make_sheet("Sheet 1")
+        s.id = p.new_sheet_id()
         p.sheets.append(s)
         p._default_title_block()
         return p
@@ -866,6 +1204,22 @@ class Project:
             self.layers[name] = Layer(name)
         return self.layers[name]
 
+    def _set_block(self, name, d):
+        """Set (d a BlockDef dict) or remove (None) a block, and re-point every reference to
+        it (their drawing changes: they are put again so caches and indexes follow)."""
+        if d is None:
+            self.blocks.pop(name, None)
+            defn = None
+        else:
+            defn = BlockDef.from_dict(d)
+            self.blocks[name] = defn
+        for s in self.sheets + [self.title_block]:
+            for e in list(s.entities.values()):
+                if isinstance(e, Insert) and e.block == name:
+                    c = e.copy()
+                    c.defn = defn
+                    s._put(c)
+
     def _set_layer(self, name, d):
         if d is None:
             self.layers.pop(name, None)
@@ -910,7 +1264,7 @@ class Project:
                 if d is None:
                     s._drop(eid)
                 else:
-                    s._put(Entity.from_dict(d))
+                    s._put(Entity.from_dict(d, self.blocks))
             elif kind == "meta":
                 _k, sid, before, after = op
                 s = self.sheet_by_id(sid)
@@ -924,7 +1278,7 @@ class Project:
                     if s is not None:
                         self.sheets.remove(s)
                 else:
-                    self.sheets.insert(index, Sheet.from_dict(d))
+                    self.sheets.insert(index, Sheet.from_dict(d, self.blocks))
             elif kind == "order":
                 _k, old, new = op
                 a, b = (new, old) if undo else (old, new)
@@ -935,6 +1289,11 @@ class Project:
                 self.fields, self.zone_format = dict(f), z
                 for s in self.sheets:
                     s.version += 1
+            elif kind == "settings":
+                self.settings = dict(op[1] if undo else op[2])
+            elif kind == "block":
+                _k, name, before, after = op
+                self._set_block(name, before if undo else after)
             elif kind == "layer":
                 _k, name, before, after = op
                 d = before if undo else after
@@ -967,9 +1326,10 @@ class Project:
     # ---- storing ---------------------------------------------------------------------------
     def to_dict(self):
         return {"format": FORMAT, "version": FORMAT_VERSION, "fields": dict(self.fields),
-                "zone_format": self.zone_format,
+                "zone_format": self.zone_format, "settings": dict(self.settings),
                 "layers": [lay.to_dict() for lay in self.layers.values()],
                 "title_block": [e.to_dict() for e in self.title_block.entities.values()],
+                "blocks": [b.to_dict() for b in self.blocks.values()],
                 "sheets": [s.to_dict() for s in self.sheets]}
 
     @classmethod
@@ -981,13 +1341,17 @@ class Project:
         p = cls()
         p.fields.update(d.get("fields", {}) or {})
         p.zone_format = d.get("zone_format", p.zone_format)
+        p.settings.update(d.get("settings", {}) or {})
         if d.get("layers"):
             p.layers = {}
             for ld in d["layers"]:
                 lay = Layer.from_dict(ld)
                 p.layers[lay.name] = lay
+        for bd in d.get("blocks", []) or []:
+            b = BlockDef.from_dict(bd)
+            p.blocks[b.name] = b
         for sd in d.get("sheets", []):
-            s = Sheet.from_dict(sd)
+            s = Sheet.from_dict(sd, p.blocks)
             if s.id is None:
                 s.id = p.new_sheet_id()
             p._next_sheet = max(p._next_sheet, int(s.id) + 1)
@@ -998,7 +1362,7 @@ class Project:
             p.sheets.append(Sheet(title="Sheet 1", id=p.new_sheet_id()))
         if "title_block" in d:
             for ed in d["title_block"]:
-                e = Entity.from_dict(ed)
+                e = Entity.from_dict(ed, p.blocks)
                 p.title_block._put(e)
                 p.ensure_layer(e.layer)
             p.title_block.touched = set()
@@ -1006,8 +1370,12 @@ class Project:
             p._default_title_block()
         return p
 
-    def save(self, path):
+    def save(self, path, backups=None):
+        """Write the project to path (a whole new file swapped in, so a crash can't leave
+        half a file). backups: how many earlier saves to keep beside it (backup.KEEP)."""
+        from . import backup
         data = json.dumps(self.to_dict(), separators=(",", ":"))
+        backup.make_backup(path, backup.KEEP if backups is None else backups)
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             f.write(data)

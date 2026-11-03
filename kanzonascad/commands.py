@@ -20,14 +20,24 @@ _RE_POLAR = re.compile(r"^\s*(@?)\s*(%s)\s*<\s*(%s)\s*$" % (_NUM, _NUM))
 _RE_NUM = re.compile(r"^\s*(%s)\s*$" % _NUM)
 
 
+_RE_UNIT = re.compile(r"(%s)\s*(mm|cm|in|\")(?![a-z])" % _NUM, re.I)
+_PER_INCH = {"mm": 1 / 25.4, "cm": 1 / 2.54, "in": 1.0, '"': 1.0}
+
+
+def to_inches(text):
+    """Numbers written with a unit become inches: "45mm" -> "1.7716...", 2" -> 2."""
+    return _RE_UNIT.sub(lambda m: repr(float(m.group(1)) * _PER_INCH[m.group(2).lower()]),
+                        text or "")
+
+
 def parse_number(text):
-    m = _RE_NUM.match(text or "")
+    m = _RE_NUM.match(to_inches(text))
     return float(m.group(1)) if m else None
 
 
 def parse_point(text, last=None):
     """A typed point, or None. last: the point "@" is relative to."""
-    t = (text or "").strip()
+    t = to_inches(text).strip()
     m = _RE_ABS.match(t)
     if m:
         return (float(m.group(1)), float(m.group(2)))
@@ -316,12 +326,22 @@ class ArcCmd(Command):
 class TextCmd(Command):
     name, title = "TEXT", "Text"
 
+    JUSTIFY_PROMPT = "Justification: L, C, R (on the baseline); TL, TC, TR (top); ML, MC, MR " \
+                     "(middle); BL, BC, BR (bottom)"
+
     def begin(self):
         self.pos = None
+        self._start_prompt()
+
+    def _start_prompt(self):
         self.step = "pos"
-        self.ctx.prompt("Specify start point of text")
+        code = M.justify_code(*self.ctx.text_justify)
+        self.ctx.prompt("Specify %s point of text (justification %s)" % (
+            "start" if code in ("L", "BL") else "insertion", code), [("Justify", "J")])
 
     def point(self, p):
+        if self.step == "justify":
+            return
         if self.step == "pos":
             self.pos = self.base = self.last = p
             self.step = "height"
@@ -348,12 +368,27 @@ class TextCmd(Command):
         return self.step == "text"
 
     def text(self, s):
+        k = s.strip().upper()
+        if self.step == "pos" and k == "J":
+            self.step = "justify"
+            self.ctx.prompt(self.JUSTIFY_PROMPT,
+                            [(code, code) for code in ("TL", "TC", "TR", "ML", "MC", "MR",
+                                                       "BL", "BC", "BR", "L", "C", "R")])
+            return True
+        if self.step == "justify":
+            if k in M.JUSTIFY:
+                self.ctx.text_justify = M.JUSTIFY[k]
+                self._start_prompt()
+                return True
+            return False
         if self.step != "text":
             return False
         if not s:
             self.finish()
             return True
-        t = M.Text(self.pos, s, self.ctx.text_height(), self.angle, layer=self.ctx.layer())
+        align, valign = self.ctx.text_justify
+        t = M.Text(self.pos, s, self.ctx.text_height(), self.angle, align, valign,
+                   layer=self.ctx.layer())
         with self.ctx.edit("Text") as ed:
             ed.add(self.ctx.sheet(), t)
         # the next line goes below, as AutoCAD's TEXT does
@@ -373,7 +408,7 @@ class TextCmd(Command):
 
     def preview(self, p):
         if self.step == "pos":
-            return [M.Text(p, "Text", self.ctx.text_height())]
+            return [M.Text(p, "Text", self.ctx.text_height(), 0.0, *self.ctx.text_justify)]
         if self.step in ("height", "angle"):
             return [M.Line(self.pos, p)]
         return []
@@ -477,23 +512,77 @@ class RotateCmd(_TwoPoint):
 
 
 class ScaleCmd(_TwoPoint):
+    """Scale by a factor, or by Reference (AutoCAD's SCALE R): pick or type a length on the
+    drawing as it is, then the length it should be (inches, or with mm: 45mm). This is how a
+    manufacturer's drawing is brought to its real size."""
     name, title = "SCALE", "Scale"
 
+    def begin(self):
+        _TwoPoint.begin(self)
+        self.step = None            # None (factor) | ref1 | ref2 | new
+
     def second_prompt(self):
-        self.ctx.prompt("Specify scale factor (number, or a point: its distance in inches)")
+        self.step = None
+        self.ctx.prompt("Specify scale factor (number, or a point: its distance in inches)",
+                        [("Reference", "R")])
 
     def result(self, p, factor=None):
         if factor is None:
-            factor = G.dist(self.from_pt, p)
+            if self.step == "new":
+                factor = G.dist(self.from_pt, p) / self.ref
+            else:
+                factor = G.dist(self.from_pt, p)
         if factor <= 1e-9:
             return list(self.ents)
         return [e.scaled(self.from_pt, factor) for e in self.ents]
 
+    def text(self, s):
+        if self.from_pt is not None and self.step is None and s.strip().upper() == "R":
+            self.step = "ref1"
+            self.ctx.prompt("Specify reference length: pick its first point, or type the "
+                            "length as drawn")
+            return True
+        return False
+
     def number(self, v):
         if self.from_pt is None or v <= 0:
             return False
+        if self.step == "ref1":
+            self._ref(v)
+            return True
+        if self.step == "ref2":
+            return False
+        if self.step == "new":
+            self._do(self.result(None, v / self.ref))
+            return True
         self._do(self.result(None, v))
         return True
+
+    def _ref(self, length):
+        if length <= 1e-12:
+            self.ctx.message("The reference length can't be zero.")
+            return
+        self.ref = length
+        self.step = "new"
+        self.base = self.last = self.from_pt
+        self.ctx.prompt("Specify new length (inches, or 45mm; or pick a point: its distance "
+                        "from the base point)")
+
+    def point(self, p):
+        if self.step == "ref1":
+            self.ref_a = self.base = self.last = p
+            self.step = "ref2"
+            self.ctx.prompt("Specify second point of the reference length")
+            return
+        if self.step == "ref2":
+            self._ref(G.dist(self.ref_a, p))
+            return
+        _TwoPoint.point(self, p)
+
+    def preview(self, p):
+        if self.step in ("ref1", "ref2"):
+            return [M.Line(self.ref_a, p)] if self.step == "ref2" else []
+        return _TwoPoint.preview(self, p)
 
     def apply(self, p):
         if G.dist(p, self.from_pt) < 1e-9:
@@ -649,9 +738,10 @@ class PasteCmd(Command):
     name, title = "PASTE", "Paste"
     repeatable = False
 
-    def __init__(self, ctx, ents, base):
+    def __init__(self, ctx, ents, base, blocks=None):
         super().__init__(ctx)
         self.ents, self.base_pt = ents, base
+        self.blocks = blocks or {}
 
     def begin(self):
         self.ctx.prompt("Specify insertion point")
@@ -669,7 +759,14 @@ class PasteCmd(Command):
         sheet = self.ctx.sheet()
         ids = set()
         with self.ctx.edit("Paste") as ed:
+            for e in self.ents:
+                if isinstance(e, M.Insert) and e.block not in self.ctx.project.blocks \
+                        and e.block in self.blocks:
+                    ed.block(self.blocks[e.block])
             for e in self.result(p):
+                if isinstance(e, M.Insert):
+                    e.defn = self.ctx.project.blocks.get(e.block, e.defn)
+                    e._world = None
                 ids.add(ed.add(sheet, e).id)
         self.ctx.set_selection(ids)
         self.finish()
@@ -695,6 +792,173 @@ class ZoomCmd(Command):
         return True
 
 
+class MakeBlockCmd(Command):
+    """BLOCK: selected objects become a symbol or footprint in your library: base point, the
+    details (name, kind...), then for a symbol its pins in order and where its tag goes."""
+    name, title = "BLOCK", "Make block"
+    selects = True
+    repeatable = False
+
+    def begin(self):
+        self.ents = [e for e in _selected(self.ctx)]
+        self.step = "base"
+        self.ctx.prompt("Specify base point (the point the block is placed by)")
+
+    def point(self, p):
+        if self.step == "base":
+            self.base_pt = self.base = self.last = p
+            details = self.ctx.host.ask_block_details(self.ents)
+            if details is None:
+                self.finish()
+                return
+            self.details = details
+            if details["kind"] == "symbol":
+                self.pins = []
+                self.step = "pins"
+                self._pin_prompt()
+            else:
+                self._make(None)
+        elif self.step == "pins":
+            self.pins.append(p)
+            self._pin_prompt()
+        elif self.step == "tag":
+            self._make(p)
+
+    def _pin_prompt(self):
+        names = self.details.get("pin_names") or []
+        n = len(self.pins)
+        nxt = names[n] if n < len(names) else str(n + 1)
+        self.ctx.prompt("Pick pin %s, where a wire attaches (Enter when all are picked)" % nxt)
+
+    def enter(self):
+        if self.selecting():
+            return Command.enter(self)
+        if self.step == "pins":
+            self.step = "tag"
+            self.ctx.prompt("Pick where the tag goes (Enter: above the symbol)")
+        elif self.step == "tag":
+            self._make(None)
+        else:
+            self.finish()
+
+    def _make(self, tag_pt):
+        d = self.details
+        bx, by = self.base_pt
+        ents = []
+        for e in self.ents:
+            if isinstance(e, M.Insert):
+                parts = e.exploded()
+            else:
+                parts = [e]
+            for q in parts:
+                c = q.moved(-bx, -by)
+                c.id = None
+                c.layer, c.color = "0", None
+                ents.append(c)
+        names = d.get("pin_names") or []
+        pins = []
+        for i, p in enumerate(getattr(self, "pins", [])):
+            pins.append({"name": names[i] if i < len(names) else str(i + 1),
+                         "pos": (p[0] - bx, p[1] - by)})
+        defn = M.BlockDef(d["name"], d["kind"], ents, pins, None, 0.1, d.get("category", ""),
+                          d.get("description", ""), d.get("role", "device"),
+                          d.get("contact", ""), d.get("prefix", ""))
+        if d["kind"] == "symbol":
+            if tag_pt is not None:
+                defn.tag_pos = (tag_pt[0] - bx, tag_pt[1] - by)
+            else:
+                x0, _y0, x1, y1 = defn.extents()
+                defn.tag_pos = ((x0 + x1) / 2, y1 + 0.06)
+        if not self.ctx.host.save_block_to_library(defn):
+            self.finish()
+            return
+        if d.get("replace", True):
+            sheet = self.ctx.sheet()
+            with self.ctx.edit("Make block") as ed:
+                ed.block(defn)
+                for e in self.ents:
+                    ed.remove(sheet, e.id)
+                ins = ed.add(sheet, M.Insert(defn.name, self.base_pt,
+                                             defn=self.ctx.project.blocks[defn.name],
+                                             layer=self.ents[0].layer if self.ents else "0"))
+            self.ctx.set_selection({ins.id})
+        self.ctx.message("Saved %s %s to your library" % (
+            "symbol" if d["kind"] == "symbol" else "footprint", defn.name))
+        self.finish()
+
+
+class InsertCmd(Command):
+    """Place a symbol or footprint (from the Library panel): pick where; R turns it 90
+    degrees, F flips it."""
+    name, title = "INSERT", "Insert"
+    repeatable = False
+
+    def __init__(self, ctx, defn, attrs=None):
+        super().__init__(ctx)
+        self.defn, self.attrs = defn, dict(attrs or {})
+        self.angle, self.mirror = 0.0, False
+
+    def begin(self):
+        self.ctx.prompt("Specify insertion point for %s" % self.defn.name,
+                        [("Rotate 90", "R"), ("Flip", "F")])
+
+    def text(self, s):
+        k = s.strip().upper()
+        if k == "R":
+            self.angle = (self.angle + 90.0) % 360.0
+            return True
+        if k == "F":
+            self.mirror = not self.mirror
+            return True
+        return False
+
+    def _make(self, p, defn):
+        layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
+        tag_h = self.ctx.project.settings.get("tag_height") if self.defn.kind == "symbol" \
+            else None
+        return M.Insert(self.defn.name, p, self.angle, 1.0, self.mirror, self.attrs, defn,
+                        tag_h, layer=layer)
+
+    def preview(self, p):
+        return [self._make(p, self.defn)]
+
+    def point(self, p):
+        project = self.ctx.project
+        sheet = self.ctx.sheet()
+        with self.ctx.edit("Insert %s" % self.defn.name) as ed:
+            if self.defn.name not in project.blocks:
+                # the project keeps its own copy (a block already in it stays as it was)
+                ed.block(self.defn)
+            ins = self._make(p, project.blocks[self.defn.name])
+            if ins.layer not in project.layers:
+                ed.layer(ins.layer, None, M.Layer(ins.layer, M.ADAPTIVE).to_dict())
+            ed.add(sheet, ins)
+        self.ctx.set_selection(set())
+        self.finish()
+
+
+class ExplodeCmd(Command):
+    """EXPLODE: block references become their lines, arcs and texts."""
+    name, title = "EXPLODE", "Explode"
+    selects = True
+
+    def begin(self):
+        sheet = self.ctx.sheet()
+        n = 0
+        new = set()
+        with self.ctx.edit("Explode") as ed:
+            for e in _selected(self.ctx):
+                if isinstance(e, M.Insert):
+                    ed.remove(sheet, e.id)
+                    for q in e.exploded():
+                        new.add(ed.add(sheet, q).id)
+                    n += 1
+        self.ctx.set_selection(new)
+        self.ctx.message("Exploded %d block(s)" % n if n else "Nothing to explode: select "
+                         "symbols or footprints")
+        self.finish()
+
+
 def _fmt(v):
     return ("%.4f" % v).rstrip("0").rstrip(".")
 
@@ -715,6 +979,8 @@ COMMANDS = {
     "ERASE": (EraseCmd, ["E"]),
     "TRIM": (TrimCmd, ["TR"]),
     "ZOOM": (ZoomCmd, ["Z"]),
+    "BLOCK": (MakeBlockCmd, ["B"]),
+    "EXPLODE": (ExplodeCmd, ["X"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)

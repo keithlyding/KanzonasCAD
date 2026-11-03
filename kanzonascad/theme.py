@@ -33,7 +33,9 @@ ICONS = {
     "sheet_add": "file-document-outline", "sheet_del": "file-remove-outline",
     "sheet_up": "arrow-up", "sheet_down": "arrow-down", "sheet_props": "file-cog-outline",
     "project_props": "folder-cog-outline", "layers": "layers-outline", "title_block": "table-edit",
-    "black_bg": "invert-colors", "sheets": "file-multiple-outline",
+    "black_bg": "invert-colors",
+    "make_block": "shape-plus", "explode": "shape-outline", "library": "bookshelf",
+    "part": "tag-plus-outline", "color": "palette-outline", "sheets": "file-multiple-outline",
     # help
     "manual": "help-circle-outline", "about": "information-outline", "shortcuts": "keyboard-outline",
 }

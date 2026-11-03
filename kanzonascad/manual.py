@@ -23,6 +23,7 @@ and reports come next.</i></p>
 <li><b>Project tabs</b>: each open project has its own tab.</li>
 <li><b>Sheets panel</b> on the left: the project's sheets with their page numbers. Click one to
 show it, double-click to open its properties, right-click for more.</li>
+<li><b>Library panel</b> on the right: your symbols, footprints and parts (see below).</li>
 <li><b>Command line</b> along the bottom (Ctrl+9 shows or hides it).</li>
 <li><b>Status bar</b>: the cursor's X and Y in inches and its <b>zone</b> (for example
 6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches.</li>
@@ -41,16 +42,40 @@ of every wire number (6001, 6002 ...).</p>
 <li><b>Delete sheet</b> removes the sheet shown (Undo brings it back).</li>
 <li><b>Move sheet up</b> and <b>Move sheet down</b> change the order (and so the automatic
 page numbers).</li>
-<li><b>Sheet properties...</b>: title, page number, size, number of zone columns and rows.</li>
-<li><b>Project properties...</b> (or double-click the title block): the title block fields
-(customer, project, drawing number, drawn by, checked by, date, revision, and any field of
-your own the title block uses) and the <b>grid reference format</b>
-(<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1).</li>
+<li><b>Sheet properties...</b> (or double-click the sheet in the Sheets panel): what belongs to
+one sheet: its title, its <b>type</b> (Schematic, Panel, Report or Other: every tool works on
+every sheet; the type brings up the matching ribbon tab and shows in the Sheets panel), page
+number and, if it differs from the project's, its own revision.
+Its size and zones are the project's unless you tick "This sheet has its own size and zones";
+then set how many columns run along the top and the first one's number (11 makes a sheet
+continue 11 to 20), and how many rows run down the left and the first one's letter. Grid
+references follow the zones as they are set: change them and every reference updates.</li>
+<li><b>Project properties...</b> (or double-click the title block): what belongs to the whole
+project, in three tabs:
+<ul>
+<li><b>General</b>: the title block fields (customer, project, drawing number, drawn by, checked
+by, date, revision, and any field of your own the title block uses), the <b>grid reference
+format</b> (<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1) and the height of new text.</li>
+<li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
+uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
+(changing it resizes every tag), and the wire and symbol colors.</li>
+<li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors.</li>
+</ul></li>
 <li><b>Edit title block</b>: see below.</li>
 <li><b>Layers...</b>: add, rename, recolor, switch off and lock layers, and choose the current
 layer. The Layer box on the Home tab picks the current layer; with objects selected, picking
 a layer moves them to it.</li>
 </ul>
+
+<h2>Colors and layers</h2>
+<p>As in AutoCAD, every object takes its <b>layer's color</b> (ByLayer) unless you give it its
+own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel tabs) to pick a
+color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
+layer it sits on, or its own color if you gave it one. Wires go on layer WIRES, symbols on
+SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
+Project properties set those colors, which recolors everything on them.</p>
+<p>The ribbon's <b>Schematic</b> and <b>Panel</b> tabs gather the tools for each kind of work.
+Both are always there: any sheet can hold a schematic, a panel layout, or both.</p>
 
 <h2>The title block</h2>
 <p>The title block is a small drawing of its own, the same on every sheet of the project.
@@ -72,6 +97,51 @@ in Project properties to fill in.</li>
 <p>A name in braces that isn't a field shows as typed, so a typo is easy to spot. Undo works
 on title block changes like on any other.</p>
 
+<h2>Symbols, footprints and parts (the library)</h2>
+<p>Your <b>library</b> is a folder of its own (<code>Documents\\KanzonasCAD Library</code> to
+start; <b>Library folder...</b> picks another, a OneDrive folder say). It is kept apart from
+the program and from projects, so it lasts through updates and serves every project. Each
+project also keeps its own copy of the blocks it uses, so it opens the same anywhere, whatever
+happens to the library later.</p>
+<ul>
+<li><b>Schematic symbols</b>: blocks with <b>pins</b> (where wires attach) and a <b>tag</b>.
+A starter set of JIC/NFPA symbols is built in (relay, contactor and timer coils, NO/NC and
+timed contacts, pushbuttons, E-stop, selector, limit/pressure/temperature/float switches,
+fuse, breaker, disconnect, overload heater and contact, pilot light, motor, solenoid, control
+transformer, terminal, ground). A symbol of yours with the same name replaces a built-in one.</li>
+<li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.</li>
+<li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
+footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
+</ul>
+<p>The <b>Library panel</b> (Library menu) lists them under Symbols, Footprints and Parts.
+Type in its search box to find one. Double-click a symbol or footprint (or select it and click
+<b>Insert</b>) to place it: click where it goes; type R to turn it 90 degrees or F to flip it
+first. In the Parts tab, Insert asks whether to place the part's symbol or its footprint.</p>
+<h3>Making your own</h3>
+<ol>
+<li>Draw it, or open the manufacturer's DXF and copy the view you want into your drawing
+(Copy, then Paste).</li>
+<li>A footprint must be real size: <b>Scale</b>, pick a base point, type R (Reference), pick
+the two ends of a dimension you know (the part's width say) and type its real length
+(<code>45mm</code> or <code>1.77</code>).</li>
+<li>Select it and use <b>Make block</b> (B). Pick the <b>base point</b> (the point it is placed
+by), then fill in the name, kind (schematic symbol or panel footprint), category and
+description. For a symbol also: its part in cross-references (a device on its own, a coil or
+operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...)
+and the pin names.</li>
+<li>For a symbol, click each <b>pin</b> in order and press Enter, then click where the
+<b>tag</b> goes (Enter puts it above).</li>
+</ol>
+<p>It is saved to your library and, unless you untick it, the selected objects become the
+block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
+footprint.</p>
+<p>Double-click a placed symbol or footprint to change its tag, description, manufacturer and
+catalog number, or pick one of the library's parts for it. <b>Explode</b> (X) turns placed
+blocks back into plain lines and texts. Delete in the Library panel removes your own symbols,
+footprints and parts (the built-in symbols stay).</p>
+<p><i>Coming next: wires that stay attached to the pins, tags numbered by page (CR601), and
+cross-references between coils and their contacts.</i></p>
+
 <h2>Drawing</h2>
 <p>Start a command from the ribbon, the <b>Draw</b> and <b>Modify</b> menus, or by typing its
 name or alias on the command line and pressing <b>Enter</b> or <b>Space</b>. Enter on an
@@ -87,12 +157,20 @@ options.</td></tr>
 diameter.</td></tr>
 <tr><td>Arc (3 points)</td><td>ARC, A</td><td>Start, a point on the arc, end.</td></tr>
 <tr><td>Text</td><td>TEXT, T, DT</td><td>Start point, height, angle, then type each line and
-press Enter; Enter on an empty line ends. Double-click a text to change it.</td></tr>
+press Enter; Enter on an empty line ends. Before the start point, J (Justify) chooses where the
+point sits on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR
+(bottom), or L, C, R (on the baseline); it is kept for the next texts.
+<b>Double-click a text</b> to change its wording, height, angle and justification afterward
+(with "Keep the text where it is" ticked, a new justification moves only its insertion point,
+which is where it snaps and turns around).</td></tr>
 <tr><td>Move</td><td>MOVE, M</td><td>Select, base point, second point.</td></tr>
 <tr><td>Copy objects</td><td>COPY, CO, CP</td><td>Select, base point, then as many copies as
 you place (Enter ends).</td></tr>
 <tr><td>Rotate</td><td>ROTATE, RO</td><td>Select, base point, angle (a point or degrees).</td></tr>
-<tr><td>Scale</td><td>SCALE, SC</td><td>Select, base point, factor.</td></tr>
+<tr><td>Scale</td><td>SCALE, SC</td><td>Select, base point, factor. Or <b>Reference</b> (R): pick
+two points of a length as drawn (or type it), then type the length it should be: this brings a
+manufacturer's drawing to its real size. Lengths can be typed in millimeters:
+<code>45mm</code>.</td></tr>
 <tr><td>Mirror</td><td>MIRROR, MI</td><td>Select, two points of the mirror line, keep or erase
 the originals. Text stays readable.</td></tr>
 <tr><td>Erase</td><td>ERASE, E, or Delete</td><td>Removes the selected objects.</td></tr>
@@ -126,7 +204,7 @@ every 45 degrees to start; <b>Drafting settings...</b> chooses the step (90, 45,
 tracking can't be on together: turning one on turns the other off.</li>
 <li><b>Snap to grid</b> (F9, SNAP): points snap to the snap spacing (1/8 inch to start); along a
 polar direction, the distance snaps to it.</li>
-<li><b>Drafting settings...</b>: snap spacing, grid spacing, text height, the polar tracking
+<li><b>Drafting settings...</b>: snap spacing, grid spacing, the polar tracking
 angles and the crosshair (all kept for next time).</li>
 <li><b>Crosshair</b>: short, as in AutoCAD (each line 5% of the view to start). In Drafting
 settings, <b>Crosshair size</b> makes it longer or shorter (1 to 100%), and <b>Full-screen
@@ -194,6 +272,12 @@ converted to inches. AutoCAD DWG files: save them as DXF first (in AutoCAD, or w
 ODA File Converter).</li>
 <li><b>Export this sheet to DXF...</b> and <b>Export all sheets to DXF...</b>: AutoCAD 2013 DXF
 in inches, one file per sheet, border and title block on layer BORDER.</li>
+<li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,
+"<i>name</i> backups", stamped with the date and time (the newest 10 are kept). <b>Open backups
+folder</b> opens it; to go back to one, open it like any project and Save as.</li>
+<li><b>Autosave</b>: every 5 minutes, projects with unsaved changes are copied to a recovery
+folder (never over your own file). If KanzonasCAD doesn't close normally (a crash, a power
+cut), it offers to recover them the next time it starts.</li>
 <li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
 black on white (layer colors are for the screen).</li>
 </ul>

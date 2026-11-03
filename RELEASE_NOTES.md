@@ -6,6 +6,30 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.2
+
+**New**
+- Your own library of schematic symbols, panel footprints and parts, kept in a folder outside
+  the program (Documents\KanzonasCAD Library), for every project from now on.
+- 27 built-in JIC/NFPA symbols: coils, contacts, pushbuttons, switches, fuses, breakers,
+  overloads, lights, motor and more.
+- Make block (B) turns a drawing into a symbol (with pins and a tag) or a panel footprint;
+  parts link a manufacturer and catalog number to both.
+- Scale by Reference brings a manufacturer's drawing to its real size; lengths can be typed in
+  millimeters (45mm).
+- Sheets start with rows A to H; the zones along the top and down the left are editable
+  (how many, and where they start), and references follow them.
+- Project properties (General, Schematic, Panel) and Sheet properties, as in AutoCAD
+  Electrical: sheets follow the project's size and zones unless they have their own, and can
+  have their own revision.
+- Automatic backups: each Save keeps the version before it (the last 10), and unsaved work
+  is autosaved every 5 minutes and offered back if KanzonasCAD didn't close normally.
+- Sheets have a type (Schematic, Panel, Report, Other) that brings up the matching ribbon tab.
+- Schematic and Panel ribbon tabs; objects take their layer's color unless you give them
+  their own (Color...); wire, symbol, footprint and dimension colors in Project properties.
+- Text justification like AutoCAD's (top, middle, bottom; left, center, right), and
+  double-click a text to change its wording, height, angle or justification.
+
 ## 0.1
 
 **New**

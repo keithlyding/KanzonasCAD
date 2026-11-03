@@ -54,19 +54,22 @@ def text_path(t):
     p = QPainterPath()
     p.addText(QPointF(0, 0), f, t.text)
     k = t.height / _font_cache["cap"]
-    w = _font_cache["fm"].horizontalAdvance(t.text) * k
-    dx = {"left": 0.0, "center": -w / 2, "right": -w}[t.align]
+    dx, dy = t.offset()
     tr = QTransform()
     tr.translate(t.pos[0], t.pos[1])
     tr.rotate(t.angle)
-    tr.translate(dx, 0)
+    tr.translate(dx, dy)
     tr.scale(k, -k)                 # glyphs are y-down; the drawing is y-up
     return tr.map(p)
 
 
 def add_entity(path, e):
     """Add an entity's outline to a stroke path (texts go to fill paths: see _Chunk)."""
-    if isinstance(e, M.Line):
+    if isinstance(e, M.Insert):
+        for w in e.world_entities():
+            if not isinstance(w, M.Text):
+                add_entity(path, w)
+    elif isinstance(e, M.Line):
         path.moveTo(e.p1[0], e.p1[1])
         path.lineTo(e.p2[0], e.p2[1])
     elif isinstance(e, M.Polyline):
@@ -174,7 +177,8 @@ class SheetRenderer:
         the title block in its own layers' colors (like any drawing)."""
         p = self.project
         s = self.sheet
-        sig = (s.size, s.cols, s.rows, s.title, p.sheet_number(s), len(p.sheets),
+        sig = (s.size, s.cols, s.rows, s.col_start, s.row_start, s.title, p.sheet_number(s),
+               len(p.sheets),
                tuple(sorted(p.fields.items())), p.title_block.version, self._layer_sig(),
                self.pal.dark)
         if sig != self._frame_sig:
@@ -198,6 +202,15 @@ class SheetRenderer:
             if lay is not None and not lay.visible:
                 continue
             key = self.pal.color(self.project, e).rgba()
+            if isinstance(e, M.Insert):
+                texts = [w for w in e.world_entities() if isinstance(w, M.Text)]
+                if texts:
+                    p = ch.fills.get(key)
+                    if p is None:
+                        p = ch.fills[key] = QPainterPath()
+                        p.setFillRule(Qt.WindingFill)
+                    for t in texts:
+                        p.addPath(text_path(t))
             if isinstance(e, M.Text):
                 p = ch.fills.get(key)
                 if p is None:
@@ -252,4 +265,40 @@ def entities_path(entities):
             fills.addPath(text_path(e))
         else:
             add_entity(strokes, e)
+            if isinstance(e, M.Insert):
+                for w in e.world_entities():
+                    if isinstance(w, M.Text):
+                        fills.addPath(text_path(w))
     return strokes, fills
+
+
+def block_pixmap(defn, size=64, dark=False):
+    """A small picture of a block for the Library panel."""
+    from PySide6.QtGui import QPixmap, QPainter
+    pm = QPixmap(size, size)
+    pal = Palette(dark)
+    pm.fill(pal.paper)
+    x0, y0, x1, y1 = defn.extents()
+    w, h = max(x1 - x0, 1e-3), max(y1 - y0, 1e-3)
+    k = (size - 8) / max(w, h)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    p.translate(size / 2, size / 2)
+    p.scale(k, -k)
+    p.translate(-(x0 + x1) / 2, -(y0 + y1) / 2)
+    strokes, fills = entities_path(defn.entities)
+    pen = QPen(pal.ink, 1.2)
+    pen.setCosmetic(True)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    p.drawPath(strokes)
+    p.setPen(Qt.NoPen)
+    p.setBrush(pal.ink)
+    p.drawPath(fills)
+    pin = QPen(QColor("#2f9e44"), 4)
+    pin.setCosmetic(True)
+    p.setPen(pin)
+    for q in defn.pins:
+        p.drawPoint(QPointF(q["pos"][0], q["pos"][1]))
+    p.end()
+    return pm

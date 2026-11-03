@@ -25,6 +25,7 @@ APP = "KanzonasCAD"
 CLIP_MIME = "application/x-kanzonascad-entities"
 CLIP_TEXT = "KanzonasCAD objects:"      # the same data as plain text (see hand_over_clipboard)
 MAX_RECENT = 10
+AUTOSAVE_MINUTES = 5
 
 
 def hand_over_clipboard():
@@ -44,6 +45,8 @@ class Document(QWidget):
     def __init__(self, project):
         super().__init__()
         self.project = project
+        import uuid
+        self.autosave_key = "untitled-" + uuid.uuid4().hex     # (its path once saved)
         self.view = CadView(project)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -92,6 +95,17 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, sd)
         self.resizeDocks([sd], [200], Qt.Horizontal)
 
+        from .library import Library
+        from .library_panel import LibraryPanel
+        self.library = Library(self.settings.value("library_folder", "") or None)
+        self.library_panel = LibraryPanel(self.library)
+        self.library_panel.insertRequested.connect(self.insert_block)
+        ld = self.library_dock = QDockWidget("Library", self)
+        ld.setObjectName("library")
+        ld.setWidget(self.library_panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, ld)
+        self.resizeDocks([ld], [280], Qt.Horizontal)
+
         self._build_actions()
         self._build_menus()
         self._build_ribbon()
@@ -108,6 +122,9 @@ class MainWindow(QMainWindow):
         if isinstance(state, QByteArray):
             self.restoreState(state)
         self._update_ui()
+        self.autosave_timer = QTimer(self, interval=AUTOSAVE_MINUTES * 60 * 1000)
+        self.autosave_timer.timeout.connect(self.autosave)
+        self.autosave_timer.start()
 
     # ============================================================================================
     # actions
@@ -155,6 +172,8 @@ class MainWindow(QMainWindow):
         A("export_dxf_all", "Export all sheets to DX&F...", self.export_dxf_all, icon="dxf_out",
           label="All to DXF")
         A("export_pdf", "Export to &PDF...", self.export_pdf, icon="pdf", label="PDF")
+        A("backups", "Open &backups folder", self.open_backups_folder, icon="open",
+          label="Backups")
         A("close", "&Close project", lambda: self.close_tab(self.tabs.currentIndex()), "Ctrl+W",
           icon="delete")
         A("quit", "E&xit", self.close, "Ctrl+Q", icon="delete")
@@ -225,6 +244,23 @@ class MainWindow(QMainWindow):
           icon="black_bg", label="Black background",
           tip="Draw on black, as in AutoCAD. PDF export always prints black on white.")
 
+        self._cmd_act("make_block", "&Make block", C.MakeBlockCmd, "Make block")
+        self.acts["make_block"].setProperty("icon_key", "make_block")
+        self._cmd_act("explode", "E&xplode", C.ExplodeCmd, "Explode")
+        self.acts["explode"].setProperty("icon_key", "explode")
+        A("object_color", "C&olor...", self.object_color, icon="color", label="Color",
+          tip="Give the selected objects a color of their own, or back to ByLayer (their "
+              "layer's color)")
+        A("schematic_settings", "&Schematic settings...", lambda: self.project_properties(1),
+          icon="sheet_props", label="Schematic settings")
+        A("panel_settings", "Pa&nel settings...", lambda: self.project_properties(2),
+          icon="sheet_props", label="Panel settings")
+        A("library_panel", "&Library panel", self._toggle_library, checkable=True,
+          icon="library", label="Library panel")
+        A("new_part", "New &part...", lambda: self.library_panel.edit_part(new=True),
+          icon="part", label="New part")
+        A("library_folder", "Library &folder...", self.choose_library_folder, icon="open",
+          label="Library folder")
         A("manual", "&User manual", self.show_manual, "F1", label="Manual")
         A("about", "&About KanzonasCAD", self.about, label="About")
 
@@ -246,6 +282,8 @@ class MainWindow(QMainWindow):
         for k in ("import_dxf", "export_dxf", "export_dxf_all", "export_pdf"):
             m.addAction(a[k])
         m.addSeparator()
+        m.addAction(a["backups"])
+        m.addSeparator()
         m.addAction(a["close"])
         m.addAction(a["quit"])
         m = mb.addMenu("&Edit")
@@ -253,7 +291,8 @@ class MainWindow(QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
-                  "osnap", "polar", "drafting", None, "black", "command_line", "sheets", "collapse",
+                  "osnap", "polar", "drafting", None, "black", "command_line", "sheets",
+                  "library_panel", "collapse",
                   "group_names"):
             m.addSeparator() if k is None else m.addAction(a[k])
         tm = m.addMenu("&Theme")
@@ -263,11 +302,16 @@ class MainWindow(QMainWindow):
         for k in ("line", "polyline", "rect", "circle", "arc", "text"):
             m.addAction(a[k])
         m = mb.addMenu("&Modify")
-        for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim"):
-            m.addAction(a[k])
+        for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
+                  "object_color"):
+            m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "sheet_props",
-                  "project_props", "edit_tb", "layers"):
+                  "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
+            m.addSeparator() if k is None else m.addAction(a[k])
+        m = mb.addMenu("&Library")
+        for k in ("library_panel", None, "make_block", "explode", None, "new_part",
+                  "library_folder"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Help")
         m.addAction(a["manual"])
@@ -291,6 +335,20 @@ class MainWindow(QMainWindow):
             ("Layers", "small", [self.layer_box, a["layers"]]),
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
         ])
+        # schematic and panel work, both always there (any sheet can hold either)
+        r.add_tab("Schematic", [
+            ("Symbols", "large", [a["library_panel"], a["make_block"], a["explode"]]),
+            ("Parts", "large", [a["new_part"]]),
+            ("Look", "small", [a["object_color"], a["layers"]]),
+            ("Settings", "large", [a["schematic_settings"]]),
+        ])
+        r.add_tab("Panel", [
+            ("Footprints", "large", [a["library_panel"], a["make_block"], a["explode"]]),
+            ("Real size", "large", [a["scale"]]),
+            ("Parts", "large", [a["new_part"]]),
+            ("Look", "small", [a["object_color"], a["layers"]]),
+            ("Settings", "large", [a["panel_settings"]]),
+        ])
         r.add_tab("Sheets", [
             ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
             ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
@@ -306,7 +364,8 @@ class MainWindow(QMainWindow):
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
             ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["polar"],
                                         a["osnap"], a["drafting"]]),
-            ("Panels", "small", [a["command_line"], a["sheets"], a["black"]]),
+            ("Panels", "small", [a["command_line"], a["sheets"], a["library_panel"],
+                                 a["black"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
             ("Ribbon", "small", [a["collapse"], a["group_names"]]),
         ])
@@ -363,9 +422,12 @@ class MainWindow(QMainWindow):
         v.cursorMoved.connect(self._cursor_moved)
         v.selectionChanged.connect(self._update_ui)
         v.sheetChanged.connect(self._fill_sheets)
+        v.sheetChanged.connect(lambda v=v: self._ribbon_for_sheet(v))
         v.commandChanged.connect(self._update_ui)
         v.editTextRequested.connect(self.edit_text)
         v.titleBlockDoubleClicked.connect(self.project_properties)
+        v.attributesRequested.connect(self.edit_attributes)
+        v.host = self
         v.contextMenuWanted.connect(self._view_menu)
         v.typed.connect(self.cmdline.take_key)
         project.listeners.append(lambda d=d: self._project_changed(d))
@@ -403,6 +465,7 @@ class MainWindow(QMainWindow):
             return True
         if not self._maybe_save(w):
             return False
+        self._drop_autosave(w)
         self.tabs.removeTab(index)
         w.view.cancel()
         w.deleteLater()
@@ -491,10 +554,96 @@ class MainWindow(QMainWindow):
         except OSError as ex:
             QMessageBox.warning(self, APP, "Couldn't save %s:\n%s" % (path, ex))
             return False
+        self._drop_autosave(d)
+        d.autosave_key = path
         self._remember(path)
         self._project_changed(d)
         self.statusBar().showMessage("Saved %s" % path, 4000)
         return True
+
+    # ---- autosave and recovery ----------------------------------------------------------------
+    def _drop_autosave(self, d):
+        from . import backup
+        try:
+            backup.remove_autosave(d.autosave_key)
+        except OSError as ex:
+            self.statusBar().showMessage("Couldn't remove the autosave copy: %s" % ex, 5000)
+
+    def autosave(self):
+        """Write every project with unsaved changes to the recovery folder (never over your
+        own file)."""
+        from . import backup
+        n = 0
+        for i in range(self.tabs.count()):
+            d = self.tabs.widget(i)
+            if isinstance(d, Document) and d.project.is_modified():
+                try:
+                    backup.write_autosave(d.project, d.autosave_key)
+                    n += 1
+                except OSError as ex:
+                    self.statusBar().showMessage("Autosave failed: %s" % ex, 8000)
+                    return n
+        if n:
+            self.statusBar().showMessage("Autosaved %d project(s)" % n, 3000)
+        return n
+
+    def offer_recovery(self):
+        """At start-up: projects that didn't close normally (a crash, a power cut) left their
+        autosave copies; offer to open them. Returns how many were opened."""
+        from . import backup
+        left = backup.leftovers()
+        if not left:
+            return 0
+        import time
+        lines = []
+        for _p, orig, t in left:
+            when = time.strftime("%Y-%m-%d %H:%M", time.localtime(t))
+            lines.append("%s (autosaved %s)" % (orig or "an unsaved project", when))
+        r = QMessageBox.question(
+            self, APP, "KanzonasCAD didn't close normally last time. Recover these projects "
+            "from their autosave copies?\n\n" + "\n".join(lines) + "\n\nNo deletes the "
+            "copies.", QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+        if r == QMessageBox.Cancel:
+            return 0
+        opened = 0
+        for p, orig, _t in left:
+            if r == QMessageBox.Yes:
+                try:
+                    proj = M.Project.load(p)
+                except (OSError, ValueError, KeyError) as ex:
+                    QMessageBox.warning(self, APP, "Couldn't recover %s:\n%s" % (p, ex))
+                    continue
+                proj.path = orig or None
+                proj.saved_at = -1              # recovered: not saved yet
+                d = self.add_document(proj)
+                d.autosave_key = orig or d.autosave_key
+                self._project_changed(d)
+                opened += 1
+            try:
+                os.remove(p)
+            except OSError as ex:
+                self.statusBar().showMessage("Couldn't remove the autosave copy %s: %s"
+                                             % (p, ex), 8000)
+        if r == QMessageBox.Yes:
+            self.statusBar().showMessage("Recovered %d project(s): save them to keep them."
+                                         % opened, 8000)
+        return opened
+
+    def open_backups_folder(self):
+        from . import backup
+        d = self.doc()
+        if d is None or not d.project.path:
+            QMessageBox.information(self, APP, "Save the project first: its backups go in a "
+                                    "folder beside it.")
+            return
+        folder = backup.backup_folder(d.project.path)
+        if not os.path.isdir(folder):
+            QMessageBox.information(self, APP, "No backups yet. Each Save keeps the version "
+                                    "before it in:\n%s" % folder)
+            return
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _last_dir(self):
         return self.settings.value("last_dir", os.path.expanduser("~"))
@@ -640,7 +789,10 @@ class MainWindow(QMainWindow):
         from . import geometry as G
         for e in ents:
             bb = G.bbox_union(bb, e.bbox())
-        data = {"base": [bb[0], bb[1]], "entities": [e.to_dict() for e in ents]}
+        blocks = {e.block: e.defn.to_dict() for e in ents
+                  if isinstance(e, M.Insert) and e.defn is not None}
+        data = {"base": [bb[0], bb[1]], "entities": [e.to_dict() for e in ents],
+                "blocks": list(blocks.values())}
         mime = QMimeData()
         mime.setData(CLIP_MIME, json.dumps(data).encode("utf-8"))
         mime.setText("%d KanzonasCAD object(s)" % len(ents))
@@ -665,13 +817,17 @@ class MainWindow(QMainWindow):
             return
         try:
             data = json.loads(raw)
-            ents = [M.Entity.from_dict(d) for d in data["entities"]]
+            # a block the project already has keeps its own drawing; others come along
+            blocks = {b["name"]: M.BlockDef.from_dict(b) for b in data.get("blocks", [])}
+            for name, b in v.project.blocks.items():
+                blocks[name] = b
+            ents = [M.Entity.from_dict(d, blocks) for d in data["entities"]]
         except (ValueError, KeyError, TypeError) as ex:
             self.statusBar().showMessage("The clipboard's objects can't be read: %s" % ex, 5000)
             return
         for e in ents:
             v.project.ensure_layer(e.layer)
-        v.run(C.PasteCmd, ents, tuple(data["base"]))
+        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks)
         v.setFocus()
 
     def select_all(self):
@@ -683,10 +839,10 @@ class MainWindow(QMainWindow):
         v = self.view()
         if v is None:
             return
-        text, ok = QInputDialog.getText(self, "Edit text", "Text:", text=ent.text)
-        if ok and text != ent.text and text.strip():
+        new = dialogs.edit_text_dialog(self, ent)
+        if new is not None:
             with v.project.edit("Edit text") as ed:
-                ed.change(v.sheet(), ent.copy(text=text))
+                ed.change(v.sheet(), new)
 
     def _view_menu(self, gpos):
         v = self.view()
@@ -758,12 +914,26 @@ class MainWindow(QMainWindow):
         if v is not None:
             p = v.project
             for s in p.sheets:
-                it = QListWidgetItem("%s   %s" % (p.sheet_number(s), s.title or "(untitled)"))
+                kind = "" if s.kind == "schematic" else "  [%s]" % M.SHEET_KINDS[s.kind]
+                it = QListWidgetItem("%s   %s%s" % (p.sheet_number(s), s.title or "(untitled)",
+                                                    kind))
                 it.setData(Qt.UserRole, s.id)
                 lst.addItem(it)
                 if s.id == v.sheet_id:
                     lst.setCurrentItem(it)
         lst.blockSignals(False)
+
+    def _ribbon_for_sheet(self, v):
+        """Showing a sheet brings up its kind's ribbon tab (Schematic or Panel)."""
+        if v is not self.view():
+            return
+        title = {"schematic": "Schematic", "panel": "Panel"}.get(v.sheet().kind)
+        if title is None:
+            return
+        for i in range(self.ribbon.count()):
+            if self.ribbon.tabText(i) == title:
+                self.ribbon.setCurrentIndex(i)
+                break
 
     def _sheet_clicked(self, item):
         v = self.view()
@@ -786,8 +956,8 @@ class MainWindow(QMainWindow):
         p = v.project
         self._leave_title_block(v)
         cur = v.sheet()
-        s = M.Sheet(title="Sheet %d" % (len(p.sheets) + 1), size=cur.size, cols=cur.cols,
-                    rows=cur.rows)
+        s = p.make_sheet("Sheet %d" % (len(p.sheets) + 1))
+        s.kind = cur.kind if cur is not p.title_block else "schematic"
         with p.edit("New sheet") as ed:
             ed.add_sheet(s, p.sheets.index(cur) + 1)
         v.show_sheet(s.id)
@@ -829,10 +999,81 @@ class MainWindow(QMainWindow):
         if v is not None and dialogs.sheet_properties(self, v.project, v.sheet()):
             self._fill_sheets()
 
-    def project_properties(self):
+    def project_properties(self, tab=0):
         v = self.view()
         if v is not None:
-            dialogs.project_properties(self, v.project)
+            dialogs.project_properties(self, v.project, tab if isinstance(tab, int) else 0)
+
+    def object_color(self):
+        v = self.view()
+        ents = self._selected()
+        if v is None:
+            return
+        if not ents:
+            self.statusBar().showMessage("Color: select the objects first.", 4000)
+            return
+        pick, ok = QInputDialog.getItem(
+            self, "Color", "Color of the %d selected object(s):" % len(ents),
+            ["ByLayer (the layer's color)", "Choose a color..."], 0, False)
+        if not ok:
+            return
+        color = None
+        if pick.startswith("Choose"):
+            from PySide6.QtGui import QColor
+            from PySide6.QtWidgets import QColorDialog
+            c = QColorDialog.getColor(QColor("#ffffff"), self, "Color")
+            if not c.isValid():
+                return
+            color = c.name()
+        with v.project.edit("Color") as ed:
+            for e in ents:
+                if e.color != color:
+                    ed.change(v.sheet(), e.copy(color=color))
+
+    # ---- library -----------------------------------------------------------------------------
+    def _toggle_library(self, on):
+        self.library_dock.setVisible(on)
+
+    def choose_library_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Library folder", self.library.folder)
+        if not folder:
+            return
+        self.library.folder = folder
+        self.settings.setValue("library_folder", folder)
+        self.library_panel.refresh()
+        self.statusBar().showMessage("Library: %s" % folder, 5000)
+
+    def insert_block(self, defn, attrs):
+        v = self.view()
+        if v is None:
+            return
+        v.run(C.InsertCmd, defn, attrs)
+        v.setFocus()
+
+    def ask_block_details(self, ents):
+        """Make block asks this after its base point (see commands.MakeBlockCmd)."""
+        from .library_panel import block_details_dialog
+        return block_details_dialog(self, self.library, "symbol")
+
+    def save_block_to_library(self, defn):
+        try:
+            self.library.save_block(defn)
+        except OSError as ex:
+            QMessageBox.warning(self, APP, "Couldn't save %s to the library (%s):\n%s"
+                                % (defn.name, self.library.folder, ex))
+            return False
+        self.library_panel.refresh()
+        return True
+
+    def edit_attributes(self, ins):
+        v = self.view()
+        if v is None:
+            return
+        from .library_panel import attributes_dialog
+        attrs = attributes_dialog(self, self.library, ins)
+        if attrs is not None and attrs != ins.attrs:
+            with v.project.edit("Attributes") as ed:
+                ed.change(v.sheet(), ins.copy(attrs=attrs))
 
     def _toggle_title_block(self, on):
         v = self.view()
@@ -871,7 +1112,6 @@ class MainWindow(QMainWindow):
             st = self.settings
             st.setValue("snap_spacing", v.snap_spacing)
             st.setValue("grid_spacing", v.grid_spacing)
-            st.setValue("text_height", v.text_height())
             st.setValue("polar_inc", v.polar_inc)
             st.setValue("polar_extra", json.dumps(v.polar_extra))
             st.setValue("crosshair_size", v.crosshair_size)
@@ -887,7 +1127,6 @@ class MainWindow(QMainWindow):
         try:
             v.snap_spacing = float(st.value("snap_spacing", v.snap_spacing))
             v.grid_spacing = float(st.value("grid_spacing", v.grid_spacing))
-            v.set_text_height(float(st.value("text_height", v.text_height())))
             v.polar_inc = float(st.value("polar_inc", v.polar_inc))
             v.polar_extra = [float(a) for a in json.loads(st.value("polar_extra", "[]"))]
             v.crosshair_size = int(st.value("crosshair_size", v.crosshair_size))
@@ -954,6 +1193,7 @@ class MainWindow(QMainWindow):
         for k in ("save", "save_as", "import_dxf", "export_dxf", "export_dxf_all", "export_pdf",
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
+                  "schematic_settings", "panel_settings", "object_color",
                   "line", "polyline", "rect", "circle", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste"):
             a[k].setEnabled(has)
@@ -984,6 +1224,11 @@ class MainWindow(QMainWindow):
         a["sheets"].blockSignals(True)
         a["sheets"].setChecked(not self.sheet_dock.isHidden())
         a["sheets"].blockSignals(False)
+        a["library_panel"].blockSignals(True)
+        a["library_panel"].setChecked(not self.library_dock.isHidden())
+        a["library_panel"].blockSignals(False)
+        for k in ("make_block", "explode"):
+            a[k].setEnabled(has)
         d = self.doc()
         title = APP
         if d is not None:
