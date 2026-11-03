@@ -126,8 +126,11 @@ every 45 degrees to start; <b>Drafting settings...</b> chooses the step (90, 45,
 tracking can't be on together: turning one on turns the other off.</li>
 <li><b>Snap to grid</b> (F9, SNAP): points snap to the snap spacing (1/8 inch to start); along a
 polar direction, the distance snaps to it.</li>
-<li><b>Drafting settings...</b>: snap spacing, grid spacing, text height and the polar tracking
-angles (all kept for next time).</li>
+<li><b>Drafting settings...</b>: snap spacing, grid spacing, text height, the polar tracking
+angles and the crosshair (all kept for next time).</li>
+<li><b>Crosshair</b>: short, as in AutoCAD (each line 5% of the view to start). In Drafting
+settings, <b>Crosshair size</b> makes it longer or shorter (1 to 100%), and <b>Full-screen
+crosshair</b> runs its lines across the whole view.</li>
 </ul>
 
 <h2>Selecting and grips</h2>

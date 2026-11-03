@@ -53,6 +53,10 @@ class CadView(QWidget):
         self.ortho_on = False
         self.osnap_on = True
         self.polar_on = False
+        # crosshair: arms this % of the view long, as AutoCAD's CURSORSIZE (5 to start), or
+        # across the whole view
+        self.crosshair_size = 5
+        self.crosshair_full = False
         self.polar_inc = 45.0           # polar tracking: every multiple of this angle...
         self.polar_extra = []           # ...and these angles too (AutoCAD's additional angles)
         self.polar = None               # (angle, distance) while the cursor is on a polar ray
@@ -914,8 +918,13 @@ class CadView(QWidget):
         col.setAlpha(170)
         p.setRenderHint(QPainter.Antialiasing, False)
         p.setPen(QPen(col, 1))
-        p.drawLine(QPointF(0, c.y()), QPointF(self.width(), c.y()))
-        p.drawLine(QPointF(c.x(), 0), QPointF(c.x(), self.height()))
+        if self.crosshair_full:
+            p.drawLine(QPointF(0, c.y()), QPointF(self.width(), c.y()))
+            p.drawLine(QPointF(c.x(), 0), QPointF(c.x(), self.height()))
+        else:
+            arm = max(8.0, self.crosshair_arm())
+            p.drawLine(QPointF(c.x() - arm, c.y()), QPointF(c.x() + arm, c.y()))
+            p.drawLine(QPointF(c.x(), c.y() - arm), QPointF(c.x(), c.y() + arm))
         wants_point = cmd is not None and not cmd.selecting() and not cmd.picking
         if wants_point:
             return
@@ -939,6 +948,11 @@ class CadView(QWidget):
                                    copy=hint == "move" and self._drag is not None
                                    and bool(QGuiApplication.keyboardModifiers()
                                             & Qt.ControlModifier))
+
+    def crosshair_arm(self):
+        """Half the crosshair's length in pixels: crosshair_size % of the view's larger side,
+        as AutoCAD measures CURSORSIZE (a whole line is twice this)."""
+        return max(self.width(), self.height()) * self.crosshair_size / 200.0
 
     def _paint_move_badge(self, p, c, copy=False):
         """A four-way arrow (and a + when Ctrl makes it a copy) beside the cursor."""

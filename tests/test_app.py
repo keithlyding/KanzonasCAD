@@ -570,3 +570,26 @@ class DragMoveTest(unittest.TestCase):
         click(v, (3, 2))
         self.assertEqual(v.sel, {self.a.id})
         self.assertEqual(v.sheet().entities[self.a.id].p1, (2.0, 2.0))
+
+
+class CrosshairTest(unittest.TestCase):
+    def test_short_by_default_and_settings_kept(self):
+        w, v = window()
+        try:
+            self.assertFalse(v.crosshair_full)
+            self.assertEqual(v.crosshair_size, 5)
+            self.assertAlmostEqual(v.crosshair_arm(), max(v.width(), v.height()) * 0.025)
+            v.crosshair_size, v.crosshair_full = 20, True
+            st = w.settings
+            st.setValue("crosshair_size", 20)
+            st.setValue("crosshair_full", True)
+            d2 = w.new_project()
+            self.assertEqual((d2.view.crosshair_size, d2.view.crosshair_full), (20, True))
+            v.cursor = (3, 3)
+            v.repaint()
+            d2.view.project.saved_at = 0
+        finally:
+            w.settings.setValue("crosshair_size", 5)
+            w.settings.setValue("crosshair_full", False)
+            v.project.saved_at = len(v.project.undo_stack)
+            w.close()

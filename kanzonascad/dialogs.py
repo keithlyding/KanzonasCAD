@@ -6,7 +6,8 @@ from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QSpinBox,
                                QDialogButtonBox, QVBoxLayout, QTableWidget, QTableWidgetItem,
                                QHBoxLayout, QPushButton, QColorDialog, QInputDialog,
-                               QMessageBox, QDoubleSpinBox, QLabel, QHeaderView)
+                               QMessageBox, QDoubleSpinBox, QLabel, QHeaderView,
+                               QCheckBox)
 
 from . import model as M
 
@@ -287,6 +288,14 @@ def drafting_settings(parent, view):
     th.setRange(0.01, 5)
     th.setSuffix(" in")
     th.setValue(view.text_height())
+    cross = QSpinBox()
+    cross.setRange(1, 100)
+    cross.setSuffix(" % of the view")
+    cross.setValue(int(view.crosshair_size))
+    full = QCheckBox("Full-screen crosshair (lines across the whole view)")
+    full.setChecked(view.crosshair_full)
+    full.toggled.connect(lambda on: cross.setEnabled(not on))
+    cross.setEnabled(not view.crosshair_full)
     inc = QComboBox()
     inc.setEditable(True)
     for a in ("90", "45", "30", "22.5", "18", "15", "10", "5"):
@@ -297,6 +306,8 @@ def drafting_settings(parent, view):
     form.addRow("Snap spacing", snap)
     form.addRow("Grid spacing (dots)", grid)
     form.addRow("Text height", th)
+    form.addRow("Crosshair size", cross)
+    form.addRow("", full)
     form.addRow("Polar tracking: every (degrees)", inc)
     form.addRow("Polar tracking: also these angles", extra)
     note = QLabel("Polar tracking (F10, POLAR) locks the cursor to every multiple of the first "
@@ -324,5 +335,7 @@ def drafting_settings(parent, view):
     view.set_text_height(th.value())
     view.polar_inc = step
     view.polar_extra = angles
+    view.crosshair_size = cross.value()
+    view.crosshair_full = full.isChecked()
     view.update()
     return True

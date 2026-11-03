@@ -874,6 +874,8 @@ class MainWindow(QMainWindow):
             st.setValue("text_height", v.text_height())
             st.setValue("polar_inc", v.polar_inc)
             st.setValue("polar_extra", json.dumps(v.polar_extra))
+            st.setValue("crosshair_size", v.crosshair_size)
+            st.setValue("crosshair_full", bool(v.crosshair_full))
             for i in range(self.tabs.count()):
                 d = self.tabs.widget(i)
                 if isinstance(d, Document) and d.view is not v:
@@ -888,6 +890,8 @@ class MainWindow(QMainWindow):
             v.set_text_height(float(st.value("text_height", v.text_height())))
             v.polar_inc = float(st.value("polar_inc", v.polar_inc))
             v.polar_extra = [float(a) for a in json.loads(st.value("polar_extra", "[]"))]
+            v.crosshair_size = int(st.value("crosshair_size", v.crosshair_size))
+            v.crosshair_full = st.value("crosshair_full", False) in (True, "true")
         except (TypeError, ValueError) as ex:
             self.statusBar().showMessage("Drafting settings reset (couldn't read them: %s)" % ex,
                                          5000)
