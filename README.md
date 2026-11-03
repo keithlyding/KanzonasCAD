@@ -138,12 +138,11 @@ constraints.txt`.
 
 ## Ready-made Windows build (no Python needed)
 
-Each build on GitHub makes a zip: open the repository's **Actions** tab, click the newest
-green run of **Build Windows and Linux apps**, and download **KanzonasCAD-windows** under
-**Artifacts**. Unzip it (twice: the download holds `KanzonasCAD-windows.zip`) and run
+Each version is published on the **[Releases page](https://github.com/keithlyding/KanzonasCAD/releases)**
+with its notes. Download `KanzonasCAD-v<version>-windows.zip`, unzip it and run
 `KanzonasCAD\KanzonasCAD.exe`. Windows may warn about an unknown publisher (the app isn't
-code-signed): **More info** > **Run anyway**. These downloads expire after 14 days; there are
-no releases yet.
+code-signed): **More info** > **Run anyway**. Versions 0.x are marked pre-release: they work,
+but KanzonasCAD isn't finished yet.
 
 ---
 
