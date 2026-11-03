@@ -37,7 +37,7 @@ ICONS = {
     "make_block": "shape-plus", "explode": "shape-outline", "library": "bookshelf",
     "part": "tag-plus-outline", "color": "palette-outline", "wire": "vector-polyline-edit", "bus": "reorder-horizontal", "sheets": "file-multiple-outline",
     # help
-    "manual": "help-circle-outline", "about": "information-outline", "shortcuts": "keyboard-outline",
+    "manual": "help-circle-outline", "about": "information-outline", "updates": "update", "shortcuts": "keyboard-outline",
 }
 
 _mode = "light"

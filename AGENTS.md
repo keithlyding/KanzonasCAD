@@ -10,8 +10,11 @@ cross-references (6-D1), wire numbers that start with the page number (6001). Dr
 inches on ANSI sheets. It shares its look (menus, ribbon, theme, icons) with KanzonasPDF.
 
 `.github/workflows/build.yml` builds a Windows folder (job `build`, the check the rule protecting `main` requires) and a Linux folder (job
-`linux`), each running the unit tests and its own `--selftest`. There is no release job yet:
-publishing releases starts when the owner asks for it.
+`linux`), each running the unit tests and its own `--selftest`. On `main`, job `publish` then
+makes a GitHub release `v<version>` with both downloads and that version's RELEASE_NOTES.md
+section, once per version and only when both builds are green (full releases, not pre-releases:
+the owner's choice). A merge that doesn't change `__version__` publishes nothing. The app's
+update box (`updates.py`) shows those notes and installs the release.
 
 ## Branches and merging (several agents work here at once)
 - Start every task from the latest `main`, on a new branch of your own named

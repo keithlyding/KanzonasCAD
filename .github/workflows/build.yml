@@ -9,10 +9,11 @@ on:
 permissions:
   contents: read
 
-# a newer push to the same branch cancels the older, still-running build
+# a newer push to the same branch cancels the older, still-running build. Not on main: a run
+# cancelled while publishing would leave a release half made; main's builds wait their turn.
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   # (ezdxf's data only: --collect-all also pulls in what its add-ons can use, pandas,
@@ -21,8 +22,7 @@ env:
     --noconfirm --windowed --collect-data ezdxf --collect-data qtawesome
     --exclude-module tkinter --exclude-module pandas --exclude-module matplotlib
     --exclude-module PIL --exclude-module lxml --exclude-module PySide6.QtDataVisualization
-    --exclude-module PySide6.QtOpenGL --exclude-module PySide6.QtOpenGLWidgets
-    --exclude-module PySide6.QtNetwork --icon assets/kanzonascad.ico --name KanzonasCAD
+    --exclude-module PySide6.QtOpenGL --exclude-module PySide6.QtOpenGLWidgets --icon assets/kanzonascad.ico --name KanzonasCAD
 
 jobs:
   # (named build, as in KanzonasPDF: the rule protecting main requires a check called build)
@@ -133,3 +133,59 @@ jobs:
           name: KanzonasCAD-linux
           path: KanzonasCAD-linux.tar.gz
           retention-days: 14
+
+  # A release for each new version that reaches main: only after both builds are green, and
+  # only once per version (a merge that didn't change __version__ publishes nothing).
+  publish:
+    needs: [build, linux]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Version and whether it is already released
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(python3 -c "import kanzonascad; print(kanzonascad.__version__)")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" > /dev/null 2>&1; then
+            echo "v$v is already released: nothing to publish"
+            echo "exists=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        if: steps.ver.outputs.exists == 'no'
+        with:
+          path: artifacts
+
+      - name: Release notes for this version
+        if: steps.ver.outputs.exists == 'no'
+        run: |
+          v="${{ steps.ver.outputs.version }}"
+          awk -v head="## $v" '
+            $0 == head { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' RELEASE_NOTES.md > section.md
+          if [ ! -s section.md ]; then echo "RELEASE_NOTES.md has no '## $v' section"; exit 1; fi
+          # (between these marks, the app's update box shows the notes: updates.release_notes)
+          { echo "<!-- kanzonascad-notes -->"; cat section.md; echo "<!-- /kanzonascad-notes -->"; } > notes.md
+          printf '\n---\n**Windows:** download `KanzonasCAD-v%s-windows.zip`, unzip it and run `KanzonasCAD\\KanzonasCAD.exe` (Windows may warn about an unknown publisher: More info > Run anyway).\n**Linux:** `KanzonasCAD-v%s-linux.tar.gz`, unpack it and run `KanzonasCAD/KanzonasCAD`.\nOr run it from source: see the README.\n' "$v" "$v" >> notes.md
+          cat notes.md
+
+      - name: Publish
+        if: steps.ver.outputs.exists == 'no'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ steps.ver.outputs.version }}"
+          mv artifacts/KanzonasCAD-windows/KanzonasCAD-windows.zip "KanzonasCAD-v$v-windows.zip"
+          mv artifacts/KanzonasCAD-linux/KanzonasCAD-linux.tar.gz "KanzonasCAD-v$v-linux.tar.gz"
+          gh release create "v$v" "KanzonasCAD-v$v-windows.zip" "KanzonasCAD-v$v-linux.tar.gz" \
+            --target "$GITHUB_SHA" --title "KanzonasCAD $v" --notes-file notes.md --latest
