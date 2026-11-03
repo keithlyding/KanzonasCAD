@@ -6,6 +6,16 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.3
+
+**New**
+- Wires (W): click to click, straight across and up or down; a wire ends by itself on a pin
+  or another wire, with a dot where wires join.
+- Moving a symbol drags its wires along; dropping a symbol onto a wire wires it in.
+
+**Fixed**
+- Starting another command no longer throws away a wire or polyline being drawn.
+
 ## 0.2
 
 **New**

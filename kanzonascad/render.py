@@ -135,6 +135,7 @@ class SheetRenderer:
         self._sig = None
         self._frame = None
         self._frame_sig = None
+        self._dots = None               # (sheet version, path) of the wire junction dots
 
     def set_dark(self, dark):
         if dark != self.pal.dark:
@@ -223,6 +224,19 @@ class SheetRenderer:
                     p = ch.strokes[key] = QPainterPath()
                 add_entity(p, e)
 
+    def _paint_dots(self, painter):
+        """Junction dots where wires join (worked out again only when the sheet changed)."""
+        s = self.sheet
+        if self._dots is None or self._dots[0] != s.version:
+            self._dots = (s.version, _dots_path(s))
+        path = self._dots[1]
+        if path.isEmpty():
+            return
+        color = self.pal.color(self.project, M.Wire([(0, 0), (1, 0)]))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(color))
+        painter.drawPath(path)
+
     def paint(self, painter, pen_width=0.0, paper=True, under=None):
         """pen_width 0: cosmetic one-pixel lines (screen); a number: that width in inches
         (PDF/print). under: drawn on the paper before anything else."""
@@ -242,6 +256,7 @@ class SheetRenderer:
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(pal.frame))
         painter.drawPath(texts)
+        self._paint_dots(painter)
         for ch in [tb] + list(self.chunks.values()):
             painter.setBrush(Qt.NoBrush)
             for rgba, path in ch.strokes.items():
@@ -255,6 +270,17 @@ class SheetRenderer:
             for rgba, path in ch.fills.items():
                 painter.setBrush(QBrush(QColor.fromRgba(rgba)))
                 painter.drawPath(path)
+
+
+DOT_RADIUS = 0.03
+
+
+def _dots_path(sheet):
+    from .wires import junctions
+    path = QPainterPath()
+    for x, y in junctions(sheet):
+        path.addEllipse(QPointF(x, y), DOT_RADIUS, DOT_RADIUS)
+    return path
 
 
 def entities_path(entities):

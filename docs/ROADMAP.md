@@ -9,9 +9,10 @@ file when a decision changes.
   Insert, Explode; Scale Reference and mm input; text justification; editable zones;
   Project vs Sheet properties; Schematic and Panel ribbon tabs; ByLayer colors; sheet types;
   backups, autosave and recovery.
+- 0.3 (branch `claude/wires`): wires that stay attached to pins, cut under placed symbols,
+  junction dots.
 
 ## Next, in order
-1. **Wires** that stay attached to pins; breaking a wire where a symbol is placed on it.
 2. **Device tags by page number**: prefix + page + 2-digit count (`CR601`, `M601`; page 12:
    `CR1201`). New devices get the next free number; a tag can be locked; Renumber sheet
    re-sequences the unlocked ones. Contacts (child symbols) take their parent's tag.
