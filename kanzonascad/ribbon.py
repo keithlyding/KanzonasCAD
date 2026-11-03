@@ -147,6 +147,11 @@ class Ribbon(QTabWidget):
                 continue
             if isinstance(item, QWidget):
                 w = item
+                if isinstance(w, SplitButton) and size == "large":
+                    w.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+                    w.setIconSize(QSize(LARGE_ICON, LARGE_ICON))
+                    w.setMinimumWidth(52)
+                    w.setFixedHeight(ROWS * SMALL_HEIGHT)
             else:
                 w = QToolButton()
                 w.setDefaultAction(item)

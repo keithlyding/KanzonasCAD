@@ -10,7 +10,7 @@ screen and in the PDF.
 """
 
 from PySide6.QtCore import Qt, QPointF, QRectF
-from PySide6.QtGui import (QPainterPath, QPen, QColor, QBrush, QFont, QFontMetricsF,
+from PySide6.QtGui import (QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QFontMetricsF,
                            QTransform)
 
 from . import model as M
@@ -257,7 +257,12 @@ class SheetRenderer:
         painter.setBrush(QBrush(pal.frame))
         painter.drawPath(texts)
         self._paint_dots(painter)
+        smooth = painter.testRenderHint(QPainter.Antialiasing)
         for ch in [tb] + list(self.chunks.values()):
+            # on screen, one-pixel lines are drawn without smoothing, as AutoCAD does: a
+            # smoothed line falling between two pixel rows would show at half strength
+            if pen_width == 0:
+                painter.setRenderHint(QPainter.Antialiasing, False)
             painter.setBrush(Qt.NoBrush)
             for rgba, path in ch.strokes.items():
                 pen = QPen(QColor.fromRgba(rgba), pen_width)
@@ -266,6 +271,7 @@ class SheetRenderer:
                 pen.setJoinStyle(Qt.RoundJoin)
                 painter.setPen(pen)
                 painter.drawPath(path)
+            painter.setRenderHint(QPainter.Antialiasing, smooth)   # text stays smooth
             painter.setPen(Qt.NoPen)
             for rgba, path in ch.fills.items():
                 painter.setBrush(QBrush(QColor.fromRgba(rgba)))

@@ -23,7 +23,6 @@ and reports come next.</i></p>
 <li><b>Project tabs</b>: each open project has its own tab.</li>
 <li><b>Sheets panel</b> on the left: the project's sheets with their page numbers. Click one to
 show it, double-click to open its properties, right-click for more.</li>
-<li><b>Library panel</b> on the right: your symbols, footprints and parts (see below).</li>
 <li><b>Command line</b> along the bottom (Ctrl+9 shows or hides it).</li>
 <li><b>Status bar</b>: the cursor's X and Y in inches and its <b>zone</b> (for example
 6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches.</li>
@@ -113,10 +112,14 @@ transformer, terminal, ground). A symbol of yours with the same name replaces a 
 <li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
 footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
 </ul>
-<p>The <b>Library panel</b> (Library menu) lists them under Symbols, Footprints and Parts.
-Type in its search box to find one. Double-click a symbol or footprint (or select it and click
-<b>Insert</b>) to place it: click where it goes; type R to turn it 90 degrees or F to flip it
-first. In the Parts tab, Insert asks whether to place the part's symbol or its footprint.</p>
+<p>The <b>Library</b> opens as a popup window, as AutoCAD Electrical's icon menu does, so the
+drawing keeps the whole width: <b>Insert symbol...</b> (Schematic tab) opens it on its Symbols,
+<b>Insert footprint...</b> (Panel tab) on its Footprints, and <b>Library...</b> (Library menu)
+as you left it; its Parts tab lists your parts. Type in its search box to find one.
+Double-click a symbol or footprint (or select it and click <b>Insert</b>): the popup gets out
+of the way and you click where it goes; type R to turn it 90 degrees or F to flip it first.
+The popup opens again where you last put it. In the Parts tab, Insert asks whether to place
+the part's symbol or its footprint.</p>
 <h3>Making your own</h3>
 <ol>
 <li>Draw it, or open the manufacturer's DXF and copy the view you want into your drawing
@@ -148,6 +151,13 @@ and up or down, with one corner per click; the corner follows the cursor, and F 
 other way. The wire <b>ends by itself</b> when you click a pin or another wire; Enter ends it
 anywhere; so does Esc or starting another command (what is drawn is kept). U takes back
 the last click.</p>
+<p><b>Bus</b> (BU; Draw menu and the Schematic tab) draws several wires side by side, three
+phases say. Type how many wires (3 to start) and how far apart (1/2 inch to start; 12mm works
+too), pressing Enter to keep what it offers; then click the path as for a wire. Every click
+turns it 90 degrees, as many times as you need, and all the wires turn together, keeping their
+spacing. The first wire runs where you click, the others to the right of the direction you
+draw (F puts them on the other side). Enter or Esc ends it; each wire of the bus is an ordinary
+wire, connecting wherever its ends land.</p>
 <ul>
 <li><b>Connections</b> are worked out from where wire ends are, never stored: a wire end on a
 pin, on another wire's end, or on the middle of another wire connects there. A wire ending on
@@ -173,8 +183,14 @@ options.</td></tr>
 <tr><td>Polyline</td><td>PLINE, PL</td><td>One connected object through all its points.</td></tr>
 <tr><td>Rectangle</td><td>RECTANG, REC</td><td>Two corners (or the first corner, then
 @width,height).</td></tr>
-<tr><td>Circle</td><td>CIRCLE, C</td><td>Center, then radius (a point or a number); D for a
-diameter.</td></tr>
+<tr><td>Circle: Center, radius</td><td>CIRCLE, C</td><td>Center, then radius (a point or a
+number); D switches to a diameter. At the first prompt, 3P, 2P or TTR switch to those ways.</td></tr>
+<tr><td>Circle: Center, diameter</td><td></td><td>Center, then diameter.</td></tr>
+<tr><td>Circle: 2-Point</td><td>C, then 2P</td><td>The two ends of a diameter.</td></tr>
+<tr><td>Circle: 3-Point</td><td>C, then 3P</td><td>Three points on the circle.</td></tr>
+<tr><td>Circle: Tan, tan, radius</td><td>C, then TTR</td><td>Pick two lines, polylines, circles or
+arcs near where the circle should touch them, then type its radius (Enter: the last one): of
+the circles that fit, you get the one touching nearest your picks.</td></tr>
 <tr><td>Arc (3 points)</td><td>ARC, A</td><td>Start, a point on the arc, end.</td></tr>
 <tr><td>Text</td><td>TEXT, T, DT</td><td>Start point, height, angle, then type each line and
 press Enter; Enter on an empty line ends. Before the start point, J (Justify) chooses where the
@@ -200,6 +216,9 @@ AutoCAD's quick mode). An object nothing crosses is erased. U undoes the last tr
 <tr><td>Zoom</td><td>ZOOM, Z</td><td>Extents (E), Sheet (S), In (I), Out (O).</td></tr>
 </table>
 <p>Typed <b>Undo</b> (U) and <b>Redo</b> work on the command line too.</p>
+
+<p>On the Home tab, <b>Circle</b> has an arrow beside it listing all its ways; the button then
+shows the way you used last, as in AutoCAD. The Draw menu has them under Circle.</p>
 
 <h3>Typing points</h3>
 <ul>
