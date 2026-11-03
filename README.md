@@ -17,6 +17,29 @@ Press **F1** in the app for the user manual.
 
 ---
 
+## Command line basics (if you've never used it)
+
+The steps below are typed into **Command Prompt**, a window where you give Windows commands
+by typing instead of clicking. Nothing you type there can harm your drawings.
+
+- **Opening it:** press the **Windows key**, type `cmd`, and click **Command Prompt**. (Not
+  "PowerShell" or "Terminal": they work a bit differently and some lines below won't work as
+  written there. If a window's title says PowerShell, close it and open Command Prompt.)
+- **The prompt:** the window shows a line like `C:\Users\keith>`. That is the folder you're
+  "in"; commands act on it. The `>` means it's waiting for you.
+- **Typing a command:** type (or paste) **one line** from below and press **Enter**. Don't type
+  the spaces at the start of the lines here; they're just how this page shows commands.
+- **Pasting:** copy a line here, then in Command Prompt **right-click** (or press **Ctrl+V**)
+  and press Enter.
+- **Waiting:** a command is finished when the `C:\...>` line comes back. Some take a few
+  minutes and print a lot (that's normal); don't type the next one until the prompt is back.
+- **Red text or "error":** stop there, and copy what it printed (drag over it with the mouse,
+  then press **Enter** or Ctrl+C to copy) to ask for help. See *If something goes wrong* below.
+- **`cd`** means "change directory": go into a folder. `cd %USERPROFILE%\KanzonasCAD` goes
+  into the KanzonasCAD folder in your user folder (`%USERPROFILE%` stands for
+  `C:\Users\<you>`).
+- **Up arrow** brings back the last command, so you don't have to retype it.
+
 ## Install on Windows (once)
 
 This runs KanzonasCAD from its source code, so updating is one double-click. You need
@@ -94,6 +117,8 @@ Back to the tested version: `git checkout main` (or double-click `update.bat`).
 | `'py'` or `'git' is not recognized` | Open a **new** Command Prompt. Still there: install it again from the website above. |
 | `Your local changes to the following files would be overwritten` | You (or something) changed a file in the folder. Throw those changes away with `git checkout -- .` and run the update again. |
 | `fatal: not a git repository` | You're not in the folder: run `cd %USERPROFILE%\KanzonasCAD` first. |
+| `cd %USERPROFILE%...` says the path can't be found, or `%USERPROFILE%` shows up as text | You're in PowerShell, not Command Prompt. Open Command Prompt (Windows key, type `cmd`), or in PowerShell type `cd ~\KanzonasCAD` instead. |
+| Nothing happens, the cursor just blinks | The command is still working (downloads take minutes). Wait for the `C:\...>` line to come back. |
 | `No module named ...` when starting | Run `py -m pip install -r requirements.txt -c constraints.txt` again. |
 | Anything else | Start it from Command Prompt with `py -m kanzonascad` and send the last lines it prints. |
 
