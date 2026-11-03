@@ -26,7 +26,7 @@ ICONS = {
     # view
     "zoom_ext": "fit-to-page-outline", "zoom_in": "magnify-plus-outline",
     "zoom_out": "magnify-minus-outline", "zoom_sheet": "file-outline", "pan": "pan",
-    "grid": "grid", "snap": "magnet", "ortho": "axis-arrow", "osnap": "vector-point",
+    "grid": "grid", "snap": "magnet", "ortho": "axis-arrow", "osnap": "vector-point", "polar": "angle-acute",
     "theme": "theme-light-dark", "command_line": "console-line", "ribbon": "view-dashboard-outline",
     "collapse": "chevron-double-up", "group_names": "label-outline", "menu_bar": "menu",
     # sheets / project

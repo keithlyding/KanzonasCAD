@@ -176,6 +176,9 @@ class MainWindow(QMainWindow):
         A("snap", "&Snap to grid", self._aid("snap_on"), "F9", checkable=True, label="Snap")
         A("ortho", "&Ortho mode", self._aid("ortho_on"), "F8", checkable=True, label="Ortho")
         A("osnap", "Object s&nap", self._aid("osnap_on"), "F3", checkable=True, label="Osnap")
+        A("polar", "&Polar tracking", self._aid("polar_on"), "F10", checkable=True, label="Polar",
+          icon="polar", tip="Lock the cursor to set angles (every 45 degrees to start; "
+                             "Drafting settings chooses them)")
         A("drafting", "&Drafting settings...", self.drafting_settings, icon="snap",
           label="Settings")
         A("command_line", "&Command line", self._toggle_cmdline, "Ctrl+9", checkable=True,
@@ -250,7 +253,7 @@ class MainWindow(QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
-                  "osnap", "drafting", None, "black", "command_line", "sheets", "collapse",
+                  "osnap", "polar", "drafting", None, "black", "command_line", "sheets", "collapse",
                   "group_names"):
             m.addSeparator() if k is None else m.addAction(a[k])
         tm = m.addMenu("&Theme")
@@ -301,8 +304,8 @@ class MainWindow(QMainWindow):
         ])
         r.add_tab("View", [
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
-            ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["osnap"],
-                                        a["drafting"]]),
+            ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["polar"],
+                                        a["osnap"], a["drafting"]]),
             ("Panels", "small", [a["command_line"], a["sheets"], a["black"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
             ("Ribbon", "small", [a["collapse"], a["group_names"]]),
@@ -325,7 +328,7 @@ class MainWindow(QMainWindow):
         self.coords = QLabel()
         self.coords.setMinimumWidth(300)
         sb.addWidget(self.coords)
-        for key in ("grid", "snap", "ortho", "osnap"):
+        for key in ("grid", "snap", "ortho", "polar", "osnap"):
             b = QToolButton()
             b.setDefaultAction(self.acts[key])
             b.setToolButtonStyle(Qt.ToolButtonTextOnly)
@@ -352,8 +355,9 @@ class MainWindow(QMainWindow):
         d = Document(project)
         v = d.view
         v.set_dark(self.acts["black"].isChecked())
+        self._load_drafting(v)
         for key, attr in (("grid", "grid_on"), ("snap", "snap_on"), ("ortho", "ortho_on"),
-                          ("osnap", "osnap_on")):
+                          ("osnap", "osnap_on"), ("polar", "polar_on")):
             setattr(v, attr, self.settings.value("aid_" + attr, getattr(v, attr)) in
                     (True, "true"))
         v.cursorMoved.connect(self._cursor_moved)
@@ -863,8 +867,30 @@ class MainWindow(QMainWindow):
 
     def drafting_settings(self):
         v = self.view()
-        if v is not None:
-            dialogs.drafting_settings(self, v)
+        if v is not None and dialogs.drafting_settings(self, v):
+            st = self.settings
+            st.setValue("snap_spacing", v.snap_spacing)
+            st.setValue("grid_spacing", v.grid_spacing)
+            st.setValue("text_height", v.text_height())
+            st.setValue("polar_inc", v.polar_inc)
+            st.setValue("polar_extra", json.dumps(v.polar_extra))
+            for i in range(self.tabs.count()):
+                d = self.tabs.widget(i)
+                if isinstance(d, Document) and d.view is not v:
+                    self._load_drafting(d.view)
+
+    def _load_drafting(self, v):
+        """The drafting settings kept from last time (Drafting settings...)."""
+        st = self.settings
+        try:
+            v.snap_spacing = float(st.value("snap_spacing", v.snap_spacing))
+            v.grid_spacing = float(st.value("grid_spacing", v.grid_spacing))
+            v.set_text_height(float(st.value("text_height", v.text_height())))
+            v.polar_inc = float(st.value("polar_inc", v.polar_inc))
+            v.polar_extra = [float(a) for a in json.loads(st.value("polar_extra", "[]"))]
+        except (TypeError, ValueError) as ex:
+            self.statusBar().showMessage("Drafting settings reset (couldn't read them: %s)" % ex,
+                                         5000)
 
     # ============================================================================================
     # view, theme, status
@@ -881,6 +907,10 @@ class MainWindow(QMainWindow):
                 setattr(v, attr, on)
                 v.update()
             self.settings.setValue("aid_" + attr, bool(on))
+            # Ortho and Polar tracking exclude each other, as in AutoCAD
+            other = {"ortho_on": "polar", "polar_on": "ortho"}.get(attr)
+            if on and other and self.acts[other].isChecked():
+                self.acts[other].setChecked(False)
         return toggle
 
     def _toggle_cmdline(self, on):
@@ -940,7 +970,7 @@ class MainWindow(QMainWindow):
         a["edit_tb"].blockSignals(False)
         if has:
             for key, attr in (("grid", "grid_on"), ("snap", "snap_on"), ("ortho", "ortho_on"),
-                              ("osnap", "osnap_on")):
+                              ("osnap", "osnap_on"), ("polar", "polar_on")):
                 a[key].blockSignals(True)
                 a[key].setChecked(getattr(v, attr))
                 a[key].blockSignals(False)

@@ -126,6 +126,11 @@ class Entity:
         """Primitive pieces for intersections: ("seg", a, b), ("arc", c, r, s, e), ("circle", c, r)."""
         raise NotImplementedError
 
+    def outline(self):
+        """The shape as polylines (lists of points; curves as short segments), for lasso
+        selection."""
+        raise NotImplementedError
+
     def snap_points(self):
         """[(kind, point)]; kind: end, mid, center, quad, insert."""
         if self._snaps is None:
@@ -187,6 +192,9 @@ class Line(Entity):
 
     def pieces(self):
         return [("seg", self.p1, self.p2)]
+
+    def outline(self):
+        return [[self.p1, self.p2]]
 
     def _compute_snaps(self):
         mid = ((self.p1[0] + self.p2[0]) / 2, (self.p1[1] + self.p2[1]) / 2)
@@ -250,6 +258,12 @@ class Polyline(Entity):
     def pieces(self):
         return [("seg", a, b) for a, b in self.segments()]
 
+    def outline(self):
+        pts = list(self.points)
+        if self.closed and len(pts) > 2:
+            pts.append(pts[0])
+        return [pts]
+
     def _compute_snaps(self):
         out = [("end", p) for p in self.points]
         for a, b in self.segments():
@@ -310,6 +324,9 @@ class Circle(Entity):
 
     def pieces(self):
         return [("circle", self.center, self.radius)]
+
+    def outline(self):
+        return [G.arc_points(self.center, self.radius, 0.0, 360.0, 10.0)]
 
     def _compute_snaps(self):
         c, r = self.center, self.radius
@@ -383,6 +400,9 @@ class Arc(Entity):
 
     def pieces(self):
         return [("arc", self.center, self.radius, self.start, self.end)]
+
+    def outline(self):
+        return [G.arc_points(self.center, self.radius, self.start, self.end, 10.0)]
 
     def _compute_snaps(self):
         out = [("end", self.start_point()), ("end", self.end_point()),
@@ -471,6 +491,10 @@ class Text(Entity):
 
     def pieces(self):
         return []
+
+    def outline(self):
+        c = self.corners()
+        return [c + [c[0]]]
 
     def _compute_snaps(self):
         return [("insert", self.pos)]

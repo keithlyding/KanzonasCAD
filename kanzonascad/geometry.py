@@ -206,3 +206,57 @@ def segment_hits_rect(a, b, rect):
 def polyline_hits_rect(points, rect, closed=False):
     pts = list(points) + ([points[0]] if closed and points else [])
     return any(segment_hits_rect(pts[i], pts[i + 1], rect) for i in range(len(pts) - 1))
+
+
+def point_in_polygon(p, poly):
+    """Is p inside the closed polygon (a list of points)? Even-odd rule."""
+    x, y = p
+    inside = False
+    n = len(poly)
+    j = n - 1
+    for i in range(n):
+        xi, yi = poly[i]
+        xj, yj = poly[j]
+        if (yi > y) != (yj > y):
+            xc = xi + (y - yi) * (xj - xi) / (yj - yi)
+            if x < xc:
+                inside = not inside
+        j = i
+    return inside
+
+
+def polyline_crosses_polygon(points, poly):
+    """Does the open polyline cross an edge of the closed polygon?"""
+    n = len(poly)
+    edges = [(poly[i], poly[(i + 1) % n]) for i in range(n)]
+    for k in range(len(points) - 1):
+        a, b = points[k], points[k + 1]
+        bx0, by0 = min(a[0], b[0]), min(a[1], b[1])
+        bx1, by1 = max(a[0], b[0]), max(a[1], b[1])
+        for c, d in edges:
+            if max(c[0], d[0]) < bx0 or min(c[0], d[0]) > bx1 or \
+                    max(c[1], d[1]) < by0 or min(c[1], d[1]) > by1:
+                continue
+            if segment_intersections(a, b, c, d):
+                return True
+    return False
+
+
+def outline_in_polygon(outline, poly):
+    """Every part of the outline (a list of polylines) wholly inside the polygon?"""
+    for pts in outline:
+        if not all(point_in_polygon(q, poly) for q in pts):
+            return False
+        if polyline_crosses_polygon(pts, poly):
+            return False
+    return True
+
+
+def outline_touches_polygon(outline, poly):
+    """Any part of the outline inside the polygon or crossing its edge?"""
+    for pts in outline:
+        if any(point_in_polygon(q, poly) for q in pts):
+            return True
+        if polyline_crosses_polygon(pts, poly):
+            return True
+    return False

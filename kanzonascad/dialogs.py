@@ -287,14 +287,42 @@ def drafting_settings(parent, view):
     th.setRange(0.01, 5)
     th.setSuffix(" in")
     th.setValue(view.text_height())
+    inc = QComboBox()
+    inc.setEditable(True)
+    for a in ("90", "45", "30", "22.5", "18", "15", "10", "5"):
+        inc.addItem(a)
+    inc.setCurrentText(("%.4f" % view.polar_inc).rstrip("0").rstrip("."))
+    extra = QLineEdit(", ".join(("%.4f" % a).rstrip("0").rstrip(".") for a in view.polar_extra))
+    extra.setPlaceholderText("for example: 60, 120")
     form.addRow("Snap spacing", snap)
     form.addRow("Grid spacing (dots)", grid)
     form.addRow("Text height", th)
+    form.addRow("Polar tracking: every (degrees)", inc)
+    form.addRow("Polar tracking: also these angles", extra)
+    note = QLabel("Polar tracking (F10, POLAR) locks the cursor to every multiple of the first "
+                  "angle (90 gives 0, 90, 180, 270; 30 gives 0, 30, 60, 90...) and to the "
+                  "extra angles. Ortho and Polar tracking can't be on together.")
+    note.setWordWrap(True)
+    note.setStyleSheet("color: gray;")
+    form.addRow(note)
     form.addRow(_buttons(dlg))
-    if dlg.exec() != QDialog.Accepted:
-        return False
+    while True:
+        if dlg.exec() != QDialog.Accepted:
+            return False
+        try:
+            step = float(inc.currentText().strip() or "0")
+            angles = [float(t) for t in extra.text().replace(";", ",").split(",") if t.strip()]
+            if not 0 < step <= 360:
+                raise ValueError("the angle must be more than 0 and up to 360")
+            break
+        except ValueError as ex:
+            QMessageBox.warning(parent, "Drafting settings",
+                                "Polar tracking angles: %s.\nType numbers in degrees, the extra "
+                                "ones separated by commas." % ex)
     view.snap_spacing = snap.value()
     view.grid_spacing = grid.value()
     view.set_text_height(th.value())
+    view.polar_inc = step
+    view.polar_extra = angles
     view.update()
     return True

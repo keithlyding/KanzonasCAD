@@ -52,12 +52,19 @@ class CadView(QWidget):
         self.snap_on = True
         self.ortho_on = False
         self.osnap_on = True
+        self.polar_on = False
+        self.polar_inc = 45.0           # polar tracking: every multiple of this angle...
+        self.polar_extra = []           # ...and these angles too (AutoCAD's additional angles)
+        self.polar = None               # (angle, distance) while the cursor is on a polar ray
         self.grid_spacing = 0.5
         self.snap_spacing = 0.125
         self.current_layer = "0"
         self._text_height = 0.125
         self._pan = None
-        self._window = None             # (start point, dragged) while picking a window
+        # while selecting with a window or a lasso: {"start", "pressed" (the button is still
+        # down from the first click), "lasso" (points, once dragged), "crossing"}
+        self._window = None
+        self._preview = set()           # what the window or lasso would select now
         self._hover = None
         self._hot_grip = None
         self._sel_cache = None
@@ -161,6 +168,7 @@ class CadView(QWidget):
                 self.done(cmd)
             self.messaged.emit("*Cancel*")
         self._window = None
+        self._preview = set()
         self.update()
 
     def enter(self):
@@ -198,7 +206,8 @@ class CadView(QWidget):
                 return True
             if cmd.base is not None and self.cursor is not None:
                 # direct distance entry: that far toward the cursor
-                aim = self._ortho(cmd.base, self.cursor) if self.ortho_on else self.cursor
+                # (toward the cursor as ortho or polar tracking aims it)
+                aim = self.resolve(self.cursor)
                 if G.dist(cmd.base, aim) > 1e-12:
                     cmd.point(G.polar(cmd.base, v, G.angle_of(cmd.base, aim)))
                     self.update()
@@ -338,9 +347,45 @@ class CadView(QWidget):
             return (p[0], base[1])
         return (base[0], p[1])
 
+    def polar_angles(self):
+        """Every angle polar tracking locks onto, degrees in [0, 360)."""
+        inc = self.polar_inc
+        out = set()
+        if inc > 0:
+            k = 0
+            while k * inc < 360 - 1e-9:
+                out.add(round(k * inc, 6))
+                k += 1
+        for a in self.polar_extra:
+            out.add(round(float(a) % 360.0, 6))
+        return sorted(out)
+
+    def _polar_lock(self, base, p):
+        """(point, angle, distance) when p is near a polar ray from base, else None."""
+        d = G.dist(base, p)
+        if d * self.scale < 4:
+            return None
+        ang = G.angle_of(base, p)
+        best = None
+        for a in self.polar_angles():
+            diff = abs((ang - a + 180.0) % 360.0 - 180.0)
+            off = d * math.sin(math.radians(min(diff, 90.0)))      # distance from the ray
+            if diff < 90 and off * self.scale <= APERTURE and (best is None or off < best[0]):
+                best = (off, a)
+        if best is None:
+            return None
+        a = best[1]
+        along = d * math.cos(math.radians(abs((ang - a + 180.0) % 360.0 - 180.0)))
+        if self.snap_on:
+            k = self.snap_spacing
+            along = max(k, round(along / k) * k)
+        return G.polar(base, along, a), a, along
+
     def resolve(self, p):
-        """The point a click at p gives: object snap, else ortho, else grid snap."""
+        """The point a click at p gives: object snap, else polar tracking or ortho, else grid
+        snap."""
         self.snap = None
+        self.polar = None
         cmd = self.cmd
         wants_point = cmd is not None and not cmd.selecting() and not cmd.picking
         if not wants_point:
@@ -350,6 +395,11 @@ class CadView(QWidget):
             if s is not None:
                 self.snap = s
                 return s[1]
+        if self.polar_on and not self.ortho_on and cmd.base is not None:
+            lock = self._polar_lock(cmd.base, p)
+            if lock is not None:
+                self.polar = (lock[1], lock[2])
+                return lock[0]
         q = p
         if self.snap_on:
             k = self.snap_spacing
@@ -382,18 +432,42 @@ class CadView(QWidget):
         return None
 
     # ---- selection -------------------------------------------------------------------------
-    def _finish_window(self, end):
-        start, _dragged = self._window
-        self._window = None
-        rect = (min(start[0], end[0]), min(start[1], end[1]),
-                max(start[0], end[0]), max(start[1], end[1]))
-        crossing = end[0] < start[0]        # right to left: crossing, as in AutoCAD
+    def _window_ids(self, end, limit=None):
+        """Ids the window (or lasso) would select with the cursor at end; None when more than
+        limit objects would have to be checked (the preview then waits for the click)."""
+        w = self._window
+        lasso = w["lasso"]
+        if lasso is not None and len(lasso) >= 3:
+            poly = lasso + [end]
+            rect = G.bbox_of(poly)
+            crossing = w["crossing"]
+        else:
+            poly = None
+            start = w["start"]
+            rect = (min(start[0], end[0]), min(start[1], end[1]),
+                    max(start[0], end[0]), max(start[1], end[1]))
+            crossing = end[0] < start[0]        # right to left: crossing, as in AutoCAD
+        cands = self.sheet().query(rect)
+        if limit is not None and len(cands) > limit:
+            return None
         found = set()
-        for e in self.sheet().query(rect):
+        for e in cands:
             if not self.layer_visible(e.layer) or self.layer_locked(e.layer):
                 continue
-            if (e.crosses(rect) or e.inside(rect)) if crossing else e.inside(rect):
+            if poly is None:
+                hit = (e.crosses(rect) or e.inside(rect)) if crossing else e.inside(rect)
+            elif crossing:
+                hit = G.outline_touches_polygon(e.outline(), poly)
+            else:
+                hit = G.bbox_inside(e.bbox(), rect) and G.outline_in_polygon(e.outline(), poly)
+            if hit:
                 found.add(e.id)
+        return found
+
+    def _finish_window(self, end):
+        found = self._window_ids(end)
+        self._window = None
+        self._preview = set()
         self.set_selection(self.sel | found)
 
     def select_all(self):
@@ -412,10 +486,22 @@ class CadView(QWidget):
             return
         self.cursor = self.to_world(pos)
         pt = self.resolve(self.cursor)
-        if self._window is not None:
-            start, dragged = self._window
-            if not dragged and G.dist(self.to_screen(start).toTuple(), pos.toTuple()) > 5:
-                self._window = (start, True)
+        w = self._window
+        if w is not None:
+            if w["pressed"] and e.buttons() & Qt.LeftButton:
+                start_px = self.to_screen(w["start"])
+                if w["lasso"] is None:
+                    if G.dist(start_px.toTuple(), pos.toTuple()) > 5:
+                        # held down and dragged: a lasso, as in AutoCAD (dragged to the
+                        # right: window lasso; to the left: crossing lasso)
+                        w["lasso"] = [w["start"]]
+                        w["crossing"] = pos.x() < start_px.x()
+                else:
+                    last = self.to_screen(w["lasso"][-1])
+                    if G.dist(last.toTuple(), pos.toTuple()) > 3:
+                        w["lasso"].append(self.cursor)
+            ids = self._window_ids(self.cursor, limit=3000)
+            self._preview = ids if ids is not None else set()
         if self.cmd is None or self.cmd.selecting() or self.cmd.picking:
             self._hover = self.pick_entity(self.cursor) if self._window is None else None
             self._hot_grip = self.grip_at(pos) if self.cmd is None else None
@@ -453,7 +539,7 @@ class CadView(QWidget):
             return
         # idle, or a command selecting objects
         if self._window is not None:
-            self._finish_window(p)
+            self._finish_window(p)          # the second click of a click-click window
             return
         if cmd is None:
             g = self.grip_at(pos)
@@ -467,7 +553,8 @@ class CadView(QWidget):
             else:
                 self.set_selection(self.sel | {ent.id})
             return
-        self._window = (p, False)
+        self._window = {"start": p, "pressed": True, "lasso": None, "crossing": None}
+        self._preview = set()
         self.update()
 
     def mouseReleaseEvent(self, e):
@@ -475,8 +562,12 @@ class CadView(QWidget):
             self._pan = None
             self.setCursor(Qt.BlankCursor)
             return
-        if e.button() == Qt.LeftButton and self._window is not None and self._window[1]:
-            self._finish_window(self.to_world(e.position()))
+        w = self._window
+        if e.button() == Qt.LeftButton and w is not None and w["pressed"]:
+            if w["lasso"] is not None:
+                self._finish_window(self.to_world(e.position()))
+            else:
+                w["pressed"] = False        # a click: the window follows until the next click
 
     def mouseDoubleClickEvent(self, e):
         if e.button() == Qt.MiddleButton:
@@ -560,6 +651,7 @@ class CadView(QWidget):
         self._paint_grips(p, pal)
         self._paint_window(p)
         self._paint_snap(p)
+        self._paint_polar(p)
         self._paint_crosshair(p, pal)
         p.end()
 
@@ -604,17 +696,34 @@ class CadView(QWidget):
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(51, 153, 255, 140))
         p.drawPath(fills)
+        lit = [s.entities[i] for i in self._preview if i in s.entities]
         h = self._hover
-        if h is not None and h.id in s.entities and h.id not in self.sel:
-            hs, hf = entities_path([h])
-            pen = QPen(pal.select, 2.5)
-            pen.setCosmetic(True)
-            p.setPen(pen)
-            p.setBrush(Qt.NoBrush)
-            p.drawPath(hs)
-            p.setPen(Qt.NoPen)
-            p.setBrush(QColor(51, 153, 255, 110))
-            p.drawPath(hf)
+        if h is not None and h.id in s.entities and self._window is None:
+            lit.append(s.entities[h.id])
+        if lit:
+            self._paint_glow(p, lit)
+
+    def _paint_glow(self, p, ents):
+        """Light up what a click (or the window/lasso) would select: a soft wide halo under a
+        bright, thicker line."""
+        strokes, fills = entities_path(ents)
+        halo = QColor(80, 170, 255, 90)
+        pen = QPen(halo, 9)
+        pen.setCosmetic(True)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(strokes)
+        p.drawPath(fills)
+        bright = QColor(150, 210, 255)
+        pen = QPen(bright, 2.5)
+        pen.setCosmetic(True)
+        p.setPen(pen)
+        p.drawPath(strokes)
+        p.setPen(Qt.NoPen)
+        p.setBrush(bright)
+        p.drawPath(fills)
 
     def _paint_grips(self, p, pal):
         if self.cmd is not None and not isinstance(self.cmd, C.GripCmd):
@@ -635,19 +744,48 @@ class CadView(QWidget):
                 p.drawRect(QRectF(q.x() - GRIP / 2, q.y() - GRIP / 2, GRIP, GRIP))
 
     def _paint_window(self, p):
-        if self._window is None or self.cursor is None:
+        w = self._window
+        if w is None or self.cursor is None:
             return
-        a = self.to_screen(self._window[0])
-        b = self.to_screen(self.cursor)
-        rect = QRectF(a, b).normalized()
-        crossing = b.x() < a.x()
+        if w["lasso"] is not None:
+            poly = QPolygonF([self.to_screen(q) for q in w["lasso"] + [self.cursor]])
+            crossing = w["crossing"]
+        else:
+            a = self.to_screen(w["start"])
+            b = self.to_screen(self.cursor)
+            r = QRectF(a, b).normalized()
+            poly = QPolygonF([r.topLeft(), r.topRight(), r.bottomRight(), r.bottomLeft()])
+            crossing = b.x() < a.x()
         if crossing:
             fill, pen = QColor(40, 180, 60, 45), QPen(QColor(40, 160, 60), 1, Qt.DashLine)
         else:
             fill, pen = QColor(40, 110, 230, 45), QPen(QColor(40, 110, 230), 1)
         p.setPen(pen)
         p.setBrush(fill)
-        p.drawRect(rect)
+        p.drawPolygon(poly)
+
+    def _paint_polar(self, p):
+        cmd = self.cmd
+        if self.polar is None or cmd is None or cmd.base is None or self.cursor is None:
+            return
+        ang, dist = self.polar
+        a = self.to_screen(cmd.base)
+        far = self.to_screen(G.polar(cmd.base, 4 * max(self.width(), self.height()) /
+                                     self.scale, ang))
+        pen = QPen(QColor(60, 200, 90), 1, Qt.DashLine)
+        p.setPen(pen)
+        p.drawLine(a, far)
+        c = self.to_screen(G.polar(cmd.base, dist, ang))
+        text = "Polar: %s < %s\u00b0" % (("%.4f" % dist).rstrip("0").rstrip("."),
+                                         ("%.2f" % ang).rstrip("0").rstrip("."))
+        fm = p.fontMetrics()
+        box = QRectF(c.x() + 14, c.y() + 14, fm.horizontalAdvance(text) + 10,
+                     fm.height() + 4)
+        p.setPen(QPen(QColor(90, 90, 90)))
+        p.setBrush(QColor(255, 255, 225) if not self.dark else QColor(40, 40, 40))
+        p.drawRect(box)
+        p.setPen(QColor(0, 0, 0) if not self.dark else QColor(230, 230, 230))
+        p.drawText(box, Qt.AlignCenter, text)
 
     def _paint_snap(self, p):
         if self.snap is None or self.cursor is None or self.cmd is None:

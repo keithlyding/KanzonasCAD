@@ -13,6 +13,7 @@ from PySide6.QtCore import QEvent
 from kanzonascad import commands as C
 from kanzonascad import model as M
 from kanzonascad import fileio
+from kanzonascad import geometry as G
 
 
 def click(view, world, button=Qt.LeftButton, mods=Qt.NoModifier):
@@ -417,3 +418,104 @@ class PrintColorTest(unittest.TestCase):
         self.assertEqual(Palette(False, mono=True).color(p, wire).name(), "#000000")
         self.assertNotEqual(Palette(True).color(p, wire).name(), "#000000")
         self.assertEqual(Palette(True).paper.name(), "#000000")
+
+
+def drag(view, points, mods=Qt.NoModifier):
+    """Press at the first point, move through the rest with the button held, release."""
+    def send(t, world, b, bs):
+        pos = view.to_screen(world)
+        APP.sendEvent(view, QMouseEvent(t, pos, view.mapToGlobal(pos), b, bs, mods))
+    send(QEvent.MouseMove, points[0], Qt.NoButton, Qt.NoButton)
+    send(QEvent.MouseButtonPress, points[0], Qt.LeftButton, Qt.LeftButton)
+    for q in points[1:]:
+        send(QEvent.MouseMove, q, Qt.NoButton, Qt.LeftButton)
+    send(QEvent.MouseButtonRelease, points[-1], Qt.LeftButton, Qt.NoButton)
+
+
+class SelectionFeelTest(unittest.TestCase):
+    def setUp(self):
+        self.win, self.v = window()
+        with self.v.project.edit("seed") as ed:
+            self.a = ed.add(self.v.sheet(), M.Line((2, 2), (3, 2)))          # inside the loop
+            self.b = ed.add(self.v.sheet(), M.Line((2.5, 1.5), (6, 1.5)))    # crosses it
+
+    def tearDown(self):
+        self.v.project.saved_at = len(self.v.project.undo_stack)
+        self.win.close()
+
+    def loop(self, rightward):
+        pts = [(1.5, 2.6), (2.5, 3), (3.5, 2.6), (3.5, 1.3), (2.5, 1.0), (1.5, 1.3), (1.5, 2.4)]
+        if not rightward:
+            pts = [(3.5, 2.6), (2.5, 3), (1.5, 2.6), (1.5, 1.3), (2.5, 1.0), (3.5, 1.3),
+                   (3.5, 2.4)]
+        return pts
+
+    def test_window_lasso(self):
+        drag(self.v, self.loop(True))
+        self.assertEqual(self.v.sel, {self.a.id})
+
+    def test_crossing_lasso(self):
+        drag(self.v, self.loop(False))
+        self.assertEqual(self.v.sel, {self.a.id, self.b.id})
+
+    def test_hover_and_window_preview_light_up(self):
+        from PySide6.QtCore import QPointF
+        v = self.v
+        pos = v.to_screen((2.5, 2.0))
+        APP.sendEvent(v, QMouseEvent(QEvent.MouseMove, pos, v.mapToGlobal(pos), Qt.NoButton,
+                                     Qt.NoButton, Qt.NoModifier))
+        self.assertEqual(v._hover.id, self.a.id)
+        click(v, (1.5, 1.8))                    # window started by a click
+        pos = v.to_screen((3.6, 2.4))
+        APP.sendEvent(v, QMouseEvent(QEvent.MouseMove, pos, v.mapToGlobal(pos), Qt.NoButton,
+                                     Qt.NoButton, Qt.NoModifier))
+        self.assertEqual(v._preview, {self.a.id})
+        v.repaint()
+        click(v, (3.6, 2.4))
+        self.assertEqual(v.sel, {self.a.id})
+        self.assertEqual(v._preview, set())
+
+
+class PolarTest(unittest.TestCase):
+    def setUp(self):
+        self.win, self.v = window()
+        self.v.osnap_on = False
+        self.v.snap_on = False
+
+    def tearDown(self):
+        self.v.project.saved_at = len(self.v.project.undo_stack)
+        self.win.close()
+
+    def test_locks_to_set_angles(self):
+        v = self.v
+        v.polar_on = True
+        v.polar_inc = 30.0
+        v.run(C.LineCmd)
+        type_in(v, "2,2")
+        near60 = G.polar((2, 2), 2.0, 61.0)
+        q = v.resolve(near60)
+        self.assertAlmostEqual(G.angle_of((2, 2), q), 60.0, 5)
+        self.assertAlmostEqual(v.polar[0], 60.0)
+        far = G.polar((2, 2), 2.0, 75.0)          # between 60 and 90: free
+        self.assertEqual(v.resolve(far), far)
+        v.polar_inc = 90.0
+        v.polar_extra = [15.0]
+        q = v.resolve(G.polar((2, 2), 3.0, 16.0))
+        self.assertAlmostEqual(G.angle_of((2, 2), q), 15.0, 5)
+        # a typed distance goes along the locked direction
+        v.cursor = G.polar((2, 2), 3.0, 16.0)
+        type_in(v, "1")
+        line = [e for e in v.sheet().entities.values()][0]
+        self.assertAlmostEqual(G.angle_of(line.p1, line.p2), 15.0, 5)
+        self.assertAlmostEqual(line.length(), 1.0)
+        v.cancel()
+
+    def test_ortho_and_polar_exclude_each_other(self):
+        w = self.win
+        w.acts["polar"].setChecked(True)
+        w.acts["ortho"].setChecked(True)
+        self.assertFalse(w.acts["polar"].isChecked())
+        self.assertFalse(self.v.polar_on)
+        w.acts["polar"].setChecked(True)
+        self.assertFalse(w.acts["ortho"].isChecked())
+        w.acts["polar"].setChecked(False)

@@ -14,7 +14,9 @@ build fails without them.
   left, and a title block you can redraw yourself (Sheets > Edit title block), with fields
   like {Customer} and {Sheet} OF {Sheets} filled in on every sheet.
 - A black drawing area like AutoCAD's; PDFs always print black on white.
-- AutoCAD-style drawing: command line (L, PL, C, M, CO, RO, TR...), object snaps, ortho, grid
-  snap, grips, window and crossing selection, undo and redo.
+- AutoCAD-style drawing: command line (L, PL, C, M, CO, RO, TR...), object snaps, ortho, polar
+  tracking at the angles you choose, grid snap, grips, undo and redo.
+- Selecting like AutoCAD: the object under the cursor lights up, window and crossing
+  selection, and the lasso (hold the button and draw around objects).
 - Layers, copy and paste, DXF import and export, PDF export.
 - The same look as KanzonasPDF: menus, ribbon tabs and light or dark theme.

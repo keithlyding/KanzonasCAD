@@ -118,15 +118,30 @@ with ORTHO on, straight across or up and down).</li>
 intersections and text insertion points near the cursor; a yellow marker shows which.</li>
 <li><b>Grid display</b> (F7, GRID): dots across the drawing area.</li>
 <li><b>Ortho mode</b> (F8, ORTHO): lines straight across or up and down.</li>
-<li><b>Snap to grid</b> (F9, SNAP): points snap to the snap spacing (1/8 inch to start).</li>
-<li><b>Drafting settings...</b>: snap spacing, grid spacing, text height.</li>
+<li><b>Polar tracking</b> (F10, POLAR): near one of the set angles (from the last point), the
+cursor locks onto that direction: a green dashed line and a tip show the distance and angle
+(<i>Polar: 2.5 &lt; 45&deg;</i>). Typing a number then goes that far along it. The angles are
+every 45 degrees to start; <b>Drafting settings...</b> chooses the step (90, 45, 30, 22.5, 18,
+15, 10, 5 or your own) and extra angles of your own (for example 60, 120). Ortho and Polar
+tracking can't be on together: turning one on turns the other off.</li>
+<li><b>Snap to grid</b> (F9, SNAP): points snap to the snap spacing (1/8 inch to start); along a
+polar direction, the distance snaps to it.</li>
+<li><b>Drafting settings...</b>: snap spacing, grid spacing, text height and the polar tracking
+angles (all kept for next time).</li>
 </ul>
 
 <h2>Selecting and grips</h2>
 <ul>
+<li>The object under the cursor <b>lights up</b> (a bright line with a blue glow): that is what a
+click selects.</li>
 <li>Click an object to add it to the selection; <b>Shift</b>+click removes it.</li>
-<li>Click (or drag) in an empty spot to start a window: <b>left to right</b> (blue) selects what
-is wholly inside; <b>right to left</b> (green, dashed) also selects what it crosses.</li>
+<li><b>Window</b>: click in an empty spot, move, and click again. <b>Left to right</b> (blue)
+selects what is wholly inside; <b>right to left</b> (green, dashed) also selects what it
+crosses.</li>
+<li><b>Lasso</b>: press in an empty spot, hold the button and draw around the objects, then let
+go. Dragged first to the <b>right</b> it is a window lasso (blue: what is wholly inside); to
+the <b>left</b>, a crossing lasso (green: what it touches too).</li>
+<li>While a window or lasso is open, the objects it would select light up.</li>
 <li><b>Select all</b> (Ctrl+A); Esc clears the selection.</li>
 <li>Selected objects show blue <b>grips</b>. Click a grip, then click where it goes, to stretch
 that end, corner, radius or text position.</li>
@@ -181,6 +196,7 @@ black on white (layer colors are for the screen).</li>
 <tr><td>F7</td><td>Grid display on/off</td></tr>
 <tr><td>F8</td><td>Ortho mode on/off</td></tr>
 <tr><td>F9</td><td>Snap to grid on/off</td></tr>
+<tr><td>F10</td><td>Polar tracking on/off</td></tr>
 <tr><td>Ctrl+9</td><td>Command line on/off</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
 <tr><td>Enter / Space</td><td>Finish a step; repeat the last command</td></tr>
