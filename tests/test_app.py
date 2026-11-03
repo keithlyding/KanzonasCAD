@@ -796,3 +796,25 @@ class CircleWaysTest(unittest.TestCase):
         w.acts["circle_3p"].trigger()
         self.assertIs(w.circle_button.defaultAction(), w.acts["circle_3p"])
         self.v.cancel()
+
+
+class ThemeTest(unittest.TestCase):
+    def test_icons_stand_out_whatever_the_system_does(self):
+        from PySide6.QtGui import QPalette, QColor
+        from kanzonascad import theme
+        w, _v = window()
+        try:
+            # as Windows in dark mode does: the style's palette turns dark by itself
+            dark = QPalette()
+            dark.setColor(QPalette.Window, QColor(30, 30, 30))
+            dark.setColor(QPalette.WindowText, QColor(230, 230, 230))
+            APP.setPalette(dark)
+            w._apply_theme("light", save=False)       # Light means light anyway
+            self.assertGreater(APP.palette().color(QPalette.Window).lightness(), 200)
+            self.assertLess(QColor(theme._icon_color()).lightness(), 80)
+            w._apply_theme("dark", save=False)
+            self.assertLess(APP.palette().color(QPalette.Window).lightness(), 80)
+            self.assertGreater(QColor(theme._icon_color()).lightness(), 180)
+        finally:
+            w._apply_theme("light", save=False)
+            w.close()

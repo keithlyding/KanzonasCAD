@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.3.3
+
+**Fixed**
+- The tool icons vanished when Windows was in dark mode. Light, Dark and Same as system now
+  mean exactly that, and the icons always stand out from what's behind them.
+
 ## 0.3.2
 
 **New**

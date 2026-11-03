@@ -1226,10 +1226,22 @@ class MainWindow(QMainWindow):
     def _apply_theme(self, mode, save=True):
         if mode not in ("light", "dark", "system"):
             mode = "light"
+        self._theme_mode = mode
+        if not getattr(self, "_follows_system", False):
+            # "Same as system": follow Windows switching between light and dark while open
+            try:
+                QGuiApplication.styleHints().colorSchemeChanged.connect(
+                    lambda _s: self._theme_mode == "system" and self._apply_theme("system",
+                                                                                  False))
+                self._follows_system = True
+            except AttributeError:
+                pass
         theme.apply(QApplication.instance(), mode)
         self.acts["theme_" + mode].setChecked(True)
         for a in self.acts.values():
             a.setIcon(theme.icon(a.property("icon_key")))
+        if getattr(self, "circle_menu", None) is not None:
+            self.circle_menu.menuAction().setIcon(theme.icon("circle"))
         for i in range(self.tabs.count()):
             d = self.tabs.widget(i)
         if save:
