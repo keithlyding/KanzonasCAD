@@ -48,7 +48,7 @@ def export_dxf(project, sheet, path, include_frame=True):
     ents = []
     for e in sheet.entities.values():
         # block references go out as their lines and texts, on the reference's layer
-        ents.extend(e.exploded() if isinstance(e, (M.Insert, M.Dimension)) else [e])
+        ents.extend(e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e])
     if include_frame:
         ents = frame_entities(project, sheet) + ents
     # the cross-references, as plain texts on layer SYMBOLS

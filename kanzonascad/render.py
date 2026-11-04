@@ -65,7 +65,7 @@ def text_path(t):
 
 def add_entity(path, e):
     """Add an entity's outline to a stroke path (texts go to fill paths: see _Chunk)."""
-    if isinstance(e, (M.Insert, M.Dimension)):
+    if isinstance(e, (M.Insert, M.Composite)):
         for w in (e.world_entities() if isinstance(e, M.Insert) else e.parts()):
             if not isinstance(w, M.Text):
                 add_entity(path, w)
@@ -205,7 +205,7 @@ class SheetRenderer:
             if lay is not None and not lay.visible:
                 continue
             key = self.pal.color(self.project, e).rgba()
-            if isinstance(e, (M.Insert, M.Dimension)):
+            if isinstance(e, (M.Insert, M.Composite)):
                 texts = [w for w in (e.world_entities() if isinstance(e, M.Insert)
                                      else e.parts()) if isinstance(w, M.Text)]
                 if texts:
@@ -324,7 +324,7 @@ def entities_path(entities):
             fills.addPath(text_path(e))
         else:
             add_entity(strokes, e)
-            if isinstance(e, (M.Insert, M.Dimension)):
+            if isinstance(e, (M.Insert, M.Composite)):
                 for w in (e.world_entities() if isinstance(e, M.Insert) else e.parts()):
                     if isinstance(w, M.Text):
                         fills.addPath(text_path(w))

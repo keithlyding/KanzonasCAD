@@ -323,6 +323,12 @@ AutoCAD's quick mode). An object nothing crosses is erased. U undoes the last tr
 then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>
 <tr><td>Aligned dimension</td><td>DIMALIGNED, DAL</td><td>The same, measured along the line
 between the two points (slanted too).</td></tr>
+<tr><td>DIN rail</td><td>DINRAIL, RAIL, DR</td><td>Real-size DIN rail from its start to its end
+(or type the length toward the cursor). Before the first click: <b>7.5</b> (TS35 x 7.5 mm, to
+start), <b>15</b> (TS35 x 15 mm) or <b>MINI</b> (TS15).</td></tr>
+<tr><td>Wire duct</td><td>DUCT, WIREWAY, WD</td><td>Real-size wire duct, the same way. Before
+the first click, type its size, width x depth: <code>2x3</code> (inches) or
+<code>50x75mm</code>.</td></tr>
 </table>
 <p>Typed <b>Undo</b> (U) and <b>Redo</b> work on the command line too.</p>
 
@@ -376,6 +382,18 @@ their heights with it (in one undoable step).</li>
 bring a manufacturer's drawing to real size with Scale, Reference before it becomes a
 footprint.</li>
 <li><b>{{Scale}}</b> in the title block shows the sheet's scale (Edit title block to add it).</li>
+<li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
+one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
+slots. Stretch one with its end grips (or double-click it and type its length), move it with
+its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its
+size. Double-click a piece for its profile or size, length, manufacturer, catalog number and
+the length it is bought in (the project's to start: Project properties, Panel; 1 m rail and 6
+ft duct).</li>
+<li><b>Panel materials...</b> (Panel tab) lists the project's rail and duct per size and part:
+the pieces and their cut lengths, the total length, and how many stock lengths that takes
+(the cuts packed into stock lengths, longest first; saw cuts take no width). <b>Save as
+CSV...</b> writes it for a spreadsheet or a purchase order. The bill of materials (later)
+takes it in.</li>
 <li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Panel
 tab, measure the true distance, so they're right at any scale; they show inches with two
 decimals (12.50"). Their grips move the measured points and the line; they go on layer
