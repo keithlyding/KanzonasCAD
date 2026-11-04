@@ -565,6 +565,24 @@ def drafting_settings(parent, view):
     form.addRow("Grid spacing (dots)", grid)
     form.addRow("Crosshair size", cross)
     form.addRow("", full)
+    # object snaps, as AutoCAD's Drafting Settings: ticked ones run while Object snap (F3) is on
+    from . import osnap as OS
+    from PySide6.QtWidgets import QGridLayout, QGroupBox
+    box = QGroupBox("Object snaps (F3 turns them all off and on)")
+    grid_l = QGridLayout(box)
+    checks = {}
+    for i, (key, name, typed) in enumerate(OS.MODES):
+        c = QCheckBox("%s  (%s)" % (name, typed))
+        c.setChecked(key in view.osnap_modes)
+        checks[key] = c
+        grid_l.addWidget(c, i // 2, i % 2)
+    row = len(OS.MODES) // 2 + 1
+    all_b, none_b = QPushButton("Select all"), QPushButton("Clear all")
+    all_b.clicked.connect(lambda: [c.setChecked(True) for c in checks.values()])
+    none_b.clicked.connect(lambda: [c.setChecked(False) for c in checks.values()])
+    grid_l.addWidget(all_b, row, 0)
+    grid_l.addWidget(none_b, row, 1)
+    form.addRow(box)
     form.addRow("Polar tracking: every (degrees)", inc)
     form.addRow("Polar tracking: also these angles", extra)
     note = QLabel("Polar tracking (F10, POLAR) locks the cursor to every multiple of the first "
@@ -593,6 +611,7 @@ def drafting_settings(parent, view):
     view.polar_extra = angles
     view.crosshair_size = cross.value()
     view.crosshair_full = full.isChecked()
+    view.osnap_modes = {k for k, c in checks.items() if c.isChecked()}
     view.update()
     return True
 

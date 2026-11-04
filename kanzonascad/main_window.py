@@ -1331,6 +1331,7 @@ class MainWindow(QMainWindow):
             st.setValue("polar_extra", json.dumps(v.polar_extra))
             st.setValue("crosshair_size", v.crosshair_size)
             st.setValue("crosshair_full", bool(v.crosshair_full))
+            st.setValue("osnap_modes", json.dumps(sorted(v.osnap_modes)))
             for i in range(self.tabs.count()):
                 d = self.tabs.widget(i)
                 if isinstance(d, Document) and d.view is not v:
@@ -1346,6 +1347,10 @@ class MainWindow(QMainWindow):
             v.polar_extra = [float(a) for a in json.loads(st.value("polar_extra", "[]"))]
             v.crosshair_size = int(st.value("crosshair_size", v.crosshair_size))
             v.crosshair_full = st.value("crosshair_full", False) in (True, "true")
+            from .osnap import NAMES
+            got = st.value("osnap_modes", None)
+            if got:
+                v.osnap_modes = {k for k in json.loads(got) if k in NAMES}
         except (TypeError, ValueError) as ex:
             self.statusBar().showMessage("Drafting settings reset (couldn't read them: %s)" % ex,
                                          5000)
