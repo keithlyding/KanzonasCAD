@@ -294,6 +294,11 @@ class Polyline(Entity):
         out = [("end", p) for p in self.points]
         for a, b in self.segments():
             out.append(("mid", ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)))
+        if self.closed and len(self.points) >= 3:
+            from .osnap import centroid
+            c = centroid(self.points)
+            if c is not None:
+                out.append(("gcen", c))
         return out
 
     def grips(self):
@@ -859,7 +864,7 @@ class Dimension(Composite):
         return out
 
     def _compute_snaps(self):
-        return [("end", self.p1), ("end", self.p2)]
+        return [("node", self.p1), ("node", self.p2)]               # (definition points)
 
     def grips(self):
         return [self.p1, self.p2, self.loc]
@@ -1244,7 +1249,7 @@ class Insert(Entity):
 
     def _compute_snaps(self):
         out = [("insert", self.pos)]
-        out += [("end", p) for _n, p in self.pin_points()]
+        out += [("node", p) for _n, p in self.pin_points()]         # (pins: AutoCAD's nodes)
         return out
 
     def grips(self):

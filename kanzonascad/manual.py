@@ -357,8 +357,19 @@ with ORTHO on, straight across or up and down).</li>
 
 <h3>Drafting aids</h3>
 <ul>
-<li><b>Object snap</b> (F3, OSNAP): points snap to ends, midpoints, centers, quadrants,
-intersections and text insertion points near the cursor; a yellow marker shows which.</li>
+<li><b>Object snap</b> (F3, OSNAP), as AutoCAD's: near the cursor, points snap onto objects;
+a yellow marker in AutoCAD's shape and the snap's name show which. The snaps:
+<b>Endpoint</b> (END), <b>Midpoint</b> (MID), <b>Center</b> (CEN), <b>Geometric center</b>
+(GCE: the middle of a closed polyline), <b>Node</b> (NOD: symbol pins, dimension points),
+<b>Quadrant</b> (QUA), <b>Intersection</b> (INT), <b>Insertion</b> (INS: blocks and text),
+<b>Perpendicular</b> (PER: square to a line, or on a circle in line with its center, from the
+last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point) and
+<b>Nearest</b> (NEA: the closest point on any object). Tick the ones that run all the time in
+<b>Drafting settings...</b> (Endpoint, Midpoint, Center, Node, Quadrant, Intersection and
+Insertion to start; Select all / Clear all); F3 turns them all off and on.</li>
+<li><b>A snap for one point</b>: at a point prompt, type its short name (PER, TAN, NEA,
+END...) and Enter, or <b>Shift + right-click</b> and pick it from the list: the next point
+uses that snap only, ticked or not, even with F3 off. NON gives the next point no snap.</li>
 <li><b>Grid display</b> (F7, GRID): dots across the drawing area.</li>
 <li><b>Ortho mode</b> (F8, ORTHO): lines straight across or up and down.</li>
 <li><b>Polar tracking</b> (F10, POLAR): near one of the set angles (from the last point), the

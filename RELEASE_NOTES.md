@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.4
+
+**New**
+- Object snaps as in AutoCAD: Node, Perpendicular, Tangent, Nearest and Geometric center join
+  Endpoint, Midpoint, Center, Quadrant, Intersection and Insertion. Choose the ones that run
+  all the time in Drafting settings.
+- A snap for one point: type PER, TAN, NEA... at a point prompt, or Shift + right-click.
+
 ## 0.10.3
 
 **New**
