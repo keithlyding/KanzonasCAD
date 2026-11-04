@@ -241,6 +241,11 @@ class MainWindow(QMainWindow):
         self._cmd_act("mirror", "M&irror", C.MirrorCmd, "Mirror")
         self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
+        self._cmd_act("lay_off", "&Hide layer", C.LayerOffCmd, "Hide layer")
+        self._cmd_act("lay_iso", "Show &only this layer", C.LayerIsoCmd, "Show only")
+        self._cmd_act("lay_on", "Show &all layers", C.LayerOnCmd, "Show all")
+        self._cmd_act("lay_lock", "Loc&k layer", C.LayerLockCmd, "Lock layer")
+        self._cmd_act("lay_unlock", "&Unlock all layers", C.LayerUnlockAllCmd, "Unlock all")
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
         self._cmd_act("rail", "DIN &rail", C.RailCmd, "DIN rail")
@@ -322,6 +327,7 @@ class MainWindow(QMainWindow):
     def _build_menus(self):
         mb = self.menuBar()
         a = self.acts
+        self._build_quick_access(mb)
         m = mb.addMenu("&File")
         for k in ("new", "open"):
             m.addAction(a[k])
@@ -362,12 +368,12 @@ class MainWindow(QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
-                  "object_color"):
+                  "object_color", None, "lay_off", "lay_iso", "lay_on", "lay_lock", "lay_unlock"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "renumber",
-                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned",
-                  "rail", "duct", "materials", None, "sheet_props",
+                  "xref_update", "xref_freeze", "xref_auto", None, "materials", None,
+                  "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
@@ -392,6 +398,16 @@ class MainWindow(QMainWindow):
         self.layer_box.setToolTip("Current layer (new objects go on it). With objects "
                                   "selected, picking a layer moves them to it.")
         self.layer_box.activated.connect(self._layer_picked)
+        # every layer with its light bulb (shown/hidden) and lock, a click away (AutoCAD's
+        # layer list)
+        from PySide6.QtWidgets import QToolButton as _TB
+        self.layer_states = _TB()
+        self.layer_states.setIcon(theme.icon("lay_states"))
+        self.layer_states.setToolTip("Layers: show or hide, lock or unlock, each one")
+        self.layer_states.setPopupMode(_TB.InstantPopup)
+        self.layer_states_menu = QMenu(self.layer_states)
+        self.layer_states_menu.aboutToShow.connect(self._fill_layer_states)
+        self.layer_states.setMenu(self.layer_states_menu)
         # Circle, with its other ways beside it: the face shows the one used last
         self.circle_button = split_button([a[k] for k in self.CIRCLE_KEYS])
         for k in self.CIRCLE_KEYS:              # (also when picked from the Draw menu)
@@ -404,7 +420,8 @@ class MainWindow(QMainWindow):
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
                                  a["erase"], a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
-            ("Layers", "small", [self.layer_box, a["layers"]]),
+            ("Layers", "small", [self.layer_box, self.layer_states, a["layers"], a["lay_off"],
+                                 a["lay_iso"], a["lay_on"], a["lay_lock"], a["lay_unlock"]]),
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
         ])
         # schematic and panel work, both always there (any sheet can hold either)
@@ -974,6 +991,68 @@ class MainWindow(QMainWindow):
         box.blockSignals(False)
         self.layer_label.setText("Layer: %s" % (v.layer() if v else ""))
 
+    def _build_quick_access(self, mb):
+        """Undo and Redo as icons right after the menus (added once the menus are in)."""
+        self._quick = []
+
+        def add():
+            for key in ("undo", "redo"):
+                src = self.acts[key]
+                q = QAction(src.icon(), "", self)
+                q.setToolTip("%s (%s)" % (src.text().replace("&", ""),
+                                          src.shortcut().toString()))
+                q.setProperty("icon_key", src.property("icon_key"))
+                q.triggered.connect(src.trigger)
+                src.changed.connect(lambda q=q, s=src: q.setEnabled(s.isEnabled()))
+                q.setEnabled(src.isEnabled())
+                mb.addAction(q)
+                self._quick.append(q)
+        QTimer.singleShot(0, add)
+
+    def _fill_layer_states(self):
+        """The layer list: a light bulb (shown) and a lock per layer, toggled with a click
+        (each click one undoable step)."""
+        from PySide6.QtWidgets import QWidgetAction, QCheckBox as _CB, QHBoxLayout as _HB
+        menu = self.layer_states_menu
+        menu.clear()
+        v = self.view()
+        if v is None:
+            return
+        for name, lay in v.project.layers.items():
+            row = QWidget()
+            hb = _HB(row)
+            hb.setContentsMargins(8, 2, 8, 2)
+            on = _CB()
+            on.setIcon(theme.icon("lay_iso" if lay.visible else "lay_off"))
+            on.setChecked(lay.visible)
+            on.setToolTip("Shown (untick to hide %s)" % name)
+            lk = _CB()
+            lk.setIcon(theme.icon("lay_lock" if lay.locked else "lay_unlock"))
+            lk.setChecked(lay.locked)
+            lk.setToolTip("Locked (objects on %s can't be selected or changed)" % name)
+            label = QLabel(name)
+            hb.addWidget(on)
+            hb.addWidget(lk)
+            sw = QLabel()
+            sw.setPixmap(dialogs._swatch(lay.color).pixmap(14, 14))
+            hb.addWidget(sw)
+            hb.addWidget(label, 1)
+            on.toggled.connect(lambda c, n=name: self._set_layer_state(n, visible=c))
+            lk.toggled.connect(lambda c, n=name: self._set_layer_state(n, locked=c))
+            act = QWidgetAction(menu)
+            act.setDefaultWidget(row)
+            menu.addAction(act)
+
+    def _set_layer_state(self, name, **change):
+        v = self.view()
+        if v is None:
+            return
+        C.set_layers(v, "Layer %s %s" % (name, ", ".join(
+            ("shown" if val else "hidden") if k == "visible" else ("locked" if val else
+                                                                    "unlocked")
+            for k, val in change.items())), {name: change})
+        self._fill_layers()
+
     def _layer_picked(self, i):
         v = self.view()
         if v is None:
@@ -1421,7 +1500,9 @@ class MainWindow(QMainWindow):
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
-                  "xref_update", "xref_freeze", "xref_auto",
+                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned",
+                  "rail", "duct", "materials", "lay_off", "lay_iso", "lay_on", "lay_lock",
+                  "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste"):

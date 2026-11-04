@@ -6,6 +6,16 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.5
+
+**New**
+- Undo and Redo arrows right after the menus.
+- Layers, quickly: a layer list with a light bulb and a lock for each layer; Hide layer, Show
+  only this layer, Show all layers, Lock layer and Unlock all layers.
+
+**Fixed**
+- The Sheets menu listed dimension, DIN rail and wire duct commands that belong in Draw.
+
 ## 0.10.2
 
 **New**
