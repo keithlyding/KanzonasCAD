@@ -164,7 +164,7 @@ class SheetRenderer:
         by_chunk = {k: [] for k in keys}
         for eid, e in s.entities.items():
             k = eid // CHUNK
-            if k in by_chunk:
+            if k in by_chunk and not isinstance(e, M.WireCross):
                 by_chunk[k].append(e)
         for k, ents in by_chunk.items():
             ch = _Chunk()
@@ -303,6 +303,42 @@ class SheetRenderer:
             for rgba, path in ch.fills.items():
                 painter.setBrush(QBrush(QColor.fromRgba(rgba)))
                 painter.drawPath(path)
+        self._paint_jumps(painter, pen_width)
+
+    def _paint_jumps(self, painter, pen_width):
+        """Wire crossings drawn as gaps or loops (crossings.py): the jumping wire is wiped
+        across the crossing in the paper's color, the crossed wire drawn again through it, and
+        a loop's half circle added."""
+        from . import crossings
+        jumps = crossings.jumps(self.project, self.sheet)
+        if not jumps:
+            return
+        r = crossings.size(self.sheet)
+        wire = self.pal.color(self.project, M.Wire([(0, 0), (1, 0)]))
+        cosmetic = pen_width == 0
+        wipe = QPen(self.pal.paper, 4 if cosmetic else pen_width * 4)
+        wipe.setCosmetic(cosmetic)
+        wipe.setCapStyle(Qt.FlatCap)
+        ink = QPen(wire, pen_width)
+        ink.setCosmetic(cosmetic)
+        ink.setCapStyle(Qt.FlatCap)
+        painter.setBrush(Qt.NoBrush)
+        for p, u, cu, st in jumps:
+            a = QPointF(p[0] - u[0] * r, p[1] - u[1] * r)
+            b = QPointF(p[0] + u[0] * r, p[1] + u[1] * r)
+            painter.setPen(wipe)
+            painter.drawLine(a, b)
+            painter.setPen(ink)
+            if cu is not None:
+                k = r * 1.6
+                painter.drawLine(QPointF(p[0] - cu[0] * k, p[1] - cu[1] * k),
+                                 QPointF(p[0] + cu[0] * k, p[1] + cu[1] * k))
+            if st == "loop":
+                pts = crossings.loop_points(p, u, r)
+                path = QPainterPath(QPointF(*pts[0]))
+                for q in pts[1:]:
+                    path.lineTo(QPointF(*q))
+                painter.drawPath(path)
 
 
 DOT_RADIUS = 0.03
@@ -322,6 +358,9 @@ def entities_path(entities):
     for e in entities:
         if isinstance(e, M.Text):
             fills.addPath(text_path(e))
+        elif isinstance(e, M.WireCross):
+            # (a mark placed by hand shows as a small circle while lit)
+            strokes.addEllipse(QPointF(*e.pos), e.R, e.R)
         else:
             add_entity(strokes, e)
             if isinstance(e, (M.Insert, M.Composite)):

@@ -73,6 +73,18 @@ color, or to set it back to ByLayer. A symbol or footprint's lines follow the co
 layer it sits on, or its own color if you gave it one. Wires go on layer WIRES, symbols on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them.</p>
+<p><b>Layers</b>, as in AutoCAD: a hidden layer isn't drawn, printed or picked; a locked one
+is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
+Locked, color, current layer). Quicker, on the Home tab's Layers group and the Modify menu:</p>
+<ul>
+<li>The <b>layer list</b> button next to the current layer: every layer with its light bulb
+(click to hide or show it) and lock (click to lock or unlock it).</li>
+<li><b>Hide layer</b> (LAYOFF): click an object, or select objects first: their layer hides.</li>
+<li><b>Show only this layer</b> (LAYISO): every other layer hides.</li>
+<li><b>Show all layers</b> (LAYON) and <b>Unlock all layers</b> (LAYULK).</li>
+<li><b>Lock layer</b> (LAYLCK): click an object, or select objects first: their layer locks.</li>
+</ul>
+<p>Each of these is one step for Undo.</p>
 <p>The ribbon's <b>Schematic</b> and <b>Panel</b> tabs gather the tools for each kind of work.
 Both are always there: any sheet can hold a schematic, a panel layout, or both.</p>
 
@@ -221,6 +233,17 @@ wire, connecting wherever its ends land.</p>
 <li><b>Connections</b> are worked out from where wire ends are, never stored: a wire end on a
 pin, on another wire's end, or on the middle of another wire connects there. A wire ending on
 the middle of another (a T), or three or more wire ends at one point, get a <b>dot</b>.</li>
+<li><b>Crossings</b>: wires that pass through each other don't connect. Project properties,
+Schematic, <b>Wire crossings</b> says how that is drawn: <b>Plain</b> (they just cross: no
+dot means not connected, to start), <b>Gap</b> (one wire is broken briefly) or <b>Loop</b> (one
+wire hops over the other); <b>Which wire jumps</b>: the up-and-down one (to start) or the
+across one. Crossings are found by themselves and follow the wires as they move; they print
+and export to DXF (the jumping wire cut, the loop as a half circle).</li>
+<li><b>Wire crossing</b> (WX; Draw menu, Schematic tab) places one by hand: click a wire where
+it should jump, on a crossing or anywhere else on it (over a symbol's line, say). Type
+<b>G</b>, <b>L</b> or <b>N</b> first for a gap, a loop or <b>none</b> (none hides a crossing
+found by itself). A mark placed by hand lights up as a small circle when the cursor is over
+it; select and Erase it to take it away.</li>
 <li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
 Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
 where needed). Select the wires too and they move with it instead.</li>
@@ -307,10 +330,12 @@ number); D switches to a diameter. At the first prompt, 3P, 2P or TTR switch to 
 arcs near where the circle should touch them, then type its radius (Enter: the last one): of
 the circles that fit, you get the one touching nearest your picks.</td></tr>
 <tr><td>Arc (3 points)</td><td>ARC, A</td><td>Start, a point on the arc, end.</td></tr>
-<tr><td>Text</td><td>TEXT, T, DT</td><td>Start point, height, angle, then type each line and
-press Enter; Enter on an empty line ends. Before the start point, J (Justify) chooses where the
-point sits on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR
-(bottom), or L, C, R (on the baseline); it is kept for the next texts.
+<tr><td>Text</td><td>TEXT, T, DT</td><td>Click where the text goes, then type each line and
+press Enter; Enter on an empty line ends. One click only: unlike AutoCAD's TEXT, a second click
+doesn't set the height. Before the click, type <b>H</b> for the height (inches on paper: 1/8
+to start), <b>R</b> for the rotation (degrees), or <b>J</b> (Justify) for where the point sits
+on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR (bottom), or L,
+C, R (on the baseline). All three are kept for the next texts.
 <b>Double-click a text</b> to change its wording, height, angle and justification afterward
 (with "Keep the text where it is" ticked, a new justification moves only its insertion point,
 which is where it snaps and turns around).</td></tr>
@@ -356,8 +381,19 @@ with ORTHO on, straight across or up and down).</li>
 
 <h3>Drafting aids</h3>
 <ul>
-<li><b>Object snap</b> (F3, OSNAP): points snap to ends, midpoints, centers, quadrants,
-intersections and text insertion points near the cursor; a yellow marker shows which.</li>
+<li><b>Object snap</b> (F3, OSNAP), as AutoCAD's: near the cursor, points snap onto objects;
+a yellow marker in AutoCAD's shape and the snap's name show which. The snaps:
+<b>Endpoint</b> (END), <b>Midpoint</b> (MID), <b>Center</b> (CEN), <b>Geometric center</b>
+(GCE: the middle of a closed polyline), <b>Node</b> (NOD: symbol pins, dimension points),
+<b>Quadrant</b> (QUA), <b>Intersection</b> (INT), <b>Insertion</b> (INS: blocks and text),
+<b>Perpendicular</b> (PER: square to a line, or on a circle in line with its center, from the
+last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point) and
+<b>Nearest</b> (NEA: the closest point on any object). Tick the ones that run all the time in
+<b>Drafting settings...</b> (Endpoint, Midpoint, Center, Node, Quadrant, Intersection and
+Insertion to start; Select all / Clear all); F3 turns them all off and on.</li>
+<li><b>A snap for one point</b>: at a point prompt, type its short name (PER, TAN, NEA,
+END...) and Enter, or <b>Shift + right-click</b> and pick it from the list: the next point
+uses that snap only, ticked or not, even with F3 off. NON gives the next point no snap.</li>
 <li><b>Grid display</b> (F7, GRID): dots across the drawing area.</li>
 <li><b>Ortho mode</b> (F8, ORTHO): lines straight across or up and down.</li>
 <li><b>Polar tracking</b> (F10, POLAR): near one of the set angles (from the last point), the
@@ -456,7 +492,8 @@ it switches while KanzonasCAD is open.</li>
 <h2>Edit menu</h2>
 <ul>
 <li><b>Undo</b> (Ctrl+Z) and <b>Redo</b> (Ctrl+Y or Ctrl+Shift+Z): every change, including
-sheet and layer changes, can be undone.</li>
+sheet and layer changes, can be undone. Their arrows also sit right after the menus (File,
+Edit, View...), always a click away.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
 insertion point (the copied objects' lower left corner lands there). Works between projects,
 and after KanzonasCAD is closed and started again.</li>

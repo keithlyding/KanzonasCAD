@@ -6,13 +6,45 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
-## 0.10.6
+## 0.10.7
 
 **New**
 - Scoot: slide devices along their wire, as in AutoCAD Electrical. The wires follow, and the
   device never leaves its wire.
 - Align devices: line devices up on their own wires (the same column on rungs), as AutoCAD
   Electrical's Align.
+
+## 0.10.6
+
+**Fixed**
+- Text could come in huge: a second click set its height, and every new text kept it. Now you
+  click once and type. Type H, R or J before clicking for the height, rotation or
+  justification. A height left huge goes back to 1/8 inch.
+
+## 0.10.5
+
+**New**
+- Undo and Redo arrows right after the menus.
+- Layers, quickly: a layer list with a light bulb and a lock for each layer; Hide layer, Show
+  only this layer, Show all layers, Lock layer and Unlock all layers.
+
+**Fixed**
+- The Sheets menu listed dimension, DIN rail, wire duct and wire crossing commands that belong in Draw.
+
+## 0.10.4
+
+**New**
+- Object snaps as in AutoCAD: Node, Perpendicular, Tangent, Nearest and Geometric center join
+  Endpoint, Midpoint, Center, Quadrant, Intersection and Insertion. Choose the ones that run
+  all the time in Drafting settings.
+- A snap for one point: type PER, TAN, NEA... at a point prompt, or Shift + right-click.
+
+## 0.10.3
+
+**New**
+- Wire crossings: choose how wires that cross are drawn, plain, with a gap or with a loop
+  (Project properties, Schematic). They're found by themselves.
+- Wire crossing (WX) adds one by hand where one wasn't found, or hides one (N).
 
 ## 0.10.2
 

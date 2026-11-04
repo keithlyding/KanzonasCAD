@@ -20,7 +20,8 @@ APERTURE = 10           # object snap reach, pixels
 PICKBOX = 5             # pick reach, pixels
 GRIP = 7                # grip square, pixels
 GRIP_LIMIT = 100        # grips are shown for at most this many selected objects (GRIPOBJLIMIT)
-SNAP_PRIORITY = {"end": 0, "int": 0, "center": 1, "quad": 1, "insert": 0, "mid": 2}
+from . import osnap as OS
+SNAP_PRIORITY = OS.PRIORITY
 
 
 class CadView(QWidget):
@@ -55,6 +56,8 @@ class CadView(QWidget):
         self.snap_on = True
         self.ortho_on = False
         self.osnap_on = True
+        self.osnap_modes = set(OS.DEFAULT)      # the running snaps (Drafting settings)
+        self.osnap_once = None                  # a snap typed for the next point only
         self.polar_on = False
         # crosshair: arms this % of the view long, as AutoCAD's CURSORSIZE (5 to start), or
         # across the whole view
@@ -167,6 +170,7 @@ class CadView(QWidget):
         if self.cmd is not None:
             self.cancel()
         self._window = None
+        self.osnap_once = None
         self.cmd = cls(self, *args)
         self.commandChanged.emit()
         self.messaged.emit(self.cmd.title.upper())
@@ -216,8 +220,17 @@ class CadView(QWidget):
         if cmd.text(text):
             self.update()
             return True
+        # a snap for the next point only (END, PER, TAN, NEA... NON): what the command didn't
+        # take as its own option
+        once = OS.TYPED.get(text.strip().upper())
+        if once is not None and not cmd.selecting() and not cmd.picking:
+            self.osnap_once = once
+            self.message("Next point: %s" % ("no snap" if once == "none" else OS.NAMES[once]))
+            self.update()
+            return True
         p = C.parse_point(text, cmd.last)
         if p is not None and not cmd.selecting() and not cmd.picking:
+            self.osnap_once = None              # (typed coordinates: no snap involved)
             cmd.point(p)
             self.update()
             return True
@@ -340,27 +353,51 @@ class CadView(QWidget):
                 best, bd = e, d
         return best
 
-    def object_snap(self, p):
-        """(kind, point) of the nearest snap point within the aperture, or None."""
+    def snap_modes(self):
+        """The snaps in use for the next point: a typed one, else the ticked ones (when
+        Object snap, F3, is on), else none."""
+        if self.osnap_once is not None:
+            return set() if self.osnap_once == "none" else {self.osnap_once}
+        return set(self.osnap_modes) if self.osnap_on else set()
+
+    def object_snap(self, p, modes=None):
+        """(kind, point) of the best snap within the aperture, or None."""
+        modes = self.snap_modes() if modes is None else modes
+        if not modes:
+            return None
         rect, r = self._near(p, APERTURE)
         cands = [e for e in self.sheet().query(rect) if self.layer_visible(e.layer)]
         best = None
+
+        def offer(kind, q):
+            nonlocal best
+            d = G.dist(p, q)
+            if d <= r:
+                key = (SNAP_PRIORITY.get(kind, 3), d)
+                if best is None or key < best[0]:
+                    best = (key, kind, q)
         for e in cands:
             for kind, q in e.snap_points():
-                d = G.dist(p, q)
-                if d <= r:
-                    key = (SNAP_PRIORITY.get(kind, 3), d)
-                    if best is None or key < best[0]:
-                        best = (key, kind, q)
+                if kind in modes:
+                    offer(kind, q)
         near = [e for e in cands if e.distance(p) <= r][:40]
-        for i in range(len(near)):
-            for j in range(i + 1, len(near)):
-                for q in entity_intersections(near[i], near[j]):
-                    d = G.dist(p, q)
-                    if d <= r:
-                        key = (SNAP_PRIORITY["int"], d)
-                        if best is None or key < best[0]:
-                            best = (key, "int", q)
+        if "int" in modes:
+            for i in range(len(near)):
+                for j in range(i + 1, len(near)):
+                    for q in entity_intersections(near[i], near[j]):
+                        offer("int", q)
+        base = self.cmd.base if self.cmd is not None else None
+        for e in near:
+            if "near" in modes:
+                q = OS.nearest(e, p)
+                if q is not None:
+                    offer("near", q)
+            if base is not None and "perp" in modes:
+                for q in OS.perpendicular(e, base, p)[:1]:
+                    offer("perp", q)
+            if base is not None and "tan" in modes:
+                for q in OS.tangent(e, base, p)[:1]:
+                    offer("tan", q)
         return None if best is None else (best[1], best[2])
 
     @staticmethod
@@ -412,11 +449,10 @@ class CadView(QWidget):
         wants_point = cmd is not None and not cmd.selecting() and not cmd.picking
         if not wants_point:
             return p
-        if self.osnap_on:
-            s = self.object_snap(p)
-            if s is not None:
-                self.snap = s
-                return s[1]
+        s = self.object_snap(p)
+        if s is not None:
+            self.snap = s
+            return s[1]
         if self.polar_on and not self.ortho_on and cmd.base is not None:
             lock = self._polar_lock(cmd.base, p)
             if lock is not None:
@@ -583,7 +619,9 @@ class CadView(QWidget):
         p = self.to_world(pos)
         self.cursor = p
         if e.button() == Qt.RightButton:
-            if self.cmd is not None:
+            if self.cmd is not None and e.modifiers() & Qt.ShiftModifier:
+                self._snap_menu(e.globalPosition().toPoint())      # (AutoCAD's Shift+right)
+            elif self.cmd is not None:
                 self.enter()
             else:
                 self.contextMenuWanted.emit(e.globalPosition().toPoint())
@@ -596,7 +634,9 @@ class CadView(QWidget):
             self.update()
             return
         if cmd is not None and not cmd.selecting():
-            cmd.point(self.resolve(p))
+            q = self.resolve(p)
+            self.osnap_once = None              # (a typed snap is for one point)
+            cmd.point(q)
             self.update()
             return
         # idle, or a command selecting objects
@@ -906,7 +946,34 @@ class CadView(QWidget):
         p.setPen(QColor(0, 0, 0) if not self.dark else QColor(230, 230, 230))
         p.drawText(box, Qt.AlignCenter, text)
 
+    def _snap_menu(self, global_pos):
+        """Shift + right-click while picking points: a snap for the next point only."""
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        for key, name, typed in OS.MODES:
+            act = menu.addAction("%s  (%s)" % (name, typed))
+            act.setData(key)
+        menu.addSeparator()
+        act = menu.addAction("None  (NON)")
+        act.setData("none")
+        menu.addSeparator()
+        act = menu.addAction("Object snap settings...")
+        act.setData("settings")
+        got = menu.exec(global_pos)
+        if got is None:
+            return
+        key = got.data()
+        if key == "settings":
+            host = getattr(self, "host", None)
+            if host is not None and hasattr(host, "drafting_settings"):
+                host.drafting_settings()
+            return
+        self.osnap_once = key
+        self.message("Next point: %s" % ("no snap" if key == "none" else OS.NAMES[key]))
+        self.update()
+
     def _paint_snap(self, p):
+        """The snap marker, AutoCAD's shapes, and the snap's name beside the cursor."""
         if self.snap is None or self.cursor is None or self.cmd is None:
             return
         kind, q = self.snap
@@ -922,15 +989,42 @@ class CadView(QWidget):
                                      QPointF(x - r, y + r)]))
         elif kind == "center":
             p.drawEllipse(c, r, r)
+        elif kind == "gcen":
+            p.drawEllipse(c, r, r)
+            p.drawLine(QPointF(x - r * 0.6, y), QPointF(x + r * 0.6, y))
+            p.drawLine(QPointF(x, y - r * 0.6), QPointF(x, y + r * 0.6))
+        elif kind == "node":
+            p.drawEllipse(c, r, r)
+            k = r * 0.7
+            p.drawLine(QPointF(x - k, y - k), QPointF(x + k, y + k))
+            p.drawLine(QPointF(x - k, y + k), QPointF(x + k, y - k))
         elif kind == "quad":
             p.drawPolygon(QPolygonF([QPointF(x, y - r), QPointF(x + r, y), QPointF(x, y + r),
                                      QPointF(x - r, y)]))
         elif kind == "int":
             p.drawLine(QPointF(x - r, y - r), QPointF(x + r, y + r))
             p.drawLine(QPointF(x - r, y + r), QPointF(x + r, y - r))
+        elif kind == "perp":                        # the right-angle mark
+            p.drawLine(QPointF(x - r, y + r), QPointF(x + r, y + r))
+            p.drawLine(QPointF(x - r, y + r), QPointF(x - r, y - r))
+            p.drawPolyline(QPolygonF([QPointF(x - r, y), QPointF(x, y), QPointF(x, y + r)]))
+        elif kind == "tan":                         # a circle with a line on top
+            p.drawEllipse(c, r * 0.8, r * 0.8)
+            p.drawLine(QPointF(x - r, y - r * 0.8), QPointF(x + r, y - r * 0.8))
+        elif kind == "near":                        # the hourglass
+            p.drawPolygon(QPolygonF([QPointF(x - r, y - r), QPointF(x + r, y - r),
+                                     QPointF(x - r, y + r), QPointF(x + r, y + r)]))
         else:
             p.drawRect(QRectF(x - r, y - r, 2 * r, 2 * r))
             p.drawLine(QPointF(x - r, y), QPointF(x + r, y))
+        name = OS.NAMES.get(kind, kind)
+        fm = p.fontMetrics()
+        box = QRectF(x + r + 6, y + r + 4, fm.horizontalAdvance(name) + 8, fm.height() + 2)
+        p.setPen(QPen(QColor(90, 90, 90)))
+        p.setBrush(QColor(255, 255, 225) if not self.dark else QColor(40, 40, 40))
+        p.drawRect(box)
+        p.setPen(QColor(0, 0, 0) if not self.dark else QColor(230, 230, 230))
+        p.drawText(box, Qt.AlignCenter, name)
 
     def _paint_crosshair(self, p, pal):
         if self.cursor is None or self._pan is not None:

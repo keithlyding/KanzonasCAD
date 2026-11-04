@@ -282,6 +282,18 @@ def project_properties(parent, project, tab=0):
     num_h.setSuffix(" in")
     num_h.setValue(float(st.get("wire_number_height", 0.08)))
     form.addRow("Wire number height", num_h)
+    cross = QComboBox()
+    for key, label in (("plain", "Plain: the wires just cross"),
+                       ("gap", "Gap: one wire is broken where it crosses"),
+                       ("loop", "Loop: one wire hops over the other")):
+        cross.addItem(label, key)
+    cross.setCurrentIndex(max(cross.findData(st.get("wire_crossing", "plain")), 0))
+    form.addRow("Wire crossings", cross)
+    jump = QComboBox()
+    jump.addItem("The up-and-down wire", "vertical")
+    jump.addItem("The across wire", "horizontal")
+    jump.setCurrentIndex(max(jump.findData(st.get("wire_jump", "vertical")), 0))
+    form.addRow("Which wire jumps", jump)
     xref_h = QDoubleSpinBox()
     xref_h.setDecimals(4)
     xref_h.setRange(0.01, 5)
@@ -343,6 +355,8 @@ def project_properties(parent, project, tab=0):
     settings["tag_height"] = tag_h.value()
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_number_height"] = num_h.value()
+    settings["wire_crossing"] = cross.currentData()
+    settings["wire_jump"] = jump.currentData()
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():
@@ -565,6 +579,24 @@ def drafting_settings(parent, view):
     form.addRow("Grid spacing (dots)", grid)
     form.addRow("Crosshair size", cross)
     form.addRow("", full)
+    # object snaps, as AutoCAD's Drafting Settings: ticked ones run while Object snap (F3) is on
+    from . import osnap as OS
+    from PySide6.QtWidgets import QGridLayout, QGroupBox
+    box = QGroupBox("Object snaps (F3 turns them all off and on)")
+    grid_l = QGridLayout(box)
+    checks = {}
+    for i, (key, name, typed) in enumerate(OS.MODES):
+        c = QCheckBox("%s  (%s)" % (name, typed))
+        c.setChecked(key in view.osnap_modes)
+        checks[key] = c
+        grid_l.addWidget(c, i // 2, i % 2)
+    row = len(OS.MODES) // 2 + 1
+    all_b, none_b = QPushButton("Select all"), QPushButton("Clear all")
+    all_b.clicked.connect(lambda: [c.setChecked(True) for c in checks.values()])
+    none_b.clicked.connect(lambda: [c.setChecked(False) for c in checks.values()])
+    grid_l.addWidget(all_b, row, 0)
+    grid_l.addWidget(none_b, row, 1)
+    form.addRow(box)
     form.addRow("Polar tracking: every (degrees)", inc)
     form.addRow("Polar tracking: also these angles", extra)
     note = QLabel("Polar tracking (F10, POLAR) locks the cursor to every multiple of the first "
@@ -593,6 +625,7 @@ def drafting_settings(parent, view):
     view.polar_extra = angles
     view.crosshair_size = cross.value()
     view.crosshair_full = full.isChecked()
+    view.osnap_modes = {k for k, c in checks.items() if c.isChecked()}
     view.update()
     return True
 

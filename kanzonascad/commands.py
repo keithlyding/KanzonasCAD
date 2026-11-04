@@ -485,43 +485,52 @@ class ArcCmd(Command):
 
 
 class TextCmd(Command):
+    """TEXT: click where the text goes, type it, Enter (each Enter starts the next line below;
+    an empty line ends). Its height (H), rotation (R) and justification (J) are typed before
+    the click, never taken from clicks: a stray click can't make text inches high (AutoCAD's
+    TEXT takes the second click as the height, a trap this avoids)."""
     name, title = "TEXT", "Text"
 
     JUSTIFY_PROMPT = "Justification: L, C, R (on the baseline); TL, TC, TR (top); ML, MC, MR " \
                      "(middle); BL, BC, BR (bottom)"
+    MAX_PAPER = 1.0                 # a remembered height over this (paper inches) is a mistake
 
     def begin(self):
         self.pos = None
+        self.angle = 0.0
+        # a height left absurd (from an older version's click) goes back to 1/8 inch
+        k = self.ctx.sheet().k()
+        if self.ctx.text_height() / k > self.MAX_PAPER:
+            self.ctx.set_text_height(0.125 * k)
+            self.ctx.message("Text height was over %g inch on paper: set back to 1/8 inch "
+                             "(type H to change it)" % self.MAX_PAPER)
         self._start_prompt()
 
     def _start_prompt(self):
         self.step = "pos"
         code = M.justify_code(*self.ctx.text_justify)
-        self.ctx.prompt("Specify %s point of text (justification %s)" % (
-            "start" if code in ("L", "BL") else "insertion", code), [("Justify", "J")])
+        self.ctx.prompt("Specify %s point of text (height %s, rotation %s, justification %s)" % (
+            "start" if code in ("L", "BL") else "insertion",
+            _fmt(self.ctx.text_height() / self.ctx.sheet().k()), _fmt(self.angle), code),
+            [("Height", "H"), ("Rotation", "R"), ("Justify", "J")])
 
     def point(self, p):
-        if self.step == "justify":
-            return
-        if self.step == "pos":
-            self.pos = self.base = self.last = p
-            self.step = "height"
-            self.ctx.prompt("Specify height <%s>" % _fmt(self.ctx.text_height()))
-        elif self.step == "height":
-            self.number(G.dist(self.pos, p))
-        elif self.step == "angle":
-            self.number(G.angle_of(self.pos, p))
+        if self.step != "pos":
+            return                      # (height, rotation: typed; a click changes nothing)
+        self.pos = self.base = self.last = p
+        self.step = "text"
+        self.ctx.prompt("Enter text (Enter on an empty line ends)", typing=True)
 
     def number(self, v):
-        if self.step == "height" and v > 0:
-            self.ctx.set_text_height(v)
-            self.step = "angle"
-            self.ctx.prompt("Specify rotation angle <0>")
+        if self.step == "height":
+            if v <= 0:
+                return False
+            self.ctx.set_text_height(v * self.ctx.sheet().k())     # (typed: paper inches)
+            self._start_prompt()
             return True
         if self.step == "angle":
             self.angle = v
-            self.step = "text"
-            self.ctx.prompt("Enter text (Enter on an empty line ends)", typing=True)
+            self._start_prompt()
             return True
         return False
 
@@ -530,11 +539,19 @@ class TextCmd(Command):
 
     def text(self, s):
         k = s.strip().upper()
-        if self.step == "pos" and k == "J":
-            self.step = "justify"
-            self.ctx.prompt(self.JUSTIFY_PROMPT,
-                            [(code, code) for code in ("TL", "TC", "TR", "ML", "MC", "MR",
-                                                       "BL", "BC", "BR", "L", "C", "R")])
+        if self.step == "pos" and k in ("J", "H", "R"):
+            if k == "J":
+                self.step = "justify"
+                self.ctx.prompt(self.JUSTIFY_PROMPT,
+                                [(code, code) for code in ("TL", "TC", "TR", "ML", "MC", "MR",
+                                                           "BL", "BC", "BR", "L", "C", "R")])
+            elif k == "H":
+                self.step = "height"
+                self.ctx.prompt("Text height, in inches on paper <%s>" % _fmt(
+                    self.ctx.text_height() / self.ctx.sheet().k()))
+            else:
+                self.step = "angle"
+                self.ctx.prompt("Rotation angle, degrees <%s>" % _fmt(self.angle))
             return True
         if self.step == "justify":
             if k in M.JUSTIFY:
@@ -558,20 +575,15 @@ class TextCmd(Command):
         return True
 
     def enter(self):
-        if self.step == "height":
-            self.number(self.ctx.text_height())
-        elif self.step == "angle":
-            self.number(0.0)
-        elif self.step == "text":
-            self.finish()
+        if self.step in ("height", "angle", "justify"):
+            self._start_prompt()                # (Enter keeps what it was)
         else:
             self.finish()
 
     def preview(self, p):
         if self.step == "pos":
-            return [M.Text(p, "Text", self.ctx.text_height(), 0.0, *self.ctx.text_justify)]
-        if self.step in ("height", "angle"):
-            return [M.Line(self.pos, p)]
+            return [M.Text(p, "Text", self.ctx.text_height(), self.angle,
+                           *self.ctx.text_justify)]
         return []
 
 
@@ -1662,6 +1674,144 @@ class AlignDevicesCmd(Command):
 
     def cancel(self):
         self.ctx.set_selection(set())
+
+
+class WireCrossCmd(Command):
+    """WIRECROSS: a wire crossing placed by hand. Click a wire where it should jump (on a
+    crossing, or anywhere else on it); G, L or N first for a gap, a loop or none (none hides a
+    crossing found by itself). Erase the mark to take it away."""
+    name, title = "WIRECROSS", "Wire crossing"
+    NAMES = {"G": "gap", "L": "loop", "N": "none"}
+
+    def begin(self):
+        st = self.ctx.project.settings.get("wire_crossing", "plain")
+        self.style = st if st in ("gap", "loop") else "loop"
+        self._prompt()
+
+    def _prompt(self):
+        self.ctx.prompt("Click a wire where it should jump (%s)" % {
+            "gap": "a gap", "loop": "a loop", "none": "none: hides a crossing"}[self.style],
+            [("Gap", "G"), ("Loop", "L"), ("None", "N")])
+
+    def text(self, s):
+        k = self.NAMES.get(s.strip().upper())
+        if k is None:
+            return False
+        self.style = k
+        self._prompt()
+        return True
+
+    def point(self, p):
+        from . import crossings
+        sheet = self.ctx.sheet()
+        tol = 0.1 * sheet.k()
+        at = crossings.place_at(self.ctx.project, sheet, p, tol)
+        if at is None:
+            self.ctx.message("No wire there: click on a wire (or where two cross)")
+            return
+        with self.ctx.edit(self.title) as ed:
+            # (one mark per spot: a new one replaces the old)
+            for e in sheet.query((at[0] - 1e-3, at[1] - 1e-3, at[0] + 1e-3, at[1] + 1e-3)):
+                if isinstance(e, M.WireCross) and G.dist(e.pos, at) < 1e-3:
+                    ed.remove(sheet, e.id)
+            ed.add(sheet, M.WireCross(at, self.style))
+        self.ctx.message("Wire crossing: %s" % self.style)
+        self._prompt()
+
+
+# ---- layers, quickly (AutoCAD's LAYOFF, LAYISO, LAYON, LAYLCK, LAYULK) --------------------------
+def set_layers(ctx, name, changes):
+    """One undoable step: {layer name: {"visible": ..., "locked": ...}}. Returns how many
+    changed."""
+    p = ctx.project
+    n = 0
+    with ctx.edit(name) as ed:
+        for lname, ch in changes.items():
+            lay = p.layers.get(lname)
+            if lay is None:
+                continue
+            before = lay.to_dict()
+            after = dict(before, **ch)
+            if after != before:
+                ed.layer(lname, before, after)
+                n += 1
+    return n
+
+
+class _LayerPickCmd(Command):
+    """Acts on the layers of the selected objects, or of an object clicked."""
+    verb = ""
+
+    def begin(self):
+        sel = _selected(self.ctx)
+        if sel:
+            self.act({e.layer for e in sel})
+            self.ctx.set_selection(set())
+            self.finish()
+            return
+        self.picking = True
+        self.ctx.prompt("Select an object on the layer to %s" % self.verb)
+
+    def pick(self, p):
+        e = self.ctx.pick_entity(p)
+        if e is None:
+            self.ctx.message("Nothing there: click an object")
+            return
+        self.act({e.layer})
+        self.finish()
+
+
+class LayerOffCmd(_LayerPickCmd):
+    """LAYOFF: hide the layer of an object (clicked, or selected)."""
+    name, title, verb = "LAYOFF", "Hide layer", "hide"
+
+    def act(self, names):
+        n = set_layers(self.ctx, self.title, {k: {"visible": False} for k in names})
+        self.ctx.message("Hidden: %s (Show all layers brings it back)" % ", ".join(sorted(names))
+                         if n else "Already hidden")
+
+
+class LayerIsoCmd(_LayerPickCmd):
+    """LAYISO: show only the layer of an object (clicked, or the selected objects' layers)."""
+    name, title, verb = "LAYISO", "Show only this layer", "show alone"
+
+    def act(self, names):
+        ch = {k: {"visible": k in names} for k in self.ctx.project.layers}
+        set_layers(self.ctx, self.title, ch)
+        self.ctx.message("Showing only: %s (Show all layers brings the others back)"
+                         % ", ".join(sorted(names)))
+
+
+class LayerLockCmd(_LayerPickCmd):
+    """LAYLCK: lock the layer of an object (clicked, or selected)."""
+    name, title, verb = "LAYLCK", "Lock layer", "lock"
+
+    def act(self, names):
+        set_layers(self.ctx, self.title, {k: {"locked": True} for k in names})
+        self.ctx.message("Locked: %s (Unlock all layers frees it)" % ", ".join(sorted(names)))
+
+
+class LayerOnCmd(Command):
+    """LAYON: show every layer."""
+    name, title = "LAYON", "Show all layers"
+    repeatable = False
+
+    def begin(self):
+        n = set_layers(self.ctx, self.title, {k: {"visible": True}
+                                              for k in self.ctx.project.layers})
+        self.ctx.message("All layers shown" if n else "Every layer was already shown")
+        self.finish()
+
+
+class LayerUnlockAllCmd(Command):
+    """LAYULK: unlock every layer."""
+    name, title = "LAYULK", "Unlock all layers"
+    repeatable = False
+
+    def begin(self):
+        n = set_layers(self.ctx, self.title, {k: {"locked": False}
+                                              for k in self.ctx.project.layers})
+        self.ctx.message("All layers unlocked" if n else "No layer was locked")
         self.finish()
 
 
@@ -1690,6 +1840,12 @@ COMMANDS = {
     "DUCT": (DuctCmd, ["WIREWAY", "WD"]),
     "SCOOT": (ScootCmd, ["AESCOOT"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
+    "LAYOFF": (LayerOffCmd, []),
+    "LAYISO": (LayerIsoCmd, []),
+    "LAYON": (LayerOnCmd, []),
+    "LAYLCK": (LayerLockCmd, []),
+    "LAYULK": (LayerUnlockAllCmd, []),
+    "WIRECROSS": (WireCrossCmd, ["WX"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)
