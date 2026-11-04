@@ -79,7 +79,7 @@ Both are always there: any sheet can hold a schematic, a panel layout, or both.<
 <h2>The title block</h2>
 <p>The title block is a small drawing of its own, the same on every sheet of the project.
 <b>Edit title block</b> (Sheets menu and Sheets tab) shows it by itself: draw, move, trim,
-erase and type text there with the usual commands, or <b>Import DXF into this sheet...</b>
+erase and type text there with the usual commands, or <b>Import DXF or DWG into this sheet...</b>
 to bring in your company's title block and move it into the lower right corner. Click
 <b>Edit title block</b> again (or click a sheet in the Sheets panel) to go back.</p>
 <p>A text that contains a field name in braces shows that field's value on every sheet:</p>
@@ -408,13 +408,18 @@ and after KanzonasCAD is closed and started again.</li>
 
 <h2>Files</h2>
 <ul>
-<li><b>New project</b> (Ctrl+N), <b>Open...</b> (Ctrl+O, a project or a DXF drawing),
+<li><b>New project</b> (Ctrl+N), <b>Open...</b> (Ctrl+O, a project, or a DXF or DWG drawing),
 <b>Open recent</b>, <b>Save</b> (Ctrl+S), <b>Save as...</b> (Ctrl+Shift+S),
 <b>Close project</b> (Ctrl+W), <b>Exit</b> (Ctrl+Q).</li>
-<li><b>Import DXF into this sheet...</b>: lines, polylines, circles, arcs, text, ellipses and
-splines (as polylines), blocks and dimensions (exploded). Drawings in millimeters are
-converted to inches. AutoCAD DWG files: save them as DXF first (in AutoCAD, or with the free
-ODA File Converter).</li>
+<li><b>Import DXF or DWG into this sheet...</b>: lines, polylines, circles, arcs, text,
+ellipses and splines (as polylines), blocks and dimensions (exploded). Drawings in
+millimeters are converted to inches.</li>
+<li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version
+since 2018 too) open and import directly, with nothing to install: KanzonasCAD reads them with
+its own DWG reader (ezdwg, free and open source). If it can't read one and the free
+<b>ODA File Converter</b> is installed, KanzonasCAD tries that by itself (the command line says
+so); otherwise it tells you why, and saving the drawing as DXF in the program that made it
+always works.</li>
 <li><b>Export this sheet to DXF...</b> and <b>Export all sheets to DXF...</b>: AutoCAD 2013 DXF
 in inches, one file per sheet, border and title block on layer BORDER.</li>
 <li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,

@@ -20,7 +20,7 @@ env:
   # (ezdxf's data only: --collect-all also pulls in what its add-ons can use, pandas,
   # matplotlib, PIL...; the self-test reads and writes DXF inside the built app)
   PYINSTALLER_OPTIONS: >-
-    --noconfirm --windowed --collect-data ezdxf --collect-data qtawesome
+    --noconfirm --windowed --collect-data ezdxf --collect-data qtawesome --collect-all ezdwg
     --exclude-module tkinter --exclude-module pandas --exclude-module matplotlib
     --exclude-module PIL --exclude-module lxml --exclude-module PySide6.QtDataVisualization
     --exclude-module PySide6.QtOpenGL --exclude-module PySide6.QtOpenGLWidgets --icon assets/kanzonascad.ico --name KanzonasCAD

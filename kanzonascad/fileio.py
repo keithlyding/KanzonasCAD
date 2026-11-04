@@ -1,8 +1,10 @@
-"""DXF import and export (through ezdxf, imported only when used) and PDF export (Qt's own
-PDF writer: vector lines and outlined text, one page per sheet at its real size)."""
+"""DXF import and export (through ezdxf, imported only when used), DWG import (ezdwg, imported
+only when used) and PDF export (Qt's own PDF writer: vector lines and outlined text, one page
+per sheet at its real size)."""
 
 import math
 import os
+import sys
 
 from . import model as M
 from . import geometry as G
@@ -101,16 +103,18 @@ def _write(msp, e):
 # ============================================================================================
 # DXF import
 # ============================================================================================
-def read_dxf(path, include_paperspace=False):
+def read_dxf(path, include_paperspace=False, units=None):
     """Entities of a DXF's model space, in inches, plus a report:
-    (entities, {"layers": {name: hex color}, "skipped": {dxftype: count}, "units": name})."""
+    (entities, {"layers": {name: hex color}, "skipped": {dxftype: count}, "units": name}).
+    units: the drawing's $INSUNITS when the file's own can't be trusted (a converted DWG)."""
     import ezdxf
     from ezdxf import recover
     try:
         doc = ezdxf.readfile(path)
     except ezdxf.DXFStructureError:
         doc, _auditor = recover.readfile(path)
-    units = int(doc.header.get("$INSUNITS", 0) or 0)
+    if units is None:
+        units = int(doc.header.get("$INSUNITS", 0) or 0)
     k = _UNITS.get(units, 1.0)
     layers = {}
     for dl in doc.layers:
@@ -241,11 +245,101 @@ def _read(de, k, out, skipped, depth):
         skipped[t + " (unreadable)"] = skipped.get(t + " (unreadable)", 0) + 1
 
 
+# ============================================================================================
+# DWG import: built in with ezdwg (MIT, R13-2018); the ODA File Converter, when installed, only
+# as a fallback for a file ezdwg can't read
+# ============================================================================================
+class DwgError(Exception):
+    """A DWG that couldn't be read, with what was tried."""
+
+
+def oda_converter():
+    """The ODA File Converter's program, when it is installed, else None."""
+    import glob
+    import shutil
+    if sys.platform.startswith("win"):
+        found = []
+        for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+            if base:
+                found += glob.glob(os.path.join(base, "ODA", "ODAFileConverter*",
+                                                "ODAFileConverter.exe"))
+        return sorted(found)[-1] if found else None
+    return shutil.which("ODAFileConverter")
+
+
+def _dwg_with_ezdwg(path, folder):
+    """(the DXF ezdwg made of it, the drawing's $INSUNITS, what it left out)."""
+    import ezdwg
+    src = ezdwg.read(path)
+    units = int(src.header_variables().get("insunits") or 0)
+    out = os.path.join(folder, "drawing.dxf")
+    res = ezdwg.to_dxf(src, out)
+    return out, units, dict(res.skipped_by_type or {})
+
+
+def _dwg_with_oda(path, folder, program):
+    """The DXF the ODA File Converter made of it (it converts folders: a folder of its own)."""
+    import shutil
+    import subprocess
+    src = os.path.join(folder, "in")
+    dst = os.path.join(folder, "out")
+    os.makedirs(src)
+    os.makedirs(dst)
+    shutil.copy(path, os.path.join(src, "drawing.dwg"))
+    subprocess.run([program, src, dst, "ACAD2018", "DXF", "0", "1", "drawing.dwg"],
+                   check=True, timeout=300, capture_output=True)
+    out = os.path.join(dst, "drawing.dxf")
+    if not os.path.isfile(out):
+        raise DwgError("the ODA File Converter made no DXF")
+    return out
+
+
+def read_dwg(path):
+    """Entities of a DWG's model space, in inches, plus the report read_dxf gives (and
+    "reader": which one read it)."""
+    import shutil
+    import subprocess
+    import tempfile
+    folder = tempfile.mkdtemp(prefix="kzcad-dwg")
+    try:
+        try:
+            dxf, units, left = _dwg_with_ezdwg(path, folder)
+            ents, rep = read_dxf(dxf, units=units)
+            for k, n in left.items():
+                rep["skipped"][k] = rep["skipped"].get(k, 0) + n
+            rep["reader"] = "ezdwg"
+            return ents, rep
+        except ImportError:
+            first = "KanzonasCAD's DWG reader (ezdwg) isn't installed"
+        except Exception as ex:         # (any failure of the reader: told, then the fallback)
+            first = "KanzonasCAD's DWG reader couldn't read it (%s)" % ex
+        program = oda_converter()
+        if program is None:
+            raise DwgError("%s. If the ODA File Converter is installed, KanzonasCAD tries it "
+                           "too; or save the drawing as DXF in the program that made it."
+                           % first)
+        try:
+            ents, rep = read_dxf(_dwg_with_oda(path, folder, program))
+        except (OSError, subprocess.SubprocessError, DwgError) as ex:
+            raise DwgError("%s, and the ODA File Converter failed too (%s)." % (first, ex))
+        rep["reader"] = "ODA File Converter"
+        return ents, rep
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def read_drawing(path):
+    """A DXF or DWG's model space (by its extension)."""
+    if path.lower().endswith(".dwg"):
+        return read_dwg(path)
+    return read_dxf(path)
+
+
 def import_dxf(project, sheet, path):
-    """Add a DXF's model space to a sheet (one undoable step). Returns the report of read_dxf
-    plus "count"."""
-    ents, rep = read_dxf(path)
-    with project.edit("Import DXF") as ed:
+    """Add a DXF's or DWG's model space to a sheet (one undoable step). Returns the report of
+    read_dxf plus "count"."""
+    ents, rep = read_drawing(path)
+    with project.edit("Import DWG" if path.lower().endswith(".dwg") else "Import DXF") as ed:
         for name, color in rep["layers"].items():
             if name not in project.layers:
                 ed.layer(name, None, M.Layer(name, color).to_dict())
