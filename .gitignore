@@ -5,3 +5,4 @@ dist/
 *.spec
 *.tmp
 selftest.log
+dist-installer/

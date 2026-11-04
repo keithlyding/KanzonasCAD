@@ -16,6 +16,15 @@ build fails without them.
 - Freeze cross-references on an issued sheet, or turn automatic updates off for the project
   and use Update cross-references. The status bar tells you when they're out of date.
 
+## 0.4.1
+
+**New**
+- A Windows installer: download `KanzonasCAD-v0.4.1-setup.exe` and run it. Install it for
+  yourself (no administrator rights needed) or for everyone on the PC. You get a Start menu
+  entry, and .kzcad projects open with a double-click.
+- An installed KanzonasCAD updates itself with Update now. A copy installed for everyone asks
+  for administrator rights first.
+
 ## 0.4
 
 **New**

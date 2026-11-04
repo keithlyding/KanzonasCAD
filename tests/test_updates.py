@@ -105,3 +105,86 @@ class CheckerTest(unittest.TestCase):
             w.settings.setValue("update_skip", "")
             v.project.saved_at = len(v.project.undo_stack)
             w.close()
+
+
+class InstallerTest(unittest.TestCase):
+    """A copy installed with the setup updates by running the next setup."""
+
+    def test_installed_copy_and_its_command(self):
+        app = tempfile.mkdtemp()
+        self.assertFalse(updates.installed(app))
+        self.assertFalse(updates.installed(None))
+        open(os.path.join(app, "unins000.exe"), "wb").close()
+        self.assertTrue(updates.installed(app))
+        cmd = updates.installer_command(r"C:\T\KanzonasCAD-v0.5-setup.exe", app)
+        self.assertEqual(cmd[0], r"C:\T\KanzonasCAD-v0.5-setup.exe")
+        # (the same switches the Windows build tests the setup with)
+        for flag in ("/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/CLOSEAPPLICATIONS",
+                     "/CURRENTUSER", "/RELAUNCH"):
+            self.assertIn(flag, cmd)
+        # a copy under Program Files with no uninstall entry of the setup's: all users
+        pf = os.path.join(tempfile.mkdtemp(), "Program Files")
+        old = os.environ.get("ProgramFiles")
+        os.environ["ProgramFiles"] = pf
+        try:
+            from unittest import mock
+            with mock.patch.object(updates, "_installed_in", return_value=None):
+                self.assertTrue(updates.for_all_users(os.path.join(pf, "KanzonasCAD")))
+                self.assertIn("/ALLUSERS", updates.installer_command(
+                    "s.exe", os.path.join(pf, "KanzonasCAD")))
+                self.assertFalse(updates.for_all_users(app))
+            # the setup's own entry decides, wherever the folder is
+            with mock.patch.object(updates, "_installed_in",
+                                   side_effect=lambda hive, d: hive == "HKLM"):
+                if os.name != "nt":
+                    import sys
+                    fake = mock.MagicMock(HKEY_CURRENT_USER="HKCU", HKEY_LOCAL_MACHINE="HKLM")
+                    with mock.patch.dict(sys.modules, {"winreg": fake}):
+                        self.assertTrue(updates.for_all_users(app))
+        finally:
+            if old is None:
+                del os.environ["ProgramFiles"]
+            else:
+                os.environ["ProgramFiles"] = old
+        self.assertEqual(updates.setup_asset_name("0.5"), "KanzonasCAD-v0.5-setup.exe")
+
+    def _download(self, data, sha):
+        from PySide6.QtCore import QEventLoop, QObject, QTimer, QUrl
+        src = os.path.join(tempfile.mkdtemp(), "KanzonasCAD-v0.5-setup.exe")
+        with open(src, "wb") as f:
+            f.write(data)
+        owner = QObject()
+        self.addCleanup(self._dispose, owner)
+        up = updates.ZipUpdater(QUrl.fromLocalFile(src).toString(), sha, None, owner, setup=True)
+        got = []
+        loop = QEventLoop()
+        up.ready.connect(lambda p: (got.append(("ready", p)), loop.quit()))
+        up.failed.connect(lambda t: (got.append(("failed", t)), loop.quit()))
+        QTimer.singleShot(10000, loop.quit)
+        up.start()
+        if not got:
+            loop.exec()
+        return up, got
+
+    @staticmethod
+    def _dispose(owner):
+        # (Qt deletes the download's objects, in order, before Python forgets them)
+        from PySide6.QtCore import QCoreApplication, QEvent
+        owner.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+    def test_setup_downloaded_and_checked(self):
+        import hashlib
+        data = b"MZ pretend setup" * 1000
+        up, got = self._download(data, hashlib.sha256(data).hexdigest())
+        self.assertEqual(got[0][0], "ready", got)
+        path = got[0][1]
+        self.assertEqual(os.path.basename(path), "KanzonasCAD-v0.5-setup.exe")
+        with open(path, "rb") as f:
+            self.assertEqual(f.read(), data)
+        # a wrong download is not kept, nor its folder
+        up, got = self._download(data, "b" * 64)
+        self.assertEqual(got[0][0], "failed")
+        self.assertIn("sha256", got[0][1])
+        self.assertFalse(os.path.exists(up.path))
+        self.assertFalse(os.path.exists(os.path.dirname(up.path)))
