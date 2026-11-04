@@ -246,6 +246,17 @@ class MainWindow(QMainWindow):
           label="Renumber sheet",
           tip="Number the devices on this sheet in order (CR601, CR602...); tags you locked "
               "stay as they are")
+        A("xref_update", "&Update cross-references", self.update_xrefs, icon="xref_update",
+          label="Update",
+          tip="Bring the cross-references of every sheet up to date (frozen sheets keep theirs)")
+        A("xref_freeze", "&Freeze cross-references", self.freeze_xrefs, icon="xref_freeze",
+          checkable=True, label="Freeze sheet",
+          tip="Keep this sheet's cross-references as they are now (an issued sheet); untick to "
+              "let them follow the drawing again")
+        A("xref_auto", "Update cross-references &automatically", self.auto_xrefs,
+          icon="xref_auto", checkable=True, label="Automatic",
+          tip="Cross-references follow every change (off: they change only with Update "
+              "cross-references)")
         A("sheet_add", "&New sheet", self.add_sheet, label="New sheet")
         A("sheet_del", "&Delete sheet", self.delete_sheet, label="Delete sheet")
         A("sheet_up", "Move sheet &up", lambda: self.move_sheet(-1), label="Move up")
@@ -342,7 +353,7 @@ class MainWindow(QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "renumber",
-                  "sheet_props",
+                  "xref_update", "xref_freeze", "xref_auto", None, "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
@@ -388,6 +399,7 @@ class MainWindow(QMainWindow):
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Tags", "large", [a["renumber"]]),
+            ("Cross-references", "large", [a["xref_update"], a["xref_freeze"], a["xref_auto"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
             ("Settings", "large", [a["schematic_settings"]]),
         ])
@@ -446,6 +458,13 @@ class MainWindow(QMainWindow):
             sb.addPermanentWidget(b)
         self.layer_label = QLabel()
         sb.addPermanentWidget(self.layer_label)
+        # shown while a sheet's cross-references aren't what the drawing says
+        self.xref_warning = QToolButton()
+        self.xref_warning.setAutoRaise(True)
+        self.xref_warning.setStyleSheet("color: #d03030; font-weight: bold;")
+        self.xref_warning.clicked.connect(self.update_xrefs)
+        self.xref_warning.hide()
+        sb.addPermanentWidget(self.xref_warning)
 
     # ============================================================================================
     # documents
@@ -470,6 +489,7 @@ class MainWindow(QMainWindow):
         v.cursorMoved.connect(self._cursor_moved)
         v.selectionChanged.connect(self._update_ui)
         v.sheetChanged.connect(self._fill_sheets)
+        v.sheetChanged.connect(self._update_ui)
         v.sheetChanged.connect(lambda v=v: self._ribbon_for_sheet(v))
         v.commandChanged.connect(self._update_ui)
         v.editTextRequested.connect(self.edit_text)
@@ -1129,10 +1149,70 @@ class MainWindow(QMainWindow):
         if v is None:
             return
         from .library_panel import attributes_dialog
-        attrs = attributes_dialog(self, self.library, ins)
+        attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet())
         if attrs is not None and attrs != ins.attrs:
             with v.project.edit("Attributes") as ed:
                 ed.change(v.sheet(), ins.copy(attrs=attrs))
+
+    # ---- cross-references -----------------------------------------------------------------
+    def update_xrefs(self):
+        v = self.view()
+        if v is None:
+            return
+        from . import xrefs
+        frozen = [s for s in v.project.sheets if s.xref_frozen
+                  and s in xrefs.out_of_date(v.project)]
+        with v.project.edit("Update cross-references") as ed:
+            n = xrefs.update(ed, v.project)
+        msg = "Cross-references updated on %d sheet(s)" % n
+        if frozen:
+            msg += "; frozen and not updated: sheet %s (Freeze cross-references off to update " \
+                   "them)" % ", ".join(v.project.sheet_number(s) for s in frozen)
+        self.cmdline.add_history(msg)
+        self._update_ui()
+
+    def freeze_xrefs(self, on):
+        v = self.view()
+        if v is None or v.sheet() is v.project.title_block:
+            return
+        from . import xrefs
+        with v.project.edit("Freeze cross-references" if on else
+                            "Unfreeze cross-references") as ed:
+            xrefs.freeze(ed, v.project, v.sheet(), bool(on))
+        self._update_ui()
+
+    def auto_xrefs(self, on):
+        v = self.view()
+        if v is None:
+            return
+        from . import xrefs
+        with v.project.edit("Automatic cross-references " + ("on" if on else "off")) as ed:
+            xrefs.set_auto(ed, v.project, bool(on))
+        self._update_ui()
+
+    def pick_parent(self, cands):
+        """The device a contact belongs to, picked from a list: (sheet, device) or None."""
+        v = self.view()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Contact belongs to")
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel("Pick the coil or device this contact belongs to:"))
+        lst = QListWidget()
+        for s, e in cands:
+            where = v.project.zone_text(s, e.pos[0], e.pos[1]) if v else ""
+            desc = e.attrs.get("DESC", "")
+            lst.addItem("%s   %s   %s%s" % (e.attrs.get("TAG", "?"), where, e.block,
+                                            ("   " + desc) if desc else ""))
+        lst.setCurrentRow(0)
+        lst.itemDoubleClicked.connect(lambda _i: dlg.accept())
+        lay.addWidget(lst)
+        box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        box.accepted.connect(dlg.accept)
+        box.rejected.connect(dlg.reject)
+        lay.addWidget(box)
+        if dlg.exec() != QDialog.Accepted or lst.currentRow() < 0:
+            return None
+        return cands[lst.currentRow()]
 
     def renumber_sheet(self):
         v = self.view()
@@ -1275,6 +1355,7 @@ class MainWindow(QMainWindow):
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
+                  "xref_update", "xref_freeze", "xref_auto",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste"):
@@ -1294,6 +1375,23 @@ class MainWindow(QMainWindow):
         a["edit_tb"].blockSignals(True)
         a["edit_tb"].setChecked(on_tb)
         a["edit_tb"].blockSignals(False)
+        for key, on in (("xref_freeze", bool(has and not on_tb and v.sheet().xref_frozen)),
+                        ("xref_auto", bool(has and p.settings.get("xref_auto", True)))):
+            a[key].blockSignals(True)
+            a[key].setChecked(on)
+            a[key].blockSignals(False)
+        a["xref_freeze"].setEnabled(bool(has and not on_tb))
+        stale = []
+        if has:
+            from .xrefs import out_of_date
+            stale = out_of_date(p)
+        if stale:
+            self.xref_warning.setText("Cross-references out of date (%d sheet(s))" % len(stale))
+            self.xref_warning.setToolTip(
+                "Sheet(s) %s show cross-references that aren't what the drawing says now. "
+                "Click to update them (frozen sheets keep theirs until unfrozen)."
+                % ", ".join(p.sheet_number(s_) for s_ in stale))
+        self.xref_warning.setVisible(bool(stale))
         if has:
             for key, attr in (("grid", "grid_on"), ("snap", "snap_on"), ("ortho", "ortho_on"),
                               ("osnap", "osnap_on"), ("polar", "polar_on")):

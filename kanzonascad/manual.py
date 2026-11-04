@@ -162,10 +162,40 @@ changes it. Untick "Lock this tag" there to give it back.</li>
 <li><b>Renumber sheet</b> (Schematic tab, Sheets menu) numbers the sheet's unlocked devices
 01, 02... per prefix in the sheet's <b>numbering order</b> (Sheet properties): across then
 down, or down then across. Locked tags stay and their numbers are skipped.</li>
-<li>Contacts take their coil's or operator's tag (choosing it comes with cross-references);
-symbols without a tag prefix get no tag.</li>
+<li>Contacts take their device's tag (next section); symbols without a tag prefix get no
+tag.</li>
 <li>Behind each tag, every device also has a hidden identity that survives renaming, so
-cross-references and panel footprints will stay linked whatever the tag becomes.</li>
+contacts, cross-references and panel footprints stay linked whatever the tag becomes.</li>
+</ul>
+
+<h2>Contacts and cross-references</h2>
+<p>A contact (a relay contact, a timed contact, an overload contact...) belongs to a device:
+a coil, a pushbutton or switch operator, a timer. It shows that device's tag and follows it:
+renumber or retag the coil, or move its sheet, and its contacts change with it.</p>
+<ul>
+<li><b>Placing a contact</b>: after the click, the command line asks which device it belongs
+to. <b>Enter</b> takes the one offered (the nearest coil with the contact's prefix: CR for a
+relay contact; on this sheet first); type a tag (<code>M601</code>) to take that device, or
+<b>L</b> for a list of them. A tag no device has yet is kept, and the contact links itself
+to the device that gets that tag. With no device in the project at all, it's placed unlinked
+(its reference shows <b>?</b>).</li>
+<li><b>Changing it later</b>: double-click the contact. "Belongs to" lists the project's
+devices; pick one or type a tag. Deleting a coil leaves its contacts unlinked (showing
+<b>?</b>) until a device takes that tag again.</li>
+<li><b>Cross-references</b> are worked out from the drawing, never typed: under a coil or
+operator, one line per contact, <b>NO 6-D3</b> or <b>NC 7-B2</b> (in sheet order, then zone
+order); under each contact, where its device is (<b>6-D1</b>). They use the project's grid
+reference format and each sheet's zones, and go into PDF and DXF exports as text.</li>
+<li>Double-click a coil and untick <b>List its contacts under it</b> to hide its list; untick
+<b>List this contact under its device</b> on a contact to leave it out of the list.</li>
+<li>They follow every change. <b>Update cross-references automatically</b> (Schematic tab,
+Sheets menu) turns that off for the project: every sheet then keeps what it shows until
+<b>Update cross-references</b>.</li>
+<li><b>Freeze cross-references</b> (Schematic tab, Sheets menu) holds the current sheet's
+references as they are, for a sheet that has been issued; Update cross-references leaves it
+alone until you untick Freeze.</li>
+<li>While any sheet shows references that aren't what the drawing says, the status bar says
+<b>Cross-references out of date</b>, with the sheets in its tip; click it to update them.</li>
 </ul>
 
 <h2>Wires</h2>

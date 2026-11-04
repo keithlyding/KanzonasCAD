@@ -136,6 +136,7 @@ class SheetRenderer:
         self._frame = None
         self._frame_sig = None
         self._dots = None               # (sheet version, path) of the wire junction dots
+        self._xrefs = None              # (references shown, path) of the cross-references
 
     def set_dark(self, dark):
         if dark != self.pal.dark:
@@ -237,6 +238,24 @@ class SheetRenderer:
         painter.setBrush(QBrush(color))
         painter.drawPath(path)
 
+    def _paint_xrefs(self, painter):
+        """Cross-references (worked out again only when what they show changed)."""
+        from . import xrefs
+        shown = tuple(tuple(t) for t in xrefs.shown(self.project, self.sheet))
+        if self._xrefs is None or self._xrefs[0] != shown:
+            path = QPainterPath()
+            path.setFillRule(Qt.WindingFill)
+            for x, y, t, h in shown:
+                path.addPath(text_path(M.Text((x, y), t, h, 0.0, "center")))
+            self._xrefs = (shown, path)
+        path = self._xrefs[1]
+        if path.isEmpty():
+            return
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(self.pal.color(self.project, M.Text((0, 0), "", 0.1,
+                                                                    layer="SYMBOLS"))))
+        painter.drawPath(path)
+
     def paint(self, painter, pen_width=0.0, paper=True, under=None):
         """pen_width 0: cosmetic one-pixel lines (screen); a number: that width in inches
         (PDF/print). under: drawn on the paper before anything else."""
@@ -257,6 +276,7 @@ class SheetRenderer:
         painter.setBrush(QBrush(pal.frame))
         painter.drawPath(texts)
         self._paint_dots(painter)
+        self._paint_xrefs(painter)
         smooth = painter.testRenderHint(QPainter.Antialiasing)
         for ch in [tb] + list(self.chunks.values()):
             # on screen, one-pixel lines are drawn without smoothing, as AutoCAD does: a

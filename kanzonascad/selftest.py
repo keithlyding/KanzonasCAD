@@ -204,6 +204,8 @@ def run(log_path):
             assert v.input_text(t)
         v.run(C.InsertCmd, Library().get("symbol", "Contact NO"), {})
         assert v.input_text("4,3")
+        if v.cmd is not None:
+            assert v.input_text("")     # (a coil is already on the sheet: it belongs to that)
         ws = [e for e in v.sheet().entities.values() if isinstance(e, M.Wire)]
         assert sorted(w.points[0][0] for w in ws) == [1.0, 4.25], [w.points for w in ws]
         ins = [e for e in v.sheet().entities.values() if isinstance(e, M.Insert)][-1]
@@ -237,6 +239,27 @@ def run(log_path):
         w.renumber_sheet()
         return "devices tagged %s; renumbered" % ", ".join(got)
     log.check("device tags", tagging)
+
+    def cross_references():
+        from .library import Library
+        from . import tags, xrefs
+        v = state["view"]
+        p, sheet = v.project, v.sheet()
+        coil = Library().get("symbol", "Relay coil")
+        v.run(C.InsertCmd, coil, {})
+        assert v.input_text("12,9")
+        c = max((e for e in sheet.entities.values() if tags.is_device(e)), key=lambda e: e.id)
+        v.run(C.InsertCmd, Library().get("symbol", "Contact NC"), {})
+        assert v.input_text("14,4")
+        assert v.input_text(c.attrs["TAG"].lower())         # belongs to that coil
+        k = max((e for e in sheet.entities.values() if tags.is_child(e)), key=lambda e: e.id)
+        assert k.attrs.get("PARENT") == c.attrs["DEV"], k.attrs
+        texts = [t[2] for t in xrefs.live(p, sheet)]
+        want = ["NC " + p.zone_text(sheet, 14, 4), p.zone_text(sheet, 12, 9)]
+        assert all(t in texts for t in want), (texts, want)
+        v.repaint()
+        return "contact linked to %s; %s" % (c.attrs["TAG"], ", ".join(want))
+    log.check("contacts and cross-references", cross_references)
 
     def manual():
         gaps = manual_gaps(state["win"])

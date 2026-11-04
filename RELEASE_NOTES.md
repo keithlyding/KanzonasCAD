@@ -6,6 +6,16 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.5
+
+**New**
+- Contacts belong to their coil: place a contact and press Enter to take the nearest coil, or
+  type a tag. The contact shows the coil's tag and follows it when it changes.
+- Cross-references: under each coil, a list of its contacts and where they are (NO 6-D3);
+  under each contact, where its coil is (6-D1). They update by themselves.
+- Freeze cross-references on an issued sheet, or turn automatic updates off for the project
+  and use Update cross-references. The status bar tells you when they're out of date.
+
 ## 0.4
 
 **New**
