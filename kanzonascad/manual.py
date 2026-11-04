@@ -293,6 +293,13 @@ nearer. Keep clicking; U takes back the last one, Enter ends.</li>
 <li><b>Delete wire</b> (DELWIRE, DW): with objects selected, only the wires among them go
 (window-select a whole area and the symbols stay); with nothing selected, click wires one by
 one.</li>
+<li><b>Delete component</b> (DELCOMP, AEERASECOMP; Schematic tab, Symbols group, and the
+Modify menu): the selected symbols go (anything else selected stays), or click them one by
+one, and the wire each one sat on is <b>joined back up</b> through where it was: delete a
+contact from a rung and the rung is whole again, with its wire number; a 3-pole breaker
+leaves its three wires whole. Wires are joined only where two pins face each other in line,
+each with one wire carrying straight on. <b>Erase</b> (the Delete key) still just erases,
+leaving the gap.</li>
 <li><b>Clean up wires</b> (WIRECLEAN): cleans the selected wires, or every wire on the sheet
 when none is selected, in one step (Undo puts it back): wires of no length and extra points
 (repeated, or in the middle of a straight run) go, a wire drawn over another goes, and two

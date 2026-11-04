@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.12
+
+**New**
+- Delete component: deletes a symbol and joins its wire back up, so deleting a contact
+  leaves the rung whole. The Delete key still just erases.
+
 ## 0.10.11
 
 **New**
