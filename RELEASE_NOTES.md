@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.8
+
+**New**
+- The last AutoCAD snaps: Extension, Parallel and Apparent intersection, with AutoCAD's
+  tracking (hover over a line or its end first).
+- Turn each snap on or off from the status bar: the arrow on OSNAP lists them all.
+
 ## 0.10.7
 
 **New**

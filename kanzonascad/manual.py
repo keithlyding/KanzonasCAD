@@ -388,9 +388,17 @@ a yellow marker in AutoCAD's shape and the snap's name show which. The snaps:
 <b>Quadrant</b> (QUA), <b>Intersection</b> (INT), <b>Insertion</b> (INS: blocks and text),
 <b>Perpendicular</b> (PER: square to a line, or on a circle in line with its center, from the
 last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point) and
-<b>Nearest</b> (NEA: the closest point on any object). Tick the ones that run all the time in
-<b>Drafting settings...</b> (Endpoint, Midpoint, Center, Node, Quadrant, Intersection and
-Insertion to start; Select all / Clear all); F3 turns them all off and on.</li>
+<b>Nearest</b> (NEA: the closest point on any object). And three that follow what the cursor
+has hovered over, as AutoCAD's tracking (a small green cross marks what was picked up):
+<b>Extension</b> (EXT: hover over a line's end, then move along the line past it: a dotted line
+follows it out), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the
+last point: the new line runs parallel to it) and <b>Apparent intersection</b> (APP: hover
+over two lines, then near where they would meet if they were longer).</li>
+<li><b>Turning snaps on and off</b>: the arrow on the status bar's <b>OSNAP</b> button lists
+every snap with a check mark; click one to turn it on or off (Select all, Clear all, Object
+snap settings... there too). <b>Drafting settings...</b> has the same checkboxes. Endpoint,
+Midpoint, Center, Node, Quadrant, Intersection and Insertion are on to start; the choice is
+kept between sessions; F3 turns them all off and on at once.</li>
 <li><b>A snap for one point</b>: at a point prompt, type its short name (PER, TAN, NEA,
 END...) and Enter, or <b>Shift + right-click</b> and pick it from the list: the next point
 uses that snap only, ticked or not, even with F3 off. NON gives the next point no snap.</li>

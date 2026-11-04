@@ -24,18 +24,22 @@ MODES = [
     ("perp", "Perpendicular", "PER"),
     ("tan", "Tangent", "TAN"),
     ("near", "Nearest", "NEA"),
+    ("ext", "Extension", "EXT"),
+    ("app", "Apparent intersection", "APP"),
+    ("par", "Parallel", "PAR"),
 ]
 NAMES = {k: n for k, n, _t in MODES}
 TYPED = {t: k for k, _n, t in MODES}
 TYPED.update({"ENDP": "end", "ENDPOINT": "end", "MIDPOINT": "mid", "CENTER": "center",
               "NODE": "node", "QUAD": "quad", "QUADRANT": "quad", "INTERSECTION": "int",
               "INSERT": "insert", "PERP": "perp", "TANGENT": "tan", "NEAR": "near",
-              "NEAREST": "near", "GCEN": "gcen", "NON": "none", "NONE": "none"})
+              "NEAREST": "near", "GCEN": "gcen", "NON": "none", "NONE": "none",
+              "EXTENSION": "ext", "APPINT": "app", "PARALLEL": "par"})
 # on to start: the ones KanzonasCAD always had, and Node (symbol pins)
 DEFAULT = {"end", "mid", "center", "node", "quad", "int", "insert"}
 # when several are in reach, the first of these wins (then the nearest)
 PRIORITY = {"end": 0, "int": 0, "insert": 0, "node": 0, "center": 1, "quad": 1, "gcen": 1,
-            "perp": 1, "tan": 1, "mid": 2, "near": 4}
+            "perp": 1, "tan": 1, "app": 1, "mid": 2, "ext": 3, "par": 3, "near": 4}
 
 
 def _segments_and_curves(e):
@@ -164,3 +168,71 @@ def centroid(points):
     if abs(a) < 1e-12:
         return None
     return (cx / (3 * a), cy / (3 * a))
+
+
+# ---- tracking: Extension and Parallel follow lines acquired by hovering (AutoCAD's tracking)
+def segments(e):
+    """An object's straight pieces, (a, b)."""
+    return [(pc[1], pc[2]) for pc in _segments_and_curves(e) if pc[0] == "seg"]
+
+
+def ends_at(e, q, tol=1e-9):
+    """[(end point, outward direction)] of e's straight pieces ending at q: where an
+    Extension continues past q."""
+    out = []
+    for a, b in segments(e):
+        for end, other in ((a, b), (b, a)):
+            if G.dist(end, q) <= tol:
+                L = G.dist(end, other)
+                if L > 1e-12:
+                    out.append((end, ((end[0] - other[0]) / L, (end[1] - other[1]) / L)))
+    return out
+
+
+def extension(acquired, p, r):
+    """[(point, from)] on the extensions past acquired ends [(end, direction)], within r of p."""
+    out = []
+    for q0, u in acquired:
+        t = (p[0] - q0[0]) * u[0] + (p[1] - q0[1]) * u[1]
+        if t <= 0:
+            continue
+        q = (q0[0] + u[0] * t, q0[1] + u[1] * t)
+        if G.dist(q, p) <= r:
+            out.append((q, q0))
+    return out
+
+
+def parallel(base, dirs, p, r):
+    """[point] on a line from base parallel to one of dirs, within r of p (and away from
+    base)."""
+    out = []
+    for u in dirs:
+        t = (p[0] - base[0]) * u[0] + (p[1] - base[1]) * u[1]
+        q = (base[0] + u[0] * t, base[1] + u[1] * t)
+        if abs(t) > r and G.dist(q, p) <= r:
+            out.append(q)
+    return out
+
+
+def apparent(segs, p, r):
+    """Where two straight pieces would meet if extended (not where they actually cross: that
+    is Intersection), within r of p."""
+    out = []
+    n = len(segs)
+    for i in range(n):
+        a, b = segs[i]
+        for j in range(i + 1, n):
+            c, d = segs[j]
+            rx, ry = b[0] - a[0], b[1] - a[1]
+            sx, sy = d[0] - c[0], d[1] - c[1]
+            den = rx * sy - ry * sx
+            if abs(den) < 1e-12:
+                continue
+            t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den
+            u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / den
+            if 0 <= t <= 1 and 0 <= u <= 1:
+                continue
+            q = (a[0] + rx * t, a[1] + ry * t)
+            if G.dist(q, p) <= r:
+                out.append(q)
+    return out

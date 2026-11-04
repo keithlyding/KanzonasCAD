@@ -87,3 +87,72 @@ class OsnapTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TrackingTest(unittest.TestCase):
+    def setUp(self):
+        self.win, self.v = window()
+        self.v.snap_on = False
+        self.v.polar_on = self.v.ortho_on = False
+        self.p = self.v.project
+        self.s = self.v.sheet()
+        with self.p.edit("lines") as ed:
+            ed.add(self.s, M.Line((2, 2), (6, 2)))           # its extension runs right
+            ed.add(self.s, M.Line((2, 6), (4, 8)))           # slanted: for Parallel
+            ed.add(self.s, M.Line((10, 4), (10, 9)))         # would meet the first at (10, 2)
+
+    def tearDown(self):
+        self.p.saved_at = len(self.p.undo_stack)
+        self.win.close()
+
+    def hover(self, x, y):
+        v = self.v
+        v.cursor = (x, y)
+        v.resolve(v.cursor)
+        v._acquire()
+
+    def test_extension(self):
+        v = self.v
+        v.osnap_modes = {"end", "ext"}
+        v.run(C.LineCmd)
+        self.hover(6.01, 2.0)                               # acquire the line's end
+        self.assertEqual(len(v.tracked), 1)
+        k, q = v.object_snap((8.0, 2.03))
+        self.assertEqual((k, q), ("ext", (8.0, 2.0)))
+        self.assertEqual(v.snap_from, (6.0, 2.0))
+
+    def test_parallel(self):
+        v = self.v
+        v.osnap_modes = {"par"}
+        v.run(C.LineCmd)
+        type_in(v, "12,2")                                  # the line starts here
+        self.hover(3.0, 7.01)                               # hover the slanted line
+        self.assertEqual(len(v.par_dirs), 1)
+        k, q = v.object_snap((15.02, 5.0))
+        self.assertEqual(k, "par")
+        self.assertAlmostEqual(q[0] - 12, q[1] - 2)         # 45 degrees, as the slanted line
+
+    def test_apparent_intersection(self):
+        v = self.v
+        v.osnap_modes = {"app"}
+        v.run(C.LineCmd)
+        self.hover(4.0, 2.01)                               # hover the two lines first
+        self.hover(10.01, 6.0)
+        k, q = v.object_snap((10.02, 2.02))
+        self.assertEqual(k, "app")
+        self.assertAlmostEqual(q[0], 10.0)
+        self.assertAlmostEqual(q[1], 2.0)
+
+    def test_status_bar_snap_list(self):
+        w = self.win
+        w._fill_osnap_menu()
+        acts = [a for a in w.osnap_menu.actions() if a.isCheckable()]
+        self.assertEqual(len(acts), len(OS.MODES))
+        nea = [a for a in acts if a.text().startswith("Nearest")][0]
+        self.assertFalse(nea.isChecked())
+        nea.setChecked(True)
+        self.assertIn("near", self.v.osnap_modes)
+        w._set_osnap_all(False)
+        self.assertEqual(self.v.osnap_modes, set())
+        w._set_osnap_all(True)
+        self.assertEqual(len(self.v.osnap_modes), len(OS.MODES))

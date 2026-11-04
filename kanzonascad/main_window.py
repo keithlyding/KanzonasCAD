@@ -494,6 +494,13 @@ class MainWindow(QMainWindow):
             b.setText(self.acts[key].iconText().upper())
             b.setToolTip("%s (%s)" % (self.acts[key].text().replace("&", ""),
                                       self.acts[key].shortcut().toString()))
+            if key == "osnap":
+                # as AutoCAD's: the arrow lists every snap, ticked or not, a click away
+                b.setPopupMode(QToolButton.MenuButtonPopup)
+                self.osnap_menu = QMenu(b)
+                self.osnap_menu.aboutToShow.connect(self._fill_osnap_menu)
+                b.setMenu(self.osnap_menu)
+                b.setToolTip(b.toolTip() + "; the arrow: which snaps run")
             sb.addPermanentWidget(b)
         self.layer_label = QLabel()
         sb.addPermanentWidget(self.layer_label)
@@ -996,6 +1003,43 @@ class MainWindow(QMainWindow):
             box.setCurrentText(v.layer())
         box.blockSignals(False)
         self.layer_label.setText("Layer: %s" % (v.layer() if v else ""))
+
+    def _fill_osnap_menu(self):
+        """The running snaps, each ticked or not (a click toggles it, for every open drawing,
+        kept between sessions)."""
+        from . import osnap as OS
+        m = self.osnap_menu
+        m.clear()
+        v = self.view()
+        if v is None:
+            return
+        for key, name, typed in OS.MODES:
+            act = m.addAction("%s  (%s)" % (name, typed))
+            act.setCheckable(True)
+            act.setChecked(key in v.osnap_modes)
+            act.toggled.connect(lambda on, k=key: self._set_osnap(k, on))
+        m.addSeparator()
+        m.addAction("Select all", lambda: self._set_osnap_all(True))
+        m.addAction("Clear all", lambda: self._set_osnap_all(False))
+        m.addSeparator()
+        m.addAction("Object snap settings...", self.drafting_settings)
+
+    def _set_osnap(self, key, on):
+        modes = set(self.view().osnap_modes) if self.view() is not None else set()
+        (modes.add if on else modes.discard)(key)
+        self._store_osnap(modes)
+
+    def _set_osnap_all(self, on):
+        from . import osnap as OS
+        self._store_osnap({k for k, _n, _t in OS.MODES} if on else set())
+
+    def _store_osnap(self, modes):
+        self.settings.setValue("osnap_modes", json.dumps(sorted(modes)))
+        for i in range(self.tabs.count()):
+            d = self.tabs.widget(i)
+            if isinstance(d, Document):
+                d.view.osnap_modes = set(modes)
+                d.view.update()
 
     def _build_quick_access(self, mb):
         """Undo and Redo as icons right after the menus (added once the menus are in)."""
