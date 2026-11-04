@@ -332,3 +332,61 @@ def cleanup(ed, sheet, ws=None):
             if not connects_at(sheet, p, exclude=w.id):
                 got["loose"] += 1
     return got
+
+
+# ---- Delete component: the wire it sat on is joined back up ---------------------------------
+def _ahead(p, q, d):
+    """Is q straight ahead of p in direction d (on the line, past p)?"""
+    v = (q[0] - p[0], q[1] - p[1])
+    L = (d[0] * d[0] + d[1] * d[1]) ** 0.5
+    return abs(v[0] * d[1] - v[1] * d[0]) <= TOL * L and v[0] * d[0] + v[1] * d[1] > TOL
+
+
+def heal(ed, sheet, ins):
+    """After the symbol ins is taken away: join back up the wires that ran into it, pin to
+    pin, where two of its pins face each other in line (straight across or up and down) with
+    one wire each, leaving away from each other: a contact on a rung leaves the rung whole, a
+    3-pole breaker its three wires. Returns how many wires were joined."""
+    from .model import _tidy
+    pins = [tuple(q) for _n, q in ins.pin_points()]
+    ends = {}
+    for q in pins:
+        got = [(e, i) for e in _near(sheet, q) if isinstance(e, Wire)
+               for i in (0, -1) if _same(e.points[i], q)]
+        if len(got) == 1 and not pins_on(sheet, q):     # (one wire, no other symbol there)
+            ends[q] = got[0]
+    pairs = []
+    for x, a in enumerate(pins):
+        for b in pins[x + 1:]:
+            if a not in ends or b not in ends:
+                continue
+            if abs(a[1] - b[1]) > TOL and abs(a[0] - b[0]) > TOL:
+                continue                                # (not in line)
+            pairs.append((abs(a[0] - b[0]) + abs(a[1] - b[1]), a, b))
+    used, n = set(), 0
+    for _d, a, b in sorted(pairs):
+        if a in used or b in used:
+            continue
+        (wa, ia), (wb, ib) = ends[a], ends[b]
+        wa, wb = sheet.entities.get(wa.id), sheet.entities.get(wb.id)
+        if not isinstance(wa, Wire) or not isinstance(wb, Wire) or wa.id == wb.id:
+            continue
+        pa = list(wa.points) if ia == -1 else list(reversed(wa.points))   # ... to a
+        pb = list(wb.points) if ib == 0 else list(reversed(wb.points))    # b to ...
+        ab = (b[0] - a[0], b[1] - a[1])
+        qa, qb = pa[-2], pb[1]
+        # both wires must carry on the line through the two pins, away from each other (the
+        # pins of one side of a 3-pole device line up too, but their wires run across it)
+        if not (_ahead(a, qa, (-ab[0], -ab[1])) and _ahead(b, qb, ab)):
+            continue
+        merged = _tidy(pa + pb)
+        if len(merged) < 2:
+            continue
+        if wb.num_lock and not wa.num_lock:
+            wa, wb = wb, wa
+            merged = merged[::-1]
+        ed.remove(sheet, wb.id)
+        ed.change(sheet, wa.copy(points=merged))
+        used.update((a, b))
+        n += 1
+    return n

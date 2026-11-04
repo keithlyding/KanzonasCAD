@@ -246,6 +246,7 @@ class MainWindow(QMainWindow):
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("del_wire", "&Delete wire", C.DeleteWireCmd, "Delete wire")
         self._cmd_act("clean_wires", "Clea&n up wires", C.CleanWiresCmd, "Clean up")
+        self._cmd_act("del_comp", "Delete co&mponent", C.DeleteComponentCmd, "Delete component")
         self._cmd_act("lay_off", "&Hide layer", C.LayerOffCmd, "Hide layer")
         self._cmd_act("lay_iso", "Show &only this layer", C.LayerIsoCmd, "Show only")
         self._cmd_act("lay_on", "Show &all layers", C.LayerOnCmd, "Show all")
@@ -375,7 +376,7 @@ class MainWindow(QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
-                  "scoot", "align_dev", None, "trim_wire", "del_wire", "clean_wires", None,
+                  "scoot", "align_dev", None, "trim_wire", "del_wire", "clean_wires", "del_comp", None,
                   "object_color", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             m.addSeparator() if k is None else m.addAction(a[k])
@@ -436,7 +437,8 @@ class MainWindow(QMainWindow):
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
-            ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"]]),
+            ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"],
+                                  a["del_comp"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
@@ -1566,7 +1568,7 @@ class MainWindow(QMainWindow):
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev",
-                  "trim_wire", "del_wire", "clean_wires"):
+                  "trim_wire", "del_wire", "clean_wires", "del_comp"):
             a[k].setEnabled(has)
         a["undo"].setEnabled(bool(has and p.undo_stack))
         a["redo"].setEnabled(bool(has and p.redo_stack))

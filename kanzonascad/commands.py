@@ -1785,6 +1785,42 @@ class DeleteWireCmd(Command):
         self.ctx.message("Deleted %d wire(s)" % len(ws))
 
 
+class DeleteComponentCmd(Command):
+    """DELCOMP (AutoCAD Electrical's Delete Component): the selected symbols go (anything
+    else selected stays), or click them one by one, and the wire each sat on is joined back
+    up through where it was. Erase (the Delete key) leaves the gap."""
+    name, title = "DELCOMP", "Delete component"
+
+    def begin(self):
+        sel = [e for e in _selected(self.ctx) if isinstance(e, M.Insert)]
+        if sel:
+            self._delete(sel)
+            self.ctx.set_selection(set())
+            self.finish()
+            return
+        self.picking = True
+        self.ctx.prompt("Click the components to delete (Enter to finish)")
+
+    def pick(self, p):
+        e = self.ctx.pick_entity(p, M.Insert)
+        if e is None:
+            self.ctx.message("Click a symbol")
+            return
+        self._delete([e])
+
+    def _delete(self, items):
+        from . import wires
+        sheet = self.ctx.sheet()
+        joined = 0
+        with self.ctx.edit(self.title) as ed:
+            for e in items:
+                ed.remove(sheet, e.id)
+            for e in items:
+                joined += wires.heal(ed, sheet, e)
+        self.ctx.message("Deleted %d component(s)%s" % (
+            len(items), "; %d wire(s) joined back up" % joined if joined else ""))
+
+
 class CleanWiresCmd(Command):
     """WIRECLEAN: clean up the selected wires, or every wire on the sheet: wires of no length,
     repeated or in-line points, a wire drawn over another, and wires meeting end to end (made
@@ -1984,6 +2020,7 @@ COMMANDS = {
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
     "DELWIRE": (DeleteWireCmd, ["DW"]),
     "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),
+    "DELCOMP": (DeleteComponentCmd, ["AEERASECOMP"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)
