@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.3
+
+**New**
+- Wire crossings: choose how wires that cross are drawn, plain, with a gap or with a loop
+  (Project properties, Schematic). They're found by themselves.
+- Wire crossing (WX) adds one by hand where one wasn't found, or hides one (N).
+
 ## 0.10.2
 
 **New**

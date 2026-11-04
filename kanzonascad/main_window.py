@@ -243,6 +243,7 @@ class MainWindow(QMainWindow):
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
+        self._cmd_act("wire_cross", "Wire cr&ossing", C.WireCrossCmd, "Crossing")
         self._cmd_act("rail", "DIN &rail", C.RailCmd, "DIN rail")
         self._cmd_act("duct", "&Wire duct", C.DuctCmd, "Wire duct")
         A("materials", "Panel &materials...", self.show_materials, icon="materials",
@@ -350,7 +351,8 @@ class MainWindow(QMainWindow):
         for mode in ("light", "dark", "system"):
             tm.addAction(a["theme_" + mode])
         m = mb.addMenu("&Draw")
-        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus", None,
+        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus",
+                  "wire_cross", None,
                   "dim_linear", "dim_aligned", None, "rail", "duct"):
             if k == "CIRCLE":
                 cm = m.addMenu("&Circle")
@@ -367,7 +369,7 @@ class MainWindow(QMainWindow):
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "renumber",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned",
-                  "rail", "duct", "materials", None, "sheet_props",
+                  "rail", "duct", "materials", "wire_cross", None, "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
@@ -409,7 +411,7 @@ class MainWindow(QMainWindow):
         ])
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
-            ("Draw", "large", [a["wire"], a["bus"]]),
+            ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Tags", "large", [a["renumber"]]),
