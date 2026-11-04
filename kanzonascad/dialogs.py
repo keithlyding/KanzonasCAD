@@ -579,7 +579,23 @@ class LayersDialog(QDialog):
 def drafting_settings(parent, view):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Drafting settings")
-    form = QFormLayout(dlg)
+    lay = QVBoxLayout(dlg)
+    page, apply = drafting_page(view)
+    lay.addWidget(page)
+    lay.addWidget(_buttons(dlg))
+    while True:
+        if dlg.exec() != QDialog.Accepted:
+            return False
+        if apply(parent):
+            return True
+
+
+def drafting_page(view):
+    """The drafting settings as a page (Drafting settings, and Options' Drafting tab):
+    (widget, apply(parent)); apply puts them on the view, or says what's wrong and returns
+    False."""
+    page = QWidget()
+    form = QFormLayout(page)
     snap = QDoubleSpinBox()
     snap.setDecimals(4)
     snap.setRange(0.001, 10)
@@ -635,29 +651,28 @@ def drafting_settings(parent, view):
     note.setWordWrap(True)
     note.setStyleSheet("color: gray;")
     form.addRow(note)
-    form.addRow(_buttons(dlg))
-    while True:
-        if dlg.exec() != QDialog.Accepted:
-            return False
+
+    def apply(parent):
         try:
             step = float(inc.currentText().strip() or "0")
             angles = [float(t) for t in extra.text().replace(";", ",").split(",") if t.strip()]
             if not 0 < step <= 360:
                 raise ValueError("the angle must be more than 0 and up to 360")
-            break
         except ValueError as ex:
             QMessageBox.warning(parent, "Drafting settings",
                                 "Polar tracking angles: %s.\nType numbers in degrees, the extra "
                                 "ones separated by commas." % ex)
-    view.snap_spacing = snap.value()
-    view.grid_spacing = grid.value()
-    view.polar_inc = step
-    view.polar_extra = angles
-    view.crosshair_size = cross.value()
-    view.crosshair_full = full.isChecked()
-    view.osnap_modes = {k for k, c in checks.items() if c.isChecked()}
-    view.update()
-    return True
+            return False
+        view.snap_spacing = snap.value()
+        view.grid_spacing = grid.value()
+        view.polar_inc = step
+        view.polar_extra = angles
+        view.crosshair_size = cross.value()
+        view.crosshair_full = full.isChecked()
+        view.osnap_modes = {k for k, c in checks.items() if c.isChecked()}
+        view.update()
+        return True
+    return page, apply
 
 
 def edit_text_dialog(parent, ent):
@@ -821,3 +836,124 @@ def materials_dialog(parent, project, folder):
     save.clicked.connect(do_save)
     lay.addWidget(box)
     dlg.exec()
+
+
+def options_dialog(parent, cur, view, tab=None):
+    """Edit > Options...: General (look, updates), Files (library, template, backups,
+    autosave) and Drafting (as Drafting settings). cur: the current values; view: the
+    drawing whose drafting settings the Drafting tab shows (None: no tab). Returns the new
+    values (with "drafting": True when that tab was applied), or None when cancelled."""
+    from PySide6.QtWidgets import QFileDialog
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Options")
+    lay = QVBoxLayout(dlg)
+    tabs = QTabWidget()
+    tabs.setObjectName("options_tabs")
+    lay.addWidget(tabs)
+
+    # General
+    page = QWidget()
+    form = QFormLayout(page)
+    theme = QComboBox()
+    theme.setObjectName("theme")
+    for key, label in (("light", "Light"), ("dark", "Dark"), ("system", "Same as system")):
+        theme.addItem(label, key)
+    theme.setCurrentIndex(max(theme.findData(cur["theme"]), 0))
+    form.addRow("Theme", theme)
+    black = QCheckBox("Black drawing area (as AutoCAD; PDFs always print black on white)")
+    black.setChecked(bool(cur["black"]))
+    form.addRow("", black)
+    upd = QCheckBox("Check for updates automatically (once a day)")
+    upd.setChecked(bool(cur["update_check"]))
+    form.addRow("", upd)
+    tabs.addTab(page, "General")
+
+    # Files
+    page = QWidget()
+    form = QFormLayout(page)
+    lib = QLineEdit(cur["library_folder"])
+    lib.setObjectName("library_folder")
+    lib_b = QPushButton("Browse...")
+
+    def pick_lib():
+        f = QFileDialog.getExistingDirectory(dlg, "Library folder", lib.text())
+        if f:
+            lib.setText(f)
+    lib_b.clicked.connect(pick_lib)
+    row = QHBoxLayout()
+    row.addWidget(lib)
+    row.addWidget(lib_b)
+    form.addRow("Library folder", row)
+    tpl = QLineEdit(cur["template_path"])
+    tpl.setObjectName("template_path")
+    tpl.setPlaceholderText("Built-in settings (no template)")
+    tpl_b = QPushButton("Browse...")
+    tpl_none = QPushButton("Built-in")
+    tpl_none.setToolTip("Start new projects from KanzonasCAD's own settings")
+
+    def pick_tpl():
+        from .templates import folder
+        import os
+        start = tpl.text() or folder(lib.text())
+        if not os.path.exists(start):
+            start = lib.text()
+        f, _flt = QFileDialog.getOpenFileName(dlg, "Template for new projects", start,
+                                              "KanzonasCAD project (*.kzcad)")
+        if f:
+            tpl.setText(f)
+    tpl_b.clicked.connect(pick_tpl)
+    tpl_none.clicked.connect(lambda: tpl.setText(""))
+    row = QHBoxLayout()
+    row.addWidget(tpl)
+    row.addWidget(tpl_b)
+    row.addWidget(tpl_none)
+    form.addRow("Template for new projects", row)
+    note = QLabel("A template is an ordinary project: a new one starts with its settings, "
+                  "layers, title block, field values and sheets. File > Save as template... "
+                  "makes one.")
+    note.setWordWrap(True)
+    note.setStyleSheet("color: gray;")
+    form.addRow(note)
+    keep = QSpinBox()
+    keep.setObjectName("backups_keep")
+    keep.setRange(0, 100)
+    keep.setValue(int(cur["backups_keep"]))
+    keep.setSpecialValueText("None")
+    form.addRow("Backups kept of each project", keep)
+    auto = QSpinBox()
+    auto.setObjectName("autosave_minutes")
+    auto.setRange(0, 120)
+    auto.setSuffix(" minutes")
+    auto.setSpecialValueText("Off")
+    auto.setValue(int(cur["autosave_minutes"]))
+    form.addRow("Autosave unsaved work every", auto)
+    tabs.addTab(page, "Files")
+
+    # Drafting
+    apply_drafting = None
+    if view is not None:
+        page, apply_drafting = drafting_page(view)
+        tabs.addTab(page, "Drafting")
+    if tab is not None:
+        for i in range(tabs.count()):
+            if tabs.tabText(i) == tab:
+                tabs.setCurrentIndex(i)
+    lay.addWidget(_buttons(dlg))
+    import os
+    while True:
+        if dlg.exec() != QDialog.Accepted:
+            return None
+        folder = lib.text().strip()
+        if folder and not os.path.isdir(folder):
+            QMessageBox.warning(parent, "Options", "The library folder %s doesn't exist." % folder)
+            continue
+        path = tpl.text().strip()
+        if path and not os.path.isfile(path):
+            QMessageBox.warning(parent, "Options", "The template %s doesn't exist." % path)
+            continue
+        if apply_drafting is not None and not apply_drafting(parent):
+            continue
+        return {"theme": theme.currentData(), "black": black.isChecked(),
+                "update_check": upd.isChecked(), "library_folder": folder,
+                "template_path": path, "backups_keep": keep.value(),
+                "autosave_minutes": auto.value(), "drafting": apply_drafting is not None}
