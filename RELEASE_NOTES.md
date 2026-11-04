@@ -10,7 +10,8 @@ build fails without them.
 
 **New**
 - KanzonasCAD has its own icon: the KanzonasPDF cactus and sunflower with a green CAD tag. It
-  shows in the window, the taskbar, the Start menu and on .kzcad files.
+  shows in the window, the taskbar, the Start menu and on .kzcad files. The installer's icon is
+  the same in blue, as KanzonasPDF's is.
 
 ## 0.10
 
