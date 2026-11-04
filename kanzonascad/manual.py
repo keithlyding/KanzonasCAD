@@ -107,7 +107,10 @@ happens to the library later.</p>
 A starter set of JIC/NFPA symbols is built in (relay, contactor and timer coils, NO/NC and
 timed contacts, pushbuttons, E-stop, selector, limit/pressure/temperature/float switches,
 fuse, breaker, disconnect, overload heater and contact, pilot light, motor, solenoid, control
-transformer, terminal, ground). A symbol of yours with the same name replaces a built-in one.</li>
+transformer, terminal strip and terminal, ground, distribution block, off-sheet connector;
+three-phase: 3-pole breaker, disconnect and fuses, contactor power contacts, overload heaters,
+motor, variable frequency drive; power supply; PLC I/O card with input and output points).
+A symbol of yours with the same name replaces a built-in one.</li>
 <li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.</li>
 <li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
 footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
@@ -224,6 +227,24 @@ where needed). Select the wires too and they move with it instead.</li>
 Electrical does: drop a contact onto a rung and it is wired in.</li>
 <li>Wires are ordinary objects otherwise: grips stretch their corners, Trim and Erase work on
 them (trimmed pieces stay wires), and they print and export (DXF) as polylines.</li>
+</ul>
+
+<h3>Three-phase power, terminals and PLC I/O</h3>
+<ul>
+<li><b>Three-pole symbols</b> (breaker, disconnect, fuses, contactor power contacts, overload
+heaters) have their poles 1/2 inch apart, top to bottom L1/T1, L2/T2, L3/T3, the spacing
+<b>Bus</b> starts with: draw a 3-wire bus, then drop the breaker on it, and each pole cuts
+its wire. The motor and the drive (VFD: L1-L3 in, T1-T3 out) line up the same way.</li>
+<li><b>Contactor power contacts</b> belong to the contactor's coil like any contact (M601)
+and list under it.</li>
+<li><b>Terminals</b> belong to a <b>Terminal strip</b> (place the strip first, anywhere: it
+takes a tag, TB601). Placing a terminal asks which strip, as a contact asks for its coil; it
+shows the strip's tag and numbers itself on the strip: 1, 2, 3... (the lowest free number;
+a copy takes the next one). Double-click a terminal to type its number instead. The strip
+lists where its terminals are.</li>
+<li><b>PLC input</b> and <b>PLC output</b> points belong to a <b>PLC I/O card</b> the same
+way, and list under it; double-click a point to type its <b>address</b> (I:0/3, %I0.3...),
+shown under it.</li>
 </ul>
 
 <h2>Wire numbers</h2>

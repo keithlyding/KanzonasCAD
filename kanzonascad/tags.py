@@ -156,6 +156,9 @@ def retag_copies(project, sheet, ents):
                 planned[prefix].add(n)
                 attrs["TAG"] = make(prefix, page, n)
             e = e.copy(attrs=attrs)
+        elif numbered(e) and e.attrs.get("TERM"):
+            # a copied terminal takes the next free number on its strip
+            e = e.copy(attrs={k: v for k, v in e.attrs.items() if k != "TERM"})
         e.id = None                     # (a copy: a new object, whatever kind it is)
         out.append(e)
     return out
@@ -254,3 +257,36 @@ def sync_children(ed, project):
                 p = by_tag.get(e.attrs["TAG"].upper())
                 if p is not None:
                     ed.change(s, e.copy(attrs=link_attrs(e.attrs, p)))
+    number_terminals(ed, project)
+
+
+def numbered(e):
+    """A contact-like symbol numbered on its device (a terminal on its strip: TERM)."""
+    d = getattr(e, "defn", None)
+    return d is not None and any(a["attr"] == "TERM" for a in d.attr_texts)
+
+
+def number_terminals(ed, project):
+    """Terminals on a strip without a number take the lowest free one on that strip (1, 2,
+    3...); a number typed stays."""
+    by_strip = {}
+    for s in project.sheets:
+        for e in s.inserts():
+            if is_child(e) and numbered(e) and e.attrs.get("PARENT"):
+                by_strip.setdefault(e.attrs["PARENT"], []).append((s, e))
+    for items in by_strip.values():
+        used = set()
+        for _s, e in items:
+            v = e.attrs.get("TERM", "")
+            if v.isdigit():
+                used.add(int(v))
+        for s, e in sorted(items, key=lambda se: (project.sheets.index(se[0]),
+                                                   order_key(se[0], se[0].number_order)(
+                                                       se[1].pos))):
+            if e.attrs.get("TERM"):
+                continue
+            n = 1
+            while n in used:
+                n += 1
+            used.add(n)
+            ed.change(s, e.copy(attrs=dict(e.attrs, TERM=str(n))))

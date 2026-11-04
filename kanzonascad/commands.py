@@ -1357,8 +1357,9 @@ class InsertCmd(Command):
                                    project.zone_text(s, e.pos[0], e.pos[1]) or "?"),
                                 [("List", "L")])
                 return
-            self.ctx.message("No coil or device to link this contact to yet: placed unlinked "
-                             "(double-click it to link it later)")
+            self.ctx.message("Nothing to link this %s to yet (a %s device): placed unlinked "
+                             "(double-click it to link it later)"
+                             % (d.name.lower(), d.prefix or "parent"))
         self._place(p, self.attrs)
 
     def _place(self, p, attrs):
