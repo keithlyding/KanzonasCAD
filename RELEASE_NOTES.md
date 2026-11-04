@@ -14,6 +14,40 @@ build fails without them.
   grid references never point into it.
 - A ready-made title block for each position, with the same fields (Undo puts yours back).
 
+## 0.10.8
+
+**New**
+- The last AutoCAD snaps: Extension, Parallel and Apparent intersection, with AutoCAD's
+  tracking (hover over a line or its end first).
+- Turn each snap on or off from the status bar: the arrow on OSNAP lists them all.
+
+## 0.10.7
+
+**New**
+- Scoot: slide devices along their wire, as in AutoCAD Electrical. The wires follow, and the
+  device never leaves its wire.
+- Align devices: line devices up on their own wires (the same column on rungs), as AutoCAD
+  Electrical's Align.
+
+## 0.10.6
+
+**Fixed**
+- Text could come in huge: a second click set its height, and every new text kept it. Now you
+  click once and type. Type H, R or J before clicking for the height, rotation or
+  justification. A height left huge goes back to 1/8 inch.
+- Saving several times within a second could keep the wrong backups (and delete the newest
+  ones). Backups are now kept in the order they were saved.
+
+## 0.10.5
+
+**New**
+- Undo and Redo arrows right after the menus.
+- Layers, quickly: a layer list with a light bulb and a lock for each layer; Hide layer, Show
+  only this layer, Show all layers, Lock layer and Unlock all layers.
+
+**Fixed**
+- The Sheets menu listed dimension, DIN rail, wire duct and wire crossing commands that belong in Draw.
+
 ## 0.10.4
 
 **New**

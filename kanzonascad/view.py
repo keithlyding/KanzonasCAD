@@ -58,6 +58,10 @@ class CadView(QWidget):
         self.osnap_on = True
         self.osnap_modes = set(OS.DEFAULT)      # the running snaps (Drafting settings)
         self.osnap_once = None                  # a snap typed for the next point only
+        self.tracked = []                       # ends acquired by hovering (Extension)
+        self.par_dirs = []                      # directions acquired by hovering (Parallel)
+        self.app_segs = []                      # lines hovered (Apparent intersection)
+        self.snap_from = None                   # where an Extension / Parallel snap runs from
         self.polar_on = False
         # crosshair: arms this % of the view long, as AutoCAD's CURSORSIZE (5 to start), or
         # across the whole view
@@ -171,6 +175,7 @@ class CadView(QWidget):
             self.cancel()
         self._window = None
         self.osnap_once = None
+        self.tracked, self.par_dirs, self.app_segs = [], [], []
         self.cmd = cls(self, *args)
         self.commandChanged.emit()
         self.messaged.emit(self.cmd.title.upper())
@@ -369,13 +374,13 @@ class CadView(QWidget):
         cands = [e for e in self.sheet().query(rect) if self.layer_visible(e.layer)]
         best = None
 
-        def offer(kind, q):
+        def offer(kind, q, frm=None):
             nonlocal best
             d = G.dist(p, q)
             if d <= r:
                 key = (SNAP_PRIORITY.get(kind, 3), d)
                 if best is None or key < best[0]:
-                    best = (key, kind, q)
+                    best = (key, kind, q, frm)
         for e in cands:
             for kind, q in e.snap_points():
                 if kind in modes:
@@ -398,7 +403,51 @@ class CadView(QWidget):
             if base is not None and "tan" in modes:
                 for q in OS.tangent(e, base, p)[:1]:
                     offer("tan", q)
-        return None if best is None else (best[1], best[2])
+        # tracking (AutoCAD's): along an acquired end's extension, parallel to an acquired
+        # line from the last point, where nearby lines would meet if extended
+        if "ext" in modes:
+            for q, q0 in OS.extension(self.tracked, p, r):
+                offer("ext", q, q0)
+        if base is not None and "par" in modes:
+            for q in OS.parallel(base, self.par_dirs, p, r):
+                offer("par", q, base)
+        if "app" in modes and len(self.app_segs) >= 2:
+            for q in OS.apparent(self.app_segs, p, r):
+                offer("app", q)
+        if best is None:
+            self.snap_from = None
+            return None
+        self.snap_from = best[3]
+        return (best[1], best[2])
+
+    def _acquire(self):
+        """Hovering acquires what tracking follows (as AutoCAD's): the ends under an
+        Endpoint snap (for Extension), the line under the cursor (for Parallel)."""
+        modes = self.snap_modes()
+        if "ext" in modes and self.snap is not None and self.snap[0] in ("end", "int"):
+            q = self.snap[1]
+            tol = 1e-6
+            for e in self.sheet().query((q[0] - tol, q[1] - tol, q[0] + tol, q[1] + tol)):
+                for end, u in OS.ends_at(e, q, 1e-6):
+                    if not any(G.dist(end, t[0]) < 1e-9 and abs(u[0] - t[1][0]) < 1e-9 and
+                               abs(u[1] - t[1][1]) < 1e-9 for t in self.tracked):
+                        self.tracked = (self.tracked + [(end, u)])[-6:]
+        if ("par" in modes or "app" in modes) and self.cursor is not None:
+            rect, r = self._near(self.cursor, APERTURE)
+            for e in self.sheet().query(rect):
+                for a, b in OS.segments(e):
+                    if G.dist_to_segment(self.cursor, a, b) > r:
+                        continue
+                    L = G.dist(a, b)
+                    if L < 1e-12:
+                        continue
+                    u = ((b[0] - a[0]) / L, (b[1] - a[1]) / L)
+                    if "par" in modes and not any(abs(u[0] * t[1] - u[1] * t[0]) < 1e-9
+                                                  for t in self.par_dirs):
+                        self.par_dirs = (self.par_dirs + [u])[-3:]
+                    if "app" in modes and (a, b) not in self.app_segs:
+                        self.app_segs = (self.app_segs + [(a, b)])[-4:]
+                    return
 
     @staticmethod
     def _ortho(base, p):
@@ -575,6 +624,8 @@ class CadView(QWidget):
             return
         self.cursor = self.to_world(pos)
         pt = self.resolve(self.cursor)
+        if self.cmd is not None and not self.cmd.selecting() and not self.cmd.picking:
+            self._acquire()
         d = self._drag
         if d is not None and e.buttons() & Qt.LeftButton:
             if not d["moved"] and G.dist(self.to_screen(d["start"]).toTuple(),
@@ -809,6 +860,7 @@ class CadView(QWidget):
         p.restore()
         self._paint_grips(p, pal)
         self._paint_window(p)
+        self._paint_tracking(p)
         self._paint_snap(p)
         self._paint_polar(p)
         self._paint_crosshair(p, pal)
@@ -946,6 +998,21 @@ class CadView(QWidget):
         p.setPen(QColor(0, 0, 0) if not self.dark else QColor(230, 230, 230))
         p.drawText(box, Qt.AlignCenter, text)
 
+    def _paint_tracking(self, p):
+        """Acquired points as small green crosses; an Extension or Parallel snap's dotted line
+        from where it runs."""
+        if self.cmd is None:
+            return
+        col = QColor(60, 200, 90)
+        p.setPen(QPen(col, 1))
+        for q, _u in self.tracked:
+            c = self.to_screen(q)
+            p.drawLine(QPointF(c.x() - 4, c.y()), QPointF(c.x() + 4, c.y()))
+            p.drawLine(QPointF(c.x(), c.y() - 4), QPointF(c.x(), c.y() + 4))
+        if self.snap is not None and self.snap[0] in ("ext", "par") and self.snap_from:
+            p.setPen(QPen(col, 1, Qt.DotLine))
+            p.drawLine(self.to_screen(self.snap_from), self.to_screen(self.snap[1]))
+
     def _snap_menu(self, global_pos):
         """Shift + right-click while picking points: a snap for the next point only."""
         from PySide6.QtWidgets import QMenu
@@ -1011,6 +1078,16 @@ class CadView(QWidget):
         elif kind == "tan":                         # a circle with a line on top
             p.drawEllipse(c, r * 0.8, r * 0.8)
             p.drawLine(QPointF(x - r, y - r * 0.8), QPointF(x + r, y - r * 0.8))
+        elif kind == "ext":                         # a small plus on the dotted line
+            p.drawLine(QPointF(x - r, y), QPointF(x + r, y))
+            p.drawLine(QPointF(x, y - r), QPointF(x, y + r))
+        elif kind == "app":                         # an X in a box
+            p.drawRect(QRectF(x - r, y - r, 2 * r, 2 * r))
+            p.drawLine(QPointF(x - r, y - r), QPointF(x + r, y + r))
+            p.drawLine(QPointF(x - r, y + r), QPointF(x + r, y - r))
+        elif kind == "par":                         # two slanted strokes
+            p.drawLine(QPointF(x - r, y + r * 0.6), QPointF(x - r * 0.2, y - r))
+            p.drawLine(QPointF(x + r * 0.2, y + r), QPointF(x + r, y - r * 0.6))
         elif kind == "near":                        # the hourglass
             p.drawPolygon(QPolygonF([QPointF(x - r, y - r), QPointF(x + r, y - r),
                                      QPointF(x - r, y + r), QPointF(x + r, y + r)]))

@@ -13,6 +13,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import shutil
 
 KEEP = 10
@@ -24,6 +25,19 @@ def backup_folder(path):
     return os.path.join(os.path.dirname(os.path.abspath(path)), stem + " backups")
 
 
+_STAMP = re.compile(r" (\d{4}-\d\d-\d\d \d{6})(?: \((\d+)\))?" + re.escape(SUFFIX) + "$")
+
+
+def _age(p):
+    """Sort key, oldest first: the time in the backup's name and its (2), (3) counter. Not the
+    file's time alone: a backup keeps the time of the save it copies, and saves a moment
+    apart can carry the same time."""
+    m = _STAMP.search(os.path.basename(p))
+    if m is None:
+        return ("", 0, os.path.getmtime(p))
+    return (m.group(1), int(m.group(2) or 1), os.path.getmtime(p))
+
+
 def make_backup(path, keep=KEEP):
     """Copy the file at path (the last save) into its backups folder; keep the newest
     `keep`. Returns the copy's path, or None when there was nothing to copy."""
@@ -33,14 +47,16 @@ def make_backup(path, keep=KEEP):
     os.makedirs(folder, exist_ok=True)
     stem = os.path.splitext(os.path.basename(path))[0]
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
-    dest = os.path.join(folder, "%s %s%s" % (stem, stamp, SUFFIX))
-    n = 2
-    while os.path.exists(dest):                 # two saves in the same second
-        dest = os.path.join(folder, "%s %s (%d)%s" % (stem, stamp, n, SUFFIX))
-        n += 1
+    # Two saves in the same second: (2), (3)... above any already there (a pruned name is
+    # never taken again, or the newest backup would sort as the oldest).
+    same = glob.glob(os.path.join(glob.escape(folder), glob.escape("%s %s" % (stem, stamp))
+                                  + "*" + SUFFIX))
+    n = max((_age(f)[1] for f in same if _age(f)[0] == stamp), default=0)
+    dest = os.path.join(folder, "%s %s%s" % (stem, stamp, SUFFIX)) if n == 0 else \
+        os.path.join(folder, "%s %s (%d)%s" % (stem, stamp, n + 1, SUFFIX))
     shutil.copy2(path, dest)
     old = sorted(glob.glob(os.path.join(glob.escape(folder), glob.escape(stem) + " *" + SUFFIX)),
-                 key=os.path.getmtime)
+                 key=_age)
     for p in old[:-keep]:
         os.remove(p)
     return dest
@@ -50,7 +66,7 @@ def list_backups(path):
     folder = backup_folder(path)
     stem = os.path.splitext(os.path.basename(path))[0]
     out = glob.glob(os.path.join(glob.escape(folder), glob.escape(stem) + " *" + SUFFIX))
-    return sorted(out, key=os.path.getmtime, reverse=True)
+    return sorted(out, key=_age, reverse=True)
 
 
 # ---- autosave / recovery ----------------------------------------------------------------------
