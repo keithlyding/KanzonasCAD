@@ -48,7 +48,7 @@ def export_dxf(project, sheet, path, include_frame=True):
     ents = []
     for e in sheet.entities.values():
         # block references go out as their lines and texts, on the reference's layer
-        ents.extend(e.exploded() if isinstance(e, M.Insert) else [e])
+        ents.extend(e.exploded() if isinstance(e, (M.Insert, M.Dimension)) else [e])
     if include_frame:
         ents = frame_entities(project, sheet) + ents
     # the cross-references, as plain texts on layer SYMBOLS
@@ -368,7 +368,7 @@ def export_pdf(project, path, sheets=None, line_width=0.008, mono=True):
     painter = None
     try:
         for i, s in enumerate(sheets):
-            w, h = s.paper()
+            w, h = s.paper_inches()
             size = QPageSize(QSizeF(w, h), QPageSize.Inch, "", QPageSize.ExactMatch)
             layout = QPageLayout(size, QPageLayout.Portrait if h > w else QPageLayout.Landscape,
                                  QMarginsF(0, 0, 0, 0))
@@ -382,9 +382,11 @@ def export_pdf(project, path, sheets=None, line_width=0.008, mono=True):
             dpi = writer.resolution()
             painter.resetTransform()
             painter.translate(0, h * dpi)
-            painter.scale(dpi, -dpi)
-            SheetRenderer(project, s, dark=False, mono=mono).paint(painter,
-                                                                   pen_width=line_width)
+            # a scaled panel sheet: its real-size drawing shrunk onto the paper (line widths
+            # stay paper widths)
+            painter.scale(dpi * s.scale, -dpi * s.scale)
+            SheetRenderer(project, s, dark=False, mono=mono).paint(
+                painter, pen_width=line_width * s.k())
     finally:
         if painter is not None:
             painter.end()

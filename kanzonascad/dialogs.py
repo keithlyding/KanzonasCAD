@@ -100,6 +100,7 @@ def sheet_properties(parent, project, sheet):
     number = QLineEdit("" if sheet.number in (None, "") else str(sheet.number))
     number.setPlaceholderText("automatic: %d" % (project.sheets.index(sheet) + 1))
     rev = QLineEdit(sheet.fields.get("Revision", ""))
+    rev.setObjectName("revision")
     rev.setPlaceholderText("the project's: %s" % (project.fields.get("Revision") or "(none)"))
     kind = QComboBox()
     for key, label in M.SHEET_KINDS.items():
@@ -111,8 +112,23 @@ def sheet_properties(parent, project, sheet):
         order.addItem(label, key)
     order.setCurrentIndex(order.findData(sheet.number_order))
     order.setToolTip("The order Renumber sheet numbers devices in (and, later, wires)")
+    scale = QComboBox()
+    scale.setEditable(True)
+    for name, v in M.SCALE_PRESETS:
+        tmp = M.Sheet()
+        tmp.scale, tmp.scale_name = v, name
+        scale.addItem(tmp.scale_text(), (name, v))
+    i = next((j for j in range(scale.count())
+              if scale.itemData(j) == (sheet.scale_name, sheet.scale)), -1)
+    if i >= 0:
+        scale.setCurrentIndex(i)
+    else:
+        scale.setEditText(sheet.scale_text())
+    scale.setToolTip("Panel sheets: draw everything at real size; the scale only sets how big "
+                     "it prints. Type 1:6 for a scale that isn't listed.")
     form.addRow("Title", title)
     form.addRow("Type", kind)
+    form.addRow("Scale", scale)
     form.addRow("Numbering order", order)
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
@@ -135,8 +151,14 @@ def sheet_properties(parent, project, sheet):
                       "zones as they are set: change them and every reference updates. The "
                       "project's size and zones are set in Project properties."))
     form.addRow(_buttons(dlg))
-    if dlg.exec() != QDialog.Accepted:
-        return False
+    while True:
+        if dlg.exec() != QDialog.Accepted:
+            return False
+        picked = _scale_of(scale)
+        if picked is not None:
+            break
+        QMessageBox.warning(parent, "Sheet properties", "Type the scale as 1:4 (or pick one "
+                                                        "from the list).")
     fields = dict(sheet.fields)
     if rev.text().strip():
         fields["Revision"] = rev.text().strip()
@@ -147,11 +169,34 @@ def sheet_properties(parent, project, sheet):
                    number_order=order.currentData())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
-    if all(before.get(k) == v for k, v in changes.items()):
+    new_scale = picked != (sheet.scale_name, sheet.scale)
+    if all(before.get(k) == v for k, v in changes.items()) and not new_scale:
         return False
     with project.edit("Sheet properties") as ed:
         ed.sheet_meta(sheet, **changes)
+        if new_scale:
+            ed.sheet_scale(sheet, picked[1], picked[0])
     return True
+
+
+def _scale_of(combo):
+    """(name, paper / real) picked or typed in the scale box, or None when it can't be read:
+    a preset, 1:4, 1/4, 4:1, or a plain number (the paper / real factor)."""
+    text = combo.currentText().strip()
+    i = combo.findText(text)
+    if i >= 0:
+        return combo.itemData(i)
+    import re
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)", text)
+    try:
+        if m:
+            a, b = float(m.group(1)), float(m.group(2))
+            v = a / b
+        else:
+            v = float(text)
+    except (ValueError, ZeroDivisionError):
+        return None
+    return ("", v) if v > 0 else None
 
 
 def _color_button(color):

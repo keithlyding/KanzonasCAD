@@ -305,10 +305,10 @@ def labels(project, sheet):
     if not enabled(project) or sheet is project.title_block:
         return []
     got = getattr(sheet, "_num_labels", None)
-    sig = (sheet.version, project.settings.get("wire_number_height", 0.08))
+    sig = (sheet.version, sheet.scale, project.settings.get("wire_number_height", 0.08))
     if got is not None and got[0] == sig:
         return got[1]
-    h = float(project.settings.get("wire_number_height", 0.08))
+    h = float(project.settings.get("wire_number_height", 0.08)) * sheet.k()
     roots = _sheet_groups(sheet)
     parts = {}
     for w in sheet.wires():

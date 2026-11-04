@@ -663,7 +663,7 @@ class SheetLayoutTest(unittest.TestCase):
         def accept(dlg):
             dlg.findChildren(QCheckBox)[0].setChecked(True)            # its own zones
             dlg.findChild(QSpinBox, "rows").setValue(5)
-            dlg.findChildren(QLineEdit)[2].setText("C")                 # its own revision
+            dlg.findChild(QLineEdit, "revision").setText("C")           # its own revision
             return QDialog.Accepted
         old = QDialog.exec
         QDialog.exec = accept

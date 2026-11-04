@@ -682,6 +682,17 @@ class ScaleCmd(_TwoPoint):
     def begin(self):
         _TwoPoint.begin(self)
         self.step = None            # None (factor) | ref1 | ref2 | new
+        if self.ctx.sheet().kind == "panel":
+            # footprints are real size: scaling one by hand would make it a different part
+            locked = [e for e in self.ents if isinstance(e, M.Insert) and e.defn is not None
+                      and e.defn.kind == "footprint"]
+            if locked:
+                self.ents = [e for e in self.ents if e not in locked]
+                self.ctx.message("%d footprint(s) left out: footprints are real size on a "
+                                 "panel sheet and aren't scaled (the sheet's scale sets how "
+                                 "big it prints)" % len(locked))
+                if not self.ents:
+                    self.finish()
 
     def second_prompt(self):
         self.step = None
@@ -1322,8 +1333,8 @@ class InsertCmd(Command):
 
     def _make(self, p, defn):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
-        tag_h = self.ctx.project.settings.get("tag_height") if self.defn.kind == "symbol" \
-            else None
+        tag_h = self.ctx.project.settings.get("tag_height") * self.ctx.sheet().k() \
+            if self.defn.kind == "symbol" else None
         return M.Insert(self.defn.name, p, self.angle, 1.0, self.mirror, self.attrs, defn,
                         tag_h, layer=layer)
 
@@ -1412,6 +1423,50 @@ def _fmt(v):
 
 
 # name -> (class, aliases); the command line accepts the name or any alias
+class DimLinearCmd(Command):
+    """DIMLINEAR: a dimension across or up and down. Pick the two points it measures, then
+    where its line goes: it reads the true distance (real size on a panel sheet), and its text
+    is paper-sized (it prints the same at any scale)."""
+    name, title = "DIMLINEAR", "Linear dimension"
+    mode = "linear"
+
+    def begin(self):
+        self.pts = []
+        self.ctx.prompt("Specify first extension line origin")
+
+    def _height(self):
+        return float(self.ctx.project.settings.get("dim_height", 0.1)) * self.ctx.sheet().k()
+
+    def point(self, p):
+        self.pts.append(p)
+        self.base = self.last = p
+        if len(self.pts) == 1:
+            self.ctx.prompt("Specify second extension line origin")
+        elif len(self.pts) == 2:
+            self.ctx.prompt("Specify dimension line location")
+        else:
+            d = M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height())
+            with self.ctx.edit(self.title) as ed:
+                if d.layer not in self.ctx.project.layers:
+                    ed.layer(d.layer, None, M.Layer(d.layer, "#00c8c8").to_dict())
+                ed.add(self.ctx.sheet(), d)
+            self.ctx.message("%s %s" % (self.title, d.label()))
+            self.finish()
+
+    def preview(self, p):
+        if len(self.pts) == 1:
+            return [M.Line(self.pts[0], p)]
+        if len(self.pts) == 2:
+            return [M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height())]
+        return []
+
+
+class DimAlignedCmd(DimLinearCmd):
+    """DIMALIGNED: a dimension along the line between the two points (slanted ones too)."""
+    name, title = "DIMALIGNED", "Aligned dimension"
+    mode = "aligned"
+
+
 COMMANDS = {
     "LINE": (LineCmd, ["L"]),
     "PLINE": (PolylineCmd, ["PL"]),
@@ -1431,6 +1486,8 @@ COMMANDS = {
     "WIRE": (WireCmd, ["W"]),
     "BUS": (BusCmd, ["BU"]),
     "EXPLODE": (ExplodeCmd, ["X"]),
+    "DIMLINEAR": (DimLinearCmd, ["DLI", "DIM"]),
+    "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)

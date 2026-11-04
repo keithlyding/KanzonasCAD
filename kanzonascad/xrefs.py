@@ -31,7 +31,7 @@ _cache = {"sig": None, "by_sheet": {}}
 
 
 def _signature(project):
-    return (tuple((s.id, s.version, project.sheet_number(s), s.size, s.cols, s.rows,
+    return (tuple((s.id, s.version, project.sheet_number(s), s.size, s.scale, s.cols, s.rows,
                    s.col_start, s.row_start) for s in project.sheets),
             project.zone_format, project.settings.get("xref_height"))
 
@@ -68,6 +68,7 @@ def live_all(project):
                 if dev in index:
                     children.setdefault(dev, []).append((s, e))
     out = {s.id: [] for s in project.sheets}
+    hk = {s.id: h * s.k() for s in project.sheets}     # (paper height on scaled sheets)
     key = _order(project)
     for dev, (s, parent) in index.items():
         if parent.attrs.get("XREF") == "0":
@@ -76,29 +77,32 @@ def live_all(project):
                        key=key)
         if not items:
             continue
+        hh = hk[s.id]
         bb = parent.bbox()
         x = (bb[0] + bb[2]) / 2.0
-        y = bb[1] - GAP - h
+        y = bb[1] - GAP - hh
         for cs, c in items:
             mark = MARK.get(c.defn.contact, "")
             text = ("%s %s" % (mark, _where(project, cs, c))).strip()
-            out[s.id].append((round(x, 6), round(y, 6), text, h))
-            y -= h * LINE
+            out[s.id].append((round(x, 6), round(y, 6), text, hh))
+            y -= hh * LINE
     # off-sheet connectors: where the same name's other ends are
     from .wirenums import connectors
     for name, ends in connectors(project).items():
         for s, c in ends:
+            hh = hk[s.id]
             others = [_where(project, os_, oc) for os_, oc in ends if oc is not c]
             bb = c.bbox()
-            out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - h, 6),
-                              ", ".join(others) if others else "?", h))
+            out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - hh, 6),
+                              ", ".join(others) if others else "?", hh))
     for s, c in contacts:
         if tags.numbered(c):
             continue                    # (a terminal shows its number, not where its strip is)
+        hh = hk[s.id]
         got = index.get(c.attrs.get("PARENT")) if c.attrs.get("PARENT") else None
         text = _where(project, got[0], got[1]) if got is not None else "?"
         bb = c.bbox()
-        out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - h, 6), text, h))
+        out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - hh, 6), text, hh))
     _cache["sig"], _cache["by_sheet"] = sig, out
     return out
 

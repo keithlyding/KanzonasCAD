@@ -195,6 +195,22 @@ def run(log_path):
         return "read with %s: %s" % (rep["reader"], ", ".join(kinds))
     log.check("DWG import", dwg)
 
+    def panel():
+        from . import sheetframe
+        p = M.Project.new()
+        s = p.sheets[0]
+        with p.edit("panel") as ed:
+            ed.sheet_meta(s, kind="panel")
+            ed.add(s, M.Line((1, 1), (37, 1)))
+            ed.sheet_scale(s, 0.25)
+            d = ed.add(s, M.Dimension((1, 1), (37, 1), (19, -1),
+                                      height=p.settings["dim_height"] * s.k()))
+        assert s.paper() == (68.0, 44.0) and s.paper_inches() == (17.0, 11.0), s.paper()
+        assert d.label() == '36.00"', d.label()
+        assert sheetframe.field_values(p, s)["Scale"] == "1:4"
+        return "1:4 sheet, real-size drawing, %s dimension" % d.label()
+    log.check("panel sheets and dimensions", panel)
+
     def library():
         from .library import Library
         lib = Library()

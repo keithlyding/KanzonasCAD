@@ -68,6 +68,7 @@ def field_values(project, sheet):
     v["Sheet"] = project.sheet_number(sheet)
     v["Sheets"] = str(len(project.sheets))
     v["Sheet title"] = sheet.title
+    v["Scale"] = sheet.scale_text()
     # a sheet's own value of a field (its own revision, say) wins over the project's
     for k, val in sheet.fields.items():
         if str(val).strip():
@@ -92,22 +93,26 @@ def fields_used(project):
     return out
 
 
-def _title_block_offset(project, sheet):
-    """How far the title block moves to sit in this sheet's corner: it is stored placed on
-    the title block sheet (whose size may differ)."""
+def _title_block_place(project, sheet):
+    """(its corner on the title block sheet, the move to this sheet's corner, factor): the
+    title block is stored placed on the title block sheet (whose size may differ) and is drawn
+    in this sheet's corner, enlarged by the sheet's factor on a scaled panel sheet (so it
+    prints the same size)."""
     tb = project.title_block
     tx1, ty0 = tb.frame()[2], tb.frame()[1]
     x1, y0 = sheet.frame()[2], sheet.frame()[1]
-    return x1 - tx1, y0 - ty0
+    k = sheet.k() if sheet is not tb else 1.0
+    return (tx1, ty0), (x1 - tx1, y0 - ty0), k
 
 
 def title_block_entities(project, sheet):
     """The title block's entities placed on `sheet` with their fields filled in."""
-    dx, dy = _title_block_offset(project, sheet)
+    corner, (dx, dy), k = _title_block_place(project, sheet)
     values = field_values(project, sheet)
     out = []
     for e in project.title_block.entities.values():
-        c = e.moved(dx, dy) if (dx or dy) else e.copy()
+        c = e.scaled(corner, k) if k != 1.0 else e
+        c = c.moved(dx, dy) if (dx or dy) else c.copy()
         if isinstance(c, Text) and "{" in c.text:
             c = c.copy(text=fill_fields(c.text, values))
         c.id = None
@@ -120,14 +125,15 @@ def border_entities(sheet):
     left), on layer BORDER."""
     out = []
     w, h = sheet.paper()
-    m, s = sheet.MARGIN, sheet.STRIP
+    k = sheet.k()
+    m, s = sheet.MARGIN * k, sheet.STRIP * k
     _box(m, m, w - m, h - m, out, FRAME_LAYER)                  # border
     x0, y0, x1, y1 = sheet.frame()
     out.append(Line((x0, y1), (x1, y1), layer=FRAME_LAYER))     # under the column strip
     out.append(Line((x0, y0), (x0, y1), layer=FRAME_LAYER))     # right of the row strip
     cw = (x1 - x0) / sheet.cols
     rh = (y1 - y0) / sheet.rows
-    th = min(0.12, s * 0.55)
+    th = min(0.12 * k, s * 0.55)
     for i in range(sheet.cols):
         if i:
             xx = x0 + i * cw
@@ -157,6 +163,7 @@ def title_block_rect(project, sheet):
     bb = project.title_block.extents()
     if bb is None:
         return None
-    dx, dy = _title_block_offset(project, sheet)
-    return (bb[0] + dx, bb[1] + dy, bb[2] + dx, bb[3] + dy)
+    (cx, cy), (dx, dy), k = _title_block_place(project, sheet)
+    return ((bb[0] - cx) * k + cx + dx, (bb[1] - cy) * k + cy + dy,
+            (bb[2] - cx) * k + cx + dx, (bb[3] - cy) * k + cy + dy)
 

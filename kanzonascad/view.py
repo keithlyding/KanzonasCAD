@@ -125,12 +125,13 @@ class CadView(QWidget):
         return self.current_layer
 
     def text_height(self):
-        """New text's height: the project's (Project properties; TEXT's height prompt sets it
-        too, as AutoCAD's TEXTSIZE)."""
-        return float(self.project.settings["text_height"])
+        """New text's height in drawing units: the project's paper height (Project properties;
+        TEXT's height prompt sets it too, as AutoCAD's TEXTSIZE), times the sheet's factor on
+        a scaled panel sheet, so it prints the same size at any scale."""
+        return float(self.project.settings["text_height"]) * self.sheet().k()
 
     def set_text_height(self, v):
-        self.project.settings["text_height"] = float(v)
+        self.project.settings["text_height"] = float(v) / self.sheet().k()
 
     def switch_to(self, cls):
         """A command handing over to another way of doing it (CIRCLE's 3P, 2P, TTR)."""

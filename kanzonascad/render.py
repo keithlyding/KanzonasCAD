@@ -65,8 +65,8 @@ def text_path(t):
 
 def add_entity(path, e):
     """Add an entity's outline to a stroke path (texts go to fill paths: see _Chunk)."""
-    if isinstance(e, M.Insert):
-        for w in e.world_entities():
+    if isinstance(e, (M.Insert, M.Dimension)):
+        for w in (e.world_entities() if isinstance(e, M.Insert) else e.parts()):
             if not isinstance(w, M.Text):
                 add_entity(path, w)
     elif isinstance(e, M.Line):
@@ -179,7 +179,8 @@ class SheetRenderer:
         the title block in its own layers' colors (like any drawing)."""
         p = self.project
         s = self.sheet
-        sig = (s.size, s.cols, s.rows, s.col_start, s.row_start, s.title, p.sheet_number(s),
+        sig = (s.size, s.scale, s.scale_name, s.cols, s.rows, s.col_start, s.row_start, s.title,
+               p.sheet_number(s),
                len(p.sheets),
                tuple(sorted(p.fields.items())), p.title_block.version, self._layer_sig(),
                self.pal.dark)
@@ -204,8 +205,9 @@ class SheetRenderer:
             if lay is not None and not lay.visible:
                 continue
             key = self.pal.color(self.project, e).rgba()
-            if isinstance(e, M.Insert):
-                texts = [w for w in e.world_entities() if isinstance(w, M.Text)]
+            if isinstance(e, (M.Insert, M.Dimension)):
+                texts = [w for w in (e.world_entities() if isinstance(e, M.Insert)
+                                     else e.parts()) if isinstance(w, M.Text)]
                 if texts:
                     p = ch.fills.get(key)
                     if p is None:
@@ -322,8 +324,8 @@ def entities_path(entities):
             fills.addPath(text_path(e))
         else:
             add_entity(strokes, e)
-            if isinstance(e, M.Insert):
-                for w in e.world_entities():
+            if isinstance(e, (M.Insert, M.Dimension)):
+                for w in (e.world_entities() if isinstance(e, M.Insert) else e.parts()):
                     if isinstance(w, M.Text):
                         fills.addPath(text_path(w))
     return strokes, fills

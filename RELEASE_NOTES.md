@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.9
+
+**New**
+- Panel sheets have a scale (1:4, 3" = 1'-0"...): draw the panel at real size and it prints at
+  that scale, with the border, title block and text at their normal size. Sheet scale... on
+  the Panel tab, or click Scale in the status bar.
+- Dimensions: Linear dimension (DLI) and Aligned dimension (DAL) measure the real distance.
+- {Scale} for the title block. Footprints can't be scaled by accident on a panel sheet.
+
 ## 0.8
 
 **New**
