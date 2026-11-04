@@ -1,3 +1,3 @@
 """KanzonasCAD: free electrical CAD for Windows and Linux."""
 
-__version__ = "0.10.4"
+__version__ = "0.10.5"
