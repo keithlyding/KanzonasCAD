@@ -16,6 +16,8 @@ def main(argv=None):
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("KanzonasCAD")
     app.setOrganizationName("KanzonasCAD")
+    from .theme import app_icon
+    app.setWindowIcon(app_icon())
 
     if args.selftest:
         from .selftest import run

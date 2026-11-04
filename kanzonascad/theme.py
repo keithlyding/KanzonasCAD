@@ -43,6 +43,14 @@ ICONS = {
 _mode = "light"
 
 
+def app_icon():
+    """KanzonasCAD's own icon (the window, the taskbar, About), shipped inside the package."""
+    import os
+    from PySide6.QtGui import QIcon
+    return QIcon(os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources",
+                              "icon.png"))
+
+
 def is_dark():
     return _mode == "dark"
 
