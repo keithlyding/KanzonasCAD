@@ -282,6 +282,18 @@ def project_properties(parent, project, tab=0):
     num_h.setSuffix(" in")
     num_h.setValue(float(st.get("wire_number_height", 0.08)))
     form.addRow("Wire number height", num_h)
+    cross = QComboBox()
+    for key, label in (("plain", "Plain: the wires just cross"),
+                       ("gap", "Gap: one wire is broken where it crosses"),
+                       ("loop", "Loop: one wire hops over the other")):
+        cross.addItem(label, key)
+    cross.setCurrentIndex(max(cross.findData(st.get("wire_crossing", "plain")), 0))
+    form.addRow("Wire crossings", cross)
+    jump = QComboBox()
+    jump.addItem("The up-and-down wire", "vertical")
+    jump.addItem("The across wire", "horizontal")
+    jump.setCurrentIndex(max(jump.findData(st.get("wire_jump", "vertical")), 0))
+    form.addRow("Which wire jumps", jump)
     xref_h = QDoubleSpinBox()
     xref_h.setDecimals(4)
     xref_h.setRange(0.01, 5)
@@ -343,6 +355,8 @@ def project_properties(parent, project, tab=0):
     settings["tag_height"] = tag_h.value()
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_number_height"] = num_h.value()
+    settings["wire_crossing"] = cross.currentData()
+    settings["wire_jump"] = jump.currentData()
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():

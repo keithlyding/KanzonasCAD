@@ -221,6 +221,17 @@ wire, connecting wherever its ends land.</p>
 <li><b>Connections</b> are worked out from where wire ends are, never stored: a wire end on a
 pin, on another wire's end, or on the middle of another wire connects there. A wire ending on
 the middle of another (a T), or three or more wire ends at one point, get a <b>dot</b>.</li>
+<li><b>Crossings</b>: wires that pass through each other don't connect. Project properties,
+Schematic, <b>Wire crossings</b> says how that is drawn: <b>Plain</b> (they just cross: no
+dot means not connected, to start), <b>Gap</b> (one wire is broken briefly) or <b>Loop</b> (one
+wire hops over the other); <b>Which wire jumps</b>: the up-and-down one (to start) or the
+across one. Crossings are found by themselves and follow the wires as they move; they print
+and export to DXF (the jumping wire cut, the loop as a half circle).</li>
+<li><b>Wire crossing</b> (WX; Draw menu, Schematic tab) places one by hand: click a wire where
+it should jump, on a crossing or anywhere else on it (over a symbol's line, say). Type
+<b>G</b>, <b>L</b> or <b>N</b> first for a gap, a loop or <b>none</b> (none hides a crossing
+found by itself). A mark placed by hand lights up as a small circle when the cursor is over
+it; select and Erase it to take it away.</li>
 <li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
 Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
 where needed). Select the wires too and they move with it instead.</li>

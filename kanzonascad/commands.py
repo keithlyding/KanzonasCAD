@@ -1564,6 +1564,49 @@ class DuctCmd(_RunCmd):
         return M.Duct(a, b, "", w, d)
 
 
+class WireCrossCmd(Command):
+    """WIRECROSS: a wire crossing placed by hand. Click a wire where it should jump (on a
+    crossing, or anywhere else on it); G, L or N first for a gap, a loop or none (none hides a
+    crossing found by itself). Erase the mark to take it away."""
+    name, title = "WIRECROSS", "Wire crossing"
+    NAMES = {"G": "gap", "L": "loop", "N": "none"}
+
+    def begin(self):
+        st = self.ctx.project.settings.get("wire_crossing", "plain")
+        self.style = st if st in ("gap", "loop") else "loop"
+        self._prompt()
+
+    def _prompt(self):
+        self.ctx.prompt("Click a wire where it should jump (%s)" % {
+            "gap": "a gap", "loop": "a loop", "none": "none: hides a crossing"}[self.style],
+            [("Gap", "G"), ("Loop", "L"), ("None", "N")])
+
+    def text(self, s):
+        k = self.NAMES.get(s.strip().upper())
+        if k is None:
+            return False
+        self.style = k
+        self._prompt()
+        return True
+
+    def point(self, p):
+        from . import crossings
+        sheet = self.ctx.sheet()
+        tol = 0.1 * sheet.k()
+        at = crossings.place_at(self.ctx.project, sheet, p, tol)
+        if at is None:
+            self.ctx.message("No wire there: click on a wire (or where two cross)")
+            return
+        with self.ctx.edit(self.title) as ed:
+            # (one mark per spot: a new one replaces the old)
+            for e in sheet.query((at[0] - 1e-3, at[1] - 1e-3, at[0] + 1e-3, at[1] + 1e-3)):
+                if isinstance(e, M.WireCross) and G.dist(e.pos, at) < 1e-3:
+                    ed.remove(sheet, e.id)
+            ed.add(sheet, M.WireCross(at, self.style))
+        self.ctx.message("Wire crossing: %s" % self.style)
+        self._prompt()
+
+
 COMMANDS = {
     "LINE": (LineCmd, ["L"]),
     "PLINE": (PolylineCmd, ["PL"]),
@@ -1587,6 +1630,7 @@ COMMANDS = {
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
     "DUCT": (DuctCmd, ["WIREWAY", "WD"]),
+    "WIRECROSS": (WireCrossCmd, ["WX"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)
