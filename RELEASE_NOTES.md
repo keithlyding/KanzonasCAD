@@ -6,6 +6,17 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.4
+
+**New**
+- Devices tag themselves by page: CR601, CR602, M601 on page 6. Copies get their own tag, and
+  tags follow when a sheet's page number changes.
+- Type a tag yourself and it stays (locked). Renumber sheet puts the rest in order, across then
+  down or down then across.
+
+**Fixed**
+- Mirror, keeping the originals, could replace an original instead of adding the copy.
+
 ## 0.3.3
 
 **Fixed**

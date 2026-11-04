@@ -242,6 +242,10 @@ class MainWindow(QMainWindow):
         self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
 
+        A("renumber", "&Renumber sheet", self.renumber_sheet, icon="renumber",
+          label="Renumber sheet",
+          tip="Number the devices on this sheet in order (CR601, CR602...); tags you locked "
+              "stay as they are")
         A("sheet_add", "&New sheet", self.add_sheet, label="New sheet")
         A("sheet_del", "&Delete sheet", self.delete_sheet, label="Delete sheet")
         A("sheet_up", "Move sheet &up", lambda: self.move_sheet(-1), label="Move up")
@@ -337,7 +341,8 @@ class MainWindow(QMainWindow):
                   "object_color"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
-        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "sheet_props",
+        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "renumber",
+                  "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
@@ -382,6 +387,7 @@ class MainWindow(QMainWindow):
             ("Draw", "large", [a["wire"], a["bus"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"]]),
             ("Parts", "large", [a["new_part"]]),
+            ("Tags", "large", [a["renumber"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
             ("Settings", "large", [a["schematic_settings"]]),
         ])
@@ -1128,6 +1134,16 @@ class MainWindow(QMainWindow):
             with v.project.edit("Attributes") as ed:
                 ed.change(v.sheet(), ins.copy(attrs=attrs))
 
+    def renumber_sheet(self):
+        v = self.view()
+        if v is None or v.sheet() is v.project.title_block:
+            return
+        from . import tags
+        with v.project.edit("Renumber sheet") as ed:
+            n = tags.renumber_sheet(ed, v.project, v.sheet())
+        self.cmdline.add_history("Renumbered %d device tag(s) on sheet %s" % (
+            n, v.project.sheet_number(v.sheet())))
+
     def _toggle_title_block(self, on):
         v = self.view()
         if v is None:
@@ -1258,7 +1274,7 @@ class MainWindow(QMainWindow):
         for k in ("save", "save_as", "import_dxf", "export_dxf", "export_dxf_all", "export_pdf",
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
-                  "schematic_settings", "panel_settings", "object_color",
+                  "schematic_settings", "panel_settings", "object_color", "renumber",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste"):

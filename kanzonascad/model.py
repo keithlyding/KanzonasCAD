@@ -954,6 +954,7 @@ class Sheet:
         self.number = number            # None: its position in the project
         self.own_layout = False             # True: its size and zones aren't the project's
         self.kind = "schematic"             # schematic, panel, report or other (defaults only)
+        self.number_order = "across"        # tags (and wire numbers): across/down then the other
         self.col_start = int(col_start)     # the first column's number (1 to start)
         self.row_start = int(row_start)     # the first row's letter: 0 = A, 1 = B...
         self.fields = dict(fields or {})
@@ -1036,6 +1037,7 @@ class Sheet:
         return {"id": self.id, "title": self.title, "size": self.size, "cols": self.cols,
                 "rows": self.rows, "col_start": self.col_start, "row_start": self.row_start,
                 "own_layout": self.own_layout, "kind": self.kind,
+                "number_order": self.number_order,
                 "number": self.number, "fields": dict(self.fields)}
 
     def to_dict(self):
@@ -1054,6 +1056,7 @@ class Sheet:
         self.row_start = int(d.get("row_start", 0))
         self.own_layout = bool(d.get("own_layout", False))
         self.kind = d.get("kind", "schematic") if d.get("kind") in SHEET_KINDS else "schematic"
+        self.number_order = "down" if d.get("number_order") == "down" else "across"
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         self.version += 1
@@ -1469,12 +1472,16 @@ class _EditContext:
             # put back what this failed step had already changed
             self.ed.project._apply(self.ed.ops, undo=True)
             return False
-        if self.ed.pin_moves:
-            try:
+        try:
+            if self.ed.pin_moves:
                 from .wires import follow_pins
                 follow_pins(self.ed)
-            except Exception:
-                self.ed.project._apply(self.ed.ops, undo=True)
-                raise
+            if any(op[0] in ("sheet", "order", "meta") for op in self.ed.ops):
+                # sheets added, removed, moved or renumbered: device tags follow their pages
+                from .tags import sync_pages
+                sync_pages(self.ed, self.ed.project)
+        except Exception:
+            self.ed.project._apply(self.ed.ops, undo=True)
+            raise
         self.ed.project._commit(self.ed)
         return False

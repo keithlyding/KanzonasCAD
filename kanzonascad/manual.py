@@ -144,6 +144,30 @@ blocks back into plain lines and texts. Delete in the Library panel removes your
 footprints and parts (the built-in symbols stay).</p>
 
 
+<h2>Device tags</h2>
+<p>Every device you place gets its tag by itself: the symbol's prefix, the page number and a
+two-digit count on that page. On page 6 that's <b>CR601</b>, CR602, <b>M601</b>, PB601...; on
+page 12, CR1201. The <code>CR?</code> you may have seen before means a device still waiting
+for a number (Renumber sheet gives it one).</p>
+<ul>
+<li>A new device takes the <b>lowest free</b> number for its prefix on its page, so deleting
+CR602 frees 02 for the next relay.</li>
+<li><b>Copies</b> (Copy, Paste, Mirror keeping the original, Ctrl+drag) get their own tag;
+a device pasted onto another page takes that page's number (CR601 pasted on page 7 becomes
+CR701 when that's free).</li>
+<li>When a sheet's <b>page number changes</b> (typed in Sheet properties, or by moving sheets
+around), its tags follow: CR601 becomes CR701.</li>
+<li><b>Typing a tag yourself</b> (double-click the device) locks it: automatic numbering never
+changes it. Untick "Lock this tag" there to give it back.</li>
+<li><b>Renumber sheet</b> (Schematic tab, Sheets menu) numbers the sheet's unlocked devices
+01, 02... per prefix in the sheet's <b>numbering order</b> (Sheet properties): across then
+down, or down then across. Locked tags stay and their numbers are skipped.</li>
+<li>Contacts take their coil's or operator's tag (choosing it comes with cross-references);
+symbols without a tag prefix get no tag.</li>
+<li>Behind each tag, every device also has a hidden identity that survives renaming, so
+cross-references and panel footprints will stay linked whatever the tag becomes.</li>
+</ul>
+
 <h2>Wires</h2>
 <p><b>Wire</b> (W; Draw menu and the Schematic tab) draws a wire on layer WIRES. Click where it
 starts (a symbol's pin, another wire, or anywhere), then where it goes: it runs straight across

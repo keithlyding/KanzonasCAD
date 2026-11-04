@@ -105,8 +105,15 @@ def sheet_properties(parent, project, sheet):
     for key, label in M.SHEET_KINDS.items():
         kind.addItem(label, key)
     kind.setCurrentIndex(kind.findData(sheet.kind))
+    order = QComboBox()
+    from .tags import ORDERS
+    for key, label in ORDERS.items():
+        order.addItem(label, key)
+    order.setCurrentIndex(order.findData(sheet.number_order))
+    order.setToolTip("The order Renumber sheet numbers devices in (and, later, wires)")
     form.addRow("Title", title)
     form.addRow("Type", kind)
+    form.addRow("Numbering order", order)
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
     form.addRow(_gray("The page number starts each wire number (page 6: 6001, 6002 ...) and "
@@ -136,7 +143,8 @@ def sheet_properties(parent, project, sheet):
     else:
         fields.pop("Revision", None)
     changes = dict(title=title.text().strip(), number=number.text().strip() or None,
-                   own_layout=own.isChecked(), fields=fields, kind=kind.currentData())
+                   own_layout=own.isChecked(), fields=fields, kind=kind.currentData(),
+                   number_order=order.currentData())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     if all(before.get(k) == v for k, v in changes.items()):
