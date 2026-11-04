@@ -357,6 +357,32 @@ class Wire(Polyline):
         dx, dy = p[0] - old[0], p[1] - old[1]
         horiz = abs(pts[k][1] - old[1]) < 1e-9
         vert = abs(pts[k][0] - old[0]) < 1e-9
+        if n >= 3 and not horiz and not vert:
+            # an angled lead (a second wire on a pin): it moves whole with its end, and the
+            # piece after it stays straight (its far corner slides, or a jog is added)
+            pts[j] = list(p)
+            pts[k] = [pts[k][0] + dx, pts[k][1] + dy]
+            m = k + 1 if j == 0 else k - 1
+            seg_h = abs(pts[m][1] - (pts[k][1] - dy)) < 1e-9
+            seg_v = abs(pts[m][0] - (pts[k][0] - dx)) < 1e-9
+            far_end = m in (0, n - 1)
+            if seg_h and abs(dy) > 1e-12:
+                if far_end:
+                    xm = (pts[k][0] + pts[m][0]) / 2
+                    jog = [[xm, pts[k][1]], [xm, pts[m][1]]]
+                    at = k + 1 if j == 0 else k
+                    pts[at:at] = jog if j == 0 else jog[::-1]
+                else:
+                    pts[m][1] += dy
+            elif seg_v and abs(dx) > 1e-12:
+                if far_end:
+                    ym = (pts[k][1] + pts[m][1]) / 2
+                    jog = [[pts[k][0], ym], [pts[m][0], ym]]
+                    at = k + 1 if j == 0 else k
+                    pts[at:at] = jog if j == 0 else jog[::-1]
+                else:
+                    pts[m][0] += dx
+            return self.copy(points=_tidy(pts))
         if n >= 3:
             if horiz and not vert:
                 pts[k][1] += dy
