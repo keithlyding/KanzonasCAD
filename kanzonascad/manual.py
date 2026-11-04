@@ -259,6 +259,11 @@ it should jump, on a crossing or anywhere else on it (over a symbol's line, say)
 <b>G</b>, <b>L</b> or <b>N</b> first for a gap, a loop or <b>none</b> (none hides a crossing
 found by itself). A mark placed by hand lights up as a small circle when the cursor is over
 it; select and Erase it to take it away.</li>
+<li><b>Two wires on one terminal</b> (double landing): start a wire on a pin that already has
+one, or end it there, and the new wire leaves the pin on a short 45-degree lead (1/8 inch on
+paper) and then runs straight beside the first, as drawn by hand. It goes to the side the
+cursor is on; a third wire takes the other side. The lead keeps its angle when the symbol
+moves. Several wires on a pin get no dot: the pin is the connection.</li>
 <li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
 Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
 where needed). Select the wires too and they move with it instead.</li>

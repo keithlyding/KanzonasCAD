@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.11
+
+**New**
+- Two wires on one terminal: a second wire on a pin leaves it on a short angled lead, then runs
+  straight beside the first. A third goes on the other side.
+
+**Fixed**
+- Three or more wires on a pin no longer get a junction dot.
+
 ## 0.10.10
 
 **New**

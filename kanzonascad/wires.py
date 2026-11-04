@@ -75,7 +75,7 @@ def junctions(sheet):
             key = (round(p[0], 6), round(p[1], 6))
             ends[key] = ends.get(key, 0) + 1
     for key, n in ends.items():
-        if n >= 3:
+        if n >= 3 and not pins_on(sheet, key):      # (on a pin, the pin is the connection)
             dots.append(key)
     for w in wires:
         for p in (w.points[0], w.points[-1]):
@@ -116,6 +116,51 @@ def break_under(ed, sheet, ins):
             ed.add(sheet, Wire(_poly_piece(pts, cum, hi, total), **keep))
         cut += 1
     return cut
+
+
+LEAD = 0.125        # the angled lead of a second wire on a pin: 1/8 inch along, on paper
+
+
+def _sign(v):
+    return 1.0 if v >= 0 else -1.0
+
+
+def lead(sheet, pin, toward, exclude=None):
+    """A pin that already has a wire on it takes another (double landing) through a short
+    angled lead, as drawn by hand: the new wire leaves the pin at 45 degrees, then runs
+    straight beside the first. Returns (the lead's corner, the way out of the pin as a unit
+    vector), or None when pin isn't a pin with a wire end on it. toward: where the new wire
+    heads (the cursor), which picks the side; a third wire takes the other side, then
+    further out."""
+    if not pins_on(sheet, pin):
+        return None
+    dirs = []
+    for e in _near(sheet, pin):
+        if not isinstance(e, Wire) or e.id == exclude:
+            continue
+        for i in (0, -1):
+            if _same(e.points[i], pin):
+                q = e.points[1] if i == 0 else e.points[-2]
+                dirs.append((q[0] - pin[0], q[1] - pin[1]))
+    if not dirs:
+        return None
+    straight = [d for d in dirs if abs(d[0]) < 1e-9 or abs(d[1]) < 1e-9]
+    d = straight[0] if straight else (toward[0] - pin[0], toward[1] - pin[1])
+    out = (_sign(d[0]), 0.0) if abs(d[0]) >= abs(d[1]) else (0.0, _sign(d[1]))
+    n = (-out[1], out[0])
+    side = _sign((toward[0] - pin[0]) * n[0] + (toward[1] - pin[1]) * n[1])
+    used = {}
+    for dx, dy in dirs:
+        s = dx * n[0] + dy * n[1]
+        if abs(s) > 1e-9:
+            used[_sign(s)] = used.get(_sign(s), 0) + 1
+    if used.get(side, 0) > used.get(-side, 0):
+        side = -side                    # (the side the cursor is on is taken: the other one)
+    k = used.get(side, 0) + 1
+    L = LEAD * sheet.k()
+    corner = (pin[0] + out[0] * L * k + n[0] * side * L * k,
+              pin[1] + out[1] * L * k + n[1] * side * L * k)
+    return corner, out
 
 
 def route(a, b, horizontal_first=True):

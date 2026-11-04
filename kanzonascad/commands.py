@@ -1000,12 +1000,32 @@ class WireCmd(Command):
         self.ctx.prompt("Specify start of wire (a pin, a wire, or a point)")
 
     def _route(self, p):
+        """The points the next click at p adds: straight across and up or down, through an
+        angled lead where the wire leaves (or lands on) a pin that already has a wire."""
+        from .wires import route, lead
+        sheet = self.ctx.sheet()
         a = self.points[-1]
+        start = []
+        if len(self.points) == 1:
+            got = lead(sheet, a, p)
+            if got is not None:
+                a, out = got
+                start = [a]
+                if self.hfirst is None:
+                    # (carry on the way the lead heads, unless the cursor is well off it)
+                    h = abs(out[0]) > 0
+                    return start + route(a, p, h)
+        end = lead(sheet, p, a)
+        if end is not None and G.dist(a, p) > 1e-9:
+            c, out = end
+            h = self.hfirst
+            if h is None:
+                h = not (abs(out[0]) > 0)  # (arrive along the way out of the pin)
+            return start + route(a, c, h) + [p]
         h = self.hfirst
         if h is None:
             h = abs(p[0] - a[0]) >= abs(p[1] - a[1])
-        from .wires import route
-        return route(a, p, h)
+        return start + route(a, p, h)
 
     def point(self, p):
         from .wires import connects_at
