@@ -129,7 +129,7 @@ def run(log_path):
         state["win"], state["view"] = w, d.view
         dt = time.perf_counter() - t
         assert dt < BUDGET["start"], "start-up took %.2f s" % dt
-        heavy = [m for m in ("ezdxf", "openpyxl") if m in sys.modules]
+        heavy = [m for m in ("ezdxf", "ezdwg", "openpyxl") if m in sys.modules]
         assert not heavy, "start-up imported %s (import them where they're used)" % heavy
         return "%.2f s" % dt
     log.check("start-up", start)
@@ -174,6 +174,26 @@ def run(log_path):
         assert open(pdf, "rb").read(4) == b"%PDF"
         return "project, DXF out and in, PDF"
     log.check("save, open, DXF and PDF", files)
+
+    def dwg():
+        import tempfile
+        import ezdwg
+        from . import fileio
+        folder = tempfile.mkdtemp(prefix="kzcad-selftest")
+        path = os.path.join(folder, "test.dwg")
+        d = ezdwg.new()
+        m = d.modelspace()
+        m.add_line((1, 1), (5, 1))
+        m.add_circle((3, 3), 0.5)
+        m.add_text("DWG", (1, 5), 0.25)
+        d.save(path)
+        ents, rep = fileio.read_dwg(path)
+        kinds = sorted(e.kind for e in ents)
+        assert kinds == ["circle", "line", "text"], kinds
+        line = [e for e in ents if e.kind == "line"][0]
+        assert abs(line.length() - 4.0) < 1e-6, line.length()      # units kept (not meters)
+        return "read with %s: %s" % (rep["reader"], ", ".join(kinds))
+    log.check("DWG import", dwg)
 
     def library():
         from .library import Library

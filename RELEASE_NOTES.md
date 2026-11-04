@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.8
+
+**New**
+- Open and import AutoCAD DWG drawings directly (AutoCAD 2018 format and older, which is what
+  every current AutoCAD saves), with nothing to install. File > Open... or Import DXF or DWG
+  into this sheet....
+- If a DWG can't be read and the free ODA File Converter is installed, KanzonasCAD uses it by
+  itself.
+
 ## 0.7
 
 **New**

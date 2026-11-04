@@ -15,6 +15,9 @@ nobody understands).
   0.3.3: icons in Windows dark mode.
 - 0.4: device tags by page number (CR601), locked tags, Renumber sheet. 0.4.1: Windows
   installer (this user or all users), updates through the next setup.
+- 0.5: contacts linked to their coil, cross-references (auto, freeze, update). 0.6: wire
+  numbers, distribution blocks, off-sheet connectors. 0.7: three-phase symbols, terminal
+  strips, PLC I/O. 0.8: DWG import (ezdwg; ODA File Converter as fallback).
 - Multi-sheet projects with a sheet list and sheet types (schematic, panel, report, other):
   done since 0.1/0.2.
 

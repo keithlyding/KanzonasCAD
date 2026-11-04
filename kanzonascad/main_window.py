@@ -172,8 +172,8 @@ class MainWindow(QMainWindow):
         A("open", "&Open...", self.open_dialog, "Ctrl+O", label="Open")
         A("save", "&Save", self.save, "Ctrl+S", label="Save")
         A("save_as", "Save &as...", self.save_as, "Ctrl+Shift+S", label="Save as")
-        A("import_dxf", "&Import DXF into this sheet...", self.import_dxf, icon="dxf_in",
-          label="Import DXF")
+        A("import_dxf", "&Import DXF or DWG into this sheet...", self.import_dxf, icon="dxf_in",
+          label="Import DXF/DWG")
         A("export_dxf", "Export this sheet to &DXF...", self.export_dxf, icon="dxf_out",
           label="Sheet to DXF")
         A("export_dxf_all", "Export all sheets to DX&F...", self.export_dxf_all, icon="dxf_out",
@@ -566,7 +566,8 @@ class MainWindow(QMainWindow):
     def open_dialog(self):
         path, _f = QFileDialog.getOpenFileName(
             self, "Open", self._last_dir(),
-            "Projects and drawings (*.kzcad *.dxf);;KanzonasCAD project (*.kzcad);;DXF (*.dxf)")
+            "Projects and drawings (*.kzcad *.dxf *.dwg);;KanzonasCAD project (*.kzcad);;"
+            "DXF (*.dxf);;DWG (*.dwg)")
         if path:
             self.open_path(path)
 
@@ -578,7 +579,7 @@ class MainWindow(QMainWindow):
                 self.tabs.setCurrentIndex(i)
                 return d
         try:
-            if path.lower().endswith(".dxf"):
+            if path.lower().endswith((".dxf", ".dwg")):
                 p = M.Project.new()
                 p.sheets[0].title = os.path.splitext(os.path.basename(path))[0]
                 rep = fileio.import_dxf(p, p.sheets[0], path)
@@ -745,7 +746,8 @@ class MainWindow(QMainWindow):
         d = self.doc()
         if d is None:
             return
-        path, _f = QFileDialog.getOpenFileName(self, "Import DXF", self._last_dir(), "DXF (*.dxf)")
+        path, _f = QFileDialog.getOpenFileName(self, "Import DXF or DWG", self._last_dir(),
+                                               "Drawings (*.dxf *.dwg);;DXF (*.dxf);;DWG (*.dwg)")
         if not path:
             return
         try:
@@ -758,6 +760,8 @@ class MainWindow(QMainWindow):
 
     def _dxf_report(self, rep):
         msg = "Imported %d object(s); drawing units: %s." % (rep["count"], rep["units"])
+        if rep.get("reader") == "ODA File Converter":
+            msg += " (Read with the ODA File Converter.)"
         if rep["skipped"]:
             msg += " Skipped: " + ", ".join("%s x%d" % kv for kv in sorted(rep["skipped"].items()))
         self.cmdline.add_history(msg)
