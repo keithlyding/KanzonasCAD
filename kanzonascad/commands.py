@@ -635,9 +635,10 @@ class CopyCmd(_TwoPoint):
         return out
 
     def apply(self, p):
+        from .tags import retag_copies
         sheet = self.ctx.sheet()
         with self.ctx.edit("Copy") as ed:
-            for e in self.result(p):
+            for e in retag_copies(self.ctx.project, sheet, self.result(p)):
                 ed.add(sheet, e)
         self.last = p
 
@@ -793,11 +794,13 @@ class MirrorCmd(_TwoPoint):
     def _do(self, erase):
         sheet = self.ctx.sheet()
         with self.ctx.edit("Mirror") as ed:
-            for e in self.result(self.to_pt):
-                if not erase:
-                    e.id = None
+            from .tags import retag_copies
+            mirrored = self.result(self.to_pt)
+            if not erase:
+                for e in retag_copies(self.ctx.project, sheet, mirrored):
                     ed.add(sheet, e)
-                else:
+            else:
+                for e in mirrored:
                     ed.change(sheet, e)
         self.finish()
 
@@ -924,10 +927,14 @@ class PasteCmd(Command):
                 if isinstance(e, M.Insert) and e.block not in self.ctx.project.blocks \
                         and e.block in self.blocks:
                     ed.block(self.blocks[e.block])
+            from .tags import retag_copies
+            placed = []
             for e in self.result(p):
                 if isinstance(e, M.Insert):
                     e.defn = self.ctx.project.blocks.get(e.block, e.defn)
                     e._world = None
+                placed.append(e)
+            for e in retag_copies(self.ctx.project, sheet, placed):
                 ids.add(ed.add(sheet, e).id)
         self.ctx.set_selection(ids)
         self.finish()
@@ -1294,7 +1301,10 @@ class InsertCmd(Command):
             if self.defn.name not in project.blocks:
                 # the project keeps its own copy (a block already in it stays as it was)
                 ed.block(self.defn)
-            ins = self._make(p, project.blocks[self.defn.name])
+            from . import tags
+            defn = project.blocks[self.defn.name]
+            ins = self._make(p, defn)
+            ins = ins.copy(attrs=tags.new_attrs(project, sheet, defn, ins.attrs))
             if ins.layer not in project.layers:
                 ed.layer(ins.layer, None, M.Layer(ins.layer, M.ADAPTIVE).to_dict())
             ed.add(sheet, ins)

@@ -157,7 +157,8 @@ class BlockWorkflowTest(unittest.TestCase):
         fileio.export_dxf(q, q.sheets[0], dxf, include_frame=False)
         ents, _rep = fileio.read_dxf(dxf)
         self.assertIn("circle", [e.kind for e in ents])
-        self.assertIn("CR601", [e.text for e in ents if e.kind == "text"])
+        # pasted onto page 1 of the new project, the device's tag took that page: CR101
+        self.assertIn("CR101", [e.text for e in ents if e.kind == "text"])
         # explode
         w.tabs.setCurrentIndex(0)
         v.set_selection({ins.id})

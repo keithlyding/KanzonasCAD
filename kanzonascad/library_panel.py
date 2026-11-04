@@ -338,13 +338,18 @@ def attributes_dialog(parent, library, ins):
         e = QLineEdit(ins.attrs.get(k, ""))
         edits[k] = e
         form.addRow(labels[k], e)
+    lock = QCheckBox("Lock this tag (automatic numbering leaves it alone)")
+    lock.setChecked(ins.attrs.get("TAG_LOCK") == "1")
+    # a tag typed by hand is meant: it locks itself (untick to let numbering have it back)
+    edits["TAG"].textEdited.connect(lambda _t: lock.setChecked(True))
+    form.addRow("", lock)
     v.addLayout(form)
     kind = ins.defn.kind if ins.defn is not None else "symbol"
     parts = []
     try:
         parts = library.parts_using(kind, ins.block)
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as ex:
+        v.addWidget(_hint("Couldn't read your library's parts: %s" % ex))
     part_id = [ins.attrs.get("PART", "")]
     if parts:
         v.addWidget(QLabel("Parts in your library for %s (double-click one to use it):"
@@ -376,4 +381,8 @@ def attributes_dialog(parent, library, ins):
         out[k] = e.text().strip()
     if part_id[0]:
         out["PART"] = part_id[0]
+    if lock.isChecked():
+        out["TAG_LOCK"] = "1"
+    else:
+        out.pop("TAG_LOCK", None)
     return out

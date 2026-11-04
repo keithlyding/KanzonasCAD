@@ -218,6 +218,26 @@ def run(log_path):
             len(v.sheet().entities) - before)
     log.check("wires", wiring)
 
+    def tagging():
+        from .library import Library
+        from . import tags
+        w = state["win"]
+        v = state["view"]
+        coil = Library().get("symbol", "Relay coil")
+        before = {e.id for e in v.sheet().entities.values() if tags.is_device(e)}
+        page = v.project.sheet_number(v.sheet())
+        made = []
+        for at in ("9,9", "9,8"):
+            v.run(C.InsertCmd, coil, {})
+            assert v.input_text(at)
+            made.append([e for e in v.sheet().entities.values() if tags.is_device(e)
+                         and e.id not in before and e.id not in made][0].id)
+        got = [v.sheet().entities[i].attrs["TAG"] for i in made]
+        assert all(t.startswith("CR" + page) for t in got) and len(set(got)) == 2, got
+        w.renumber_sheet()
+        return "devices tagged %s; renumbered" % ", ".join(got)
+    log.check("device tags", tagging)
+
     def manual():
         gaps = manual_gaps(state["win"])
         assert not gaps, "missing from the manual: %s" % gaps

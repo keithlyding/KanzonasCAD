@@ -636,14 +636,16 @@ class CadView(QWidget):
                     sheet = self.sheet()
                     with self.edit("Copy" if copy else "Move") as ed:
                         new = set()
-                        for ent in d["ents"]:
-                            c = ent.moved(dx, dy)
-                            if copy:
+                        moved = [ent.moved(dx, dy) for ent in d["ents"]]
+                        if copy:
+                            from .tags import retag_copies
+                            for c in retag_copies(self.project, sheet, moved):
                                 c.id = None
-                                ed.add(sheet, c)
-                            else:
+                                new.add(ed.add(sheet, c).id)
+                        else:
+                            for c in moved:
                                 ed.change(sheet, c)
-                            new.add(c.id)
+                                new.add(c.id)
                     self.set_selection(new)
                     self.messaged.emit("%s %d object(s)" % ("Copied" if copy else "Moved",
                                                             len(new)))
