@@ -19,13 +19,15 @@ Press **F1** in the app for the user manual.
 
 1. Open the **[Releases page](https://github.com/keithlyding/KanzonasCAD/releases)** and, under
    the newest version, download **`KanzonasCAD-v<version>-setup.exe`**.
-2. Run it. It installs for you only, so it needs no administrator rights. Windows may warn
+2. Run it. It asks whether to install for you only (no administrator rights needed) or for
+   everyone on the PC (Windows asks for administrator rights). Windows may warn
    about an unknown publisher (the app isn't code-signed yet): **More info** > **Run anyway**.
 3. Start KanzonasCAD from the Start menu. Double-clicking a `.kzcad` project opens it too.
 
 **Updates:** KanzonasCAD tells you when a new version is out (or use **Help > Check for
 updates...**). **Update now** downloads it, checks it, and installs it over your copy. Your
-projects, library and settings stay as they are.
+projects, library and settings stay as they are. A copy installed for everyone is updated
+for everyone, after Windows' administrator prompt.
 
 **Uninstall:** Windows **Settings > Apps > Installed apps > KanzonasCAD > Uninstall**. Your
 projects and your library (in Documents) are kept.

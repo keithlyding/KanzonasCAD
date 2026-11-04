@@ -1361,7 +1361,10 @@ class MainWindow(QMainWindow):
                 "installer": "Update now downloads the new setup, checks it against the "
                              "release, closes KanzonasCAD (you'll be asked to save first) and "
                              "installs it over this copy, which then starts again. Your "
-                             "projects, library and settings aren't touched.",
+                             "projects, library and settings aren't touched."
+                             + (" Installed for all users: Windows asks for administrator "
+                                "rights." if updates.how() == "installer"
+                                and updates.for_all_users(updates.app_folder()) else ""),
                 "windows": "Update now downloads it, checks it against the release, and "
                            "replaces this copy when KanzonasCAD closes (you'll be asked to save "
                            "first). Your projects and library aren't touched.",
@@ -1459,7 +1462,7 @@ class MainWindow(QMainWindow):
                 dlg.accept()
                 if self.close():
                     if setup:
-                        start_setup(new)
+                        start_setup(new, app_dir)
                     else:
                         start_swap(new, app_dir)
                     QApplication.instance().quit()

@@ -1,7 +1,8 @@
 ; KanzonasCAD installer (Inno Setup 6). Built by the GitHub workflow:
 ;   ISCC.exe /DMyAppVersion=0.4.1 installer\KanzonasCAD.iss
-; Installs for the current user only (no administrator rights needed, ever: KanzonasCAD's
-; Update now runs the next setup the same way). Adapted from KanzonasPDF's installer.
+; Installs for the current user (no administrator rights needed) unless "all users" is picked
+; on the first page (Windows' administrator prompt). KanzonasCAD's Update now runs the next
+; setup the same way the copy was installed. Adapted from KanzonasPDF's installer.
 
 #ifndef MyAppVersion
   #define MyAppVersion "0.0"
@@ -22,6 +23,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist-installer
@@ -51,7 +53,8 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
 
 [Registry]
-; .kzcad projects open in KanzonasCAD (for this user; removed again by the uninstaller)
+; .kzcad projects open in KanzonasCAD (for this user, or everyone with an all-users install;
+; removed again by the uninstaller)
 Root: HKA; Subkey: "Software\Classes\.kzcad"; ValueType: string; ValueData: "KanzonasCAD.Project"; Flags: uninsdeletevalue; Tasks: kzcadfiles
 Root: HKA; Subkey: "Software\Classes\.kzcad\OpenWithProgids"; ValueType: string; ValueName: "KanzonasCAD.Project"; ValueData: ""; Flags: uninsdeletevalue; Tasks: kzcadfiles
 Root: HKA; Subkey: "Software\Classes\KanzonasCAD.Project"; ValueType: string; ValueData: "KanzonasCAD project"; Flags: uninsdeletekey; Tasks: kzcadfiles

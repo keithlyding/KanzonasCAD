@@ -116,12 +116,36 @@ class InstallerTest(unittest.TestCase):
         self.assertFalse(updates.installed(None))
         open(os.path.join(app, "unins000.exe"), "wb").close()
         self.assertTrue(updates.installed(app))
-        cmd = updates.installer_command(r"C:\T\KanzonasCAD-v0.5-setup.exe")
+        cmd = updates.installer_command(r"C:\T\KanzonasCAD-v0.5-setup.exe", app)
         self.assertEqual(cmd[0], r"C:\T\KanzonasCAD-v0.5-setup.exe")
         # (the same switches the Windows build tests the setup with)
         for flag in ("/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/CLOSEAPPLICATIONS",
                      "/CURRENTUSER", "/RELAUNCH"):
             self.assertIn(flag, cmd)
+        # a copy under Program Files with no uninstall entry of the setup's: all users
+        pf = os.path.join(tempfile.mkdtemp(), "Program Files")
+        old = os.environ.get("ProgramFiles")
+        os.environ["ProgramFiles"] = pf
+        try:
+            from unittest import mock
+            with mock.patch.object(updates, "_installed_in", return_value=None):
+                self.assertTrue(updates.for_all_users(os.path.join(pf, "KanzonasCAD")))
+                self.assertIn("/ALLUSERS", updates.installer_command(
+                    "s.exe", os.path.join(pf, "KanzonasCAD")))
+                self.assertFalse(updates.for_all_users(app))
+            # the setup's own entry decides, wherever the folder is
+            with mock.patch.object(updates, "_installed_in",
+                                   side_effect=lambda hive, d: hive == "HKLM"):
+                if os.name != "nt":
+                    import sys
+                    fake = mock.MagicMock(HKEY_CURRENT_USER="HKCU", HKEY_LOCAL_MACHINE="HKLM")
+                    with mock.patch.dict(sys.modules, {"winreg": fake}):
+                        self.assertTrue(updates.for_all_users(app))
+        finally:
+            if old is None:
+                del os.environ["ProgramFiles"]
+            else:
+                os.environ["ProgramFiles"] = old
         self.assertEqual(updates.setup_asset_name("0.5"), "KanzonasCAD-v0.5-setup.exe")
 
     def _download(self, data, sha):

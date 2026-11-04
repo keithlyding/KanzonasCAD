@@ -59,6 +59,20 @@ nobody understands).
      once with the count ("Delete 14 parts?"); if some are used in the open project, ask
      separately ("2 of these are in your project. Delete those too?": No deletes only the
      unused ones). Deleting from the library never breaks placed symbols.
+   - **Two library folders** (owner's choice, Nov 2026), each chosen freely: the setup
+     suggests the first as a shared one in a cloud-synced folder (OneDrive / SharePoint /
+     Teams, Google Drive, Dropbox: synced by their own apps, no sign-in inside KanzonasCAD)
+     and the second as a personal one, but either can be anything (two local folders to keep
+     two libraries apart is fine). Both are searched together; each item shows which library
+     it's from; a name in both shows both; saving asks which one (remembering the last).
+   - **One file per part** (not one parts.json), so two people adding parts at once don't
+     make a sync conflict copy.
+   - A folder KanzonasCAD can't write to (read-only share) is used read-only, and says so.
+   - Changes made by others show up without reopening (the folders are watched); conflict
+     copies left by a sync app ("parts (Keith's PC).json"...) are pointed out, not listed as
+     parts.
+   - Later: "Update from library" lists a project's blocks that are older than the library's
+     and updates only the ones chosen.
 6. **Cross-references and wire numbers**:
    - **Schematic <-> panel links go through the device (tag + hidden id), not the part**: three
      contactors may share one catalog number. Links ignore scale and screen position.

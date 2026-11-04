@@ -133,6 +133,8 @@ jobs:
           if ((Get-ItemProperty $un).DisplayVersion -ne $v) { throw "Installed version is '$((Get-ItemProperty $un).DisplayVersion)' after the update" }
           if ((Get-ItemProperty $un).InstallLocation.TrimEnd('\') -ne $dir) { throw "The update installed to a different folder" }
           if ((Get-ItemProperty "HKCU:\Software\KanzonasCAD\upgradetest").keep -ne "yes") { throw "The update lost the user's settings" }
+          python -c "import sys; from kanzonascad import updates; sys.exit(1 if updates.for_all_users(sys.argv[1]) else 0)" $dir
+          if ($LASTEXITCODE -ne 0) { throw "The updater takes this per-user copy for an all-users one" }
           $p = Start-Process "$dir\KanzonasCAD.exe" -ArgumentList "--selftest","installed-selftest.log" -PassThru -Wait
           Get-Content installed-selftest.log
           if ($p.ExitCode -ne 0) { throw "The installed app failed its self test" }
@@ -142,6 +144,41 @@ jobs:
           if (Test-Path "Registry::HKEY_CURRENT_USER\Software\Classes\KanzonasCAD.Project") { throw "Uninstall left the .kzcad association behind" }
           Remove-Item -Recurse -Force "HKCU:\Software\KanzonasCAD\upgradetest" -ErrorAction SilentlyContinue
           Write-Host "Installed 0.0, updated to $v in place (settings kept, restarted), uninstalled"
+
+      - name: Test the installer for all users (install, update as Update now does, uninstall)
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          # (the build machine runs as administrator: no prompt; on a PC, Windows asks)
+          $v = "${{ steps.ver.outputs.version }}"
+          $un = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{3D7B9E24-6A1C-4F85-B2E0-9C4D7A15E863}_is1"
+          $p = Start-Process "dist-installer\KanzonasCAD-v0.0-setup.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/ALLUSERS","/NORESTART","/TASKS=kzcadfiles" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "The all-users install failed (code $($p.ExitCode))" }
+          $dir = (Get-ItemProperty $un).InstallLocation.TrimEnd('\')
+          if (-not $dir.StartsWith($env:ProgramFiles)) { throw "All-users install went to '$dir'" }
+          if (-not (Test-Path "Registry::HKEY_LOCAL_MACHINE\Software\Classes\KanzonasCAD.Project\shell\open\command")) { throw ".kzcad isn't associated for all users" }
+          python -c "import sys; from kanzonascad import updates; c = updates.installer_command('s.exe', sys.argv[1]); print(c); sys.exit(0 if '/ALLUSERS' in c else 1)" $dir
+          if ($LASTEXITCODE -ne 0) { throw "The updater doesn't see the all-users install" }
+          $uargs = "/SILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/CLOSEAPPLICATIONS","/ALLUSERS","/RELAUNCH"
+          $p = Start-Process "dist-installer\KanzonasCAD-v$v-setup.exe" -ArgumentList $uargs -PassThru
+          $p.WaitForExit()
+          if ($p.ExitCode -ne 0) { throw "The all-users update failed (code $($p.ExitCode))" }
+          foreach ($i in 1..30) {
+            $again = Get-Process KanzonasCAD -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($dir) }
+            if ($again) { break }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $again) { throw "The all-users update didn't start KanzonasCAD again" }
+          $again | Stop-Process -Force
+          Start-Sleep -Seconds 2
+          if ((Get-ItemProperty $un).DisplayVersion -ne $v) { throw "All-users version is '$((Get-ItemProperty $un).DisplayVersion)' after the update" }
+          if ((Get-ItemProperty $un).InstallLocation.TrimEnd('\') -ne $dir) { throw "The all-users update went to a different folder" }
+          $cu = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{3D7B9E24-6A1C-4F85-B2E0-9C4D7A15E863}_is1"
+          if (Test-Path $cu) { throw "The all-users update also installed a per-user copy" }
+          $p = Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -PassThru -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path "$dir\KanzonasCAD.exe") { throw "Uninstall left the all-users app behind" }
+          Write-Host "All users: installed 0.0, updated to $v in place, restarted, uninstalled"
 
       - uses: actions/upload-artifact@v4
         with:
