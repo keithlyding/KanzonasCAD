@@ -73,6 +73,18 @@ color, or to set it back to ByLayer. A symbol or footprint's lines follow the co
 layer it sits on, or its own color if you gave it one. Wires go on layer WIRES, symbols on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them.</p>
+<p><b>Layers</b>, as in AutoCAD: a hidden layer isn't drawn, printed or picked; a locked one
+is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
+Locked, color, current layer). Quicker, on the Home tab's Layers group and the Modify menu:</p>
+<ul>
+<li>The <b>layer list</b> button next to the current layer: every layer with its light bulb
+(click to hide or show it) and lock (click to lock or unlock it).</li>
+<li><b>Hide layer</b> (LAYOFF): click an object, or select objects first: their layer hides.</li>
+<li><b>Show only this layer</b> (LAYISO): every other layer hides.</li>
+<li><b>Show all layers</b> (LAYON) and <b>Unlock all layers</b> (LAYULK).</li>
+<li><b>Lock layer</b> (LAYLCK): click an object, or select objects first: their layer locks.</li>
+</ul>
+<p>Each of these is one step for Undo.</p>
 <p>The ribbon's <b>Schematic</b> and <b>Panel</b> tabs gather the tools for each kind of work.
 Both are always there: any sheet can hold a schematic, a panel layout, or both.</p>
 
@@ -470,7 +482,8 @@ it switches while KanzonasCAD is open.</li>
 <h2>Edit menu</h2>
 <ul>
 <li><b>Undo</b> (Ctrl+Z) and <b>Redo</b> (Ctrl+Y or Ctrl+Shift+Z): every change, including
-sheet and layer changes, can be undone.</li>
+sheet and layer changes, can be undone. Their arrows also sit right after the menus (File,
+Edit, View...), always a click away.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
 insertion point (the copied objects' lower left corner lands there). Works between projects,
 and after KanzonasCAD is closed and started again.</li>

@@ -1619,6 +1619,102 @@ class WireCrossCmd(Command):
         self._prompt()
 
 
+# ---- layers, quickly (AutoCAD's LAYOFF, LAYISO, LAYON, LAYLCK, LAYULK) --------------------------
+def set_layers(ctx, name, changes):
+    """One undoable step: {layer name: {"visible": ..., "locked": ...}}. Returns how many
+    changed."""
+    p = ctx.project
+    n = 0
+    with ctx.edit(name) as ed:
+        for lname, ch in changes.items():
+            lay = p.layers.get(lname)
+            if lay is None:
+                continue
+            before = lay.to_dict()
+            after = dict(before, **ch)
+            if after != before:
+                ed.layer(lname, before, after)
+                n += 1
+    return n
+
+
+class _LayerPickCmd(Command):
+    """Acts on the layers of the selected objects, or of an object clicked."""
+    verb = ""
+
+    def begin(self):
+        sel = _selected(self.ctx)
+        if sel:
+            self.act({e.layer for e in sel})
+            self.ctx.set_selection(set())
+            self.finish()
+            return
+        self.picking = True
+        self.ctx.prompt("Select an object on the layer to %s" % self.verb)
+
+    def pick(self, p):
+        e = self.ctx.pick_entity(p)
+        if e is None:
+            self.ctx.message("Nothing there: click an object")
+            return
+        self.act({e.layer})
+        self.finish()
+
+
+class LayerOffCmd(_LayerPickCmd):
+    """LAYOFF: hide the layer of an object (clicked, or selected)."""
+    name, title, verb = "LAYOFF", "Hide layer", "hide"
+
+    def act(self, names):
+        n = set_layers(self.ctx, self.title, {k: {"visible": False} for k in names})
+        self.ctx.message("Hidden: %s (Show all layers brings it back)" % ", ".join(sorted(names))
+                         if n else "Already hidden")
+
+
+class LayerIsoCmd(_LayerPickCmd):
+    """LAYISO: show only the layer of an object (clicked, or the selected objects' layers)."""
+    name, title, verb = "LAYISO", "Show only this layer", "show alone"
+
+    def act(self, names):
+        ch = {k: {"visible": k in names} for k in self.ctx.project.layers}
+        set_layers(self.ctx, self.title, ch)
+        self.ctx.message("Showing only: %s (Show all layers brings the others back)"
+                         % ", ".join(sorted(names)))
+
+
+class LayerLockCmd(_LayerPickCmd):
+    """LAYLCK: lock the layer of an object (clicked, or selected)."""
+    name, title, verb = "LAYLCK", "Lock layer", "lock"
+
+    def act(self, names):
+        set_layers(self.ctx, self.title, {k: {"locked": True} for k in names})
+        self.ctx.message("Locked: %s (Unlock all layers frees it)" % ", ".join(sorted(names)))
+
+
+class LayerOnCmd(Command):
+    """LAYON: show every layer."""
+    name, title = "LAYON", "Show all layers"
+    repeatable = False
+
+    def begin(self):
+        n = set_layers(self.ctx, self.title, {k: {"visible": True}
+                                              for k in self.ctx.project.layers})
+        self.ctx.message("All layers shown" if n else "Every layer was already shown")
+        self.finish()
+
+
+class LayerUnlockAllCmd(Command):
+    """LAYULK: unlock every layer."""
+    name, title = "LAYULK", "Unlock all layers"
+    repeatable = False
+
+    def begin(self):
+        n = set_layers(self.ctx, self.title, {k: {"locked": False}
+                                              for k in self.ctx.project.layers})
+        self.ctx.message("All layers unlocked" if n else "No layer was locked")
+        self.finish()
+
+
 COMMANDS = {
     "LINE": (LineCmd, ["L"]),
     "PLINE": (PolylineCmd, ["PL"]),
@@ -1642,6 +1738,11 @@ COMMANDS = {
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
     "DUCT": (DuctCmd, ["WIREWAY", "WD"]),
+    "LAYOFF": (LayerOffCmd, []),
+    "LAYISO": (LayerIsoCmd, []),
+    "LAYON": (LayerOnCmd, []),
+    "LAYLCK": (LayerLockCmd, []),
+    "LAYULK": (LayerUnlockAllCmd, []),
     "WIRECROSS": (WireCrossCmd, ["WX"]),
 }
 

@@ -6,12 +6,22 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
-## 0.10.8
+## 0.10.6
 
 **Fixed**
 - Text could come in huge: a second click set its height, and every new text kept it. Now you
   click once and type. Type H, R or J before clicking for the height, rotation or
   justification. A height left huge goes back to 1/8 inch.
+
+## 0.10.5
+
+**New**
+- Undo and Redo arrows right after the menus.
+- Layers, quickly: a layer list with a light bulb and a lock for each layer; Hide layer, Show
+  only this layer, Show all layers, Lock layer and Unlock all layers.
+
+**Fixed**
+- The Sheets menu listed dimension, DIN rail, wire duct and wire crossing commands that belong in Draw.
 
 ## 0.10.4
 
