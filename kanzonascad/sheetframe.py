@@ -63,6 +63,45 @@ def default_title_block(sheet):
     return out
 
 
+STRIP_W = 1.75                  # a right-hand strip title block's width
+STRIP_ROW = 0.375               # its rows' height (and a bottom strip's height, twice)
+STRIP_FIELDS = [("SHEET", "{Sheet} OF {Sheets}"), ("REV", "{Revision}"),
+                ("DRAWING NO.", "{Drawing number}"), ("SCALE", "{Scale}"), ("DATE", "{Date}"),
+                ("CHECKED BY", "{Checked by}"), ("DRAWN BY", "{Drawn by}"),
+                ("PROJECT", "{Project}"), ("CUSTOMER", "{Customer}")]
+
+
+def strip_title_block(sheet, side):
+    """A title block made for a strip (Project properties, Title block position): down the
+    right ("right": cells stacked from the bottom, the sheet title above them, room for a logo
+    or notes at the top) or along the bottom ("bottom": one row of cells across)."""
+    out = []
+    x0, y0, x1, y1 = sheet.frame()
+    if side == "right":
+        bx0 = x1 - STRIP_W
+        _box(bx0, y0, x1, y1, out)
+        y = y0
+        for label, value in STRIP_FIELDS:
+            _cell(out, bx0, y, x1, y + STRIP_ROW, label, value)
+            y += STRIP_ROW
+        _cell(out, bx0, y, x1, y + 2 * STRIP_ROW, "SHEET TITLE", "{Sheet title}", TITLE_H)
+        return out
+    h = 2 * STRIP_ROW
+    cells = [("CUSTOMER", "{Customer}", 2.0), ("PROJECT", "{Project}", 2.0),
+             ("SHEET TITLE", "{Sheet title}", 3.0), ("DRAWN BY", "{Drawn by}", 1.0),
+             ("CHECKED BY", "{Checked by}", 1.0), ("DATE", "{Date}", 1.0),
+             ("SCALE", "{Scale}", 0.9), ("DRAWING NO.", "{Drawing number}", 1.6),
+             ("REV", "{Revision}", 0.5), ("SHEET", "{Sheet} OF {Sheets}", 0.9)]
+    total = sum(c[2] for c in cells)
+    k = (x1 - x0) / total
+    x = x0
+    for label, value, w in cells:
+        _cell(out, x, y0, x + w * k, y0 + h, label, value,
+              TITLE_H if label == "SHEET TITLE" else VALUE_H)
+        x += w * k
+    return out
+
+
 def field_values(project, sheet):
     v = dict(project.fields)
     v["Sheet"] = project.sheet_number(sheet)
@@ -128,9 +167,14 @@ def border_entities(sheet):
     k = sheet.k()
     m, s = sheet.MARGIN * k, sheet.STRIP * k
     _box(m, m, w - m, h - m, out, FRAME_LAYER)                  # border
-    x0, y0, x1, y1 = sheet.frame()
-    out.append(Line((x0, y1), (x1, y1), layer=FRAME_LAYER))     # under the column strip
-    out.append(Line((x0, y0), (x0, y1), layer=FRAME_LAYER))     # right of the row strip
+    fx0, fy0, fx1, fy1 = sheet.frame()
+    x0, y0, x1, y1 = sheet.zone_frame()        # (smaller than the frame beside a title strip)
+    out.append(Line((fx0, fy1), (fx1, fy1), layer=FRAME_LAYER))  # under the column strip
+    out.append(Line((fx0, fy0), (fx0, fy1), layer=FRAME_LAYER))  # right of the row strip
+    if x1 < fx1 - 1e-9:                         # the title block strip down the right
+        out.append(Line((x1, fy0), (x1, fy1 + s), layer=FRAME_LAYER))
+    if y0 > fy0 + 1e-9:                         # the title block strip along the bottom
+        out.append(Line((fx0 - s, y0), (fx1, y0), layer=FRAME_LAYER))
     cw = (x1 - x0) / sheet.cols
     rh = (y1 - y0) / sheet.rows
     th = min(0.12 * k, s * 0.55)

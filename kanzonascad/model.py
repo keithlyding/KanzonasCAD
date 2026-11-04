@@ -54,6 +54,9 @@ DEFAULT_SETTINGS = {
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
     "wire_number_height": 0.08,
     "dim_height": 0.1,          # dimension text, paper inches
+    "tb_position": "corner",    # the title block: in the lower right corner, or a strip down
+                                # the right ("right") or along the bottom ("bottom") that the
+                                # zone grid stops at
     "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)
     "wire_jump": "vertical",    # which one jumps: vertical or horizontal
     "rail_profile": "TS35x7.5",             # DIN rail and wire duct drawn next
@@ -1406,6 +1409,9 @@ class Sheet:
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
         self.scale_name = ""                # its preset's name (1/4" = 1'-0"...), "" for 1:N
+        self.reserve = None                 # ("right" | "bottom", paper inches): the title
+                                            # block's strip, the zones stop at it (set by the
+                                            # project: Project.sync_reserve)
         self.xref_frozen = False            # cross-references kept as they were (issued sheet)
         self.xref_shown = None              # the cross-references shown while frozen (or while
                                             # the project's aren't automatic): xrefs.py
@@ -1457,10 +1463,23 @@ class Sheet:
         m, s = self.MARGIN * k, self.STRIP * k
         return (m + s, m, w - m, h - m - s)
 
-    def zone_at(self, x, y):
-        """(row letter, column number) of a point, or None outside the drawing area. Columns
-        count left to right from col_start, rows top to bottom from the row_start letter."""
+    def zone_frame(self):
+        """The part of the drawing area the zone grid covers: all of it, or what a title
+        block strip down the right or along the bottom leaves."""
         x0, y0, x1, y1 = self.frame()
+        if self.reserve:
+            side, size = self.reserve
+            size *= self.k()
+            if side == "right":
+                x1 = max(x0 + (x1 - x0) * 0.2, x1 - size)
+            elif side == "bottom":
+                y0 = min(y1 - (y1 - y0) * 0.2, y0 + size)
+        return x0, y0, x1, y1
+
+    def zone_at(self, x, y):
+        """(row letter, column number) of a point, or None outside the zone grid. Columns
+        count left to right from col_start, rows top to bottom from the row_start letter."""
+        x0, y0, x1, y1 = self.zone_frame()
         if not (x0 <= x <= x1 and y0 <= y <= y1):
             return None
         col = min(self.cols - 1, int((x - x0) / ((x1 - x0) / self.cols)))
@@ -1736,8 +1755,10 @@ class Project:
     def make_sheet(self, title=""):
         """A new sheet laid out as the project says (not yet in the project)."""
         st = self.settings
-        return Sheet(title=title, size=st["size"], cols=st["cols"], rows=st["rows"],
-                     col_start=st["col_start"], row_start=st["row_start"])
+        s = Sheet(title=title, size=st["size"], cols=st["cols"], rows=st["rows"],
+                  col_start=st["col_start"], row_start=st["row_start"])
+        s.reserve = self.reserve()
+        return s
 
     @classmethod
     def new(cls):
@@ -1836,8 +1857,30 @@ class Project:
         self._changed()
 
     def _changed(self):
+        self.sync_reserve()
         for f in list(self.listeners):
             f()
+
+    def reserve(self):
+        """The title block strip the zones stop at, ("right" | "bottom", paper inches), or None
+        (title block in the corner)."""
+        pos = self.settings.get("tb_position", "corner")
+        if pos not in ("right", "bottom"):
+            return None
+        bb = self.title_block.extents()
+        if bb is None:
+            return None
+        x0, y0, x1, _y1 = self.title_block.frame()
+        size = (x1 - bb[0]) if pos == "right" else (bb[3] - y0)
+        return (pos, max(0.0, size)) if size > 1e-6 else None
+
+    def sync_reserve(self):
+        """Every sheet's zone grid stops at the title block strip (when there is one)."""
+        r = self.reserve()
+        for s in self.sheets:
+            if s.reserve != r:
+                s.reserve = r
+                s.version += 1
 
     def is_modified(self):
         return self.saved_at != len(self.undo_stack)
@@ -1959,6 +2002,7 @@ class Project:
             p.title_block.touched = set()
         else:
             p._default_title_block()
+        p.sync_reserve()
         return p
 
     def save(self, path, backups=None):

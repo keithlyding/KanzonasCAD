@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.9
+
+**New**
+- Title block position (Project properties, General): in the lower right corner, as a
+  right-hand strip, or along the bottom. With a strip the zones stop at the title block, so
+  grid references never point into it.
+- A ready-made title block for each position, with the same fields (Undo puts yours back).
+
 ## 0.10.8
 
 **New**
