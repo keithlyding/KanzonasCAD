@@ -15,6 +15,24 @@ and reports. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Press **F1** in the app for the user manual.
 
+## Install on Windows (the easy way)
+
+1. Open the **[Releases page](https://github.com/keithlyding/KanzonasCAD/releases)** and, under
+   the newest version, download **`KanzonasCAD-v<version>-setup.exe`**.
+2. Run it. It installs for you only, so it needs no administrator rights. Windows may warn
+   about an unknown publisher (the app isn't code-signed yet): **More info** > **Run anyway**.
+3. Start KanzonasCAD from the Start menu. Double-clicking a `.kzcad` project opens it too.
+
+**Updates:** KanzonasCAD tells you when a new version is out (or use **Help > Check for
+updates...**). **Update now** downloads it, checks it, and installs it over your copy. Your
+projects, library and settings stay as they are.
+
+**Uninstall:** Windows **Settings > Apps > Installed apps > KanzonasCAD > Uninstall**. Your
+projects and your library (in Documents) are kept.
+
+The rest of this page runs KanzonasCAD from its source code instead: for trying changes before
+they're released, or on a PC where you can't run a setup.
+
 ---
 
 ## Command line basics (if you've never used it)
@@ -40,7 +58,7 @@ by typing instead of clicking. Nothing you type there can harm your drawings.
   `C:\Users\<you>`).
 - **Up arrow** brings back the last command, so you don't have to retype it.
 
-## Install on Windows (once)
+## Install from source on Windows (once)
 
 This runs KanzonasCAD from its source code, so updating is one double-click. You need
 **Python** (runs the program) and **Git** (downloads it and its updates).
@@ -82,7 +100,7 @@ Or double-click **`KanzonasCAD.bat`** in the `KanzonasCAD` folder. For a desktop
 right-click `KanzonasCAD.bat` > **Show more options** > **Send to** > **Desktop (create
 shortcut)**.
 
-## Update on Windows
+## Update from source on Windows
 
 Double-click **`update.bat`** in the `KanzonasCAD` folder. It gets the newest tested version
 (`main`) and anything new it needs, then says **Done**.
@@ -136,11 +154,11 @@ Starting over is always safe: delete the `KanzonasCAD` folder and repeat step 4.
 Update: `git checkout main && git pull && .venv/bin/pip install -r requirements.txt -c
 constraints.txt`.
 
-## Ready-made Windows build (no Python needed)
+## Windows without installing (the zip)
 
-Each version is published on the **[Releases page](https://github.com/keithlyding/KanzonasCAD/releases)**
-with its notes. Download `KanzonasCAD-v<version>-windows.zip`, unzip it and run
-`KanzonasCAD\KanzonasCAD.exe`. Windows may warn about an unknown publisher (the app isn't
+Each version on the **[Releases page](https://github.com/keithlyding/KanzonasCAD/releases)**
+also has `KanzonasCAD-v<version>-windows.zip`: unzip it anywhere (a USB stick, a shared
+drive) and run `KanzonasCAD\KanzonasCAD.exe`. Windows may warn about an unknown publisher (the app isn't
 code-signed): **More info** > **Run anyway**. KanzonasCAD then tells you about new versions and updates
 itself (Help > Check for updates...).
 

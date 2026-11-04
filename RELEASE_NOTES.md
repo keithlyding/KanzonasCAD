@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.4.1
+
+**New**
+- A Windows installer: download `KanzonasCAD-v0.4.1-setup.exe` and run it. No administrator
+  rights needed, a Start menu entry, and .kzcad projects open with a double-click.
+- An installed KanzonasCAD updates itself with Update now, the same as before.
+
 ## 0.4
 
 **New**

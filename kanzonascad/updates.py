@@ -5,10 +5,14 @@ the notes of every version since theirs, and update when they say so.
 How it updates depends on how KanzonasCAD runs:
 - From source (a git clone, as the README sets up): `git checkout main`, `git pull` and
   `pip install` (SourceUpdater), then it starts again.
-- The Windows build (a folder with KanzonasCAD.exe): the release's zip is downloaded and used
-  only if its sha256 matches the digest GitHub publishes for that file; it is unpacked beside
-  the program and, once KanzonasCAD has closed, a small script copies it over the old files
-  and starts the new version (ZipUpdater).
+- Installed on Windows with KanzonasCAD's setup (its uninstaller unins000.exe sits beside the
+  program): the release's setup is downloaded into a new private folder, used only if its
+  sha256 matches the digest GitHub publishes, and run quietly over this copy once KanzonasCAD
+  has closed; it starts KanzonasCAD again (ZipUpdater with setup=True, installer_command).
+- The Windows zip (a folder with KanzonasCAD.exe, unpacked by hand): the release's zip is
+  downloaded and checked the same way; it is unpacked beside the program and, once
+  KanzonasCAD has closed, a small script copies it over the old files and starts the new
+  version (ZipUpdater).
 - The Linux build: tells, and opens the release page (no self-update yet).
 """
 
@@ -116,6 +120,10 @@ def windows_asset_name(version):
     return "KanzonasCAD-v%s-windows.zip" % version
 
 
+def setup_asset_name(version):
+    return "KanzonasCAD-v%s-setup.exe" % version
+
+
 def _sha256_hex(asset):
     digest = (asset or {}).get("digest") or ""
     if not isinstance(digest, str) or not digest.startswith("sha256:"):
@@ -158,14 +166,31 @@ def app_folder():
     return None
 
 
+def installed(folder):
+    """True for a copy installed by KanzonasCAD's setup (its uninstaller sits beside it)."""
+    return bool(folder) and os.path.isfile(os.path.join(folder, "unins000.exe"))
+
+
 def how():
-    """'source', 'windows' (the zip build: it can replace itself), or 'tell'."""
+    """'source', 'installer' (installed with the setup: the next setup updates it), 'windows'
+    (the zip build: it can replace itself), or 'tell'."""
     if source_folder():
         return "source"
     folder = app_folder()
+    if installed(folder):
+        return "installer"
     if folder and os.access(folder, os.W_OK):
         return "windows"
     return "tell"
+
+
+def installer_command(setup_path):
+    """How Update now runs the new setup: quietly (a progress window only, no questions), over
+    the installed copy with its options kept, closing anything still using its files, for this
+    user, and starting KanzonasCAD again when done (/RELAUNCH, see installer/KanzonasCAD.iss;
+    the Windows build tests this exact command line)."""
+    return [setup_path, "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-",
+            "/CLOSEAPPLICATIONS", "/CURRENTUSER", "/RELAUNCH"]
 
 
 def source_steps(root):
@@ -361,25 +386,35 @@ class SourceUpdater(QObject):
 
 
 class ZipUpdater(QObject):
-    """Downloads the Windows zip, checks its sha256, unpacks it beside the program.
-    progress(received, total); ready(folder of the new version); failed(text)."""
+    """Downloads the Windows zip, checks its sha256, unpacks it beside the program; or, with
+    setup=True, downloads the setup into a new folder only this user can write to and checks
+    it. progress(received, total); ready(folder of the new version, or the checked setup's
+    path); failed(text)."""
     progress = Signal(int, int)
     ready = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, url, sha256, app_dir, parent=None):
+    def __init__(self, url, sha256, app_dir, parent=None, setup=False):
         super().__init__(parent)
-        self.url, self.sha256, self.app_dir = url, sha256, app_dir
+        self.url, self.sha256, self.app_dir, self.setup = url, sha256, app_dir, setup
         self.net = QNetworkAccessManager(self)
         self.reply = None
         self.file = None
-        self.path = os.path.join(app_dir, STAGING + ".zip")
+        self.path = None if setup else os.path.join(app_dir, STAGING + ".zip")
+        self._keep = False
 
     def start(self):
         try:
+            if self.setup:
+                # (a fresh folder of this user's, under a name nobody can guess: nobody else
+                # can put a file there between the check and the run)
+                import tempfile
+                folder = tempfile.mkdtemp(prefix="kzcadsetup")
+                self.path = os.path.join(folder, os.path.basename(urlparse(self.url).path)
+                                         or "KanzonasCAD-setup.exe")
             self.file = open(self.path, "wb")
         except OSError as e:
-            self.failed.emit("Can't write beside KanzonasCAD.exe (%s)." % e)
+            self.failed.emit("Can't write the download (%s)." % e)
             return
         req = QNetworkRequest(QUrl(self.url))
         req.setRawHeader(b"User-Agent", ("KanzonasCAD/" + __version__).encode())
@@ -412,14 +447,24 @@ class ZipUpdater(QObject):
                 self.failed.emit("The download was not used: its sha256 doesn't match the "
                                  "release.")
                 return
-            self.ready.emit(unpack(self.path, self.app_dir))
+            if self.setup:
+                self._keep = True               # checked: kept for running
+                self.ready.emit(self.path)
+            else:
+                self.ready.emit(unpack(self.path, self.app_dir))
         except (OSError, ValueError, zipfile.BadZipFile) as e:
             self.failed.emit(str(e))
         finally:
-            try:
-                os.remove(self.path)
-            except OSError:
-                pass                # (only the downloaded zip: it may already be gone)
+            if not self._keep:
+                try:
+                    os.remove(self.path)
+                except OSError:
+                    pass            # (only the download: it may already be gone)
+                if self.setup:
+                    try:
+                        os.rmdir(os.path.dirname(self.path))
+                    except OSError:
+                        pass        # (its own empty folder only)
 
 
 def start_swap(new, app_dir):
@@ -430,3 +475,10 @@ def start_swap(new, app_dir):
         f.write(swap_script(os.getpid(), new, app_dir))
     subprocess.Popen(["cmd", "/c", script], cwd=app_dir,
                      creationflags=0x00000008 | 0x00000200)   # DETACHED | NEW_PROCESS_GROUP
+
+
+def start_setup(setup_path):
+    """Start the checked setup, detached: it closes anything still using KanzonasCAD's files,
+    updates it and starts it again."""
+    cmd = installer_command(setup_path)
+    QProcess.startDetached(cmd[0], cmd[1:])
