@@ -57,6 +57,7 @@ DEFAULT_SETTINGS = {
     "tb_position": "corner",    # the title block: in the lower right corner, or a strip down
                                 # the right ("right") or along the bottom ("bottom") that the
                                 # zone grid stops at
+    "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
     "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)
     "wire_jump": "vertical",    # which one jumps: vertical or horizontal
     "rail_profile": "TS35x7.5",             # DIN rail and wire duct drawn next

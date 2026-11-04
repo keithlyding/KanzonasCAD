@@ -229,7 +229,9 @@ alone until you untick Freeze.</li>
 </ul>
 
 <h2>Wires</h2>
-<p><b>Wire</b> (W; Draw menu and the Schematic tab) draws a wire on layer WIRES. Click where it
+<p><b>Wire</b> (W; Draw menu and the Schematic tab) draws a wire on layer WIRES (move wires
+to another layer afterward like any object: select them and pick the layer in the Layer box;
+they stay wires). Click where it
 starts (a symbol's pin, another wire, or anywhere), then where it goes: it runs straight across
 and up or down, with one corner per click; the corner follows the cursor, and F flips it the
 other way. The wire <b>ends by itself</b> when you click a pin or another wire; Enter ends it
@@ -274,6 +276,28 @@ on wires up and down. One that would leave its wire stops where its wire ends (t
 line says so).</li>
 <li>Wires are ordinary objects otherwise: grips stretch their corners, Trim and Erase work on
 them (trimmed pieces stay wires), and they print and export (DXF) as polylines.</li>
+</ul>
+
+<h3>Editing wires</h3>
+<p>The Schematic tab's <b>Edit wires</b> group (also on the Modify menu):</p>
+<ul>
+<li><b>Trim wire</b> (TRIMWIRE, AETRIM, TW), as AutoCAD Electrical's: click a piece of wire
+and it goes, up to the nearest wire or pin on either side (to the wire's end when there is
+none): no cutting edges to pick, and only wires are trimmed, even where a symbol's line is
+nearer. Keep clicking; U takes back the last one, Enter ends.</li>
+<li><b>Delete wire</b> (DELWIRE, DW): with objects selected, only the wires among them go
+(window-select a whole area and the symbols stay); with nothing selected, click wires one by
+one.</li>
+<li><b>Clean up wires</b> (WIRECLEAN): cleans the selected wires, or every wire on the sheet
+when none is selected, in one step (Undo puts it back): wires of no length and extra points
+(repeated, or in the middle of a straight run) go, a wire drawn over another goes, and two
+wires meeting end to end with nothing else there (no pin, no third wire) become one. The
+command line then says what it did and how many wire ends connect to nothing, which is
+usually a wire stopping short of where it should go.</li>
+<li><b>Cleanup as you draw</b>: a wire drawn exactly where one already runs isn't added twice,
+and a wire drawn on from another wire's free end joins it, so it is one wire. Trim wire and
+Delete wire join the wires they leave meeting end to end. Turn it off with <b>Clean up wires
+as they're drawn</b> (Project properties, Schematic).</li>
 </ul>
 
 <h3>Three-phase power, terminals and PLC I/O</h3>

@@ -6,6 +6,17 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.10
+
+**New**
+- Trim wire: click a piece of wire and it goes, up to the nearest wire or pin. No cutting
+  edges to pick.
+- Delete wire: deletes only the wires among the selected objects, or the wires you click.
+- Clean up wires: joins wires that meet end to end, removes wires drawn twice or of no
+  length, and tells you how many wire ends connect to nothing.
+- Wires are cleaned up as you draw: a wire carried on from another's end joins it, and one
+  drawn over another isn't added twice (Project properties, Schematic, to turn it off).
+
 ## 0.10.9
 
 **New**

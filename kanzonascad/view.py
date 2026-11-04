@@ -346,12 +346,14 @@ class CadView(QWidget):
         r = px / self.scale
         return (p[0] - r, p[1] - r, p[0] + r, p[1] + r), r
 
-    def pick_entity(self, p):
-        """The visible, unlocked entity nearest p within the pickbox."""
+    def pick_entity(self, p, only=None):
+        """The visible, unlocked entity nearest p within the pickbox (only: of that class)."""
         rect, r = self._near(p, PICKBOX)
         best, bd = None, None
         for e in self.sheet().query(rect):
             if not self.layer_visible(e.layer) or self.layer_locked(e.layer):
+                continue
+            if only is not None and not isinstance(e, only):
                 continue
             d = e.distance(p)
             if d <= r and (bd is None or d < bd):
