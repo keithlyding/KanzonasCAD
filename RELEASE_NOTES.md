@@ -6,6 +6,11 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.2
+
+**New**
+- A bigger CAD on the icon (and on the installer's blue one).
+
 ## 0.10.1
 
 **New**
