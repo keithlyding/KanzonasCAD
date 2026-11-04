@@ -54,6 +54,8 @@ DEFAULT_SETTINGS = {
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
     "wire_number_height": 0.08,
     "dim_height": 0.1,          # dimension text, paper inches
+    "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)
+    "wire_jump": "vertical",    # which one jumps: vertical or horizontal
     "rail_profile": "TS35x7.5",             # DIN rail and wire duct drawn next
     "duct_size": [2.0, 3.0],
     "rail_stock": 1000 / 25.4,              # bought in 1 m lengths
@@ -368,6 +370,57 @@ class Wire(Polyline):
                 ym = (a[1] + b[1]) / 2
                 pts = [a, [a[0], ym], [b[0], ym], b]
         return self.copy(points=_tidy(pts))
+
+
+@_register
+class WireCross(Entity):
+    """A wire crossing placed by hand (command Wire crossing): the wire under pos jumps there
+    ("gap" or "loop"), or, on a crossing found by itself, its style ("none" hides it). Drawn
+    only through the jump it makes (crossings.py); selected and erased like any object."""
+    kind = "wirecross"
+    __slots__ = ("pos", "style")
+    R = 0.0625
+
+    def __init__(self, pos, style="loop", **kw):
+        kw.setdefault("layer", "WIRES")
+        super().__init__(**kw)
+        self.pos = _pt(pos)
+        self.style = style if style in ("gap", "loop", "none") else "loop"
+
+    def _data(self):
+        return {"pos": list(self.pos), "style": self.style}
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["pos"], d.get("style", "loop"), layer=d.get("layer", "WIRES"),
+                   color=d.get("color"), id=d.get("id"))
+
+    def _compute_bbox(self):
+        r = self.R
+        return (self.pos[0] - r, self.pos[1] - r, self.pos[0] + r, self.pos[1] + r)
+
+    def distance(self, p):
+        return max(0.0, G.dist(p, self.pos) - self.R)
+
+    def crosses(self, rect):
+        return G.bbox_overlaps(self.bbox(), rect)
+
+    def pieces(self):
+        return []
+
+    def outline(self):
+        r = self.R
+        x, y = self.pos
+        return [[(x - r, y - r), (x + r, y - r), (x + r, y + r), (x - r, y + r), (x - r, y - r)]]
+
+    def grips(self):
+        return [self.pos]
+
+    def with_grip(self, i, p):
+        return self.copy(pos=list(p))
+
+    def _map(self, fn, **_kw):
+        return self.copy(pos=list(fn(self.pos)))
 
 
 def _tidy(pts):

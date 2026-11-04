@@ -37,7 +37,7 @@ ICONS = {
     "make_block": "shape-plus", "explode": "shape-outline", "library": "bookshelf",
     "part": "tag-plus-outline", "color": "palette-outline", "wire": "vector-polyline-edit", "bus": "reorder-horizontal", "sheets": "file-multiple-outline",
     # help
-    "manual": "help-circle-outline", "about": "information-outline", "updates": "update", "renumber": "numeric", "dim_linear": "ruler", "rail": "minus-thick", "duct": "view-sequential-outline", "materials": "format-list-numbered", "dim_aligned": "ruler-square", "sheet_scale": "scale-balance", "xref_update": "refresh", "xref_freeze": "snowflake", "xref_auto": "autorenew", "shortcuts": "keyboard-outline",
+    "manual": "help-circle-outline", "about": "information-outline", "updates": "update", "renumber": "numeric", "dim_linear": "ruler", "wire_cross": "vector-curve", "rail": "minus-thick", "duct": "view-sequential-outline", "materials": "format-list-numbered", "dim_aligned": "ruler-square", "sheet_scale": "scale-balance", "xref_update": "refresh", "xref_freeze": "snowflake", "xref_auto": "autorenew", "shortcuts": "keyboard-outline",
 }
 
 _mode = "light"
