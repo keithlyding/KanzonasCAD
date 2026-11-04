@@ -30,12 +30,11 @@ update box (`updates.py`) shows those notes and installs the release.
   number (0.2, 0.3) for a significant new capability (a new kind of work: wires, symbols,
   wire numbers, cross-references, reports...); everything else bumps the last number
   (0.2 -> 0.2.1). Plain numbers only (0.2, not 0.20).
-- Every push to any branch runs both builds. Push when a piece of work is done, not after
-  every small edit.
-- The rule on `main` counts only the pull request's own run of `build` and `linux` (a run
-  started by hand on the branch doesn't count). GitHub skips every run of a commit whose
-  message contains the skip-ci marker anywhere, even quoted: the newest commit of a branch
-  must not contain it when its pull request is opened or updated.
+- Every push to any branch runs both builds, as in KanzonasPDF (no separate pull-request
+  run). Push when a piece of work is done, not after every small edit; then open its pull
+  request and merge once the branch's builds are green: build and publish in one go (the
+  owner's choice). Never hold builds back with GitHub's skip-ci marker: a branch whose newest
+  commit carries it has no run, and its pull request can't merge.
 
 ## Every user-facing change must update, in the same commit:
 1. **The user manual** `kanzonascad/manual.py` (Help > User manual, F1). Describe new or
