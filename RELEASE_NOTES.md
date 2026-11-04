@@ -6,6 +6,16 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.1
+
+**Fixed**
+- Drawing on big sheets is much faster: on a sheet with 12,000 wires, adding a wire (with its
+  number, dots and crossings) takes about a twentieth of a second instead of more than half a
+  second.
+- Wire numbers no longer sit on top of a crossing's loop or gap.
+- On/off menu items (Help > Check for updates automatically, View > Grid display, Snap to
+  grid...) show a check box, so you can see whether they're on.
+
 ## 0.11
 
 **New**

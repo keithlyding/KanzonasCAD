@@ -61,31 +61,71 @@ def _steep(seg):
     return abs(b[1] - a[1]) - abs(b[0] - a[0])      # > 0: more up and down than across
 
 
+def _pairs_of(sheet, w, done):
+    """{(lower id, higher id): [(point, lower's segment, higher's segment)]} of the wires
+    crossing w (pairs already in done skipped)."""
+    out = {}
+    for seg in _segments(w):
+        (a, b) = seg
+        rect = (min(a[0], b[0]) - TOL, min(a[1], b[1]) - TOL,
+                max(a[0], b[0]) + TOL, max(a[1], b[1]) + TOL)
+        for o in sheet.query(rect):
+            if not isinstance(o, Wire) or o.id == w.id:
+                continue
+            key = (min(w.id, o.id), max(w.id, o.id))
+            if key in done:
+                continue
+            for oseg in _segments(o):
+                # (worked out from the lower id's side, always: the same point to the last
+                # digit whichever wire changed)
+                lo, hi = (seg, oseg) if w.id < o.id else (oseg, seg)
+                p = _hit(lo[0], lo[1], hi[0], hi[1])
+                if p is None or _is_end(w, p) or _is_end(o, p):
+                    continue
+                rec = (p, lo, hi)
+                got = out.setdefault(key, [])
+                if rec not in got:
+                    got.append(rec)
+    return out
+
+
 def found(sheet, jump="vertical"):
     """[(point, jumping segment, crossed segment)] of the wires crossing on a sheet (kept per
-    sheet version)."""
+    sheet version). The crossings are kept per pair of wires and, after an edit, worked out
+    again only for the wires it added, changed or removed."""
     key = (sheet.version, jump)
     got = getattr(sheet, "_crossings", None)
     if got is not None and got[0] == key:
         return got[1]
+    cur = {w.id: w for w in sheet.wires()}
+    st = getattr(sheet, "_crossing_state", None)
+    if st is None:
+        pairs = {}
+        for w in cur.values():
+            pairs.update(_pairs_of(sheet, w, pairs))
+    else:
+        old, pairs = st
+        stale = {i for i, w in cur.items() if old.get(i) is not w and
+                 (old.get(i) is None or old[i].points != w.points)}
+        stale |= {i for i in old if i not in cur}
+        if stale:
+            pairs = {k: v for k, v in pairs.items()
+                     if k[0] not in stale and k[1] not in stale}
+            done = set(pairs)
+            for i in sorted(stale):
+                w = cur.get(i)
+                if w is not None:
+                    new = _pairs_of(sheet, w, done)
+                    pairs.update(new)
+                    done.update(new)
+    sheet._crossing_state = (cur, pairs)
     out = []
-    for w in sheet.wires():
-        for seg in _segments(w):
-            (a, b) = seg
-            rect = (min(a[0], b[0]) - TOL, min(a[1], b[1]) - TOL,
-                    max(a[0], b[0]) + TOL, max(a[1], b[1]) + TOL)
-            for o in sheet.query(rect):
-                # (each pair once: the lower id finds it)
-                if not isinstance(o, Wire) or o.id <= w.id:
-                    continue
-                for oseg in _segments(o):
-                    p = _hit(a, b, oseg[0], oseg[1])
-                    if p is None or _is_end(w, p) or _is_end(o, p):
-                        continue
-                    first_jumps = _steep(seg) >= _steep(oseg)
-                    if jump == "horizontal":
-                        first_jumps = not first_jumps
-                    out.append((p, seg, oseg) if first_jumps else (p, oseg, seg))
+    for k in sorted(pairs):
+        for p, s1, s2 in pairs[k]:
+            first_jumps = _steep(s1) >= _steep(s2)
+            if jump == "horizontal":
+                first_jumps = not first_jumps
+            out.append((p, s1, s2) if first_jumps else (p, s2, s1))
     sheet._crossings = (key, out)
     return out
 

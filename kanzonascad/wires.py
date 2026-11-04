@@ -64,30 +64,78 @@ def connects_at(sheet, p, exclude=None, tol=TOL):
     return False
 
 
+def _dot_at(sheet, p):
+    """Does a junction dot belong at p: a wire end on the middle (or a corner) of another
+    wire, or three or more wire ends with no pin there (on a pin, the pin is the
+    connection)?"""
+    ends, middle = 0, False
+    for e in sheet.query_point(p, TOL):
+        if not isinstance(e, Wire):
+            continue
+        n = _same(e.points[0], p) + _same(e.points[-1], p)
+        if n:
+            ends += n
+        elif e.touches(p, TOL):
+            middle = True
+    if not ends:
+        return False
+    return middle or (ends >= 3 and not pins_on(sheet, p))
+
+
+def _key(p):
+    return (round(p[0], 6), round(p[1], 6))
+
+
 def junctions(sheet):
-    """Points where wires join and a dot belongs: a wire end on the middle of another wire,
-    or three or more wire ends at one point."""
-    wires = [e for e in sheet.entities.values() if isinstance(e, Wire)]
-    dots = []
-    ends = {}
-    for w in wires:
-        for p in (w.points[0], w.points[-1]):
-            key = (round(p[0], 6), round(p[1], 6))
-            ends[key] = ends.get(key, 0) + 1
-    for key, n in ends.items():
-        if n >= 3 and not pins_on(sheet, key):      # (on a pin, the pin is the connection)
-            dots.append(key)
-    for w in wires:
-        for p in (w.points[0], w.points[-1]):
-            for other in _near(sheet, p):
-                if other is w or not isinstance(other, Wire):
-                    continue
-                if other.distance(p) <= TOL and not any(_same(p, q) for q in
-                                                        (other.points[0], other.points[-1])):
-                    key = (round(p[0], 6), round(p[1], 6))
-                    if key not in dots:
-                        dots.append(key)
-    return dots
+    """Points where wires join and a dot belongs (see _dot_at), kept per sheet version. After
+    an edit only the points near what it changed are looked at again (entities are values:
+    a changed wire or symbol is a new object), so a big sheet isn't measured whole."""
+    got = getattr(sheet, "_junctions", None)
+    if got is not None and got[0] == sheet.version:
+        return got[1]
+    cur = {e.id: e for e in sheet.wires()}
+    cur.update((e.id, e) for e in sheet.inserts())
+    st = getattr(sheet, "_junction_state", None)
+    if st is None:
+        dots = set()
+        for w in sheet.wires():
+            for p in (w.points[0], w.points[-1]):
+                k = _key(p)
+                if k not in dots and _dot_at(sheet, p):
+                    dots.add(k)
+    else:
+        old, dots = st
+        def moved(a, b):
+            # (only where a wire or a symbol's pins are matters: not its number or tag)
+            if b is None or type(a) is not type(b):
+                return True
+            if isinstance(a, Wire):
+                return a.points != b.points
+            return a.pin_points() != b.pin_points()
+        stale = [old[i] for i in old if cur.get(i) is not old[i] and moved(old[i], cur.get(i))]
+        stale += [e for i, e in cur.items() if old.get(i) is not e and moved(e, old.get(i))]
+        look = set()
+        for e in stale:
+            if isinstance(e, Wire):
+                look.add(_key(e.points[0]))
+                look.add(_key(e.points[-1]))
+                x0, y0, x1, y1 = e.bbox()
+                for o in sheet.query((x0 - TOL, y0 - TOL, x1 + TOL, y1 + TOL)):
+                    if isinstance(o, Wire):
+                        for q in (o.points[0], o.points[-1]):
+                            if e.touches(q, TOL):
+                                look.add(_key(q))
+            else:
+                look.update(_key(q) for _n, q in e.pin_points())
+        for k in look:
+            if _dot_at(sheet, k):
+                dots.add(k)
+            else:
+                dots.discard(k)
+    sheet._junction_state = (cur, dots)
+    out = sorted(dots)
+    sheet._junctions = (sheet.version, out)
+    return out
 
 
 def break_under(ed, sheet, ins):

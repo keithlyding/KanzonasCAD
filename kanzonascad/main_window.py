@@ -112,6 +112,11 @@ class MainWindow(QMainWindow):
             dlg.restoreGeometry(geo)
 
         self._build_actions()
+        for act in self.acts.values():
+            # (an on/off item shows a check box in the menus: with its icon there, most styles
+            # show the state only as a faint frame around the icon; the ribbon keeps the icon)
+            if act.isCheckable():
+                act.setIconVisibleInMenu(False)
         self._build_menus()
         self._build_ribbon()
         self._build_status()

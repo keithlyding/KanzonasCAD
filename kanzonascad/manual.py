@@ -332,7 +332,9 @@ shown under it.</li>
 
 <h2>Wire numbers</h2>
 <p>Every wire gets its number by itself: the page number and three digits, <b>6001</b>, 6002...
-on page 6. The number shows above the wire (beside it when it runs up and down).</p>
+on page 6. The number shows above the wire (beside it when it runs up and down), on its
+longest straight piece, in the middle of the longest stretch clear of crossings and
+junctions.</p>
 <ul>
 <li><b>One number per connected wire</b>: wires joined end to end or in a T share it. A
 symbol's pins don't join wires, so the number changes through a device or a terminal.</li>
