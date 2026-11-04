@@ -20,6 +20,7 @@ BUDGET = {
     "edit_move": 2.0,           # 1,000 lines moved in one edit, then drawn
     "hover": 0.01,              # one mouse move over the dense sheet (per move)
     "peak_mb": 800,
+    "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings
 }
 
 
@@ -330,6 +331,34 @@ def run(log_path):
         assert wirenums.labels(p, sh)
         return "12,000 wires numbered; one more wire %.0f ms" % (each * 1000)
     log.check("wire numbers", wire_numbers)
+
+    def wire_editing():
+        import time
+        from . import wires, crossings
+        p = M.Project.new()
+        s = p.sheets[0]
+        with p.edit("rungs") as ed:
+            ed.project_settings({"wire_crossing": "loop"})
+            for i in range(400):            # 400 rungs of 30 pieces, 30 wires crossing them
+                for j in range(30):
+                    ed.add(s, M.Wire([(j * 1.0, i * 0.25), (j * 1.0 + 1.0, i * 0.25)]))
+            for j in range(30):
+                ed.add(s, M.Wire([(j + 0.375, -0.5), (j + 0.375, 100.5)]))
+        wires.junctions(s)
+        crossings.jumps(p, s)
+        t = time.perf_counter()
+        for k in range(10):
+            with p.edit("one") as ed:
+                ed.add(s, M.Wire([(40 + k, 0), (40 + k, 1)]))
+            wires.junctions(s)
+            crossings.jumps(p, s)
+        each = (time.perf_counter() - t) / 10
+        assert each < BUDGET["wire_edit"], \
+            "a wire added to a 12,030-wire sheet (numbers, dots, crossings) took %.0f ms" % (
+                each * 1000)
+        return "one wire on a 12,030-wire sheet, numbered, dots and crossings: %.0f ms" % (
+            each * 1000)
+    log.check("wire editing speed (12,030-wire sheet)", wire_editing)
 
     def manual():
         gaps = manual_gaps(state["win"])

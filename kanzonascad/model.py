@@ -346,6 +346,20 @@ class Wire(Polyline):
         return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
                    layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
 
+    def touches(self, p, tol=1e-6):
+        """Does the wire pass within tol of p (an end, a corner or the middle of a piece)?
+        Pieces whose box is far from p are skipped without measuring."""
+        x, y = p
+        pts = self.points
+        for k in range(len(pts) - 1):
+            a, b = pts[k], pts[k + 1]
+            if x < min(a[0], b[0]) - tol or x > max(a[0], b[0]) + tol or \
+                    y < min(a[1], b[1]) - tol or y > max(a[1], b[1]) + tol:
+                continue
+            if G.dist_to_segment(p, a, b) <= tol:
+                return True
+        return False
+
     def end_moved(self, i, p):
         """A copy with end i (0 or -1) at p, kept straight across / up and down: the next
         corner slides along with it, or a jog is added to a two-point wire."""
@@ -1407,6 +1421,17 @@ class SpatialIndex:
                 out |= s
         return out
 
+    def query_point(self, p, tol):
+        """Ids whose box may hold a point within tol of p: the one cell p is in, unless p is
+        within tol of a cell's edge (then the box's cells, as query)."""
+        c = self.CELL
+        fx, fy = p[0] / c, p[1] / c
+        i, j = math.floor(fx), math.floor(fy)
+        t = tol / c
+        if fx - i > t and i + 1 - fx > t and fy - j > t and j + 1 - fy > t:
+            return self.cells.get((i, j), ())
+        return self.query((p[0] - tol, p[1] - tol, p[0] + tol, p[1] + tol))
+
 
 # a panel sheet's scale presets: (name written on the drawing, paper / real); "" names 1:N
 SCALE_PRESETS = [
@@ -1566,6 +1591,12 @@ class Sheet:
         """Entities whose box may touch rect."""
         ents = self.entities
         return [ents[i] for i in self.index.query(rect) if i in ents]
+
+    def query_point(self, p, tol=1e-6):
+        """Entities whose box may hold a point within tol of p (faster than query for a
+        point: usually one cell)."""
+        ents = self.entities
+        return [ents[i] for i in self.index.query_point(p, tol) if i in ents]
 
     def extents(self):
         bb = None

@@ -84,12 +84,13 @@ def new_attrs(project, sheet, defn, attrs):
 
 def order_key(sheet, how):
     """Sorting key of a point for a sheet's numbering order (by zone, then position)."""
+    rows = {n: i for i, n in enumerate(sheet.row_labels())}
+    cols = {n: i for i, n in enumerate(sheet.col_labels())}
+
     def key(p):
         z = sheet.zone_at(p[0], p[1])
-        rows = sheet.row_labels()
-        cols = sheet.col_labels()
-        r = rows.index(z[0]) if z else 0
-        c = cols.index(z[1]) if z else 0
+        r = rows.get(z[0], 0) if z else 0
+        c = cols.get(z[1], 0) if z else 0
         if how == "down":
             return (c, r, -p[1], p[0])
         return (r, c, -p[1], p[0])

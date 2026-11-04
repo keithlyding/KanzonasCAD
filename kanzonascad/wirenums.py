@@ -20,6 +20,7 @@ The number shows above the group's longest straight piece on each sheet it's on 
 Project setting "wire_numbers" (on to start) turns all of it off.
 """
 
+import math
 import re
 from functools import lru_cache
 
@@ -74,24 +75,73 @@ class _Union:
 
 
 def _touching(sheet, p):
-    return sheet.query((p[0] - TOL, p[1] - TOL, p[0] + TOL, p[1] + TOL))
+    return sheet.query_point(p, TOL)
+
+
+def _adjacent(sheet, w):
+    """Ids of the wires w connects with: one whose middle or end w ends on, or one that ends
+    on w (its middle or end)."""
+    out = set()
+    for p in (w.points[0], w.points[-1]):
+        for o in _touching(sheet, p):
+            if o is not w and o.kind == "wire" and o.touches(p, TOL):
+                out.add(o.id)
+    x0, y0, x1, y1 = w.bbox()
+    for o in sheet.query((x0 - TOL, y0 - TOL, x1 + TOL, y1 + TOL)):
+        if o is not w and o.kind == "wire" and o.id not in out and \
+                (w.touches(o.points[0], TOL) or w.touches(o.points[-1], TOL)):
+            out.add(o.id)
+    return out
 
 
 def _sheet_groups(sheet):
     """Wires of one sheet joined end to end / end to middle: {wire id: root id} (kept per
-    sheet version)."""
+    sheet version). Which wires connect is kept per sheet and brought up to date for the
+    wires an edit added, changed or removed only (entities are values: a changed wire is a
+    new object), so an edit on a big sheet doesn't measure every wire again."""
     got = getattr(sheet, "_wire_groups", None)
     if got is not None and got[0] == sheet.version:
         return got[1]
-    u = _Union()
-    wires = sheet.wires()
-    for w in wires:
-        u.find(w.id)
-        for p in (w.points[0], w.points[-1]):
-            for o in _touching(sheet, p):
-                if o is not w and o.kind == "wire" and o.distance(p) <= TOL:
-                    u.join(w.id, o.id)
-    out = {w.id: u.find(w.id) for w in wires}
+    cur = {w.id: w for w in sheet.wires()}
+    st = getattr(sheet, "_wire_adj", None)
+    if st is None:
+        adj = {i: _adjacent(sheet, w) for i, w in cur.items()}
+    else:
+        old, adj = st
+        # (a wire whose points are the same, its number changed say, connects the same)
+        stale = [i for i, w in cur.items() if old.get(i) is not w and
+                 (old.get(i) is None or old[i].points != w.points)]
+        stale += [i for i in old if i not in cur]
+        for i in stale:
+            for n in adj.pop(i, ()):
+                ns = adj.get(n)
+                if ns is not None:
+                    ns.discard(i)
+        for i in stale:
+            w = cur.get(i)
+            if w is None:
+                continue
+            a = _adjacent(sheet, w)
+            adj[i] = a
+            for n in a:
+                adj.setdefault(n, set()).add(i)
+    sheet._wire_adj = (cur, adj)
+    out = {}
+    for i in cur:                       # (each group named by its lowest wire id)
+        if i in out:
+            continue
+        comp, todo = [i], [i]
+        out[i] = i
+        while todo:
+            for n in adj.get(todo.pop(), ()):
+                if n not in out:
+                    out[n] = i
+                    comp.append(n)
+                    todo.append(n)
+        root = min(comp)
+        if root != i:
+            for n in comp:
+                out[n] = root
     sheet._wire_groups = (sheet.version, out)
     return out
 
@@ -101,7 +151,7 @@ def _pin_wires(sheet, ins, roots):
     out = {}
     for name, p in ins.pin_points():
         for o in _touching(sheet, p):
-            if o.kind == "wire" and o.distance(p) <= TOL and o.id in roots:
+            if o.kind == "wire" and o.id in roots and o.touches(p, TOL):
                 out.setdefault(name, roots[o.id])
     return out
 
@@ -117,11 +167,19 @@ def _summary(sheet):
     if got is not None and got[0] == sig:
         return got[1]
     roots = _sheet_groups(sheet)
+    zsig = sig[1:] + (sheet.scale, sheet.reserve)
+    cache = getattr(sheet, "_num_keys", None)
+    if cache is None or cache[0] != zsig:
+        cache = sheet._num_keys = (zsig, {})
+    known = cache[1]
     key = tags.order_key(sheet, sheet.number_order)
     local = {}
     for w in sheet.wires():
         r = roots[w.id]
-        k = key(min(w.points[0], w.points[-1]))
+        q = min(w.points[0], w.points[-1])
+        k = known.get(q)
+        if k is None:
+            k = known[q] = key(q)
         g = local.get(r)
         if g is None:
             local[r] = [k, [w], set(), None]
@@ -315,6 +373,7 @@ def labels(project, sheet):
         if w.num:
             parts.setdefault((roots[w.id], w.num), []).append(w)
     out = []
+    busy = _busy_points(sheet)
     for (_r, num), ws in parts.items():
         best = None
         for w in ws:
@@ -325,13 +384,54 @@ def labels(project, sheet):
         if best is None:
             continue
         _d, a, b = best
-        mx, my = (a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0
+        mx, my = _clear_spot(a, b, busy)
         if abs(a[1] - b[1]) > abs(a[0] - b[0]):
             out.append(Text((mx - h * 0.4, my), num, h, 90.0, "center"))
         else:
             out.append(Text((mx, my + h * 0.4), num, h, 0.0, "center"))
     sheet._num_labels = (sig, out)
     return out
+
+
+_CELL = 0.5
+
+
+def _busy_points(sheet):
+    """Where wires cross or join on a sheet, in cells of _CELL inches: {cell: [point]}."""
+    from . import crossings, wires
+    out = {}
+    pts = [p for p, _s, _o in crossings.found(sheet)] + list(wires.junctions(sheet))
+    for p in pts:
+        out.setdefault((int(p[0] // _CELL), int(p[1] // _CELL)), []).append(p)
+    return out
+
+
+def _clear_spot(a, b, busy):
+    """The middle of the longest stretch of the piece a-b with no crossing or junction on it
+    (so a wire number doesn't sit on a crossing's gap or loop, or on a dot); the middle of the
+    piece when nothing is on it."""
+    L = math.hypot(b[0] - a[0], b[1] - a[1])
+    if L < 1e-9:
+        return a
+    ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+    ts = [0.0, L]
+    i0, i1 = sorted((int(a[0] // _CELL), int(b[0] // _CELL)))
+    j0, j1 = sorted((int(a[1] // _CELL), int(b[1] // _CELL)))
+    for i in range(i0 - 1, i1 + 2):
+        for j in range(j0 - 1, j1 + 2):
+            for q in busy.get((i, j), ()):
+                t = (q[0] - a[0]) * ux + (q[1] - a[1]) * uy
+                if 1e-6 < t < L - 1e-6 and \
+                        abs((q[0] - a[0]) * uy - (q[1] - a[1]) * ux) <= 1e-6:
+                    ts.append(t)
+    if len(ts) == 2:
+        return ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)
+    ts.sort()
+    gaps = [(ts[k + 1] - ts[k], -abs((ts[k] + ts[k + 1]) / 2 - L / 2), k)
+            for k in range(len(ts) - 1)]
+    _g, _c, k = max(gaps)
+    t = (ts[k] + ts[k + 1]) / 2
+    return (a[0] + ux * t, a[1] + uy * t)
 
 
 # ---- off-sheet connectors -------------------------------------------------------------------

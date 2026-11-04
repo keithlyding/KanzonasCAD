@@ -82,6 +82,32 @@ def check_sheet(sheet):
             for a, b in zip(e.points, e.points[1:]):
                 assert abs(a[0] - b[0]) > 1e-9 or abs(a[1] - b[1]) > 1e-9, e.points
     json.dumps(sheet.to_dict())
+    check_groups(sheet)
+
+
+def _partition(groups):
+    by = {}
+    for i, r in groups.items():
+        by.setdefault(r, set()).add(i)
+    return sorted(sorted(g) for g in by.values())
+
+
+def check_groups(sheet):
+    """The wire groups kept up to date edit by edit are the ones worked out from scratch."""
+    kept = _partition(wirenums._sheet_groups(sheet))
+    saved = sheet._wire_groups, sheet._wire_adj
+    sheet._wire_groups = sheet._wire_adj = None
+    fresh = _partition(wirenums._sheet_groups(sheet))
+    sheet._wire_groups, sheet._wire_adj = saved
+    assert kept == fresh, "wire groups kept up to date differ from a fresh count"
+    kept = (wires.junctions(sheet), sorted(crossings.found(sheet)))
+    saved = (sheet._junctions, sheet._junction_state, sheet._crossings,
+             sheet._crossing_state)
+    sheet._junctions = sheet._junction_state = sheet._crossings = sheet._crossing_state = None
+    fresh = (wires.junctions(sheet), sorted(crossings.found(sheet)))
+    (sheet._junctions, sheet._junction_state, sheet._crossings,
+     sheet._crossing_state) = saved
+    assert kept == fresh, "junction dots or crossings kept up to date differ from a fresh count"
 
 
 def norm(d):
