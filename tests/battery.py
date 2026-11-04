@@ -390,6 +390,9 @@ def random_editing(log, out, ops, seed):
 
 
 # ---- 2. every menu command ---------------------------------------------------------------------
+CLOSER = None
+
+
 class DialogCloser:
     """Closes any dialog or message box that opens (rejects it), and answers file dialogs
     with nothing chosen."""
@@ -432,7 +435,8 @@ def every_command(log, out):
     errors = []
     hook = sys.excepthook
     sys.excepthook = lambda *a: errors.append("".join(traceback.format_exception(*a)))
-    closer = DialogCloser()
+    closer = CLOSER
+    seen = len(closer.closed)
     skip = {"quit", "close"}            # (they end the run; Close is checked last)
     done = 0
     try:
@@ -474,12 +478,11 @@ def every_command(log, out):
                 win.new_project()
         win.close()
     finally:
-        closer.stop()
         sys.excepthook = hook
     if errors:
         raise AssertionError("%d command(s) raised:\n%s" % (len(errors), "\n".join(errors)))
     return "%d menu commands triggered over 3 phases; %d dialogs opened and closed" % (
-        done, len(closer.closed))
+        done, len(closer.closed) - seen)
 
 
 def type_in_cmds(v, win):
@@ -645,6 +648,10 @@ def main(argv):
     seed = int(argv[argv.index("--seed") + 1]) if "--seed" in argv else 1
     os.makedirs(out, exist_ok=True)
     log = Log(os.path.join(out, "battery.log"))
+    # (any dialog closes by itself for the whole run: one opened late, by an answer to a
+    # command of an earlier section, Check for updates say, would otherwise wait forever)
+    global CLOSER
+    CLOSER = DialogCloser()
     import kanzonascad
     log.say("KanzonasCAD %s battery, Python %s, %s, seed %d" % (
         kanzonascad.__version__, sys.version.split()[0], sys.platform, seed))
@@ -653,6 +660,7 @@ def main(argv):
     log.check("files", lambda: files(log, out))
     log.check("speed at scale", lambda: speed(log, out))
     log.check("pictures", lambda: pictures(log, out))
+    CLOSER.stop()
     log.say("%d failure(s); output in %s" % (log.failures, out))
     return 1 if log.failures else 0
 
