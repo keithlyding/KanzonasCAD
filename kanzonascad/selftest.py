@@ -143,7 +143,7 @@ def run(log_path):
         v.run(C.CircleCmd)
         assert v.input_text("5,5") and v.input_text("0.5")
         v.run(C.TextCmd)
-        for t in ("2,8", "0.2", "0", "CR1", ""):
+        for t in ("H", "0.2", "2,8", "CR1", ""):
             assert v.input_text(t)
         kinds = sorted(e.kind for e in v.sheet().entities.values())
         assert kinds == ["circle", "line", "line", "text"], kinds

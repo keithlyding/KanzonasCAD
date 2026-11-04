@@ -73,6 +73,18 @@ color, or to set it back to ByLayer. A symbol or footprint's lines follow the co
 layer it sits on, or its own color if you gave it one. Wires go on layer WIRES, symbols on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them.</p>
+<p><b>Layers</b>, as in AutoCAD: a hidden layer isn't drawn, printed or picked; a locked one
+is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
+Locked, color, current layer). Quicker, on the Home tab's Layers group and the Modify menu:</p>
+<ul>
+<li>The <b>layer list</b> button next to the current layer: every layer with its light bulb
+(click to hide or show it) and lock (click to lock or unlock it).</li>
+<li><b>Hide layer</b> (LAYOFF): click an object, or select objects first: their layer hides.</li>
+<li><b>Show only this layer</b> (LAYISO): every other layer hides.</li>
+<li><b>Show all layers</b> (LAYON) and <b>Unlock all layers</b> (LAYULK).</li>
+<li><b>Lock layer</b> (LAYLCK): click an object, or select objects first: their layer locks.</li>
+</ul>
+<p>Each of these is one step for Undo.</p>
 <p>The ribbon's <b>Schematic</b> and <b>Panel</b> tabs gather the tools for each kind of work.
 Both are always there: any sheet can hold a schematic, a panel layout, or both.</p>
 
@@ -237,6 +249,16 @@ Mirror, Scale, dragging it or its grip), staying straight across and up or down 
 where needed). Select the wires too and they move with it instead.</li>
 <li><b>Placing a symbol on a wire</b> cuts the wire between the symbol's pins, as AutoCAD
 Electrical does: drop a contact onto a rung and it is wired in.</li>
+<li><b>Scoot</b> (SCOOT, AESCOOT; Modify menu, Schematic tab), as AutoCAD Electrical's:
+select devices (a contact, a pushbutton, a terminal...), a base point, then where to. They
+slide only along their own wire, across a rung or up and down a vertical wire, however you
+move the mouse; the wires on their pins stretch on one side and shorten on the other, staying
+straight. They stop short of a wire's far end or corner.</li>
+<li><b>Align devices</b> (AEALIGN; Modify menu, Schematic tab), as AutoCAD Electrical's
+Align: click the device to line up with, then the devices to line up, and press Enter. Each
+slides along its own wire (as Scoot) into line: the same column on rungs across, the same row
+on wires up and down. One that would leave its wire stops where its wire ends (the command
+line says so).</li>
 <li>Wires are ordinary objects otherwise: grips stretch their corners, Trim and Erase work on
 them (trimmed pieces stay wires), and they print and export (DXF) as polylines.</li>
 </ul>
@@ -308,10 +330,12 @@ number); D switches to a diameter. At the first prompt, 3P, 2P or TTR switch to 
 arcs near where the circle should touch them, then type its radius (Enter: the last one): of
 the circles that fit, you get the one touching nearest your picks.</td></tr>
 <tr><td>Arc (3 points)</td><td>ARC, A</td><td>Start, a point on the arc, end.</td></tr>
-<tr><td>Text</td><td>TEXT, T, DT</td><td>Start point, height, angle, then type each line and
-press Enter; Enter on an empty line ends. Before the start point, J (Justify) chooses where the
-point sits on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR
-(bottom), or L, C, R (on the baseline); it is kept for the next texts.
+<tr><td>Text</td><td>TEXT, T, DT</td><td>Click where the text goes, then type each line and
+press Enter; Enter on an empty line ends. One click only: unlike AutoCAD's TEXT, a second click
+doesn't set the height. Before the click, type <b>H</b> for the height (inches on paper: 1/8
+to start), <b>R</b> for the rotation (degrees), or <b>J</b> (Justify) for where the point sits
+on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR (bottom), or L,
+C, R (on the baseline). All three are kept for the next texts.
 <b>Double-click a text</b> to change its wording, height, angle and justification afterward
 (with "Keep the text where it is" ticked, a new justification moves only its insertion point,
 which is where it snaps and turns around).</td></tr>
@@ -476,7 +500,8 @@ it switches while KanzonasCAD is open.</li>
 <h2>Edit menu</h2>
 <ul>
 <li><b>Undo</b> (Ctrl+Z) and <b>Redo</b> (Ctrl+Y or Ctrl+Shift+Z): every change, including
-sheet and layer changes, can be undone.</li>
+sheet and layer changes, can be undone. Their arrows also sit right after the menus (File,
+Edit, View...), always a click away.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
 insertion point (the copied objects' lower left corner lands there). Works between projects,
 and after KanzonasCAD is closed and started again.</li>

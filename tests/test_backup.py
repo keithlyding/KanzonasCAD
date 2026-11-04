@@ -26,6 +26,21 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(newest.sheets[0].title, "v11")      # the save before the last
         self.assertEqual(M.Project.load(path).sheets[0].title, "v12")
 
+    def test_order_when_saves_carry_the_same_time(self):
+        # (a backup keeps its save's file time; saves a moment apart can share it)
+        folder = tempfile.mkdtemp()
+        path = os.path.join(folder, "Job 7.kzcad")
+        p = M.Project.new()
+        p.save(path)
+        for i in range(5):
+            with p.edit("t") as ed:
+                ed.sheet_meta(p.sheets[0], title="v%d" % i)
+            p.save(path, backups=3)
+            for f in backup.list_backups(path) + [path]:
+                os.utime(f, (1000000000, 1000000000))
+        olds = backup.list_backups(path)
+        self.assertEqual([M.Project.load(f).sheets[0].title for f in olds], ["v3", "v2", "v1"])
+
     def test_autosave_and_recovery(self):
         w, v = window()
         try:
