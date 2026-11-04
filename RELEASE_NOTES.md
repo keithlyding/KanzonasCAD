@@ -10,7 +10,7 @@ build fails without them.
 
 **Fixed**
 - Drawing on big sheets is much faster: on a sheet with 12,000 wires, adding a wire (with its
-  number, dots and crossings) takes about a twentieth of a second instead of nearly half a
+  number, dots and crossings) takes about a twentieth of a second instead of more than half a
   second.
 - Wire numbers no longer sit on top of a crossing's loop or gap.
 
