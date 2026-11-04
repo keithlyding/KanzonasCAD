@@ -131,7 +131,7 @@ class MainWindow(QMainWindow):
         self._update_ui()
         self.autosave_timer = QTimer(self, interval=AUTOSAVE_MINUTES * 60 * 1000)
         self.autosave_timer.timeout.connect(self.autosave)
-        self.autosave_timer.start()
+        self._set_autosave_timer()
 
     # ============================================================================================
     # actions
@@ -169,6 +169,11 @@ class MainWindow(QMainWindow):
         self.acts = {}
         A = self._act
         A("new", "&New project", self.new_project, "Ctrl+N", label="New")
+        A("new_template", "New project from &template...", self.new_from_template,
+          icon="new", label="From template")
+        A("save_template", "Save as te&mplate...", self.save_as_template, icon="save",
+          label="Save as template")
+        A("options", "&Options...", self.options, icon="snap", label="Options")
         A("open", "&Open...", self.open_dialog, "Ctrl+O", label="Open")
         A("save", "&Save", self.save, "Ctrl+S", label="Save")
         A("save_as", "Save &as...", self.save_as, "Ctrl+Shift+S", label="Save as")
@@ -336,12 +341,12 @@ class MainWindow(QMainWindow):
         a = self.acts
         self._build_quick_access(mb)
         m = mb.addMenu("&File")
-        for k in ("new", "open"):
+        for k in ("new", "new_template", "open"):
             m.addAction(a[k])
         self.recent_menu = m.addMenu("Open &recent")
         self.recent_menu.aboutToShow.connect(self._fill_recent)
         m.addSeparator()
-        for k in ("save", "save_as"):
+        for k in ("save", "save_as", "save_template"):
             m.addAction(a[k])
         m.addSeparator()
         for k in ("import_dxf", "export_dxf", "export_dxf_all", "export_pdf"):
@@ -352,7 +357,8 @@ class MainWindow(QMainWindow):
         m.addAction(a["close"])
         m.addAction(a["quit"])
         m = mb.addMenu("&Edit")
-        for k in ("undo", "redo", None, "cut", "copy_clip", "paste", "delete", None, "select_all"):
+        for k in ("undo", "redo", None, "cut", "copy_clip", "paste", "delete", None, "select_all",
+                  None, "options"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
@@ -566,9 +572,119 @@ class MainWindow(QMainWindow):
         return d
 
     def new_project(self):
-        p = M.Project.new()
+        """A new project: from the default template (Options, Files), else the built-in
+        settings."""
+        path = self.settings.value("template_path", "") or ""
+        p = None
+        if path:
+            p = self._from_template(path)
+        if p is None:
+            p = M.Project.new()
         self._untitled += 1
         return self.add_document(p)
+
+    def _from_template(self, path):
+        from . import templates
+        try:
+            return templates.new_from(path)
+        except (OSError, ValueError, KeyError) as ex:
+            QMessageBox.warning(self, APP, "Couldn't read the template %s:\n%s\n\nThe new "
+                                "project starts from the built-in settings instead (Edit > "
+                                "Options... chooses the template)." % (path, ex))
+            return None
+
+    def new_from_template(self):
+        from . import templates
+        start = templates.folder(self.library.folder)
+        if not os.path.isdir(start):
+            start = self._last_dir()
+        path, _f = QFileDialog.getOpenFileName(self, "New project from template", start,
+                                               "KanzonasCAD project (*.kzcad)")
+        if not path:
+            return None
+        p = self._from_template(path)
+        if p is None:
+            return None
+        self._untitled += 1
+        return self.add_document(p)
+
+    def save_as_template(self):
+        from . import templates
+        d = self.doc()
+        if d is None:
+            return None
+        start = os.path.join(templates.folder(self.library.folder),
+                             (os.path.splitext(d.name())[0] or "Template") + M.FILE_SUFFIX)
+        path, _f = QFileDialog.getSaveFileName(self, "Save as template", start,
+                                               "KanzonasCAD project (*.kzcad)")
+        if not path:
+            return None
+        if not path.lower().endswith(M.FILE_SUFFIX):
+            path += M.FILE_SUFFIX
+        try:
+            templates.save(d.project, path)
+        except OSError as ex:
+            QMessageBox.warning(self, APP, "Couldn't save the template %s:\n%s" % (path, ex))
+            return None
+        if QMessageBox.question(
+                self, "Save as template",
+                "Saved the template %s.\n\nStart every new project from it (File > New "
+                "project)?" % os.path.basename(path)) == QMessageBox.Yes:
+            self.settings.setValue("template_path", path)
+        self.statusBar().showMessage("Template saved: %s" % path, 5000)
+        return path
+
+    def backups_keep(self):
+        try:
+            return max(0, int(self.settings.value("backups_keep", 10)))
+        except (TypeError, ValueError):
+            return 10
+
+    def autosave_minutes(self):
+        try:
+            return max(0, int(self.settings.value("autosave_minutes", AUTOSAVE_MINUTES)))
+        except (TypeError, ValueError):
+            return AUTOSAVE_MINUTES
+
+    def _set_autosave_timer(self):
+        mins = self.autosave_minutes()
+        if mins:
+            self.autosave_timer.start(mins * 60 * 1000)
+        else:
+            self.autosave_timer.stop()
+
+    def options(self):
+        """Edit > Options...: what belongs to you and this computer (Project properties has
+        what belongs to one project)."""
+        cur = {"theme": self.settings.value("theme", "light"),
+               "black": self.acts["black"].isChecked(),
+               "update_check": self.settings.value("update_check", "true") not in
+               (False, "false"),
+               "library_folder": self.library.folder,
+               "template_path": self.settings.value("template_path", "") or "",
+               "backups_keep": self.backups_keep(),
+               "autosave_minutes": self.autosave_minutes()}
+        got = dialogs.options_dialog(self, cur, self.view())
+        if got is None:
+            return False
+        if got["theme"] != cur["theme"]:
+            self._apply_theme(got["theme"])
+            self.acts["theme_" + got["theme"]].setChecked(True)
+        if got["black"] != cur["black"]:
+            self.acts["black"].setChecked(got["black"])
+        if got["update_check"] != cur["update_check"]:
+            self.acts["auto_updates"].setChecked(got["update_check"])     # (saves it)
+        if got["library_folder"] and got["library_folder"] != cur["library_folder"]:
+            self.library.folder = got["library_folder"]
+            self.settings.setValue("library_folder", got["library_folder"])
+            self.library_panel.refresh()
+        self.settings.setValue("template_path", got["template_path"])
+        self.settings.setValue("backups_keep", int(got["backups_keep"]))
+        self.settings.setValue("autosave_minutes", int(got["autosave_minutes"]))
+        self._set_autosave_timer()
+        if got.get("drafting"):
+            self._store_drafting(self.view())
+        return True
 
     def _project_changed(self, d):
         i = self.tabs.indexOf(d)
@@ -680,7 +796,7 @@ class MainWindow(QMainWindow):
 
     def _save_to(self, d, path):
         try:
-            d.project.save(path)
+            d.project.save(path, backups=self.backups_keep())
         except OSError as ex:
             QMessageBox.warning(self, APP, "Couldn't save %s:\n%s" % (path, ex))
             return False
@@ -1460,6 +1576,10 @@ class MainWindow(QMainWindow):
     def drafting_settings(self):
         v = self.view()
         if v is not None and dialogs.drafting_settings(self, v):
+            self._store_drafting(v)
+
+    def _store_drafting(self, v):
+        if v is not None:
             st = self.settings
             st.setValue("snap_spacing", v.snap_spacing)
             st.setValue("grid_spacing", v.grid_spacing)

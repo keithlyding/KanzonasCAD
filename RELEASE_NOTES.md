@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11
+
+**New**
+- Project templates: set a project up once (settings, wire colors, title block and its fields,
+  even sheets) and File > Save as template.... New projects start from it, or pick one with
+  New project from template....
+- Edit > Options...: the theme, library folder, template for new projects, how many backups to
+  keep, how often to autosave, and the drafting settings, in one place.
+
 ## 0.10.12
 
 **New**

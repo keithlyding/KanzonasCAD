@@ -19,6 +19,10 @@ nobody understands).
   numbers, distribution blocks, off-sheet connectors. 0.7: three-phase symbols, terminal
   strips, PLC I/O. 0.8: DWG import (ezdwg; ODA File Converter as fallback). 0.9: panel
   sheets with one scale, paper-sized text, {Scale}, dimensions (linear, aligned).
+- 0.10: DIN rail and wire duct, panel materials. 0.10.1-0.10.12: icon, wire crossings,
+  AutoCAD's object snaps, quick layer tools, one-click Text, Scoot and Align, title block
+  position, Trim wire / Delete wire / Clean up wires, double landing, Delete component.
+- 0.11: project templates; Edit > Options....
 - Multi-sheet projects with a sheet list and sheet types (schematic, panel, report, other):
   done since 0.1/0.2.
 
@@ -142,6 +146,13 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   own copies of the blocks (and, from part assignment on, parts) they use.
 - The title block is the project's own drawing with fields (Project properties is its form;
   Sheets > Edit title block redraws it); new fields like `{Scale}` are added as features need.
+- Templates (owner, Nov 2026): a template is an ordinary project, sheets and field values
+  included (no "include sheets" switch, no fields cleared): what's in it is what a new project
+  gets. Kept in the library's Templates folder; the default is chosen in Edit > Options....
+- Options (Edit menu) holds what belongs to the user and computer; Project properties what
+  belongs to one project.
+- Delete component (not the Delete key) joins the wire back up through a deleted symbol;
+  Erase leaves the gap, as in AutoCAD Electrical.
 - Full GitHub releases for each new version on main; the app updates itself.
 - Builds as in KanzonasPDF (owner, Nov 2026): every push builds; a finished piece of work is
   pushed, its pull request opened and merged once the `build` and `linux` checks are green

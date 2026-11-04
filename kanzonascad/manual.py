@@ -574,13 +574,48 @@ always works.</li>
 <li><b>Export this sheet to DXF...</b> and <b>Export all sheets to DXF...</b>: AutoCAD 2013 DXF
 in inches, one file per sheet, border and title block on layer BORDER.</li>
 <li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,
-"<i>name</i> backups", stamped with the date and time (the newest 10 are kept). <b>Open backups
+"<i>name</i> backups", stamped with the date and time (the newest 10 are kept, or as many as
+Edit &gt; Options..., Files, says; none turns backups off). <b>Open backups
 folder</b> opens it; to go back to one, open it like any project and Save as.</li>
-<li><b>Autosave</b>: every 5 minutes, projects with unsaved changes are copied to a recovery
+<li><b>Autosave</b>: every 5 minutes (Options, Files, changes it or turns it off), projects with unsaved changes are copied to a recovery
 folder (never over your own file). If KanzonasCAD doesn't close normally (a crash, a power
 cut), it offers to recover them the next time it starts.</li>
 <li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
 black on white (layer colors are for the screen).</li>
+</ul>
+
+<h2>Project templates</h2>
+<p>A <b>template</b> is an ordinary project that new projects start from: everything in it
+comes along, so set it up once. Its settings (Project properties), layers and their colors
+(wire colors too), the title block drawing and its field values (Drawn by, say), the zones, and
+its <b>sheets with what is drawn on them</b> (a cover sheet, a legend, a ladder ready to wire,
+a panel sheet with its scale set). What you leave out of it isn't there: delete a sheet from
+the template and new projects don't have it; leave Customer blank and it starts blank.</p>
+<ul>
+<li><b>Save as template...</b> (File menu) saves the open project as a template, in the
+<b>Templates</b> folder of your library (a shared library can share them), then asks whether
+every new project should start from it. The project you saved stays as it was.</li>
+<li><b>New project</b> (Ctrl+N) starts from that default template; with none chosen, from
+KanzonasCAD's own settings.</li>
+<li><b>New project from template...</b> (File menu) starts one from any template you pick
+(one per customer, say).</li>
+<li>A new project from a template is untitled: Save asks where to put it, and the template file
+is never changed by it. To change a template, open it like any project, change it and Save.</li>
+<li><b>Edit &gt; Options...</b>, Files, shows which template new projects start from;
+<b>Built-in</b> goes back to KanzonasCAD's own settings.</li>
+</ul>
+
+<h2>Options</h2>
+<p><b>Options...</b> (Edit menu) holds what belongs to you and this computer, for every project
+(<b>Project properties</b> holds what belongs to one project):</p>
+<ul>
+<li><b>General</b>: the theme (Light, Dark, Same as system), the black drawing area, and
+checking for updates automatically.</li>
+<li><b>Files</b>: the library folder, the template for new projects (Browse..., or Built-in),
+how many backups to keep of each project (None turns them off), and how often unsaved work is
+autosaved (Off turns it off).</li>
+<li><b>Drafting</b>: the same settings as <b>Drafting settings...</b> (View menu): snap and grid
+spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 </ul>
 
 <h2>Keyboard shortcuts</h2>
