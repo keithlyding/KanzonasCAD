@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.2
+
+**Fixed**
+- Moving two symbols with a wire between them could crash KanzonasCAD and lose the move (when
+  they moved exactly the wire's length). The wire now moves along with them.
+
 ## 0.11.1
 
 **Fixed**

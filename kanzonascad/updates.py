@@ -158,7 +158,8 @@ def source_folder():
     if getattr(sys, "frozen", False):
         return None
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return root if os.path.isdir(os.path.join(root, ".git")) else None
+    # (.git is a folder in a clone, a file in a git worktree or submodule: both are clones)
+    return root if os.path.exists(os.path.join(root, ".git")) else None
 
 
 def app_folder():
