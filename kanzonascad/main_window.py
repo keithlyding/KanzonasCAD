@@ -248,6 +248,7 @@ class MainWindow(QMainWindow):
         self._cmd_act("lay_unlock", "&Unlock all layers", C.LayerUnlockAllCmd, "Unlock all")
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
+        self._cmd_act("wire_cross", "Wire cr&ossing", C.WireCrossCmd, "Crossing")
         self._cmd_act("rail", "DIN &rail", C.RailCmd, "DIN rail")
         self._cmd_act("duct", "&Wire duct", C.DuctCmd, "Wire duct")
         A("materials", "Panel &materials...", self.show_materials, icon="materials",
@@ -356,7 +357,8 @@ class MainWindow(QMainWindow):
         for mode in ("light", "dark", "system"):
             tm.addAction(a["theme_" + mode])
         m = mb.addMenu("&Draw")
-        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus", None,
+        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus",
+                  "wire_cross", None,
                   "dim_linear", "dim_aligned", None, "rail", "duct"):
             if k == "CIRCLE":
                 cm = m.addMenu("&Circle")
@@ -426,7 +428,7 @@ class MainWindow(QMainWindow):
         ])
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
-            ("Draw", "large", [a["wire"], a["bus"]]),
+            ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Tags", "large", [a["renumber"]]),
@@ -1410,6 +1412,7 @@ class MainWindow(QMainWindow):
             st.setValue("polar_extra", json.dumps(v.polar_extra))
             st.setValue("crosshair_size", v.crosshair_size)
             st.setValue("crosshair_full", bool(v.crosshair_full))
+            st.setValue("osnap_modes", json.dumps(sorted(v.osnap_modes)))
             for i in range(self.tabs.count()):
                 d = self.tabs.widget(i)
                 if isinstance(d, Document) and d.view is not v:
@@ -1425,6 +1428,10 @@ class MainWindow(QMainWindow):
             v.polar_extra = [float(a) for a in json.loads(st.value("polar_extra", "[]"))]
             v.crosshair_size = int(st.value("crosshair_size", v.crosshair_size))
             v.crosshair_full = st.value("crosshair_full", False) in (True, "true")
+            from .osnap import NAMES
+            got = st.value("osnap_modes", None)
+            if got:
+                v.osnap_modes = {k for k in json.loads(got) if k in NAMES}
         except (TypeError, ValueError) as ex:
             self.statusBar().showMessage("Drafting settings reset (couldn't read them: %s)" % ex,
                                          5000)
@@ -1501,8 +1508,8 @@ class MainWindow(QMainWindow):
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned",
-                  "rail", "duct", "materials", "lay_off", "lay_iso", "lay_on", "lay_lock",
-                  "lay_unlock",
+                  "rail", "duct", "materials", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste"):

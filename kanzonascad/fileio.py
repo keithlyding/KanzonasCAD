@@ -46,9 +46,23 @@ def export_dxf(project, sheet, path, include_frame=True):
     _layer_color(l0, project.layer_color("0"))
     msp = doc.modelspace()
     ents = []
+    from . import crossings
+    jumps = crossings.jumps(project, sheet)
+    r = crossings.size(sheet)
     for e in sheet.entities.values():
+        if isinstance(e, M.WireCross):
+            continue                    # (drawn through the jump it makes, below)
+        if isinstance(e, M.Wire) and jumps:
+            # wires with gaps or loops: cut where they jump
+            for pts in crossings.cut_wire(e, jumps, r):
+                ents.append(e.copy(points=[list(q) for q in pts]))
+            continue
         # block references go out as their lines and texts, on the reference's layer
         ents.extend(e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e])
+    for p, u, _cu, st in jumps:
+        if st == "loop":
+            ents.append(M.Polyline(crossings.loop_points(p, u, r), layer="WIRES"
+                                   if "WIRES" in project.layers else "0"))
     if include_frame:
         ents = frame_entities(project, sheet) + ents
     # the cross-references, as plain texts on layer SYMBOLS

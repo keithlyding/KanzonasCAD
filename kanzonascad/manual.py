@@ -233,6 +233,17 @@ wire, connecting wherever its ends land.</p>
 <li><b>Connections</b> are worked out from where wire ends are, never stored: a wire end on a
 pin, on another wire's end, or on the middle of another wire connects there. A wire ending on
 the middle of another (a T), or three or more wire ends at one point, get a <b>dot</b>.</li>
+<li><b>Crossings</b>: wires that pass through each other don't connect. Project properties,
+Schematic, <b>Wire crossings</b> says how that is drawn: <b>Plain</b> (they just cross: no
+dot means not connected, to start), <b>Gap</b> (one wire is broken briefly) or <b>Loop</b> (one
+wire hops over the other); <b>Which wire jumps</b>: the up-and-down one (to start) or the
+across one. Crossings are found by themselves and follow the wires as they move; they print
+and export to DXF (the jumping wire cut, the loop as a half circle).</li>
+<li><b>Wire crossing</b> (WX; Draw menu, Schematic tab) places one by hand: click a wire where
+it should jump, on a crossing or anywhere else on it (over a symbol's line, say). Type
+<b>G</b>, <b>L</b> or <b>N</b> first for a gap, a loop or <b>none</b> (none hides a crossing
+found by itself). A mark placed by hand lights up as a small circle when the cursor is over
+it; select and Erase it to take it away.</li>
 <li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
 Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
 where needed). Select the wires too and they move with it instead.</li>
@@ -358,8 +369,19 @@ with ORTHO on, straight across or up and down).</li>
 
 <h3>Drafting aids</h3>
 <ul>
-<li><b>Object snap</b> (F3, OSNAP): points snap to ends, midpoints, centers, quadrants,
-intersections and text insertion points near the cursor; a yellow marker shows which.</li>
+<li><b>Object snap</b> (F3, OSNAP), as AutoCAD's: near the cursor, points snap onto objects;
+a yellow marker in AutoCAD's shape and the snap's name show which. The snaps:
+<b>Endpoint</b> (END), <b>Midpoint</b> (MID), <b>Center</b> (CEN), <b>Geometric center</b>
+(GCE: the middle of a closed polyline), <b>Node</b> (NOD: symbol pins, dimension points),
+<b>Quadrant</b> (QUA), <b>Intersection</b> (INT), <b>Insertion</b> (INS: blocks and text),
+<b>Perpendicular</b> (PER: square to a line, or on a circle in line with its center, from the
+last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point) and
+<b>Nearest</b> (NEA: the closest point on any object). Tick the ones that run all the time in
+<b>Drafting settings...</b> (Endpoint, Midpoint, Center, Node, Quadrant, Intersection and
+Insertion to start; Select all / Clear all); F3 turns them all off and on.</li>
+<li><b>A snap for one point</b>: at a point prompt, type its short name (PER, TAN, NEA,
+END...) and Enter, or <b>Shift + right-click</b> and pick it from the list: the next point
+uses that snap only, ticked or not, even with F3 off. NON gives the next point no snap.</li>
 <li><b>Grid display</b> (F7, GRID): dots across the drawing area.</li>
 <li><b>Ortho mode</b> (F8, ORTHO): lines straight across or up and down.</li>
 <li><b>Polar tracking</b> (F10, POLAR): near one of the set angles (from the last point), the
