@@ -1,9 +1,10 @@
 name: Build Windows and Linux apps
 
+# as KanzonasPDF: every push builds (a branch's run is the check its pull request needs: no
+# separate pull-request run), and a push to main builds and then publishes the release
 on:
   push:
     branches: ["**"]
-  pull_request:
   workflow_dispatch:
 
 permissions:

@@ -139,6 +139,6 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 - The title block is the project's own drawing with fields (Project properties is its form;
   Sheets > Edit title block redraws it); new fields like `{Scale}` are added as features need.
 - Full GitHub releases for each new version on main; the app updates itself.
-- Builds: push with `[skip ci]` until the owner says "build"; the commit a pull request is
-  opened on must not say `[skip ci]` (the rule on `main` needs that pull request's own run). Merge to `main` only through a
-  pull request once the `build` and `linux` checks are green (a rule on `main` enforces it).
+- Builds as in KanzonasPDF (owner, Nov 2026): every push builds; a finished piece of work is
+  pushed, its pull request opened and merged once the `build` and `linux` checks are green
+  (a rule on `main` enforces it), which publishes the release: build and publish in one go.
