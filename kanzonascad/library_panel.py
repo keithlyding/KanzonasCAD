@@ -368,6 +368,17 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None):
         e = QLineEdit(ins.attrs.get(k, ""))
         edits[k] = e
         form.addRow(labels[k], e)
+    # what the symbol shows besides its tag (a terminal's number, a PLC point's address)
+    for a in (ins.defn.attr_texts if ins.defn is not None else []):
+        k = a["attr"]
+        if k in edits:
+            continue
+        e = QLineEdit(ins.attrs.get(k, ""))
+        if k == "TERM":
+            e.setPlaceholderText("Numbered by itself on its strip; type one to set it")
+        edits[k] = e
+        form.addRow({"TERM": "Terminal number", "ADDR": "Address (I:0/3, %I0.3...)"}.get(k, k),
+                    e)
     lock = QCheckBox("Lock this tag (automatic numbering leaves it alone)")
     lock.setChecked(ins.attrs.get("TAG_LOCK") == "1")
     listed = None

@@ -674,7 +674,7 @@ class BlockDef:
 
     def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
                  category="", description="", role="device", contact="", prefix="",
-                 builtin=False, wiring=""):
+                 builtin=False, wiring="", attr_texts=()):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -688,6 +688,10 @@ class BlockDef:
         self.prefix = prefix            # tag prefix: CR, M, PB... (page-number tags, later)
         self.builtin = bool(builtin)    # one of the program's own (not in your library folder)
         self.wiring = wiring if wiring in WIRINGS else ""
+        # attributes shown on the symbol besides its tag: [{"attr": "TERM", "pos": (x, y),
+        # "height": h}] (a terminal's number, a PLC point's address...)
+        self.attr_texts = [{"attr": str(a["attr"]), "pos": _pt(a["pos"]),
+                            "height": float(a.get("height", 0.08))} for a in attr_texts]
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -696,7 +700,10 @@ class BlockDef:
                 "tag_pos": list(self.tag_pos) if self.tag_pos is not None else None,
                 "pins": [{"name": p["name"], "pos": list(p["pos"])} for p in self.pins],
                 "entities": [e.to_dict() for e in self.entities]} | (
-                    {"wiring": self.wiring} if self.wiring else {})
+                    {"wiring": self.wiring} if self.wiring else {}) | (
+                    {"attr_texts": [{"attr": a["attr"], "pos": list(a["pos"]),
+                                     "height": a["height"]} for a in self.attr_texts]}
+                    if self.attr_texts else {})
 
     @classmethod
     def from_dict(cls, d, builtin=False):
@@ -704,7 +711,8 @@ class BlockDef:
                    [Entity.from_dict(e) for e in d.get("entities", [])], d.get("pins", []),
                    d.get("tag_pos"), d.get("tag_height", 0.1), d.get("category", ""),
                    d.get("description", ""), d.get("role", "device"), d.get("contact", ""),
-                   d.get("prefix", ""), builtin, d.get("wiring", ""))
+                   d.get("prefix", ""), builtin, d.get("wiring", ""),
+                   d.get("attr_texts", ()))
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
@@ -805,6 +813,11 @@ class Insert(Entity):
                 t = self.tag_text()
                 if t is not None:
                     out.append(t)
+                for a in d.attr_texts:
+                    v = self.attrs.get(a["attr"], "")
+                    if v:
+                        out.append(Text(self.to_world(a["pos"]), v, a["height"] * self.scale,
+                                        0.0, "center"))
             for w in out:
                 w.layer, w.color = self.layer, self.color
             self._world = out

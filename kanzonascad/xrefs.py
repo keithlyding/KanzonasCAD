@@ -93,6 +93,8 @@ def live_all(project):
             out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - h, 6),
                               ", ".join(others) if others else "?", h))
     for s, c in contacts:
+        if tags.numbered(c):
+            continue                    # (a terminal shows its number, not where its strip is)
         got = index.get(c.attrs.get("PARENT")) if c.attrs.get("PARENT") else None
         text = _where(project, got[0], got[1]) if got is not None else "?"
         bb = c.bbox()

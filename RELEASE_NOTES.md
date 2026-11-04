@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.7
+
+**New**
+- Three-phase symbols: 3-pole breaker, disconnect and fuses, contactor power contacts, overload
+  heaters, a 3-phase motor and a VFD. Their poles line up with a 3-wire bus.
+- Terminal strips: terminals belong to a strip, show its tag and number themselves 1, 2, 3.
+- PLC I/O: input and output points belong to a PLC card, list under it and show their address.
+- A power supply (AC in, DC out).
+
 ## 0.6
 
 **New**
