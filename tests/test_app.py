@@ -67,7 +67,7 @@ class CommandTest(unittest.TestCase):
         v.run(C.ArcCmd)
         type_in(v, "1,6", "2,7", "3,6")
         v.run(C.TextCmd)
-        type_in(v, "1,8", "0.2", "0", "CR1", "CR2", "")
+        type_in(v, "H", "0.2", "1,8", "CR1", "CR2", "")
         kinds = sorted(e.kind for e in ents(v))
         self.assertEqual(kinds, ["arc", "circle", "polyline", "text", "text"])
         self.assertAlmostEqual(ents(v, "circle")[0].radius, 1.0)
@@ -399,7 +399,7 @@ class TitleBlockTest(unittest.TestCase):
             self.assertFalse(w.acts["sheet_del"].isEnabled())
             v.snap_on = v.osnap_on = False
             v.run(C.TextCmd)
-            type_in(v, "1,1", "0.1", "0", "{Customer}", "")
+            type_in(v, "H", "0.1", "1,1", "{Customer}", "")
             w.acts["edit_tb"].trigger()
             self.assertIs(v.sheet(), v.project.sheets[0])
             self.assertTrue(w.acts["black"].isChecked())
@@ -613,7 +613,7 @@ class TextJustifyTest(unittest.TestCase):
         try:
             v.snap_on = v.osnap_on = False
             v.run(C.TextCmd)
-            type_in(v, "J", "MC", "5,5", "0.2", "0", "CR601", "")
+            type_in(v, "J", "MC", "H", "0.2", "5,5", "CR601", "")
             t = [e for e in v.sheet().entities.values()][0]
             self.assertEqual((t.align, t.valign, t.pos), ("center", "middle", (5.0, 5.0)))
             self.assertEqual(v.text_justify, ("center", "middle"))
@@ -826,3 +826,30 @@ class IconTest(unittest.TestCase):
         ic = app_icon()
         self.assertFalse(ic.isNull())
         self.assertGreaterEqual(max(s.width() for s in ic.availableSizes()), 256)
+
+
+class TextHeightTest(unittest.TestCase):
+    def test_one_click_and_a_huge_height_reset(self):
+        from tests.util import window, type_in
+        w, v = window()
+        try:
+            v.snap_on = v.osnap_on = False
+            v.project.settings["text_height"] = 3.2         # (left by the old second click)
+            v.run(C.TextCmd)
+            self.assertEqual(v.text_height(), 0.125)        # back to 1/8 inch
+            type_in(v, "2,2")
+            v.cmd.point((6, 6))                             # a stray click: nothing happens
+            type_in(v, "MOTOR", "")
+            t = [e for e in v.sheet().entities.values() if e.kind == "text"][0]
+            self.assertEqual((t.text, t.pos, t.height), ("MOTOR", (2.0, 2.0), 0.125))
+            # on a 1:4 panel sheet, H takes paper inches
+            with v.project.edit("1:4") as ed:
+                ed.sheet_scale(v.sheet(), 0.25)
+            v.run(C.TextCmd)
+            type_in(v, "H", "0.25", "10,10", "BIG", "")
+            t = [e for e in v.sheet().entities.values() if e.kind == "text" and
+                 e.text == "BIG"][0]
+            self.assertAlmostEqual(t.height, 1.0)           # 1/4 inch on paper at 1:4
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            w.close()
