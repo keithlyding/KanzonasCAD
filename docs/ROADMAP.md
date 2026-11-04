@@ -87,7 +87,15 @@ nobody understands).
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
-- One `.kzcad` file per project (all sheets inside).
+- One `.kzcad` file per project (all sheets inside). It is plain JSON, readable by anyone: the
+  working file, shared with other KanzonasCAD users as it is. DXF and PDF are for people
+  without KanzonasCAD.
+- Exported DXFs carry KanzonasCAD's data too (owner's choice, Nov 2026): devices, tags and
+  hidden ids, block roles, the sheet's page number and zones, stored as XDATA/dictionaries
+  under KanzonasCAD's own application name. Other programs ignore it; importing such a DXF
+  back restores devices instead of plain lines, and data a program left stale (a symbol moved
+  or erased in AutoCAD) is checked against the geometry and dropped, never trusted blindly.
+  Documented openly (docs/DXF_DATA.md) so any program can read it.
 - US practice: JIC/NFPA symbols, horizontal rungs, grid-style references (`6-D1`), zones A-H
   down the left and 1-10 along the top to start (both editable).
 - Drawing area black by default; PDF always black on white.
@@ -97,5 +105,6 @@ nobody understands).
 - The title block is the project's own drawing with fields (Project properties is its form;
   Sheets > Edit title block redraws it); new fields like `{Scale}` are added as features need.
 - Full GitHub releases for each new version on main; the app updates itself.
-- Builds: push with `[skip ci]` until the owner says "build"; merge to `main` only through a
+- Builds: push with `[skip ci]` until the owner says "build"; the commit a pull request is
+  opened on must not say `[skip ci]` (the rule on `main` needs that pull request's own run). Merge to `main` only through a
   pull request once the `build` and `linux` checks are green (a rule on `main` enforces it).
