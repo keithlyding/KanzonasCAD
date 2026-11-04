@@ -241,6 +241,12 @@ class MainWindow(QMainWindow):
         self._cmd_act("mirror", "M&irror", C.MirrorCmd, "Mirror")
         self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
+        self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
+        self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
+        A("sheet_scale", "Sheet sc&ale...", self.sheet_properties, icon="sheet_scale",
+          label="Sheet scale",
+          tip="This sheet's scale (Sheet properties): the drawing stays real size, the scale "
+              "sets how big it prints")
 
         A("renumber", "&Renumber sheet", self.renumber_sheet, icon="renumber",
           label="Renumber sheet",
@@ -338,7 +344,8 @@ class MainWindow(QMainWindow):
         for mode in ("light", "dark", "system"):
             tm.addAction(a["theme_" + mode])
         m = mb.addMenu("&Draw")
-        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus"):
+        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus", None,
+                  "dim_linear", "dim_aligned"):
             if k == "CIRCLE":
                 cm = m.addMenu("&Circle")
                 for ck in self.CIRCLE_KEYS:
@@ -353,7 +360,7 @@ class MainWindow(QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "renumber",
-                  "xref_update", "xref_freeze", "xref_auto", None, "sheet_props",
+                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", None, "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
@@ -405,7 +412,8 @@ class MainWindow(QMainWindow):
         ])
         r.add_tab("Panel", [
             ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"]]),
-            ("Real size", "large", [a["scale"]]),
+            ("Real size", "large", [a["scale"], a["sheet_scale"]]),
+            ("Dimensions", "large", [a["dim_linear"], a["dim_aligned"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
             ("Settings", "large", [a["panel_settings"]]),
@@ -458,6 +466,13 @@ class MainWindow(QMainWindow):
             sb.addPermanentWidget(b)
         self.layer_label = QLabel()
         sb.addPermanentWidget(self.layer_label)
+        # the sheet's scale (a panel sheet at 1:4...): click to change it
+        self.scale_label = QToolButton()
+        self.scale_label.setAutoRaise(True)
+        self.scale_label.setToolTip("This sheet's scale: the drawing is real size, the scale "
+                                    "sets how big it prints. Click to change it.")
+        self.scale_label.clicked.connect(self.sheet_properties)
+        sb.addPermanentWidget(self.scale_label)
         # shown while a sheet's cross-references aren't what the drawing says
         self.xref_warning = QToolButton()
         self.xref_warning.setAutoRaise(True)
@@ -1411,6 +1426,10 @@ class MainWindow(QMainWindow):
             a[key].setChecked(on)
             a[key].blockSignals(False)
         a["xref_freeze"].setEnabled(bool(has and not on_tb))
+        a["sheet_scale"].setEnabled(bool(has and not on_tb))
+        self.scale_label.setVisible(bool(has and not on_tb))
+        if has and not on_tb:
+            self.scale_label.setText("Scale " + v.sheet().scale_text())
         stale = []
         if has:
             from .xrefs import out_of_date

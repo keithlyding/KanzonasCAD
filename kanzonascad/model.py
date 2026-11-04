@@ -53,6 +53,7 @@ DEFAULT_SETTINGS = {
     "xref_height": 0.08,        # cross-reference text
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
     "wire_number_height": 0.08,
+    "dim_height": 0.1,          # dimension text, paper inches
 }
 LAYOUT_KEYS = ("size", "cols", "rows", "col_start", "row_start")
 
@@ -650,6 +651,161 @@ class Text(Entity):
                          height=self.height * abs(factor))
 
 
+def fmt_inches(v, places=2):
+    """A length as a panel builder reads it: 12.50\"."""
+    return "%.*f\"" % (places, v)
+
+
+@_register
+class Dimension(Entity):
+    """A dimension: the true distance between p1 and p2, its line through loc. mode "linear"
+    (across or up and down, whichever loc points to) or "aligned" (along p1-p2). height: its
+    text height, in drawing units (on a scaled panel sheet, the paper height times the
+    scale's factor: it reads the same on paper at any scale). text: what to show instead of
+    the measured length ("" measures; <> in it stands for the measured length)."""
+    kind = "dimension"
+    __slots__ = ("p1", "p2", "loc", "mode", "height", "text", "_parts")
+
+    def __init__(self, p1, p2, loc, mode="linear", height=0.1, text="", **kw):
+        kw.setdefault("layer", "DIMENSIONS")
+        super().__init__(**kw)
+        self.p1, self.p2, self.loc = _pt(p1), _pt(p2), _pt(loc)
+        self.mode = "aligned" if mode == "aligned" else "linear"
+        self.height = float(height)
+        self.text = str(text or "")
+        self._parts = None
+
+    def _data(self):
+        d = {"p1": list(self.p1), "p2": list(self.p2), "loc": list(self.loc), "mode": self.mode,
+             "height": self.height}
+        if self.text:
+            d["text"] = self.text
+        return d
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["p1"], d["p2"], d["loc"], d.get("mode", "linear"), d.get("height", 0.1),
+                   d.get("text", ""), layer=d.get("layer", "DIMENSIONS"), color=d.get("color"),
+                   id=d.get("id"))
+
+    # ---- geometry --------------------------------------------------------------------------
+    def direction(self):
+        """(unit vector along the measurement, measured value)."""
+        a, b = self.p1, self.p2
+        if self.mode == "aligned":
+            L = G.dist(a, b)
+            if L < 1e-12:
+                return (1.0, 0.0), 0.0
+            return ((b[0] - a[0]) / L, (b[1] - a[1]) / L), L
+        x0, x1 = sorted((a[0], b[0]))
+        y0, y1 = sorted((a[1], b[1]))
+        out_x = max(x0 - self.loc[0], self.loc[0] - x1, 0.0)
+        out_y = max(y0 - self.loc[1], self.loc[1] - y1, 0.0)
+        if out_y >= out_x:
+            return (1.0, 0.0), abs(b[0] - a[0])             # across
+        return (0.0, 1.0), abs(b[1] - a[1])                 # up and down
+
+    def value(self):
+        return self.direction()[1]
+
+    def label(self):
+        v = fmt_inches(self.value())
+        if not self.text:
+            return v
+        return self.text.replace("<>", v)
+
+    def parts(self):
+        """Its lines, arrows and text, placed (kept until it changes)."""
+        if self._parts is not None:
+            return self._parts
+        h = self.height
+        (ux, uy), _v = self.direction()
+        nx, ny = -uy, ux
+        a, b, loc = self.p1, self.p2, self.loc
+        # the dimension line: through loc, along u; its ends square off a and b
+        d = (loc[0] - a[0]) * nx + (loc[1] - a[1]) * ny
+        if self.mode == "linear":
+            if ux:                          # across: ends at the points' x, at loc's y
+                da, db = (a[0], loc[1]), (b[0], loc[1])
+            else:
+                da, db = (loc[0], a[1]), (loc[0], b[1])
+        else:
+            da = (a[0] + nx * d, a[1] + ny * d)
+            db = (b[0] + nx * d, b[1] + ny * d)
+        out = [Line(da, db)]
+        gap, ext = h * 0.5, h * 0.75
+        for p, q in ((a, da), (b, db)):
+            L = G.dist(p, q)
+            if L > 1e-9:
+                vx, vy = (q[0] - p[0]) / L, (q[1] - p[1]) / L
+                out.append(Line((p[0] + vx * min(gap, L), p[1] + vy * min(gap, L)),
+                                (q[0] + vx * ext, q[1] + vy * ext)))
+        # open arrowheads pointing out to the extension lines
+        s = h * 1.0
+        L = G.dist(da, db)
+        if L > 1e-9:
+            ex, ey = (db[0] - da[0]) / L, (db[1] - da[1]) / L
+            for tip, sx, sy in ((da, ex, ey), (db, -ex, -ey)):
+                for side in (1, -1):
+                    out.append(Line(tip, (tip[0] + sx * s - ey * s * 0.33 * side,
+                                          tip[1] + sy * s + ex * s * 0.33 * side)))
+        # the text, above the middle of the line, reading left to right or bottom to top
+        ang = math.degrees(math.atan2(db[1] - da[1], db[0] - da[0])) % 360.0
+        if 90.0 < ang <= 270.0:
+            ang = (ang + 180.0) % 360.0
+        r = math.radians(ang)
+        off = h * 0.4
+        mid = ((da[0] + db[0]) / 2 - math.sin(r) * off, (da[1] + db[1]) / 2 + math.cos(r) * off)
+        out.append(Text(mid, self.label(), h, ang, "center"))
+        for e in out:
+            e.layer, e.color = self.layer, self.color
+        self._parts = out
+        return out
+
+    def _compute_bbox(self):
+        bb = None
+        for e in self.parts():
+            bb = G.bbox_union(bb, e.bbox())
+        return bb
+
+    def distance(self, p):
+        return min(e.distance(p) for e in self.parts())
+
+    def crosses(self, rect):
+        return any(e.crosses(rect) for e in self.parts())
+
+    def pieces(self):
+        return []                           # (trim and intersections pass dimensions by)
+
+    def outline(self):
+        out = []
+        for e in self.parts():
+            out.extend(e.outline())
+        return out
+
+    def _compute_snaps(self):
+        return [("end", self.p1), ("end", self.p2)]
+
+    def grips(self):
+        return [self.p1, self.p2, self.loc]
+
+    def with_grip(self, i, p):
+        key = ("p1", "p2", "loc")[i]
+        return self.copy(**{key: list(p)})
+
+    def _map(self, fn, **_kw):
+        # (scaled, its text keeps its height: it is paper-sized, and the number follows)
+        return self.copy(p1=list(fn(self.p1)), p2=list(fn(self.p2)), loc=list(fn(self.loc)))
+
+    def exploded(self):
+        out = []
+        for e in self.parts():
+            c = e.copy()
+            c.id = None
+            out.append(c)
+        return out
+
+
 # ============================================================================================
 # Blocks: symbols (schematic, with pins and a tag) and footprints (panel outlines)
 # ============================================================================================
@@ -981,6 +1137,14 @@ class SpatialIndex:
         return out
 
 
+# a panel sheet's scale presets: (name written on the drawing, paper / real); "" names 1:N
+SCALE_PRESETS = [
+    ("", 1.0), ("", 1 / 2), ("", 1 / 4), ("", 1 / 5), ("", 1 / 8), ("", 1 / 10), ("", 1 / 16),
+    ("", 1 / 20),
+    ('3" = 1\'-0"', 1 / 4), ('1-1/2" = 1\'-0"', 1 / 8), ('1" = 1\'-0"', 1 / 12),
+    ('3/4" = 1\'-0"', 1 / 16), ('1/2" = 1\'-0"', 1 / 24), ('1/4" = 1\'-0"', 1 / 48),
+]
+
 SHEET_KINDS = {"schematic": "Schematic", "panel": "Panel", "report": "Report", "other": "Other"}
 TITLE_BLOCK_ID = 0          # the project's title block is kept as a sheet with this id
 
@@ -997,6 +1161,10 @@ class Sheet:
         self.own_layout = False             # True: its size and zones aren't the project's
         self.kind = "schematic"             # schematic, panel, report or other (defaults only)
         self.number_order = "across"        # tags (and wire numbers): across/down then the other
+        self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
+                                            # drawing is real size, the border and paper-sized
+                                            # text around it are drawn 1/scale larger
+        self.scale_name = ""                # its preset's name (1/4" = 1'-0"...), "" for 1:N
         self.xref_frozen = False            # cross-references kept as they were (issued sheet)
         self.xref_shown = None              # the cross-references shown while frozen (or while
                                             # the project's aren't automatic): xrefs.py
@@ -1011,7 +1179,30 @@ class Sheet:
 
     # ---- size, border, zones -------------------------------------------------------------
     def paper(self):
+        """The sheet's size in drawing units (its paper size at 1:1; 1/scale larger on a
+        scaled panel sheet)."""
+        w, h = SHEET_SIZES[self.size]
+        k = self.k()
+        return w * k, h * k
+
+    def paper_inches(self):
+        """The real paper size (what prints)."""
         return SHEET_SIZES[self.size]
+
+    def k(self):
+        """Drawing units per paper inch: 1 on a 1:1 sheet, 4 on a 1:4 one."""
+        return 1.0 / self.scale if self.scale > 0 else 1.0
+
+    def scale_text(self):
+        """The scale as written on the drawing: its preset's name, or 1:4."""
+        if self.scale_name:
+            return self.scale_name
+        if abs(self.scale - 1.0) < 1e-12:
+            return "1:1"
+        inv = 1.0 / self.scale
+        if abs(inv - round(inv)) < 1e-9:
+            return "1:%d" % round(inv)
+        return "%g:1" % self.scale if self.scale > 1 else "1:%g" % inv
 
     MARGIN = 0.375                      # paper edge to the border
     STRIP = 0.25                        # height/width of the zone label strips (top, left)
@@ -1021,7 +1212,8 @@ class Sheet:
         along the top and right of the row strip down the left (none on the right or
         bottom: they would only take room)."""
         w, h = self.paper()
-        m, s = self.MARGIN, self.STRIP
+        k = self.k()
+        m, s = self.MARGIN * k, self.STRIP * k
         return (m + s, m, w - m, h - m - s)
 
     def zone_at(self, x, y):
@@ -1101,6 +1293,7 @@ class Sheet:
                 "own_layout": self.own_layout, "kind": self.kind,
                 "number_order": self.number_order,
                 "number": self.number, "fields": dict(self.fields),
+                "scale": self.scale, "scale_name": self.scale_name,
                 "xref_frozen": self.xref_frozen,
                 "xref_shown": [list(t) for t in self.xref_shown]
                 if self.xref_shown is not None else None}
@@ -1124,6 +1317,12 @@ class Sheet:
         self.number_order = "down" if d.get("number_order") == "down" else "across"
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
+        try:
+            self.scale = float(d.get("scale", 1.0)) or 1.0
+        except (TypeError, ValueError):
+            self.scale = 1.0
+        self.scale = self.scale if self.scale > 0 else 1.0
+        self.scale_name = str(d.get("scale_name", "") or "")
         self.xref_frozen = bool(d.get("xref_frozen", False))
         shown = d.get("xref_shown")
         self.xref_shown = [tuple(t) for t in shown] if shown is not None else None
@@ -1189,6 +1388,22 @@ class Edit:
         after.update(changes)
         sheet.set_meta(after)
         self.ops.append(["meta", sheet.id, before, after])
+
+    def sheet_scale(self, sheet, scale, name=""):
+        """Give a sheet another scale. The drawing stays real size; texts, tags and
+        dimensions are paper-sized, so their heights follow (they print the same size)."""
+        old_k = sheet.k()
+        self.sheet_meta(sheet, scale=float(scale), scale_name=name)
+        f = sheet.k() / old_k
+        if abs(f - 1.0) < 1e-12:
+            return
+        for e in list(sheet.entities.values()):
+            if isinstance(e, Text):
+                self.change(sheet, e.copy(height=e.height * f))
+            elif isinstance(e, Dimension):
+                self.change(sheet, e.copy(height=e.height * f))
+            elif isinstance(e, Insert) and e.tag_h:
+                self.change(sheet, e.copy(tag_h=e.tag_h * f))
 
     def add_sheet(self, sheet, index=None):
         p = self.project

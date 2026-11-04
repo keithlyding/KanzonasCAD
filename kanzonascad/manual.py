@@ -88,7 +88,8 @@ to bring in your company's title block and move it into the lower right corner. 
 <code>{{Drawn by}}</code>, <code>{{Checked by}}</code>, <code>{{Date}}</code>,
 <code>{{Revision}}</code> - from Project properties.</li>
 <li><code>{{Sheet}}</code> (the page number), <code>{{Sheets}}</code> (how many sheets) and
-<code>{{Sheet title}}</code> - from each sheet. <code>{{Sheet}} OF {{Sheets}}</code> gives
+<code>{{Sheet title}}</code> and <code>{{Scale}}</code> (1:4, 3" = 1'-0"...) - from each
+sheet. <code>{{Sheet}} OF {{Sheets}}</code> gives
 "6 OF 12".</li>
 <li>Any other name, like <code>{{Job number}}</code>, becomes a field of your own: it appears
 in Project properties to fill in.</li>
@@ -310,7 +311,7 @@ you place (Enter ends).</td></tr>
 <tr><td>Scale</td><td>SCALE, SC</td><td>Select, base point, factor. Or <b>Reference</b> (R): pick
 two points of a length as drawn (or type it), then type the length it should be: this brings a
 manufacturer's drawing to its real size. Lengths can be typed in millimeters:
-<code>45mm</code>.</td></tr>
+<code>45mm</code>. On a panel sheet, footprints are left out (they're real size).</td></tr>
 <tr><td>Mirror</td><td>MIRROR, MI</td><td>Select, two points of the mirror line, keep or erase
 the originals. Text stays readable.</td></tr>
 <tr><td>Erase</td><td>ERASE, E, or Delete</td><td>Removes the selected objects.</td></tr>
@@ -318,6 +319,10 @@ the originals. Text stays readable.</td></tr>
 back to the nearest crossing objects on either side (every object is a cutting edge, as in
 AutoCAD's quick mode). An object nothing crosses is erased. U undoes the last trim.</td></tr>
 <tr><td>Zoom</td><td>ZOOM, Z</td><td>Extents (E), Sheet (S), In (I), Out (O).</td></tr>
+<tr><td>Linear dimension</td><td>DIMLINEAR, DLI, DIM</td><td>Pick the two points to measure,
+then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>
+<tr><td>Aligned dimension</td><td>DIMALIGNED, DAL</td><td>The same, measured along the line
+between the two points (slanted too).</td></tr>
 </table>
 <p>Typed <b>Undo</b> (U) and <b>Redo</b> work on the command line too.</p>
 
@@ -352,6 +357,30 @@ angles and the crosshair (all kept for next time).</li>
 <li><b>Crosshair</b>: short, as in AutoCAD (each line 5% of the view to start). In Drafting
 settings, <b>Crosshair size</b> makes it longer or shorter (1 to 100%), and <b>Full-screen
 crosshair</b> runs its lines across the whole view.</li>
+</ul>
+
+<h2>Panel sheets and dimensions</h2>
+<p>A panel layout is drawn at <b>real size</b>: a 3 inch contactor is 3 inches in the drawing,
+on every sheet, forever. Each sheet has <b>one scale</b> that only sets how big it prints:
+<b>Sheet scale...</b> (Panel tab), Sheet properties, or click <b>Scale 1:4</b> in the status
+bar. Pick 1:2, 1:4, 1:5... or an architectural one (3" = 1'-0"...), or type one (1:6).</p>
+<ul>
+<li>The border, zones and title block are drawn around the real-size drawing, enlarged by the
+scale, so the sheet prints at its paper size (PDF) with the drawing at that scale. DXF
+exports hold the real-size drawing with the border enlarged around it, as AutoCAD drawings
+in model space do.</li>
+<li>Text, tags, cross-references, wire numbers and dimension text are <b>paper-sized</b>: new
+text at 1/8 inch prints 1/8 inch high whatever the scale. Changing a sheet's scale changes
+their heights with it (in one undoable step).</li>
+<li>Footprints aren't scaled by hand on a panel sheet (Scale leaves them out and says so):
+bring a manufacturer's drawing to real size with Scale, Reference before it becomes a
+footprint.</li>
+<li><b>{{Scale}}</b> in the title block shows the sheet's scale (Edit title block to add it).</li>
+<li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Panel
+tab, measure the true distance, so they're right at any scale; they show inches with two
+decimals (12.50"). Their grips move the measured points and the line; they go on layer
+DIMENSIONS (its color: Project properties, Panel). Dimension text height: Project
+properties.</li>
 </ul>
 
 <h2>Selecting and grips</h2>
