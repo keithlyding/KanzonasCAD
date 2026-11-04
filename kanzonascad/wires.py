@@ -23,8 +23,12 @@ def _same(a, b, tol=TOL):
 
 def follow_pins(ed):
     """Stretch the wires whose ends sat on the pins of symbols this edit moved. Wires the
-    edit changed itself (moved along with the symbol, say) are left as they are."""
+    edit changed itself (moved along with the symbol, say) are left as they are. Every end
+    of a wire that moves is moved together (two symbols moved with a wire between them): a
+    wire whose two ends move the same way just moves along, and one left with no length
+    goes."""
     changed_by_user = {(sid, eid) for (sid, eid) in ed._seen}
+    moves = {}                                  # (sheet id, wire id) -> (sheet, {end: point})
     for sheet, old_pins, new_pins in ed.pin_moves:
         for name, old in old_pins.items():
             new = new_pins.get(name)
@@ -38,8 +42,25 @@ def follow_pins(ed):
                     continue
                 for i in (0, -1):
                     if _same(cur.points[i], old):
-                        cur = cur.end_moved(i, new)
-                ed.change(sheet, cur)
+                        moves.setdefault((sheet.id, e.id), (sheet, {}))[1].setdefault(i, new)
+    for (_sid, eid), (sheet, ends) in moves.items():
+        cur = sheet.entities.get(eid)
+        if cur is None:
+            continue
+        if len(ends) == 2:
+            d0 = (ends[0][0] - cur.points[0][0], ends[0][1] - cur.points[0][1])
+            d1 = (ends[-1][0] - cur.points[-1][0], ends[-1][1] - cur.points[-1][1])
+            if abs(d0[0] - d1[0]) <= TOL and abs(d0[1] - d1[1]) <= TOL:
+                ed.change(sheet, cur.moved(d0[0], d0[1]))
+                continue
+        for i, q in ends.items():
+            if len(cur.points) < 2:
+                break
+            cur = cur.end_moved(i, q)
+        if len(cur.points) < 2:
+            ed.remove(sheet, eid)               # (both ends on one point: no wire left)
+        else:
+            ed.change(sheet, cur)
 
 
 def pins_on(sheet, p, tol=TOL):

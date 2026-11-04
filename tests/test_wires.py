@@ -145,3 +145,45 @@ class BusTest(unittest.TestCase):
         finally:
             v.project.saved_at = len(v.project.undo_stack)
             w.close()
+
+
+class FollowPinsBothEndsTest(unittest.TestCase):
+    """Found by tests/battery.py (seed 3): a wire between two symbols moved together, by
+    its own length, crashed (its first end landed on its second before that one moved)."""
+
+    def test_wire_between_two_moved_symbols(self):
+        from tests.util import window, type_in
+        from kanzonascad import commands as C
+        w, v = window()
+        try:
+            v.osnap_on = v.snap_on = False
+            s, p = v.sheet(), v.project
+            coil = w.library.get("symbol", "Relay coil")
+            v.run(C.InsertCmd, coil, {"TAG": "CR1"})
+            type_in(v, "4,5")
+            a = max(s.inserts(), key=lambda e: e.id)
+            v.run(C.InsertCmd, coil, {"TAG": "CR2"})
+            type_in(v, "6,5")
+            b = max(s.inserts(), key=lambda e: e.id)
+            pa = max(q for _n, q in a.pin_points())
+            pb = min(q for _n, q in b.pin_points())
+            with p.edit("w") as ed:
+                wire = ed.add(s, M.Wire([pa, pb]))
+            dx = pb[0] - pa[0]
+            v.set_selection({a.id, b.id})
+            v.run(C.MoveCmd)
+            type_in(v, "0,0", "%g,0" % dx)
+            # the wire moved along with both of its ends
+            self.assertEqual(s.entities[wire.id].points,
+                             [(pa[0] + dx, pa[1]), (pb[0] + dx, pb[1])])
+            # one symbol moved onto the other's pin: the wire has no length left and goes
+            v.set_selection({b.id})
+            v.run(C.MoveCmd)
+            type_in(v, "0,0", "%g,0" % -dx)
+            self.assertNotIn(wire.id, s.entities)
+            p.undo()
+            p.undo()
+            self.assertEqual(s.entities[wire.id].points, [pa, pb])
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            w.close()

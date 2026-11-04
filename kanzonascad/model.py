@@ -365,6 +365,8 @@ class Wire(Polyline):
         corner slides along with it, or a jog is added to a two-point wire."""
         pts = [list(q) for q in self.points]
         n = len(pts)
+        if n < 2:
+            return self.copy(points=[list(p)])      # (no length: nothing to keep straight)
         j = 0 if i == 0 else n - 1
         k = 1 if j == 0 else n - 2
         old = pts[j]
