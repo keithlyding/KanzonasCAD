@@ -1358,6 +1358,13 @@ class MainWindow(QMainWindow):
         how = updates.how()
         hint = {"source": "Update now gets the new version (git pull) and what it needs, then "
                           "starts KanzonasCAD again. Your projects and library aren't touched.",
+                "installer": "Update now downloads the new setup, checks it against the "
+                             "release, closes KanzonasCAD (you'll be asked to save first) and "
+                             "installs it over this copy, which then starts again. Your "
+                             "projects, library and settings aren't touched."
+                             + (" Installed for all users: Windows asks for administrator "
+                                "rights." if updates.how() == "installer"
+                                and updates.for_all_users(updates.app_folder()) else ""),
                 "windows": "Update now downloads it, checks it against the release, and "
                            "replaces this copy when KanzonasCAD closes (you'll be asked to save "
                            "first). Your projects and library aren't touched.",
@@ -1396,6 +1403,14 @@ class MainWindow(QMainWindow):
                 QDesktopServices.openUrl(QUrl(updates.page(release)))
                 return
             self._run_zip_update(got[0], got[1], updates.app_folder())
+        elif how == "installer":
+            got = updates.asset(release, updates.setup_asset_name(v))
+            if got is None:
+                QMessageBox.warning(self, "Update", "This release has no checked setup. "
+                                    "Opening the release page instead.")
+                QDesktopServices.openUrl(QUrl(updates.page(release)))
+                return
+            self._run_zip_update(got[0], got[1], updates.app_folder(), setup=True)
         else:
             QDesktopServices.openUrl(QUrl(updates.page(release)))
 
@@ -1430,11 +1445,11 @@ class MainWindow(QMainWindow):
         up.start()
         dlg.exec()
 
-    def _run_zip_update(self, url, sha, app_dir):
-        from .updates import ZipUpdater, start_swap
+    def _run_zip_update(self, url, sha, app_dir, setup=False):
+        from .updates import ZipUpdater, start_setup, start_swap
         dlg, out, box = self._progress_dialog("Updating KanzonasCAD")
         out.append("Downloading...")
-        up = ZipUpdater(url, sha, app_dir, dlg)
+        up = ZipUpdater(url, sha, app_dir, dlg, setup=setup)
         up.progress.connect(lambda a, b: self.statusBar().showMessage(
             "Downloading the update: %d of %d MB" % (a // 1000000, max(b, 0) // 1000000)))
 
@@ -1446,7 +1461,10 @@ class MainWindow(QMainWindow):
                                     ) == QMessageBox.Yes:
                 dlg.accept()
                 if self.close():
-                    start_swap(new, app_dir)
+                    if setup:
+                        start_setup(new, app_dir)
+                    else:
+                        start_swap(new, app_dir)
                     QApplication.instance().quit()
 
         def failed(text):

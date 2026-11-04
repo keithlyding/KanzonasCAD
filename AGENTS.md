@@ -32,6 +32,10 @@ update box (`updates.py`) shows those notes and installs the release.
   (0.2 -> 0.2.1). Plain numbers only (0.2, not 0.20).
 - Every push to any branch runs both builds. Push when a piece of work is done, not after
   every small edit.
+- The rule on `main` counts only the pull request's own run of `build` and `linux` (a run
+  started by hand on the branch doesn't count). GitHub skips every run of a commit whose
+  message contains the skip-ci marker anywhere, even quoted: the newest commit of a branch
+  must not contain it when its pull request is opened or updated.
 
 ## Every user-facing change must update, in the same commit:
 1. **The user manual** `kanzonascad/manual.py` (Help > User manual, F1). Describe new or

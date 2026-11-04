@@ -75,10 +75,121 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path dist\KanzonasCAD -DestinationPath KanzonasCAD-windows.zip
 
+      - name: Version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = python -c "import kanzonascad; print(kanzonascad.__version__)"
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build the installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup isn't available" }
+          & $iscc /DMyAppVersion=${{ steps.ver.outputs.version }} installer\KanzonasCAD.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
+          # the same files labeled 0.0 stand in for "the version the user already has"
+          & $iscc /DMyAppVersion=0.0 installer\KanzonasCAD.iss
+          if ($LASTEXITCODE -ne 0) { throw "Old installer build failed" }
+
+      - name: Test the installer (install, update as Update now does, self test, uninstall)
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $dir = "$env:RUNNER_TEMP\kzcadinstall"
+          $un = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{3D7B9E24-6A1C-4F85-B2E0-9C4D7A15E863}_is1"
+          $p = Start-Process "dist-installer\KanzonasCAD-v0.0-setup.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/CURRENTUSER","/NORESTART","/DIR=$dir","/TASKS=kzcadfiles" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "The old version failed to install (code $($p.ExitCode))" }
+          if ((Get-ItemProperty $un).DisplayVersion -ne "0.0") { throw "No uninstall entry for the old version" }
+          if ((Get-ItemProperty "Registry::HKEY_CURRENT_USER\Software\Classes\.kzcad")."(default)" -ne "KanzonasCAD.Project") { throw ".kzcad isn't associated" }
+          $cmd = (Get-ItemProperty "Registry::HKEY_CURRENT_USER\Software\Classes\KanzonasCAD.Project\shell\open\command")."(default)"
+          if ($cmd -notlike "*$dir\KanzonasCAD.exe*%1*") { throw "Wrong open command: $cmd" }
+          New-Item -Force "HKCU:\Software\KanzonasCAD\upgradetest" | Set-ItemProperty -Name keep -Value "yes"
+          # the old version is running when the update starts
+          $old = Start-Process "$dir\KanzonasCAD.exe" -PassThru
+          Start-Sleep -Seconds 10
+          if ($old.HasExited) { throw "The installed app exited early (code $($old.ExitCode))" }
+          # the new setup runs exactly as Update now runs it (updates.installer_command): no /DIR
+          # (it finds the installed copy by itself), and /RELAUNCH starts KanzonasCAD again
+          $uargs = "/SILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/CLOSEAPPLICATIONS","/CURRENTUSER","/RELAUNCH"
+          # (not -Wait: that would also wait for the KanzonasCAD the setup starts)
+          $p = Start-Process "dist-installer\KanzonasCAD-v$v-setup.exe" -ArgumentList $uargs -PassThru
+          $p.WaitForExit()
+          if ($p.ExitCode -ne 0) { throw "The update failed (code $($p.ExitCode))" }
+          if (-not $old.HasExited) { $old | Stop-Process -Force; throw "The setup didn't close the running KanzonasCAD" }
+          $again = $null
+          foreach ($i in 1..60) {
+            $again = Get-Process KanzonasCAD -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($dir) }
+            if ($again) { break }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $again) { throw "The update didn't start KanzonasCAD again" }
+          Start-Sleep -Seconds 3
+          $again | Stop-Process -Force
+          Start-Sleep -Seconds 2
+          if ((Get-ItemProperty $un).DisplayVersion -ne $v) { throw "Installed version is '$((Get-ItemProperty $un).DisplayVersion)' after the update" }
+          if ((Get-ItemProperty $un).InstallLocation.TrimEnd('\') -ne $dir) { throw "The update installed to a different folder" }
+          if ((Get-ItemProperty "HKCU:\Software\KanzonasCAD\upgradetest").keep -ne "yes") { throw "The update lost the user's settings" }
+          python -c "import sys; from kanzonascad import updates; sys.exit(1 if updates.for_all_users(sys.argv[1]) else 0)" $dir
+          if ($LASTEXITCODE -ne 0) { throw "The updater takes this per-user copy for an all-users one" }
+          $p = Start-Process "$dir\KanzonasCAD.exe" -ArgumentList "--selftest","installed-selftest.log" -PassThru -Wait
+          Get-Content installed-selftest.log
+          if ($p.ExitCode -ne 0) { throw "The installed app failed its self test" }
+          $p = Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -PassThru -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path "$dir\KanzonasCAD.exe") { throw "Uninstall left the app behind" }
+          if (Test-Path "Registry::HKEY_CURRENT_USER\Software\Classes\KanzonasCAD.Project") { throw "Uninstall left the .kzcad association behind" }
+          Remove-Item -Recurse -Force "HKCU:\Software\KanzonasCAD\upgradetest" -ErrorAction SilentlyContinue
+          Write-Host "Installed 0.0, updated to $v in place (settings kept, restarted), uninstalled"
+
+      - name: Test the installer for all users (install, update as Update now does, uninstall)
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          # (the build machine runs as administrator: no prompt; on a PC, Windows asks)
+          $v = "${{ steps.ver.outputs.version }}"
+          $un = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{3D7B9E24-6A1C-4F85-B2E0-9C4D7A15E863}_is1"
+          $p = Start-Process "dist-installer\KanzonasCAD-v0.0-setup.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/ALLUSERS","/NORESTART","/TASKS=kzcadfiles" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "The all-users install failed (code $($p.ExitCode))" }
+          $dir = (Get-ItemProperty $un).InstallLocation.TrimEnd('\')
+          if (-not $dir.StartsWith($env:ProgramFiles)) { throw "All-users install went to '$dir'" }
+          if (-not (Test-Path "Registry::HKEY_LOCAL_MACHINE\Software\Classes\KanzonasCAD.Project\shell\open\command")) { throw ".kzcad isn't associated for all users" }
+          python -c "import sys; from kanzonascad import updates; c = updates.installer_command('s.exe', sys.argv[1]); print(c); sys.exit(0 if '/ALLUSERS' in c else 1)" $dir
+          if ($LASTEXITCODE -ne 0) { throw "The updater doesn't see the all-users install" }
+          $uargs = "/SILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/CLOSEAPPLICATIONS","/ALLUSERS","/RELAUNCH"
+          $p = Start-Process "dist-installer\KanzonasCAD-v$v-setup.exe" -ArgumentList $uargs -PassThru
+          $p.WaitForExit()
+          if ($p.ExitCode -ne 0) { throw "The all-users update failed (code $($p.ExitCode))" }
+          foreach ($i in 1..30) {
+            $again = Get-Process KanzonasCAD -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($dir) }
+            if ($again) { break }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $again) { throw "The all-users update didn't start KanzonasCAD again" }
+          $again | Stop-Process -Force
+          Start-Sleep -Seconds 2
+          if ((Get-ItemProperty $un).DisplayVersion -ne $v) { throw "All-users version is '$((Get-ItemProperty $un).DisplayVersion)' after the update" }
+          if ((Get-ItemProperty $un).InstallLocation.TrimEnd('\') -ne $dir) { throw "The all-users update went to a different folder" }
+          $cu = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{3D7B9E24-6A1C-4F85-B2E0-9C4D7A15E863}_is1"
+          if (Test-Path $cu) { throw "The all-users update also installed a per-user copy" }
+          $p = Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -PassThru -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path "$dir\KanzonasCAD.exe") { throw "Uninstall left the all-users app behind" }
+          Write-Host "All users: installed 0.0, updated to $v in place, restarted, uninstalled"
+
       - uses: actions/upload-artifact@v4
         with:
           name: KanzonasCAD-windows
           path: KanzonasCAD-windows.zip
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KanzonasCAD-setup
+          path: dist-installer/KanzonasCAD-v${{ steps.ver.outputs.version }}-setup.exe
           retention-days: 14
 
   linux:
@@ -176,7 +287,7 @@ jobs:
           if [ ! -s section.md ]; then echo "RELEASE_NOTES.md has no '## $v' section"; exit 1; fi
           # (between these marks, the app's update box shows the notes: updates.release_notes)
           { echo "<!-- kanzonascad-notes -->"; cat section.md; echo "<!-- /kanzonascad-notes -->"; } > notes.md
-          printf '\n---\n**Windows:** download `KanzonasCAD-v%s-windows.zip`, unzip it and run `KanzonasCAD\\KanzonasCAD.exe` (Windows may warn about an unknown publisher: More info > Run anyway).\n**Linux:** `KanzonasCAD-v%s-linux.tar.gz`, unpack it and run `KanzonasCAD/KanzonasCAD`.\nOr run it from source: see the README.\n' "$v" "$v" >> notes.md
+          printf '\n---\n**Windows:** download `KanzonasCAD-v%s-setup.exe` and run it (no administrator rights needed; Windows may warn about an unknown publisher: More info > Run anyway). Or, without installing, `KanzonasCAD-v%s-windows.zip`: unzip it and run `KanzonasCAD\\KanzonasCAD.exe`.\n**Linux:** `KanzonasCAD-v%s-linux.tar.gz`, unpack it and run `KanzonasCAD/KanzonasCAD`.\nOr run it from source: see the README.\n' "$v" "$v" "$v" >> notes.md
           cat notes.md
 
       - name: Publish
@@ -187,5 +298,6 @@ jobs:
           v="${{ steps.ver.outputs.version }}"
           mv artifacts/KanzonasCAD-windows/KanzonasCAD-windows.zip "KanzonasCAD-v$v-windows.zip"
           mv artifacts/KanzonasCAD-linux/KanzonasCAD-linux.tar.gz "KanzonasCAD-v$v-linux.tar.gz"
-          gh release create "v$v" "KanzonasCAD-v$v-windows.zip" "KanzonasCAD-v$v-linux.tar.gz" \
+          mv "artifacts/KanzonasCAD-setup/KanzonasCAD-v$v-setup.exe" .
+          gh release create "v$v" "KanzonasCAD-v$v-setup.exe" "KanzonasCAD-v$v-windows.zip" "KanzonasCAD-v$v-linux.tar.gz" \
             --target "$GITHUB_SHA" --title "KanzonasCAD $v" --notes-file notes.md --latest

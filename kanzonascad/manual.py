@@ -370,6 +370,15 @@ black on white (layer colors are for the screen).</li>
 <h2>Help</h2>
 <p><b>User manual</b> (F1) opens this page. <b>About KanzonasCAD</b> shows the version.</p>
 
+<h2>Installing</h2>
+<p>On Windows, <b>KanzonasCAD-v&lt;version&gt;-setup.exe</b> from the Releases page installs
+KanzonasCAD for you (no administrator rights needed) or, if you pick it on the first page,
+for everyone on the PC (Windows asks for administrator rights), with a Start menu entry, an optional
+desktop shortcut, and <b>.kzcad</b> projects opening in KanzonasCAD with a double-click (DXF
+drawings get KanzonasCAD under <i>Open with</i>). It uninstalls from Windows Settings &gt;
+Apps; your projects and library are kept. The zip of the same version runs without
+installing.</p>
+
 <h2>Updates</h2>
 <p>KanzonasCAD asks GitHub for new versions by itself, at most once a day (also while it stays
 open), quietly: nothing shows unless there is one. Then a box tells you what changed in every
@@ -378,9 +387,13 @@ not told about it again; a newer one still shows) and <b>Later</b>.</p>
 <ul>
 <li>Run from source (the README's way): Update now gets the new version (git pull) and what it
 needs, shows what it did, and offers to start the new version.</li>
-<li>The Windows download: Update now downloads the new version, uses it only if it matches the
-release exactly (its sha256), and replaces this copy when KanzonasCAD closes, then starts it
-again.</li>
+<li>Installed with the setup (KanzonasCAD-v&lt;version&gt;-setup.exe): Update now downloads
+the new setup, uses it only if it matches the release exactly (its sha256), closes
+KanzonasCAD and installs the new version over this one, then starts it again. No
+administrator rights are needed for a copy installed for you; a copy installed for all users
+updates for all users too, and Windows asks for administrator rights first.</li>
+<li>The Windows zip (unzipped by hand): Update now downloads the new zip, checks it the same
+way, and replaces this copy when KanzonasCAD closes, then starts it again.</li>
 <li>Either way you're asked to save any changes first, and your projects and library are never
 touched.</li>
 </ul>
