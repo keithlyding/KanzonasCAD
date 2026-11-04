@@ -33,6 +33,7 @@ class CadView(QWidget):
     editTextRequested = Signal(object)
     titleBlockDoubleClicked = Signal()
     attributesRequested = Signal(object)        # a block reference double-clicked
+    wireNumberRequested = Signal(object)        # a wire double-clicked
     contextMenuWanted = Signal(object)          # global QPoint
     typed = Signal(object)                      # a key typed over the drawing (QKeyEvent)
 
@@ -672,6 +673,10 @@ class CadView(QWidget):
             if isinstance(ent, M.Insert):
                 self._window = None
                 self.attributesRequested.emit(ent)
+                return
+            if isinstance(ent, M.Wire):
+                self._window = None
+                self.wireNumberRequested.emit(ent)
                 return
             if ent is None and self.sheet() is not self.project.title_block:
                 from .sheetframe import title_block_rect

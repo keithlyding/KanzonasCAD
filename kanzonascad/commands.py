@@ -1234,7 +1234,8 @@ class MakeBlockCmd(Command):
                          "pos": (p[0] - bx, p[1] - by)})
         defn = M.BlockDef(d["name"], d["kind"], ents, pins, None, 0.1, d.get("category", ""),
                           d.get("description", ""), d.get("role", "device"),
-                          d.get("contact", ""), d.get("prefix", ""))
+                          d.get("contact", ""), d.get("prefix", ""),
+                          wiring=d.get("wiring", ""))
         if d["kind"] == "symbol":
             if tag_pt is not None:
                 defn.tag_pos = (tag_pt[0] - bx, tag_pt[1] - by)
@@ -1272,6 +1273,7 @@ class InsertCmd(Command):
         self.angle, self.mirror = 0.0, False
         self.pending = None             # a contact's point, waiting for its device
         self.cands = []
+        self.link_name = None           # an off-sheet connector's name offered
 
     def begin(self):
         self.ctx.prompt("Specify insertion point for %s" % self.defn.name,
@@ -1279,6 +1281,9 @@ class InsertCmd(Command):
 
     def text(self, s):
         k = s.strip().upper()
+        if self.pending is not None and self.link_name is not None:
+            self._place(self.pending, dict(self.attrs, TAG=k))
+            return True
         if self.pending is not None:
             from . import tags
             if k == "L":
@@ -1306,6 +1311,9 @@ class InsertCmd(Command):
         return False
 
     def enter(self):
+        if self.pending is not None and self.link_name is not None:
+            self._place(self.pending, dict(self.attrs, TAG=self.link_name))
+            return
         if self.pending is not None and self.cands:
             from . import tags
             self._place(self.pending, tags.link_attrs(self.attrs, self.cands[0][1]))
@@ -1326,6 +1334,16 @@ class InsertCmd(Command):
         if self.pending is not None:
             return                      # (waiting for the contact's device)
         d = self.defn
+        if d.wiring == "link" and not self.attrs.get("TAG"):
+            # an off-sheet connector: its name pairs it with the other end
+            from .wirenums import next_name, connectors
+            self.pending = p
+            self.link_name = next_name(self.ctx.project, self.ctx.sheet())
+            waiting = self.link_name in connectors(self.ctx.project)
+            self.ctx.prompt("Connector name: Enter for %s (%s), or type a name"
+                            % (self.link_name, "continues the wire from another sheet"
+                               if waiting else "a new one"))
+            return
         if d.kind == "symbol" and d.role == "child" and not self.attrs.get("PARENT") \
                 and not self.attrs.get("TAG"):
             from . import tags

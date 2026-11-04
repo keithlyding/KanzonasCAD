@@ -261,6 +261,32 @@ def run(log_path):
         return "contact linked to %s; %s" % (c.attrs["TAG"], ", ".join(want))
     log.check("contacts and cross-references", cross_references)
 
+    def wire_numbers():
+        import time
+        from . import wirenums
+        p = M.Project.new()
+        with p.edit("sheets") as ed:
+            for i in range(39):
+                ed.add_sheet(p.make_sheet("S%d" % i))
+        with p.edit("wires") as ed:
+            for sh in p.sheets:
+                for r in range(150):
+                    y = 1 + r * 0.05
+                    ed.add(sh, M.Wire([(1, y), (8, y)]))
+                    ed.add(sh, M.Wire([(9, y), (15, y)]))
+        sh = p.sheets[5]
+        got = sorted({w.num for w in sh.wires()})
+        assert got[0] == "6001" and len(got) == 300, got[:3]
+        t = time.perf_counter()
+        for i in range(10):
+            with p.edit("one") as ed:
+                ed.add(sh, M.Wire([(1, 9.5 + i * 0.01), (3, 9.5 + i * 0.01)]))
+        each = (time.perf_counter() - t) / 10
+        assert each < 0.25, "a wire added to a 12,000-wire project took %.0f ms" % (each * 1000)
+        assert wirenums.labels(p, sh)
+        return "12,000 wires numbered; one more wire %.0f ms" % (each * 1000)
+    log.check("wire numbers", wire_numbers)
+
     def manual():
         gaps = manual_gaps(state["win"])
         assert not gaps, "missing from the manual: %s" % gaps

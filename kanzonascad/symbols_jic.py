@@ -25,9 +25,9 @@ def _pins(a="1", b="2"):
 
 
 def _sym(name, category, ents, role="device", contact="", prefix="", pins=None, tag=TAG,
-         description=""):
+         description="", wiring=""):
     return BlockDef(name, "symbol", ents, pins if pins is not None else _pins(), tag, 0.1,
-                    category, description, role, contact, prefix, builtin=True)
+                    category, description, role, contact, prefix, builtin=True, wiring=wiring)
 
 
 def _contact(nc=False):
@@ -209,4 +209,22 @@ def builtin_symbols():
          Line((-0.08, -0.17), (0.08, -0.17)), Line((-0.035, -0.215), (0.035, -0.215))]
     S.append(_sym("Ground", "JIC/Wiring", o, "device", "", "", pins=[{"name": "1", "pos": (0, 0)}],
                   tag=None, description="Ground"))
+    # a distribution block: one wire in on the left, four out on the right (their numbers take
+    # the incoming wire's, with A, B, C, D added)
+    outs = (0.375, 0.125, -0.125, -0.375)
+    o = [Polyline([(-0.125, -0.5), (0.125, -0.5), (0.125, 0.5), (-0.125, 0.5)], True),
+         Line((-0.25, 0), (-0.125, 0))]
+    o += [Line((0.125, y), (0.25, y)) for y in outs]
+    S.append(_sym("Distribution block 4-way", "JIC/Wiring", o, "device", "", "DB",
+                  pins=[{"name": "IN", "pos": (-0.25, 0)}] +
+                  [{"name": "OUT%d" % (i + 1), "pos": (0.25, y)} for i, y in enumerate(outs)],
+                  tag=(0.0, 0.58), description="Distribution block, one in, four out",
+                  wiring="distribution"))
+    # an off-sheet connector: the wire goes on at the connector(s) of the same name elsewhere
+    o = [Polyline([(0, 0.0625), (0.25, 0.0625), (0.3125, 0), (0.25, -0.0625), (0, -0.0625)],
+                  True)]
+    S.append(_sym("Off-sheet connector", "JIC/Wiring", o, "device", "", "",
+                  pins=[{"name": "1", "pos": (0, 0)}], tag=(0.15625, 0.1),
+                  description="Off-sheet connector: the wire continues at the connector of "
+                              "the same name", wiring="link"))
     return S

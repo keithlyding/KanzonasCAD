@@ -239,15 +239,20 @@ class SheetRenderer:
         painter.drawPath(path)
 
     def _paint_xrefs(self, painter):
-        """Cross-references (worked out again only when what they show changed)."""
-        from . import xrefs
+        """Cross-references and wire numbers (worked out again only when what they show
+        changed)."""
+        from . import xrefs, wirenums
         shown = tuple(tuple(t) for t in xrefs.shown(self.project, self.sheet))
-        if self._xrefs is None or self._xrefs[0] != shown:
+        nums = tuple((t.text, t.pos, t.angle, t.height)
+                     for t in wirenums.labels(self.project, self.sheet))
+        if self._xrefs is None or self._xrefs[0] != (shown, nums):
             path = QPainterPath()
             path.setFillRule(Qt.WindingFill)
             for x, y, t, h in shown:
                 path.addPath(text_path(M.Text((x, y), t, h, 0.0, "center")))
-            self._xrefs = (shown, path)
+            for t in wirenums.labels(self.project, self.sheet):
+                path.addPath(text_path(t))
+            self._xrefs = ((shown, nums), path)
         path = self._xrefs[1]
         if path.isEmpty():
             return

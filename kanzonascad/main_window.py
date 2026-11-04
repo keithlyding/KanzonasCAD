@@ -495,6 +495,7 @@ class MainWindow(QMainWindow):
         v.editTextRequested.connect(self.edit_text)
         v.titleBlockDoubleClicked.connect(self.project_properties)
         v.attributesRequested.connect(self.edit_attributes)
+        v.wireNumberRequested.connect(self.edit_wire_number)
         v.host = self
         v.contextMenuWanted.connect(self._view_menu)
         v.typed.connect(self.cmdline.take_key)
@@ -1218,11 +1219,36 @@ class MainWindow(QMainWindow):
         v = self.view()
         if v is None or v.sheet() is v.project.title_block:
             return
-        from . import tags
+        from . import tags, wirenums
         with v.project.edit("Renumber sheet") as ed:
             n = tags.renumber_sheet(ed, v.project, v.sheet())
-        self.cmdline.add_history("Renumbered %d device tag(s) on sheet %s" % (
-            n, v.project.sheet_number(v.sheet())))
+            wirenums.sync(ed, v.project, renumber=v.sheet())
+        self.cmdline.add_history("Renumbered %d device tag(s) and the unlocked wire numbers on "
+                                 "sheet %s" % (n, v.project.sheet_number(v.sheet())))
+
+    def edit_wire_number(self, wire):
+        """Double-clicked wire: type its number (locked), or clear it to let numbering give it
+        one."""
+        v = self.view()
+        if v is None:
+            return
+        from . import wirenums
+        if not wirenums.enabled(v.project):
+            self.statusBar().showMessage("Wire numbers are off (Project properties, Schematic).",
+                                         5000)
+            return
+        cur = v.sheet().entities.get(wire.id, wire)
+        text, ok = QInputDialog.getText(
+            self, "Wire number", "Wire number for this wire and every wire joined to it.\n"
+            "A number you type is locked: numbering leaves it alone. Leave it empty to let "
+            "numbering give it one.", text=cur.num or "")
+        if not ok:
+            return
+        num = text.strip().upper()
+        if num == (cur.num or "") and (cur.num_lock or not num):
+            return
+        with v.project.edit("Wire number") as ed:
+            wirenums.set_number(ed, v.project, v.sheet(), cur, num)
 
     def _toggle_title_block(self, on):
         v = self.view()

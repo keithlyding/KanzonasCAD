@@ -130,8 +130,9 @@ the two ends of a dimension you know (the part's width say) and type its real le
 <li>Select it and use <b>Make block</b> (B). Pick the <b>base point</b> (the point it is placed
 by), then fill in the name, kind (schematic symbol or panel footprint), category and
 description. For a symbol also: its part in cross-references (a device on its own, a coil or
-operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...)
-and the pin names.</li>
+operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...),
+what wire numbers do through it (nothing; a distribution block; an off-sheet connector: see
+Wire numbers) and the pin names.</li>
 <li>For a symbol, click each <b>pin</b> in order and press Enter, then click where the
 <b>tag</b> goes (Enter puts it above).</li>
 </ol>
@@ -222,9 +223,37 @@ where needed). Select the wires too and they move with it instead.</li>
 <li><b>Placing a symbol on a wire</b> cuts the wire between the symbol's pins, as AutoCAD
 Electrical does: drop a contact onto a rung and it is wired in.</li>
 <li>Wires are ordinary objects otherwise: grips stretch their corners, Trim and Erase work on
-them, and they print and export (DXF) as polylines.</li>
+them (trimmed pieces stay wires), and they print and export (DXF) as polylines.</li>
 </ul>
-<p><i>Coming next: device tags by page number, cross-references, then wire numbers.</i></p>
+
+<h2>Wire numbers</h2>
+<p>Every wire gets its number by itself: the page number and three digits, <b>6001</b>, 6002...
+on page 6. The number shows above the wire (beside it when it runs up and down).</p>
+<ul>
+<li><b>One number per connected wire</b>: wires joined end to end or in a T share it. A
+symbol's pins don't join wires, so the number changes through a device or a terminal.</li>
+<li>Numbers are given in the sheet's <b>numbering order</b> (Sheet properties: across then down,
+or down then across) and then <b>kept</b>: drawing more doesn't renumber what's there. A new
+wire takes the lowest free number of its page, so a deleted number comes back.</li>
+<li>When two wires are joined, the lower number stays; when one is cut in two (a symbol placed
+on it, Trim), the part later in order takes a new number.</li>
+<li><b>Double-click a wire</b> to type its number (for it and every wire joined to it). A typed
+number is locked: numbering leaves it alone. Clear it to let numbering give one back.</li>
+<li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
+as device tags do.</li>
+<li><b>Renumber sheet</b> also numbers the sheet's unlocked wires again, 001, 002... in
+order.</li>
+<li><b>Distribution block</b> (Library, JIC/Wiring): the wires on its outputs take the number
+of the wire on its input with A, B, C... added (6001A, 6001B; after Z come AA, AB...).</li>
+<li><b>Off-sheet connector</b> (Library, JIC/Wiring): place one where a wire leaves the sheet
+and one where it comes back on another sheet, with the same name. Placing one asks its name:
+Enter takes the one offered (a connector still waiting for its other end, else the next free
+letter). The wire keeps the number of the sheet it starts on, and under each connector its
+other end's place shows (<b>7-A2</b>).</li>
+<li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
+numbers and cross-references.</li>
+<li>Wire numbers go into PDF and DXF exports as text.</li>
+</ul>
 
 <h2>Drawing</h2>
 <p>Start a command from the ribbon, the <b>Draw</b> and <b>Modify</b> menus, or by typing its
