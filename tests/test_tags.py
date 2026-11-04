@@ -47,8 +47,13 @@ class TagTest(unittest.TestCase):
         self.assertEqual([self.tag_of(x) for x in (a, b, m)], ["CR601", "CR602", "M601"])
         self.assertTrue(a.attrs.get("DEV"))
         self.assertNotEqual(a.attrs["DEV"], b.attrs["DEV"])
-        # contacts and symbols without a prefix get no tag of their own
-        self.assertEqual(self.place(self.contact, (5, 8)).attrs.get("TAG", ""), "")
+        # a contact takes its device's tag (asked for: Enter takes the nearest CR coil); a
+        # symbol without a prefix gets no tag
+        self.v.run(C.InsertCmd, self.contact, {})
+        type_in(self.v, "5,8", "")
+        got = [e for e in self.v.sheet().entities.values() if tags.is_child(e)][-1]
+        self.assertEqual((got.attrs.get("TAG"), got.attrs.get("PARENT")),
+                         ("CR601", a.attrs["DEV"]))
         self.assertEqual(self.place(self.ground, (5, 5)).attrs.get("TAG", ""), "")
         # deleting CR601 frees 01 for the next one
         with self.v.project.edit("del") as ed:

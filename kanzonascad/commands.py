@@ -1261,7 +1261,8 @@ class MakeBlockCmd(Command):
 
 class InsertCmd(Command):
     """Place a symbol or footprint (from the Library panel): pick where; R turns it 90
-    degrees, F flips it."""
+    degrees, F flips it. A contact then asks which device it belongs to: Enter takes the one
+    offered (the nearest coil with its prefix), a typed tag takes that device, L lists them."""
     name, title = "INSERT", "Insert"
     repeatable = False
 
@@ -1269,6 +1270,8 @@ class InsertCmd(Command):
         super().__init__(ctx)
         self.defn, self.attrs = defn, dict(attrs or {})
         self.angle, self.mirror = 0.0, False
+        self.pending = None             # a contact's point, waiting for its device
+        self.cands = []
 
     def begin(self):
         self.ctx.prompt("Specify insertion point for %s" % self.defn.name,
@@ -1276,6 +1279,24 @@ class InsertCmd(Command):
 
     def text(self, s):
         k = s.strip().upper()
+        if self.pending is not None:
+            from . import tags
+            if k == "L":
+                pick = getattr(self.ctx.host, "pick_parent", None)
+                got = pick(self.cands) if pick is not None else None
+                if got is not None:
+                    self._place(self.pending, tags.link_attrs(self.attrs, got[1]))
+                return True
+            got = tags.find_tag(self.ctx.project, k)
+            if got is not None:
+                self._place(self.pending, tags.link_attrs(self.attrs, got[1]))
+            else:
+                # no device has that tag yet: the contact keeps it and links itself to the
+                # device that gets it
+                self._place(self.pending, dict(self.attrs, TAG=k))
+                self.ctx.message("No device is tagged %s yet: the contact links to it once "
+                                 "one is" % k)
+            return True
         if k == "R":
             self.angle = (self.angle + 90.0) % 360.0
             return True
@@ -1283,6 +1304,13 @@ class InsertCmd(Command):
             self.mirror = not self.mirror
             return True
         return False
+
+    def enter(self):
+        if self.pending is not None and self.cands:
+            from . import tags
+            self._place(self.pending, tags.link_attrs(self.attrs, self.cands[0][1]))
+            return
+        super().enter()
 
     def _make(self, p, defn):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
@@ -1292,9 +1320,30 @@ class InsertCmd(Command):
                         tag_h, layer=layer)
 
     def preview(self, p):
-        return [self._make(p, self.defn)]
+        return [self._make(self.pending if self.pending is not None else p, self.defn)]
 
     def point(self, p):
+        if self.pending is not None:
+            return                      # (waiting for the contact's device)
+        d = self.defn
+        if d.kind == "symbol" and d.role == "child" and not self.attrs.get("PARENT") \
+                and not self.attrs.get("TAG"):
+            from . import tags
+            project = self.ctx.project
+            self.cands = tags.candidates(project, self.ctx.sheet(), d.prefix, p)
+            if self.cands:
+                self.pending = p
+                s, e = self.cands[0]
+                self.ctx.prompt("Belongs to: Enter for %s (%s), or type a tag"
+                                % (e.attrs.get("TAG", "?"),
+                                   project.zone_text(s, e.pos[0], e.pos[1]) or "?"),
+                                [("List", "L")])
+                return
+            self.ctx.message("No coil or device to link this contact to yet: placed unlinked "
+                             "(double-click it to link it later)")
+        self._place(p, self.attrs)
+
+    def _place(self, p, attrs):
         project = self.ctx.project
         sheet = self.ctx.sheet()
         with self.ctx.edit("Insert %s" % self.defn.name) as ed:
@@ -1303,7 +1352,7 @@ class InsertCmd(Command):
                 ed.block(self.defn)
             from . import tags
             defn = project.blocks[self.defn.name]
-            ins = self._make(p, defn)
+            ins = self._make(p, defn).copy(attrs=attrs)
             ins = ins.copy(attrs=tags.new_attrs(project, sheet, defn, ins.attrs))
             if ins.layer not in project.layers:
                 ed.layer(ins.layer, None, M.Layer(ins.layer, M.ADAPTIVE).to_dict())

@@ -324,9 +324,11 @@ def block_details_dialog(parent, library, kind_hint="symbol"):
             "replace": replace.isChecked()}
 
 
-def attributes_dialog(parent, library, ins):
-    """The attributes of a placed block (TAG, DESC, MFR, CAT) and the part it is. Returns the
-    new attrs dict, or None when cancelled."""
+def attributes_dialog(parent, library, ins, project=None, sheet=None):
+    """The attributes of a placed block (TAG, DESC, MFR, CAT) and the part it is; for a
+    contact, the device it belongs to; for a device, whether its contacts are listed under it.
+    Returns the new attrs dict, or None when cancelled."""
+    from . import tags
     dlg = QDialog(parent)
     dlg.setWindowTitle("%s: attributes" % ins.block)
     v = QVBoxLayout(dlg)
@@ -334,15 +336,47 @@ def attributes_dialog(parent, library, ins):
     edits = {}
     labels = {"TAG": "Tag", "DESC": "Description", "MFR": "Manufacturer",
               "CAT": "Catalog number"}
+    child = tags.is_child(ins) and project is not None
+    cands = []
+    owner = None
     for k in M.ATTR_NAMES:
+        if k == "TAG" and child:
+            # a contact's tag is its device's: picked from the project's devices, or typed
+            # (a tag no device has yet links once one has it)
+            cands = tags.candidates(project, sheet, ins.defn.prefix, ins.pos)
+            owner = QComboBox()
+            owner.setEditable(True)
+            owner.addItem("")
+            for s_, d in cands:
+                owner.addItem("%s   (%s)" % (d.attrs.get("TAG", "?"), project.zone_text(
+                    s_, d.pos[0], d.pos[1]) or "?"), d.attrs.get("DEV"))
+            got = tags.parent_of(project, ins)
+            if got is not None:
+                i = owner.findData(got[1].attrs.get("DEV"))
+                owner.setCurrentIndex(max(i, 0))
+            else:
+                owner.setEditText(ins.attrs.get("TAG", ""))
+            form.addRow("Belongs to", owner)
+            continue
         e = QLineEdit(ins.attrs.get(k, ""))
         edits[k] = e
         form.addRow(labels[k], e)
     lock = QCheckBox("Lock this tag (automatic numbering leaves it alone)")
     lock.setChecked(ins.attrs.get("TAG_LOCK") == "1")
-    # a tag typed by hand is meant: it locks itself (untick to let numbering have it back)
-    edits["TAG"].textEdited.connect(lambda _t: lock.setChecked(True))
-    form.addRow("", lock)
+    listed = None
+    if child:
+        listed = QCheckBox("List this contact under its device")
+    elif tags.is_device(ins):
+        # a tag typed by hand is meant: it locks itself (untick to let numbering have it back)
+        edits["TAG"].textEdited.connect(lambda _t: lock.setChecked(True))
+        form.addRow("", lock)
+        if ins.defn.role == "parent":
+            listed = QCheckBox("List its contacts under it (cross-references)")
+    else:
+        form.addRow("", lock)
+    if listed is not None:
+        listed.setChecked(ins.attrs.get("XREF") != "0")
+        form.addRow("", listed)
     v.addLayout(form)
     kind = ins.defn.kind if ins.defn is not None else "symbol"
     parts = []
@@ -379,6 +413,24 @@ def attributes_dialog(parent, library, ins):
     out = dict(ins.attrs)
     for k, e in edits.items():
         out[k] = e.text().strip()
+    if owner is not None:
+        dev = owner.currentData() if owner.currentText() == owner.itemText(
+            owner.currentIndex()) else None
+        if dev:
+            found = tags.devices(project).get(dev)
+            out = tags.link_attrs(out, found[1] if found else None)
+        else:
+            # typed: that device if there is one, else the tag kept (it links later)
+            typed = owner.currentText().split("(")[0].strip().upper()
+            found = tags.find_tag(project, typed)
+            out = tags.link_attrs(out, found[1] if found else None)
+            if found is None:
+                out["TAG"] = typed
+    if listed is not None:
+        if listed.isChecked():
+            out.pop("XREF", None)
+        else:
+            out["XREF"] = "0"
     if part_id[0]:
         out["PART"] = part_id[0]
     if lock.isChecked():

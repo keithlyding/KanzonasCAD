@@ -10,8 +10,9 @@ number of its sheet and a two-digit count on that page: CR601, CR602, M601; on p
   numbering order (across then down, or down then across).
 - When a sheet's page number changes (typed, or by moving sheets), its unlocked tags follow:
   CR601 becomes CR701 (sync_pages, run at the end of every edit that touched sheets).
-- Every device also carries a hidden id (attribute DEV) that survives renaming: cross-references
-  and panel footprints will link through it.
+- Every device also carries a hidden id (attribute DEV) that survives renaming: contacts,
+  cross-references and panel footprints link through it.
+- A contact (role "child") belongs to a device through that id and shows its tag (below).
 """
 
 import re
@@ -47,11 +48,11 @@ def make(prefix, page, count):
 
 def used_counts(project, prefix, page, skip=()):
     """Counts already taken for prefix on page, over the whole project (a tag typed by hand on
-    another sheet still takes its number)."""
+    another sheet still takes its number). Contacts don't count: their tag is their device's."""
     out = set()
     for s in project.sheets:
-        for e in s.entities.values():
-            if e.id in skip or not isinstance(e, Insert):
+        for e in s.inserts():
+            if e.id in skip or is_child(e):
                 continue
             got = split(e.attrs.get("TAG", ""), prefix)
             if got and got[0] == page:
@@ -158,3 +159,98 @@ def retag_copies(project, sheet, ents):
         e.id = None                     # (a copy: a new object, whatever kind it is)
         out.append(e)
     return out
+
+
+# ---- contacts and their parent ------------------------------------------------------------
+# A contact (a symbol whose role is "child": a relay contact, an overload contact...) belongs
+# to a parent device (a coil, a pushbutton operator...) through the parent's hidden id: its
+# attribute PARENT holds the parent's DEV. It shows the parent's tag (kept in its TAG, which
+# follows the parent: sync_children). A contact with a tag but no parent yet links itself to
+# the device that takes that tag later.
+
+def is_child(e):
+    d = getattr(e, "defn", None)
+    return isinstance(e, Insert) and d is not None and d.kind == "symbol" and d.role == "child"
+
+
+def devices(project):
+    """{hidden id: (sheet, device)} of every device in the project."""
+    out = {}
+    for s in project.sheets:
+        for e in s.inserts():
+            if is_device(e) and e.attrs.get("DEV"):
+                out[e.attrs["DEV"]] = (s, e)
+    return out
+
+
+def parent_of(project, child, index=None):
+    """(sheet, parent device) of a contact, or None (not linked, or its parent is gone)."""
+    dev = child.attrs.get("PARENT")
+    if not dev:
+        return None
+    return (index if index is not None else devices(project)).get(dev)
+
+
+def candidates(project, sheet, prefix, pos):
+    """The devices a contact can belong to, as (sheet, device): parents (coils, operators)
+    before plain devices, those with the contact's own prefix first (a CR contact: CR coils,
+    then M, TR... coils, since a contactor's auxiliary contact is the same symbol), then this
+    sheet before the others, nearest first."""
+    out = []
+    for i, s in enumerate(project.sheets):
+        for e in s.inserts():
+            if is_device(e) and e.attrs.get("DEV"):
+                here = s is sheet
+                d = ((e.pos[0] - pos[0]) ** 2 + (e.pos[1] - pos[1]) ** 2) if here else 0.0
+                out.append(((0 if e.defn.role == "parent" else 1,
+                             0 if e.defn.prefix == prefix else 1, 0 if here else 1, i, d,
+                             e.attrs.get("TAG", "")), s, e))
+    out.sort(key=lambda t: t[0])
+    return [(s, e) for _k, s, e in out]
+
+
+def find_tag(project, tag, prefix=None):
+    """(sheet, device) whose tag is tag (and prefix, when given), or None."""
+    tag = (tag or "").strip().upper()
+    if not tag:
+        return None
+    for s in project.sheets:
+        for e in s.inserts():
+            if is_device(e) and e.attrs.get("TAG", "").upper() == tag \
+                    and (prefix is None or e.defn.prefix == prefix):
+                return s, e
+    return None
+
+
+def link_attrs(attrs, parent):
+    """attrs of a contact linked to parent (a device), or unlinked when parent is None (its
+    tag kept as it is)."""
+    out = dict(attrs or {})
+    if parent is None:
+        out.pop("PARENT", None)
+    else:
+        out["PARENT"] = parent.attrs["DEV"]
+        out["TAG"] = parent.attrs.get("TAG", "")
+    return out
+
+
+def sync_children(ed, project):
+    """Contacts show their parent's tag; a contact with a tag and no parent (never linked, or
+    its device was deleted) links itself to a device that has that tag now."""
+    index = devices(project)
+    by_tag = {}
+    for dev, (_s, e) in index.items():
+        by_tag.setdefault(e.attrs.get("TAG", "").upper(), e)
+    for s in project.sheets:
+        for e in list(s.inserts()):
+            if not is_child(e):
+                continue
+            dev = e.attrs.get("PARENT")
+            got = index.get(dev) if dev else None
+            if got is not None:
+                if got[1].attrs.get("TAG", "") != e.attrs.get("TAG", ""):
+                    ed.change(s, e.copy(attrs=link_attrs(e.attrs, got[1])))
+            elif e.attrs.get("TAG"):
+                p = by_tag.get(e.attrs["TAG"].upper())
+                if p is not None:
+                    ed.change(s, e.copy(attrs=link_attrs(e.attrs, p)))

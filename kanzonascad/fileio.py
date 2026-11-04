@@ -49,6 +49,11 @@ def export_dxf(project, sheet, path, include_frame=True):
         ents.extend(e.exploded() if isinstance(e, M.Insert) else [e])
     if include_frame:
         ents = frame_entities(project, sheet) + ents
+    # the cross-references, as plain texts on layer SYMBOLS
+    from .xrefs import texts as xref_texts
+    for t in xref_texts(project, sheet):
+        t.layer = "SYMBOLS" if "SYMBOLS" in project.layers else "0"
+        ents.append(t)
     for e in ents:
         _write(msp, e)
     doc.saveas(path)

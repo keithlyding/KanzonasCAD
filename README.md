@@ -8,10 +8,12 @@ AutoCAD but want fewer commands, fewer settings and fewer surprises.
 - Projects of ANSI sheets with a grid of zones (`6-D1` references) and an editable title block.
 - A library of your own: JIC/NFPA schematic symbols, panel footprints and parts.
 - Wires that stay attached to symbols, and buses.
+- Device tags by page number (`CR601`), contacts linked to their coil, and cross-references
+  that update themselves.
 - DXF in and out, PDF out.
 
-Coming next: device tags by page number (`CR601`), cross-references, wire numbers, dimensions
-and reports. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
+Coming next: wire numbers, more symbols (3-phase, PLC I/O), DWG import, panel layouts with
+DIN rail and wire duct, and reports. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Press **F1** in the app for the user manual.
 

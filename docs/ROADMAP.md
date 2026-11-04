@@ -13,22 +13,49 @@ nobody understands).
 - 0.3: wires that stay attached to pins, cut under placed symbols, junction dots.
 - 0.3.1: Library popup, Circle options, Bus. 0.3.2: in-app updates, GitHub releases.
   0.3.3: icons in Windows dark mode.
+- 0.4: device tags by page number (CR601), locked tags, Renumber sheet. 0.4.1: Windows
+  installer (this user or all users), updates through the next setup.
 - Multi-sheet projects with a sheet list and sheet types (schematic, panel, report, other):
   done since 0.1/0.2.
 
 ## Next, in build order (each its own pull request with tests)
-1. **Device tags by page number**: prefix + page + 2-digit count (`CR601`, `M601`; page 12:
-   `CR1201`), per prefix and page. New devices get the lowest free number; a tag typed by hand
-   is locked; Renumber sheet re-sequences the unlocked ones (across then down, or down then
-   across, per sheet). A device's page part follows its sheet's page number. Every device also
-   gets a hidden id that survives renaming. Contacts (child symbols) take their parent's tag
-   (picking the parent comes with cross-references).
-2. **DWG import** built in, with **ezdwg** (MIT, reads R13-2018, i.e. every current AutoCAD
+Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,
+cross-references, wire numbers, off-sheet connectors, more symbols), then the panel.
+1. **Contacts linked to their coil, and cross-references** (0.5):
+   - A contact (child symbol) belongs to a parent device through the parent's hidden id
+     (attribute PARENT = the parent's DEV) and shows the parent's tag, following it when the
+     parent is renumbered or retagged. Placing a contact asks for its parent: a list of the
+     project's devices with the same prefix (nearest first), or a tag typed; a tag with no
+     parent yet leaves the contact unlinked (flagged) until that parent exists.
+   - **Schematic <-> panel links go through the device (tag + hidden id), not the part**: three
+     contactors may share one catalog number. Links ignore scale and screen position.
+   - Under a coil / operator: one line per contact with an NO or NC mark and its location
+     (`6-D3`); next to each contact: its coil's location (`6-D1`). Each device's listing can be
+     switched off, and each contact line on or off; spare contacts as hollow marks (a setting,
+     off by default). Panel sheets too: footprint <-> device locations.
+   - **Updated automatically** after every change (computed, never stored as text). Project
+     setting "Update cross-references automatically" (on by default); per-sheet **Freeze
+     cross-references** for issued sheets; a status bar warning "Cross-references out of date"
+     and an **Update cross-references** command whenever anything is off or frozen.
+   - Format follows the project's grid reference format and each sheet's zones.
+2. **Wire numbers and off-sheet connectors** (0.6):
+   - Source/destination arrows for a wire continuing on another sheet, linked in pairs, each
+     showing the other's location (`7-A2`); the wire keeps its start sheet's number.
+   - Wire numbers: page number + 3 digits (`6001`); one number per connected group of
+     wires, changing only through a device or terminal; after a distribution block the
+     branches get A-Z suffixes (`6001A`...`AA`); a wire continuing to another sheet keeps the
+     number of the sheet it starts on; sequence across-then-down or down-then-across per
+     sheet; numbers stay stable once given; deleted numbers are reused; locking and Renumber
+     sheet.
+3. **More symbols**: 3-phase (3-pole breaker and disconnect, contactor power contacts, 3-pole
+   overload, motor starter), VFD, power supply, PLC I/O (input/output points linked to a card
+   like contacts to a coil), terminal strips (terminals sharing a strip tag), relay base.
+4. **DWG import** built in, with **ezdwg** (MIT, reads R13-2018, i.e. every current AutoCAD
    file): opening or importing a `.dwg` works like DXF, nothing to install. The ODA File
    Converter, when installed, is only a fallback for a file ezdwg can't read. DXF stays the
    export format. Fixes go in our import code first, upstream to ezdwg second; fork only if
    urgent (its core is Rust).
-3. **Panel sheets and dimensions**:
+5. **Panel sheets and dimensions**:
    - Panel geometry is always real-world inches, 1:1: a 3" contactor footprint is 3" in the
      data on every sheet, forever.
    - Each panel sheet has ONE visible scale (e.g. 1:4), a lens on the real-size layout. Named
@@ -43,7 +70,18 @@ nobody understands).
    - Never show the word "annotative" or any per-object scale list.
    - Dimensions (linear, aligned, radius...) read the true geometry, so they're right at any
      scale.
-4. **Part assignment**: projects keep their own copies of the parts they use (as they do of
+   - **DIN rail and wire duct** (owner, Nov 2026), real size on panel sheets, drawn by two
+     clicks and stretched by their end grips or a typed length (no fixed blocks):
+     - DIN rail profiles: 35 x 7.5 mm (TS35/7.5) and 35 x 15 mm (TS35/15), plus 15 mm mini
+       (TS15) and a custom width. Drawn as the rail outline with its slot line.
+     - Wire duct (Panduit-style): width and depth from presets (1 x 2, 1 x 3, 1.5 x 3, 2 x 2,
+       2 x 3, 2 x 4, 3 x 3, 3 x 4, 4 x 4 in, metric too) or typed. The depth isn't drawn in
+       2D but is kept for the bill of materials. Drawn as the duct outline with its fingers
+       side shown.
+     - Each piece can carry a part (manufacturer, catalog number, stock length: rail 1 m or
+       2 m, duct 6 ft to start). The bill of materials lists total length per size and part,
+       the number of stock pieces it takes (rounded up) and each cut length.
+6. **Part assignment**: projects keep their own copies of the parts they use (as they do of
    blocks), so a part leaving the library never breaks a drawing.
    - Symbol, footprint and part stay three separate things; the symbol never knows the brand.
    - Draw with the generic symbol; assign a part now or later. The part picker is filtered to
@@ -52,7 +90,7 @@ nobody understands).
    - Placing a device on a panel sheet pulls the footprint from its part. Panel insert can pick
      from the schematic's devices, so tag and cross-reference come along; the schematic side
      flags devices not yet placed on a panel.
-5. **Library management**:
+7. **Library management**:
    - Right-click a placed symbol with a part -> "Save to library as part" (name defaults to
      the catalog number): writes symbol + footprint + part into the library.
    - Library browser: right-click Edit or Delete. Single delete asks once. Bulk delete asks
@@ -73,31 +111,13 @@ nobody understands).
      parts.
    - Later: "Update from library" lists a project's blocks that are older than the library's
      and updates only the ones chosen.
-6. **Cross-references and wire numbers**:
-   - **Schematic <-> panel links go through the device (tag + hidden id), not the part**: three
-     contactors may share one catalog number. Links ignore scale and screen position.
-   - Under a coil / operator: one line per contact with an NO or NC mark and its location
-     (`6-D3`); next to each contact: its coil's location (`6-D1`). Each device's listing can be
-     switched off, and each contact line on or off; spare contacts as hollow marks (a setting,
-     off by default). Panel sheets too: footprint <-> device locations.
-   - **Updated automatically** after every change (computed, never stored as text). Project
-     setting "Update cross-references automatically" (on by default); per-sheet **Freeze
-     cross-references** for issued sheets; a status bar warning "Cross-references out of date"
-     and an **Update cross-references** command whenever anything is off or frozen.
-   - Format follows the project's grid reference format and each sheet's zones.
-   - **Wire numbers**: page number + 3 digits (`6001`); one number per connected group of
-     wires, changing only through a device or terminal; after a distribution block the
-     branches get A-Z suffixes (`6001A`...`AA`); a wire continuing to another sheet keeps the
-     number of the sheet it starts on; sequence across-then-down or down-then-across per
-     sheet; numbers stay stable once given; deleted numbers are reused; locking and Renumber
-     sheet.
-7. **Reports**: bill of materials, wire list, terminal strip list (Report sheets; CSV and Excel
+8. **Reports**: bill of materials (DIN rail and wire duct by length and stock pieces), wire list, terminal strip list (Report sheets; CSV and Excel
    via openpyxl, MIT, imported only when exporting).
-8. **PDF export opening in KanzonasPDF** when it is installed (export exists).
-9. **Check out / check in** sheets: export chosen sheets (with their blocks, parts and
+9. **PDF export opening in KanzonasPDF** when it is installed (export exists).
+10. **Check out / check in** sheets: export chosen sheets (with their blocks, parts and
    settings) for someone else, lock them while out, check them back in matched by sheet id
    with a summary of changes; references and numbers recalculate.
-10. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
+11. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
@@ -115,7 +135,7 @@ nobody understands).
 - Drawing area black by default; PDF always black on white.
 - Revisions: one project revision, each sheet may override it.
 - The library lives outside the program (Documents\KanzonasCAD Library); projects keep their
-  own copies of the blocks (and, from item 4, parts) they use.
+  own copies of the blocks (and, from part assignment on, parts) they use.
 - The title block is the project's own drawing with fields (Project properties is its form;
   Sheets > Edit title block redraws it); new fields like `{Scale}` are added as features need.
 - Full GitHub releases for each new version on main; the app updates itself.

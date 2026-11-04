@@ -49,6 +49,8 @@ DEFAULT_SETTINGS = {
     "tag_height": 0.1,          # device tags on symbols
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
+    "xref_auto": True,          # cross-references follow every change (else: Update command)
+    "xref_height": 0.08,        # cross-reference text
 }
 LAYOUT_KEYS = ("size", "cols", "rows", "col_start", "row_start")
 
@@ -955,6 +957,9 @@ class Sheet:
         self.own_layout = False             # True: its size and zones aren't the project's
         self.kind = "schematic"             # schematic, panel, report or other (defaults only)
         self.number_order = "across"        # tags (and wire numbers): across/down then the other
+        self.xref_frozen = False            # cross-references kept as they were (issued sheet)
+        self.xref_shown = None              # the cross-references shown while frozen (or while
+                                            # the project's aren't automatic): xrefs.py
         self.col_start = int(col_start)     # the first column's number (1 to start)
         self.row_start = int(row_start)     # the first row's letter: 0 = A, 1 = B...
         self.fields = dict(fields or {})
@@ -1021,6 +1026,15 @@ class Sheet:
             self.version += 1
             self.touched.add(eid)
 
+    def inserts(self):
+        """The block references on this sheet (kept per sheet version: tags, contacts and
+        cross-references read them without walking every line)."""
+        got = getattr(self, "_inserts", None)
+        if got is None or got[0] != self.version:
+            got = self._inserts = (self.version, [e for e in self.entities.values()
+                                                  if isinstance(e, Insert)])
+        return got[1]
+
     def query(self, rect):
         """Entities whose box may touch rect."""
         ents = self.entities
@@ -1038,7 +1052,10 @@ class Sheet:
                 "rows": self.rows, "col_start": self.col_start, "row_start": self.row_start,
                 "own_layout": self.own_layout, "kind": self.kind,
                 "number_order": self.number_order,
-                "number": self.number, "fields": dict(self.fields)}
+                "number": self.number, "fields": dict(self.fields),
+                "xref_frozen": self.xref_frozen,
+                "xref_shown": [list(t) for t in self.xref_shown]
+                if self.xref_shown is not None else None}
 
     def to_dict(self):
         d = self.meta_dict()
@@ -1059,6 +1076,9 @@ class Sheet:
         self.number_order = "down" if d.get("number_order") == "down" else "across"
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
+        self.xref_frozen = bool(d.get("xref_frozen", False))
+        shown = d.get("xref_shown")
+        self.xref_shown = [tuple(t) for t in shown] if shown is not None else None
         self.version += 1
 
     @classmethod
@@ -1476,10 +1496,16 @@ class _EditContext:
             if self.ed.pin_moves:
                 from .wires import follow_pins
                 follow_pins(self.ed)
-            if any(op[0] in ("sheet", "order", "meta") for op in self.ed.ops):
+            sheets = any(op[0] in ("sheet", "order", "meta") for op in self.ed.ops)
+            if sheets:
                 # sheets added, removed, moved or renumbered: device tags follow their pages
                 from .tags import sync_pages
                 sync_pages(self.ed, self.ed.project)
+            if sheets or any(op[0] == "ent" and "insert" in (
+                    (op[3] or {}).get("kind"), (op[4] or {}).get("kind")) for op in self.ed.ops):
+                # a device added, removed or retagged: its contacts show its tag
+                from .tags import sync_children
+                sync_children(self.ed, self.ed.project)
         except Exception:
             self.ed.project._apply(self.ed.ops, undo=True)
             raise
