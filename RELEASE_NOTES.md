@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.6
+
+**New**
+- Scoot: slide devices along their wire, as in AutoCAD Electrical. The wires follow, and the
+  device never leaves its wire.
+- Align devices: line devices up on their own wires (the same column on rungs), as AutoCAD
+  Electrical's Align.
+
 ## 0.10.2
 
 **New**

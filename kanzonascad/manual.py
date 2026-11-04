@@ -226,6 +226,16 @@ Mirror, Scale, dragging it or its grip), staying straight across and up or down 
 where needed). Select the wires too and they move with it instead.</li>
 <li><b>Placing a symbol on a wire</b> cuts the wire between the symbol's pins, as AutoCAD
 Electrical does: drop a contact onto a rung and it is wired in.</li>
+<li><b>Scoot</b> (SCOOT, AESCOOT; Modify menu, Schematic tab), as AutoCAD Electrical's:
+select devices (a contact, a pushbutton, a terminal...), a base point, then where to. They
+slide only along their own wire, across a rung or up and down a vertical wire, however you
+move the mouse; the wires on their pins stretch on one side and shorten on the other, staying
+straight. They stop short of a wire's far end or corner.</li>
+<li><b>Align devices</b> (AEALIGN; Modify menu, Schematic tab), as AutoCAD Electrical's
+Align: click the device to line up with, then the devices to line up, and press Enter. Each
+slides along its own wire (as Scoot) into line: the same column on rungs across, the same row
+on wires up and down. One that would leave its wire stops where its wire ends (the command
+line says so).</li>
 <li>Wires are ordinary objects otherwise: grips stretch their corners, Trim and Erase work on
 them (trimmed pieces stay wires), and they print and export (DXF) as polylines.</li>
 </ul>

@@ -1564,6 +1564,107 @@ class DuctCmd(_RunCmd):
         return M.Duct(a, b, "", w, d)
 
 
+class ScootCmd(_TwoPoint):
+    """SCOOT (AutoCAD Electrical's): slide devices along their own wire. Select them, a base
+    point, then where to: they move only along their wire (across a rung, or up and down a
+    vertical wire), and the wires on their pins stretch and shorten with them, staying
+    straight. They stop short of a wire's far end or corner."""
+    name, title = "SCOOT", "Scoot"
+
+    def begin(self):
+        from . import scoot
+        self.devs = scoot.devices(_selected(self.ctx))
+        if not self.devs:
+            self.ctx.message("Scoot: select symbols on a wire (devices, contacts, terminals...)")
+            self.finish()
+            return
+        self.ax = scoot.axis(self.devs[0])
+        self.ents = self.devs
+        self.from_pt = None
+        self.ctx.prompt("Specify base point")
+
+    def _slide(self, p):
+        from . import scoot
+        d = (p[0] - self.from_pt[0]) * self.ax[0] + (p[1] - self.from_pt[1]) * self.ax[1]
+        sheet = self.ctx.sheet()
+        for e in self.devs:                 # (all together: as far as the tightest allows)
+            if scoot.axis(e) == self.ax:
+                d = scoot.clamp(sheet, e, self.ax, d)
+        return d
+
+    def result(self, p):
+        from . import scoot
+        d = self._slide(p)
+        return [e.moved(self.ax[0] * d, self.ax[1] * d) if scoot.axis(e) == self.ax else e
+                for e in self.devs]
+
+    def apply(self, p):
+        d = self._slide(p)
+        sheet = self.ctx.sheet()
+        with self.ctx.edit(self.title) as ed:
+            for e in self.result(p):
+                ed.change(sheet, e)
+        self.ctx.message("Scooted %s" % M.fmt_inches(abs(d)))
+        self.finish()
+
+
+class AlignDevicesCmd(Command):
+    """AEALIGN (AutoCAD Electrical's Align): click the device to line up with, then the
+    devices to line up; Enter. Each slides along its own wire (as Scoot) until it is in line:
+    in the same column on rungs across, in the same row on wires up and down."""
+    name, title = "AEALIGN", "Align devices"
+    repeatable = True
+
+    def begin(self):
+        self.picking = True
+        self.ref = None
+        self.targets = []
+        self.ctx.prompt("Click the device to line up with")
+
+    def pick(self, p):
+        from . import scoot
+        e = self.ctx.pick_entity(p)
+        if not (isinstance(e, M.Insert) and scoot.axis(e) is not None):
+            self.ctx.message("Click a symbol on a wire")
+            return
+        if self.ref is None:
+            self.ref = e
+            self.ctx.prompt("Click the devices to line up (Enter when done)")
+            self.ctx.set_selection({e.id})
+            return
+        if e.id != self.ref.id and all(t.id != e.id for t in self.targets):
+            self.targets.append(e)
+            self.ctx.set_selection({self.ref.id} | {t.id for t in self.targets})
+
+    def enter(self):
+        from . import scoot
+        if self.ref is None or not self.targets:
+            self.finish()
+            return
+        sheet = self.ctx.sheet()
+        short = 0
+        with self.ctx.edit(self.title) as ed:
+            for t in self.targets:
+                cur = sheet.entities.get(t.id, t)
+                ax = scoot.axis(cur)
+                want = (self.ref.pos[0] - cur.pos[0]) * ax[0] + \
+                    (self.ref.pos[1] - cur.pos[1]) * ax[1]
+                d = scoot.clamp(sheet, cur, ax, want)
+                if abs(d - want) > 1e-9:
+                    short += 1
+                if abs(d) > 1e-12:
+                    ed.change(sheet, cur.moved(ax[0] * d, ax[1] * d))
+        self.ctx.set_selection(set())
+        self.ctx.message("Lined up %d device(s)%s" % (
+            len(self.targets) - short, "; %d stopped where their wire ends" % short
+            if short else ""))
+        self.finish()
+
+    def cancel(self):
+        self.ctx.set_selection(set())
+        self.finish()
+
+
 COMMANDS = {
     "LINE": (LineCmd, ["L"]),
     "PLINE": (PolylineCmd, ["PL"]),
@@ -1587,6 +1688,8 @@ COMMANDS = {
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
     "DUCT": (DuctCmd, ["WIREWAY", "WD"]),
+    "SCOOT": (ScootCmd, ["AESCOOT"]),
+    "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)

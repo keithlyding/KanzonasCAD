@@ -241,6 +241,8 @@ class MainWindow(QMainWindow):
         self._cmd_act("mirror", "M&irror", C.MirrorCmd, "Mirror")
         self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
+        self._cmd_act("scoot", "Sc&oot", C.ScootCmd, "Scoot")
+        self._cmd_act("align_dev", "&Align devices", C.AlignDevicesCmd, "Align")
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
         self._cmd_act("rail", "DIN &rail", C.RailCmd, "DIN rail")
@@ -362,7 +364,7 @@ class MainWindow(QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
-                  "object_color"):
+                  "scoot", "align_dev", None, "object_color"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "renumber",
@@ -412,6 +414,7 @@ class MainWindow(QMainWindow):
             ("Draw", "large", [a["wire"], a["bus"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"]]),
             ("Parts", "large", [a["new_part"]]),
+            ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Tags", "large", [a["renumber"]]),
             ("Cross-references", "large", [a["xref_update"], a["xref_freeze"], a["xref_auto"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
@@ -1424,7 +1427,7 @@ class MainWindow(QMainWindow):
                   "xref_update", "xref_freeze", "xref_auto",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
-                  "scale", "mirror", "erase", "trim", "paste"):
+                  "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev"):
             a[k].setEnabled(has)
         a["undo"].setEnabled(bool(has and p.undo_stack))
         a["redo"].setEnabled(bool(has and p.redo_stack))
