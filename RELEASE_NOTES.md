@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.8
+
+**Fixed**
+- Text could come in huge: a second click set its height, and every new text kept it. Now you
+  click once and type. Type H, R or J before clicking for the height, rotation or
+  justification. A height left huge goes back to 1/8 inch.
+
 ## 0.10.4
 
 **New**

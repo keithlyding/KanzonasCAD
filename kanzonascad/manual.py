@@ -308,10 +308,12 @@ number); D switches to a diameter. At the first prompt, 3P, 2P or TTR switch to 
 arcs near where the circle should touch them, then type its radius (Enter: the last one): of
 the circles that fit, you get the one touching nearest your picks.</td></tr>
 <tr><td>Arc (3 points)</td><td>ARC, A</td><td>Start, a point on the arc, end.</td></tr>
-<tr><td>Text</td><td>TEXT, T, DT</td><td>Start point, height, angle, then type each line and
-press Enter; Enter on an empty line ends. Before the start point, J (Justify) chooses where the
-point sits on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR
-(bottom), or L, C, R (on the baseline); it is kept for the next texts.
+<tr><td>Text</td><td>TEXT, T, DT</td><td>Click where the text goes, then type each line and
+press Enter; Enter on an empty line ends. One click only: unlike AutoCAD's TEXT, a second click
+doesn't set the height. Before the click, type <b>H</b> for the height (inches on paper: 1/8
+to start), <b>R</b> for the rotation (degrees), or <b>J</b> (Justify) for where the point sits
+on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR (bottom), or L,
+C, R (on the baseline). All three are kept for the next texts.
 <b>Double-click a text</b> to change its wording, height, angle and justification afterward
 (with "Keep the text where it is" ticked, a new justification moves only its insertion point,
 which is where it snaps and turns around).</td></tr>
