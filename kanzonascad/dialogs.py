@@ -301,6 +301,23 @@ def project_properties(parent, project, tab=0):
     form.addRow("Footprint color (layer PANEL)", fp_color)
     dim_color = _color_button(project.layer_color("DIMENSIONS"))
     form.addRow("Dimension color (layer DIMENSIONS)", dim_color)
+    dim_h = QDoubleSpinBox()
+    dim_h.setDecimals(4)
+    dim_h.setRange(0.01, 5)
+    dim_h.setSuffix(" in")
+    dim_h.setValue(float(st.get("dim_height", 0.1)))
+    form.addRow("Dimension text height (on paper)", dim_h)
+    stocks = {}
+    for key, label in (("rail_stock", "DIN rail bought in lengths of"),
+                       ("duct_stock", "Wire duct bought in lengths of")):
+        b = QDoubleSpinBox()
+        b.setDecimals(3)
+        b.setRange(1, 10000)
+        b.setSuffix(" in")
+        b.setValue(float(st.get(key, 39.37 if key == "rail_stock" else 72.0)))
+        b.setToolTip("1 m = 39.37 in, 2 m = 78.74 in, 6 ft = 72 in")
+        stocks[key] = b
+        form.addRow(label, b)
     form.addRow(_gray("Objects take their layer's color (ByLayer), as in AutoCAD, unless you "
                       "give them their own (Modify > Color...). Panel scale and dimension "
                       "settings come with the dimension tools."))
@@ -327,6 +344,9 @@ def project_properties(parent, project, tab=0):
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_number_height"] = num_h.value()
     settings["xref_height"] = xref_h.value()
+    settings["dim_height"] = dim_h.value()
+    for key, b in stocks.items():
+        settings[key] = b.value()
     colors = {"WIRES": wire_color.color, "SYMBOLS": sym_color.color, "PANEL": fp_color.color,
               "DIMENSIONS": dim_color.color}
     changed_colors = {n: c for n, c in colors.items() if c != project.layer_color(n)
@@ -627,3 +647,114 @@ def edit_text_dialog(parent, ent):
     if new.to_dict() == ent.to_dict():
         return None
     return new
+
+
+def run_properties(parent, project, e):
+    """A DIN rail's or wire duct's size, length and part. Returns the changed copy, or None."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(e.name())
+    form = QFormLayout(dlg)
+    rail = isinstance(e, M.Rail)
+    size = QComboBox()
+    if rail:
+        for key, (name, _w, _d) in M.RAIL_PROFILES.items():
+            size.addItem(name, key)
+        size.setCurrentIndex(max(size.findData(e.size), 0))
+    else:
+        size.setEditable(True)
+        for w, d in M.DUCT_SIZES:
+            size.addItem(M.size_text(w, d))
+        size.setEditText(M.size_text(e.width, e.depth))
+        size.setToolTip("Width x depth: 2 x 3 (inches) or 50 x 75 mm. The depth isn't drawn; "
+                        "it goes on the materials list.")
+    length = QDoubleSpinBox()
+    length.setDecimals(3)
+    length.setRange(0.01, 10000)
+    length.setSuffix(" in")
+    length.setValue(e.length())
+    edits = {}
+    for k, label in (("MFR", "Manufacturer"), ("CAT", "Catalog number"),
+                     ("DESC", "Description")):
+        edits[k] = QLineEdit(e.attrs.get(k, ""))
+    stock = QDoubleSpinBox()
+    stock.setDecimals(3)
+    stock.setRange(0, 10000)
+    stock.setSuffix(" in")
+    stock.setSpecialValueText("the project's (%s)" % M.fmt_inches(
+        float(project.settings.get("rail_stock" if rail else "duct_stock", 0))))
+    stock.setValue(e.stock)
+    form.addRow("Profile" if rail else "Size", size)
+    form.addRow("Length (from its start)", length)
+    form.addRow("Manufacturer", edits["MFR"])
+    form.addRow("Catalog number", edits["CAT"])
+    form.addRow("Description", edits["DESC"])
+    form.addRow("Bought in lengths of", stock)
+    form.addRow(_buttons(dlg))
+    while True:
+        if dlg.exec() != QDialog.Accepted:
+            return None
+        if rail:
+            key = size.currentData()
+            _n, w, d = M.RAIL_PROFILES[key]
+            break
+        from .commands import parse_duct_size
+        got = parse_duct_size(size.currentText().replace(" ", ""))
+        if got is not None:
+            key, (w, d) = "", got
+            break
+        QMessageBox.warning(parent, e.name(), "Type the size as width x depth: 2 x 3 (inches) "
+                                              "or 50 x 75 mm.")
+    attrs = {k: x.text().strip() for k, x in edits.items() if x.text().strip()}
+    new = e.copy(size=key, width=w, depth=d, attrs=attrs, stock=stock.value())
+    if abs(length.value() - e.length()) > 1e-9:
+        new = new.with_length(length.value())
+    return None if new.to_dict() == e.to_dict() else new
+
+
+def materials_dialog(parent, project, folder):
+    """The project's DIN rail and wire duct: per size and part, pieces, cut lengths, total,
+    stock pieces; Save as CSV..."""
+    from . import materials
+    head, body = materials.table(project)
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Panel materials")
+    dlg.resize(900, 360)
+    lay = QVBoxLayout(dlg)
+    if not body:
+        lay.addWidget(QLabel("No DIN rail or wire duct in this project yet (Panel tab: DIN rail, "
+                             "Wire duct)."))
+    t = QTableWidget(len(body), len(head))
+    t.setHorizontalHeaderLabels(head)
+    for i, row in enumerate(body):
+        for j, cell in enumerate(row):
+            it = QTableWidgetItem(cell)
+            it.setFlags(it.flags() & ~Qt.ItemIsEditable)
+            t.setItem(i, j, it)
+    t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+    lay.addWidget(t, 1)
+    lay.addWidget(_gray("Stock pieces: the cut lengths packed into the stock lengths, longest "
+                        "first (saw cuts take no width). Set a piece's stock length, part and "
+                        "size by double-clicking it; the project's stock lengths are in Project "
+                        "properties, Panel."))
+    box = QDialogButtonBox(QDialogButtonBox.Close)
+    save = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    save.setEnabled(bool(body))
+    box.rejected.connect(dlg.reject)
+
+    def do_save():
+        from PySide6.QtWidgets import QFileDialog
+        import os
+        path, _f = QFileDialog.getSaveFileName(dlg, "Save panel materials",
+                                               os.path.join(folder, "panel materials.csv"),
+                                               "CSV (*.csv)")
+        if not path:
+            return
+        try:
+            n = materials.write_csv(project, path)
+        except OSError as ex:
+            QMessageBox.warning(dlg, "Panel materials", "Couldn't save %s:\n%s" % (path, ex))
+            return
+        QMessageBox.information(dlg, "Panel materials", "Saved %d row(s) to %s." % (n, path))
+    save.clicked.connect(do_save)
+    lay.addWidget(box)
+    dlg.exec()

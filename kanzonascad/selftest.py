@@ -208,7 +208,15 @@ def run(log_path):
         assert s.paper() == (68.0, 44.0) and s.paper_inches() == (17.0, 11.0), s.paper()
         assert d.label() == '36.00"', d.label()
         assert sheetframe.field_values(p, s)["Scale"] == "1:4"
-        return "1:4 sheet, real-size drawing, %s dimension" % d.label()
+        from . import materials
+        with p.edit("rail and duct") as ed:
+            ed.add(s, M.Rail((2, 2), (32, 2), "TS35x7.5", *M.RAIL_PROFILES["TS35x7.5"][1:]))
+            ed.add(s, M.Duct((2, 5), (32, 5), "", 2, 3))
+            ed.add(s, M.Duct((2, 8), (52, 8), "", 2, 3))
+        got = {r["item"]: (r["total"], r["sticks"]) for r in materials.rows(p)}
+        assert got == {"DIN rail": (30.0, 1), "Wire duct": (80.0, 2)}, got
+        return "1:4 sheet, real-size drawing, %s dimension; rail and duct %s" % (
+            d.label(), got)
     log.check("panel sheets and dimensions", panel)
 
     def library():

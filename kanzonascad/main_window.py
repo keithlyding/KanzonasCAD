@@ -243,6 +243,12 @@ class MainWindow(QMainWindow):
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
+        self._cmd_act("rail", "DIN &rail", C.RailCmd, "DIN rail")
+        self._cmd_act("duct", "&Wire duct", C.DuctCmd, "Wire duct")
+        A("materials", "Panel &materials...", self.show_materials, icon="materials",
+          label="Materials",
+          tip="The DIN rail and wire duct this project takes: lengths, stock pieces and cuts "
+              "(save as CSV)")
         A("sheet_scale", "Sheet sc&ale...", self.sheet_properties, icon="sheet_scale",
           label="Sheet scale",
           tip="This sheet's scale (Sheet properties): the drawing stays real size, the scale "
@@ -345,7 +351,7 @@ class MainWindow(QMainWindow):
             tm.addAction(a["theme_" + mode])
         m = mb.addMenu("&Draw")
         for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus", None,
-                  "dim_linear", "dim_aligned"):
+                  "dim_linear", "dim_aligned", None, "rail", "duct"):
             if k == "CIRCLE":
                 cm = m.addMenu("&Circle")
                 for ck in self.CIRCLE_KEYS:
@@ -360,7 +366,8 @@ class MainWindow(QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "renumber",
-                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", None, "sheet_props",
+                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned",
+                  "rail", "duct", "materials", None, "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
@@ -414,6 +421,7 @@ class MainWindow(QMainWindow):
             ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"]]),
             ("Real size", "large", [a["scale"], a["sheet_scale"]]),
             ("Dimensions", "large", [a["dim_linear"], a["dim_aligned"]]),
+            ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
             ("Settings", "large", [a["panel_settings"]]),
@@ -1164,9 +1172,22 @@ class MainWindow(QMainWindow):
         self.library_panel.refresh()
         return True
 
+    def show_materials(self):
+        v = self.view()
+        if v is None:
+            return
+        dialogs.materials_dialog(self, v.project, self._last_dir())
+
     def edit_attributes(self, ins):
         v = self.view()
         if v is None:
+            return
+        if isinstance(ins, M.Run):
+            new = dialogs.run_properties(self, v.project, ins)
+            if new is not None:
+                with v.project.edit("%s properties" % ("DIN rail" if isinstance(ins, M.Rail)
+                                                       else "Wire duct")) as ed:
+                    ed.change(v.sheet(), new)
             return
         from .library_panel import attributes_dialog
         attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet())

@@ -54,6 +54,10 @@ DEFAULT_SETTINGS = {
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
     "wire_number_height": 0.08,
     "dim_height": 0.1,          # dimension text, paper inches
+    "rail_profile": "TS35x7.5",             # DIN rail and wire duct drawn next
+    "duct_size": [2.0, 3.0],
+    "rail_stock": 1000 / 25.4,              # bought in 1 m lengths
+    "duct_stock": 72.0,                     # bought in 6 ft lengths
 }
 LAYOUT_KEYS = ("size", "cols", "rows", "col_start", "row_start")
 
@@ -656,8 +660,47 @@ def fmt_inches(v, places=2):
     return "%.*f\"" % (places, v)
 
 
+class Composite(Entity):
+    """An object drawn as several plain pieces (lines, texts) worked out from a few values:
+    dimensions, DIN rail, wire duct. Subclasses give parts(); hit tests, boxes and export
+    follow from them."""
+    __slots__ = ()
+
+    def parts(self):
+        raise NotImplementedError
+
+    def _compute_bbox(self):
+        bb = None
+        for e in self.parts():
+            bb = G.bbox_union(bb, e.bbox())
+        return bb
+
+    def distance(self, p):
+        return min(e.distance(p) for e in self.parts())
+
+    def crosses(self, rect):
+        return any(e.crosses(rect) for e in self.parts())
+
+    def pieces(self):
+        return []                           # (trim and intersections pass them by)
+
+    def outline(self):
+        out = []
+        for e in self.parts():
+            out.extend(e.outline())
+        return out
+
+    def exploded(self):
+        out = []
+        for e in self.parts():
+            c = e.copy()
+            c.id = None
+            out.append(c)
+        return out
+
+
 @_register
-class Dimension(Entity):
+class Dimension(Composite):
     """A dimension: the true distance between p1 and p2, its line through loc. mode "linear"
     (across or up and down, whichever loc points to) or "aligned" (along p1-p2). height: its
     text height, in drawing units (on a scaled panel sheet, the paper height times the
@@ -762,27 +805,6 @@ class Dimension(Entity):
         self._parts = out
         return out
 
-    def _compute_bbox(self):
-        bb = None
-        for e in self.parts():
-            bb = G.bbox_union(bb, e.bbox())
-        return bb
-
-    def distance(self, p):
-        return min(e.distance(p) for e in self.parts())
-
-    def crosses(self, rect):
-        return any(e.crosses(rect) for e in self.parts())
-
-    def pieces(self):
-        return []                           # (trim and intersections pass dimensions by)
-
-    def outline(self):
-        out = []
-        for e in self.parts():
-            out.extend(e.outline())
-        return out
-
     def _compute_snaps(self):
         return [("end", self.p1), ("end", self.p2)]
 
@@ -797,12 +819,173 @@ class Dimension(Entity):
         # (scaled, its text keeps its height: it is paper-sized, and the number follows)
         return self.copy(p1=list(fn(self.p1)), p2=list(fn(self.p2)), loc=list(fn(self.loc)))
 
-    def exploded(self):
-        out = []
-        for e in self.parts():
-            c = e.copy()
-            c.id = None
-            out.append(c)
+
+# ---- DIN rail and wire duct: real-size pieces from one end to the other ---------------------
+MM_IN = 1 / 25.4
+# rail profiles: key -> (name, width, depth) in inches
+RAIL_PROFILES = {
+    "TS35x7.5": ("TS35 x 7.5 mm", 35 * MM_IN, 7.5 * MM_IN),
+    "TS35x15": ("TS35 x 15 mm", 35 * MM_IN, 15 * MM_IN),
+    "TS15": ("TS15 x 5.5 mm (mini)", 15 * MM_IN, 5.5 * MM_IN),
+}
+# wire duct sizes offered (width x depth, inches); any other can be typed
+DUCT_SIZES = [(1, 2), (1, 3), (1.5, 3), (2, 2), (2, 3), (2, 4), (3, 3), (3, 4), (4, 4)]
+
+
+def size_text(width, depth):
+    """2 x 3 (inches), or 50 x 75 mm when it is a whole number of millimeters and not of
+    eighths of an inch."""
+    def nice(v):
+        return ("%.3f" % v).rstrip("0").rstrip(".")
+    if all(abs(v * 8 - round(v * 8)) < 1e-6 for v in (width, depth)):
+        return "%s x %s" % (nice(width), nice(depth))
+    return "%s x %s mm" % (nice(width * 25.4), nice(depth * 25.4))
+
+
+class Run(Composite):
+    """A straight piece cut to length, drawn at real size from p1 to p2 (its centerline):
+    DIN rail or wire duct. width is drawn; depth isn't (a plan view) but goes on the bill of
+    materials. attrs: MFR, CAT, DESC of its part; stock: the length it is bought in (0: the
+    project's)."""
+    __slots__ = ("p1", "p2", "size", "width", "depth", "attrs", "stock", "_parts")
+
+    def __init__(self, p1, p2, size="", width=1.0, depth=1.0, attrs=None, stock=0.0, **kw):
+        kw.setdefault("layer", "PANEL")
+        super().__init__(**kw)
+        self.p1, self.p2 = _pt(p1), _pt(p2)
+        self.size = str(size or "")
+        self.width, self.depth = float(width), float(depth)
+        self.attrs = {k: str(v) for k, v in (attrs or {}).items()}
+        self.stock = float(stock or 0.0)
+        self._parts = None
+
+    def _data(self):
+        d = {"p1": list(self.p1), "p2": list(self.p2), "size": self.size, "width": self.width,
+             "depth": self.depth}
+        if self.attrs:
+            d["attrs"] = dict(self.attrs)
+        if self.stock:
+            d["stock"] = self.stock
+        return d
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["p1"], d["p2"], d.get("size", ""), d.get("width", 1.0), d.get("depth", 1.0),
+                   d.get("attrs"), d.get("stock", 0.0), layer=d.get("layer", "PANEL"),
+                   color=d.get("color"), id=d.get("id"))
+
+    def length(self):
+        return G.dist(self.p1, self.p2)
+
+    def axes(self):
+        """(unit vector along, unit normal)."""
+        L = self.length()
+        if L < 1e-12:
+            return (1.0, 0.0), (0.0, 1.0)
+        ux, uy = (self.p2[0] - self.p1[0]) / L, (self.p2[1] - self.p1[1]) / L
+        return (ux, uy), (-uy, ux)
+
+    def at(self, s, t):
+        """The point s along from p1 and t across the centerline."""
+        (ux, uy), (nx, ny) = self.axes()
+        return (self.p1[0] + ux * s + nx * t, self.p1[1] + uy * s + ny * t)
+
+    def corners(self):
+        L, h = self.length(), self.width / 2
+        return [self.at(0, -h), self.at(L, -h), self.at(L, h), self.at(0, h)]
+
+    def name(self):
+        return self.size
+
+    def parts(self):
+        if self._parts is None:
+            c = self.corners()
+            out = [Polyline(c, True)] + self._details()
+            for e in out:
+                e.layer, e.color = self.layer, self.color
+            self._parts = out
+        return self._parts
+
+    def _details(self):
+        return []
+
+    def _compute_snaps(self):
+        mid = ((self.p1[0] + self.p2[0]) / 2, (self.p1[1] + self.p2[1]) / 2)
+        return [("end", self.p1), ("end", self.p2), ("mid", mid)] + \
+            [("end", q) for q in self.corners()]
+
+    def grips(self):
+        mid = ((self.p1[0] + self.p2[0]) / 2, (self.p1[1] + self.p2[1]) / 2)
+        return [self.p1, mid, self.p2]
+
+    def with_grip(self, i, p):
+        if i == 0:
+            return self.copy(p1=list(p))
+        if i == 2:
+            return self.copy(p2=list(p))
+        return Entity.with_grip(self, i, p)
+
+    def _map(self, fn, **_kw):
+        # (scaled, it gets longer or shorter: its profile stays the real one)
+        return self.copy(p1=list(fn(self.p1)), p2=list(fn(self.p2)))
+
+    def with_length(self, L):
+        """A copy L long, p1 staying where it is."""
+        (ux, uy), _n = self.axes()
+        return self.copy(p2=[self.p1[0] + ux * L, self.p1[1] + uy * L])
+
+
+@_register
+class Rail(Run):
+    """DIN rail: its outline, the edges of its lips and its mounting slots."""
+    kind = "rail"
+    __slots__ = ()
+
+    def name(self):
+        prof = RAIL_PROFILES.get(self.size)
+        return "DIN rail " + (prof[0] if prof else self.size)
+
+    def _details(self):
+        L, h = self.length(), self.width / 2
+        lip = 5 * MM_IN * self.width / (35 * MM_IN)
+        out = [Line(self.at(0, -(h - lip)), self.at(L, -(h - lip))),
+               Line(self.at(0, h - lip), self.at(L, h - lip))]
+        # mounting slots: 15 x 5.2 mm every 25 mm on a 35 mm rail (in proportion on others)
+        f = self.width / (35 * MM_IN)
+        sl, sw, pitch = 15 * MM_IN * f, 5.2 * MM_IN * f, 25 * MM_IN * f
+        s = pitch / 2 - sl / 2
+        n = 0
+        while s + sl <= L and n < 2000:
+            out.append(Polyline([self.at(s, -sw / 2), self.at(s + sl, -sw / 2),
+                                 self.at(s + sl, sw / 2), self.at(s, sw / 2)], True))
+            s += pitch
+            n += 1
+        return out
+
+
+@_register
+class Duct(Run):
+    """Wire duct (wireway): its outline, its walls and their finger slots. The depth isn't
+    drawn (a plan view) but is part of its size."""
+    kind = "duct"
+    __slots__ = ()
+    WALL = 0.08
+    PITCH = 0.5
+
+    def name(self):
+        return "Wire duct " + size_text(self.width, self.depth)
+
+    def _details(self):
+        L, h, t = self.length(), self.width / 2, min(self.WALL, self.width / 6)
+        out = [Line(self.at(0, -(h - t)), self.at(L, -(h - t))),
+               Line(self.at(0, h - t), self.at(L, h - t))]
+        s = self.PITCH
+        n = 0
+        while s < L - 1e-9 and n < 4000:
+            out.append(Line(self.at(s, -h), self.at(s, -(h - t))))
+            out.append(Line(self.at(s, h), self.at(s, h - t)))
+            s += self.PITCH
+            n += 1
         return out
 
 

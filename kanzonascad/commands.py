@@ -1467,6 +1467,103 @@ class DimAlignedCmd(DimLinearCmd):
     mode = "aligned"
 
 
+def parse_duct_size(text):
+    """2x3, 2 x 3, 1.5x3 (inches) or 50x75mm -> (width, depth) in inches, or None."""
+    import re
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)\s*(mm)?\s*", text or "")
+    if not m:
+        return None
+    w, d = float(m.group(1)), float(m.group(2))
+    if m.group(3):
+        w, d = w / 25.4, d / 25.4
+    return (w, d) if w > 0 and d > 0 else None
+
+
+class _RunCmd(Command):
+    """Draw a straight real-size piece: its start, then its end (or a typed length toward
+    the cursor). Size options before the first click."""
+    kind = None
+
+    def begin(self):
+        self.p1 = None
+        self._prompt_start()
+
+    def point(self, p):
+        if self.p1 is None:
+            self.p1 = self.base = self.last = p
+            self.ctx.prompt("Specify end point, or type the length (toward the cursor)")
+            return
+        if G.dist(self.p1, p) < 1e-6:
+            return
+        e = self.make(self.p1, p)
+        with self.ctx.edit(self.title) as ed:
+            if e.layer not in self.ctx.project.layers:
+                ed.layer(e.layer, None, M.Layer(e.layer).to_dict())
+            ed.add(self.ctx.sheet(), e)
+        self.ctx.message("%s, %s long" % (e.name(), M.fmt_inches(e.length())))
+        self.finish()
+
+    def preview(self, p):
+        if self.p1 is None or G.dist(self.p1, p) < 1e-6:
+            return []
+        return [self.make(self.p1, p)]
+
+
+class RailCmd(_RunCmd):
+    """DINRAIL: DIN rail at real size, from one end to the other. Profiles: 7.5 (TS35 x 7.5
+    mm, to start), 15 (TS35 x 15 mm), MINI (TS15)."""
+    name, title = "DINRAIL", "DIN rail"
+    PICK = {"7.5": "TS35x7.5", "TS35X7.5": "TS35x7.5", "15": "TS35x15", "TS35X15": "TS35x15",
+            "MINI": "TS15", "TS15": "TS15"}
+
+    def _profile(self):
+        key = self.ctx.project.settings.get("rail_profile", "TS35x7.5")
+        return key if key in M.RAIL_PROFILES else "TS35x7.5"
+
+    def _prompt_start(self):
+        self.ctx.prompt("Specify start point (%s)" % M.RAIL_PROFILES[self._profile()][0],
+                        [("TS35 x 7.5", "7.5"), ("TS35 x 15", "15"), ("TS15 mini", "MINI")])
+
+    def text(self, s):
+        key = self.PICK.get(s.strip().upper())
+        if key is None or self.p1 is not None:
+            return False
+        self.ctx.project.settings["rail_profile"] = key
+        self._prompt_start()
+        return True
+
+    def make(self, a, b):
+        key = self._profile()
+        _n, w, d = M.RAIL_PROFILES[key]
+        return M.Rail(a, b, key, w, d)
+
+
+class DuctCmd(_RunCmd):
+    """DUCT: wire duct at real size, from one end to the other. Type its size first: width x
+    depth, 2x3 (inches) or 50x75mm."""
+    name, title = "DUCT", "Wire duct"
+
+    def _size(self):
+        got = self.ctx.project.settings.get("duct_size", [2.0, 3.0])
+        return float(got[0]), float(got[1])
+
+    def _prompt_start(self):
+        self.ctx.prompt("Specify start point (%s; type another size: 2x3, 1.5x3, 50x75mm)"
+                        % M.size_text(*self._size()))
+
+    def text(self, s):
+        got = parse_duct_size(s)
+        if got is None or self.p1 is not None:
+            return False
+        self.ctx.project.settings["duct_size"] = [got[0], got[1]]
+        self._prompt_start()
+        return True
+
+    def make(self, a, b):
+        w, d = self._size()
+        return M.Duct(a, b, "", w, d)
+
+
 COMMANDS = {
     "LINE": (LineCmd, ["L"]),
     "PLINE": (PolylineCmd, ["PL"]),
@@ -1488,6 +1585,8 @@ COMMANDS = {
     "EXPLODE": (ExplodeCmd, ["X"]),
     "DIMLINEAR": (DimLinearCmd, ["DLI", "DIM"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
+    "DINRAIL": (RailCmd, ["RAIL", "DR"]),
+    "DUCT": (DuctCmd, ["WIREWAY", "WD"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)

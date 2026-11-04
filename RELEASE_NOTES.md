@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10
+
+**New**
+- DIN rail (TS35 x 7.5, TS35 x 15, TS15) and wire duct (2 x 3, 50 x 75 mm... any size) at
+  real size: click both ends or type the length, and stretch them with their grips.
+- Panel materials: how much rail and duct the project takes, how many stock lengths that is,
+  and the cut lengths. Save it as CSV.
+
 ## 0.9
 
 **New**

@@ -671,7 +671,7 @@ class CadView(QWidget):
                 self._window = None
                 self.editTextRequested.emit(ent)
                 return
-            if isinstance(ent, M.Insert):
+            if isinstance(ent, (M.Insert, M.Run)):
                 self._window = None
                 self.attributesRequested.emit(ent)
                 return
