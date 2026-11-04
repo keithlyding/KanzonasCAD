@@ -307,6 +307,12 @@ def project_properties(parent, project, tab=0):
     jump.addItem("The across wire", "horizontal")
     jump.setCurrentIndex(max(jump.findData(st.get("wire_jump", "vertical")), 0))
     form.addRow("Which wire jumps", jump)
+    wclean = QCheckBox("Clean up wires as they're drawn")
+    wclean.setToolTip("A wire drawn where one already runs isn't added twice; a wire carried "
+                      "on from another wire's end joins it; Trim wire and Delete wire join "
+                      "the wires they leave meeting end to end.")
+    wclean.setChecked(bool(st.get("wire_cleanup", True)))
+    form.addRow("", wclean)
     xref_h = QDoubleSpinBox()
     xref_h.setDecimals(4)
     xref_h.setRange(0.01, 5)
@@ -371,6 +377,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_number_height"] = num_h.value()
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
+    settings["wire_cleanup"] = wclean.isChecked()
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():

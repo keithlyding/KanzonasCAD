@@ -117,6 +117,11 @@ class Command:
         """An object picked at p while self.picking."""
 
 
+def _cleanup_on(ctx):
+    """Wires cleaned up as they're drawn (Project properties, Schematic)?"""
+    return bool(ctx.project.settings.get("wire_cleanup", True))
+
+
 def _selected(ctx):
     sheet = ctx.sheet()
     return [sheet.entities[i] for i in ctx.selection() if i in sheet.entities]
@@ -1036,8 +1041,13 @@ class WireCmd(Command):
     def _make(self):
         pts = M._tidy(self.points)
         if len(pts) >= 2:
+            sheet = self.ctx.sheet()
             with self.ctx.edit("Wire") as ed:
-                ed.add(self.ctx.sheet(), M.Wire(pts))
+                w = ed.add(sheet, M.Wire(pts))
+                if _cleanup_on(self.ctx):
+                    from .wires import tidy_new
+                    if tidy_new(ed, sheet, w) == "duplicate":
+                        self.ctx.message("That wire is already there: not drawn twice")
         self.finish()
 
     def enter(self):
@@ -1169,10 +1179,14 @@ class BusCmd(Command):
         made = 0
         if self.step == "path" and len(self.points) >= 2:
             paths = bus_paths(self.points, self.count, self.spacing, self.flip)
+            sheet = self.ctx.sheet()
             with self.ctx.edit("Bus") as ed:
                 for pts in paths:
-                    ed.add(self.ctx.sheet(), M.Wire(pts))
+                    w = ed.add(sheet, M.Wire(pts))
                     made += 1
+                    if _cleanup_on(self.ctx):
+                        from .wires import tidy_new
+                        tidy_new(ed, sheet, w)
         if made:
             self.ctx.message("Bus of %d wires" % made)
         self.finish()
@@ -1676,6 +1690,107 @@ class AlignDevicesCmd(Command):
         self.ctx.set_selection(set())
 
 
+class TrimWireCmd(Command):
+    """TRIMWIRE (AutoCAD Electrical's Trim Wire): click a wire and the piece clicked goes, up
+    to the nearest wire or pin on either side (to its end when there is none). No cutting
+    edges to choose; only wires are trimmed."""
+    name, title = "TRIMWIRE", "Trim wire"
+
+    def begin(self):
+        self.picking = True
+        self.done = 0
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click the piece of wire to trim (Enter to finish)", [("Undo", "U")])
+
+    def pick(self, p):
+        from . import wires
+        sheet = self.ctx.sheet()
+        w = _pick_wire(self.ctx, p)
+        if w is None:
+            self.ctx.message("Click a wire")
+            return
+        pieces, ends = wires.trim_wire(sheet, w, p)
+        with self.ctx.edit(self.title) as ed:
+            ed.remove(sheet, w.id)
+            for e in pieces:
+                ed.add(sheet, e)
+            if _cleanup_on(self.ctx):
+                wires.join_at(ed, sheet, ends)
+        self.done += 1
+
+    def text(self, s):
+        if s.strip().upper() == "U":
+            if self.done:
+                self.ctx.undo()
+                self.done -= 1
+            return True
+        return False
+
+
+def _pick_wire(ctx, p):
+    """The wire under p (a wire even where a symbol's line is nearer), or None."""
+    return ctx.pick_entity(p, M.Wire)
+
+
+class DeleteWireCmd(Command):
+    """DELWIRE (AutoCAD Electrical's Delete Wires): the selected wires go (anything else
+    selected stays), or click wires one by one. Wires left meeting end to end become one."""
+    name, title = "DELWIRE", "Delete wire"
+
+    def begin(self):
+        sel = [e for e in _selected(self.ctx) if isinstance(e, M.Wire)]
+        if sel:
+            self._delete(sel)
+            self.ctx.set_selection(set())
+            self.finish()
+            return
+        self.picking = True
+        self.ctx.prompt("Click the wires to delete (Enter to finish)")
+
+    def pick(self, p):
+        w = _pick_wire(self.ctx, p)
+        if w is None:
+            self.ctx.message("Click a wire")
+            return
+        self._delete([w])
+
+    def _delete(self, ws):
+        from . import wires
+        sheet = self.ctx.sheet()
+        with self.ctx.edit(self.title) as ed:
+            for w in ws:
+                ed.remove(sheet, w.id)
+            if _cleanup_on(self.ctx):
+                wires.join_at(ed, sheet, wires._ends(ws))
+        self.ctx.message("Deleted %d wire(s)" % len(ws))
+
+
+class CleanWiresCmd(Command):
+    """WIRECLEAN: clean up the selected wires, or every wire on the sheet: wires of no length,
+    repeated or in-line points, a wire drawn over another, and wires meeting end to end (made
+    one). Then says how many wire ends connect to nothing."""
+    name, title = "WIRECLEAN", "Clean up wires"
+    repeatable = False
+
+    def begin(self):
+        from . import wires
+        sheet = self.ctx.sheet()
+        sel = [e for e in _selected(self.ctx) if isinstance(e, M.Wire)]
+        with self.ctx.edit(self.title) as ed:
+            got = wires.cleanup(ed, sheet, sel or None)
+        self.ctx.set_selection(set())
+        done = ["%d %s" % (got[k], label) for k, label in (
+            ("joined", "joined end to end"), ("duplicates", "drawn twice, removed"),
+            ("empty", "of no length, removed"), ("tidied", "with extra points, tidied"))
+            if got[k]]
+        self.ctx.message("Clean up wires (%s): %s. %s" % (
+            "selected wires" if sel else "this sheet", ", ".join(done) if done else
+            "nothing to clean up",
+            "%d wire end(s) connect to nothing." % got["loose"] if got["loose"]
+            else "Every wire end connects to something."))
+        self.finish()
+
+
 class WireCrossCmd(Command):
     """WIRECROSS: a wire crossing placed by hand. Click a wire where it should jump (on a
     crossing, or anywhere else on it); G, L or N first for a gap, a loop or none (none hides a
@@ -1846,6 +1961,9 @@ COMMANDS = {
     "LAYLCK": (LayerLockCmd, []),
     "LAYULK": (LayerUnlockAllCmd, []),
     "WIRECROSS": (WireCrossCmd, ["WX"]),
+    "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
+    "DELWIRE": (DeleteWireCmd, ["DW"]),
+    "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)

@@ -243,6 +243,9 @@ class MainWindow(QMainWindow):
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
         self._cmd_act("scoot", "Sc&oot", C.ScootCmd, "Scoot")
         self._cmd_act("align_dev", "&Align devices", C.AlignDevicesCmd, "Align")
+        self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
+        self._cmd_act("del_wire", "&Delete wire", C.DeleteWireCmd, "Delete wire")
+        self._cmd_act("clean_wires", "Clea&n up wires", C.CleanWiresCmd, "Clean up")
         self._cmd_act("lay_off", "&Hide layer", C.LayerOffCmd, "Hide layer")
         self._cmd_act("lay_iso", "Show &only this layer", C.LayerIsoCmd, "Show only")
         self._cmd_act("lay_on", "Show &all layers", C.LayerOnCmd, "Show all")
@@ -372,7 +375,8 @@ class MainWindow(QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
-                  "scoot", "align_dev", None, "object_color", None, "lay_off", "lay_iso",
+                  "scoot", "align_dev", None, "trim_wire", "del_wire", "clean_wires", None,
+                  "object_color", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
@@ -434,6 +438,7 @@ class MainWindow(QMainWindow):
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"]]),
             ("Parts", "large", [a["new_part"]]),
+            ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Tags", "large", [a["renumber"]]),
             ("Cross-references", "large", [a["xref_update"], a["xref_freeze"], a["xref_auto"]]),
@@ -1560,7 +1565,8 @@ class MainWindow(QMainWindow):
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
-                  "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev"):
+                  "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev",
+                  "trim_wire", "del_wire", "clean_wires"):
             a[k].setEnabled(has)
         a["undo"].setEnabled(bool(has and p.undo_stack))
         a["redo"].setEnabled(bool(has and p.redo_stack))
