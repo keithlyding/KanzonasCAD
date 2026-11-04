@@ -13,6 +13,8 @@ build fails without them.
   number, dots and crossings) takes about a twentieth of a second instead of more than half a
   second.
 - Wire numbers no longer sit on top of a crossing's loop or gap.
+- On/off menu items (Help > Check for updates automatically, View > Grid display, Snap to
+  grid...) show a check box, so you can see whether they're on.
 
 ## 0.11
 
