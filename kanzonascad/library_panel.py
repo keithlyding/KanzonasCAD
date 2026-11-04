@@ -275,6 +275,12 @@ def block_details_dialog(parent, library, kind_hint="symbol"):
         contact.addItem(label, key)
     prefix = QLineEdit()
     prefix.setPlaceholderText("CR, M, PB, LS...")
+    wiring = QComboBox()
+    wiring.addItem("Nothing: each pin's wire has its own number", "")
+    wiring.addItem("Distribution block: the first pin's number goes on, with A, B, C...",
+                   "distribution")
+    wiring.addItem("Off-sheet connector: the wire continues at the connector of the same name",
+                   "link")
     pins = QLineEdit()
     pins.setPlaceholderText("1, 2  (or A1, A2; 13, 14...)")
     replace = QCheckBox("Replace the selected objects with the block")
@@ -284,7 +290,8 @@ def block_details_dialog(parent, library, kind_hint="symbol"):
     form.addRow("Category", cat)
     form.addRow("Description", desc)
     sym_rows = [("Part in cross-references", role), ("Contact", contact),
-                ("Tag prefix", prefix), ("Pin names, in the order you'll pick them", pins)]
+                ("Tag prefix", prefix), ("Wire numbers through it", wiring),
+                ("Pin names, in the order you'll pick them", pins)]
     for label, w in sym_rows:
         form.addRow(label, w)
     form.addRow("", replace)
@@ -318,7 +325,7 @@ def block_details_dialog(parent, library, kind_hint="symbol"):
     return {"kind": kind.currentData(), "name": name.text().strip(),
             "category": cat.currentText().strip(), "description": desc.text().strip(),
             "role": role.currentData(), "contact": contact.currentData(),
-            "prefix": prefix.text().strip().upper(),
+            "prefix": prefix.text().strip().upper(), "wiring": wiring.currentData(),
             "pin_names": [t.strip() for t in pins.text().replace(";", ",").split(",")
                           if t.strip()],
             "replace": replace.isChecked()}

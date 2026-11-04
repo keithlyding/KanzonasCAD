@@ -5,7 +5,7 @@ the pick is removed; an object nothing crosses is deleted)."""
 import math
 
 from . import geometry as G
-from .model import Line, Polyline, Circle, Arc
+from .model import Line, Polyline, Circle, Arc, Wire
 
 EPS = 1e-7
 
@@ -86,6 +86,8 @@ def trim(ent, click, cutters):
             continue
         crossings.extend(entity_intersections(ent, c))
     keep = dict(layer=ent.layer, color=ent.color)
+    if isinstance(ent, Wire):
+        keep["_wire"] = ent      # (its pieces stay wires, with its number)
 
     if isinstance(ent, Line):
         L = ent.length()
@@ -168,6 +170,10 @@ def trim(ent, click, cutters):
 
 
 def _mk_poly(points, keep):
+    wire = keep.get("_wire")
+    keep = {k: v for k, v in keep.items() if k != "_wire"}
+    if wire is not None:
+        return wire.copy(points=[list(p) for p in points], id=None)
     if len(points) == 2:
         return Line(points[0], points[1], **keep)
     return Polyline(points, False, **keep)

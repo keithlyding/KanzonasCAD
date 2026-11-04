@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.6
+
+**New**
+- Wire numbers: every wire gets its number by itself (6001, 6002 on page 6), one per connected
+  wire, and keeps it. Double-click a wire to type your own; Renumber sheet puts them in order.
+- Distribution blocks: the wires coming out take the incoming number with A, B, C added.
+- Off-sheet connectors: a wire continuing on another sheet keeps its number, and each end
+  shows where the other one is.
+
+**Fixed**
+- Trimming a wire turned the pieces into plain lines.
+
 ## 0.5
 
 **New**

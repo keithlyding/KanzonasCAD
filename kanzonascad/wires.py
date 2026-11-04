@@ -107,7 +107,8 @@ def break_under(ed, sheet, ins):
             continue
         lo, hi = min(on), max(on)
         total = cum[-1]
-        keep = dict(layer=w.layer, color=w.color)
+        # (both pieces keep its number to start: numbering gives the second its own)
+        keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock)
         ed.remove(sheet, w.id)
         if lo > TOL:
             ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, lo), **keep))

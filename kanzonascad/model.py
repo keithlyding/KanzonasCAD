@@ -51,6 +51,8 @@ DEFAULT_SETTINGS = {
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
     "xref_height": 0.08,        # cross-reference text
+    "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
+    "wire_number_height": 0.08,
 }
 LAYOUT_KEYS = ("size", "cols", "rows", "col_start", "row_start")
 
@@ -305,10 +307,28 @@ class Wire(Polyline):
     wires. What it connects is worked out from where its ends are (wires.py), never stored, so
     it can't go stale; moving a symbol drags the ends that sat on its pins."""
     kind = "wire"
+    __slots__ = ("num", "num_lock")
 
-    def __init__(self, points, closed=False, **kw):
+    def __init__(self, points, closed=False, num=None, num_lock=False, **kw):
         kw.setdefault("layer", "WIRES")
         super().__init__(points, False, **kw)
+        # its wire number (every wire of a connected group has the same: wirenums.py) and
+        # whether it was typed (locked: numbering leaves it alone)
+        self.num = str(num) if num else None
+        self.num_lock = bool(num_lock) and bool(num)
+
+    def _data(self):
+        d = super()._data()
+        if self.num:
+            d["num"] = self.num
+            if self.num_lock:
+                d["num_lock"] = True
+        return d
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
+                   layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
 
     def end_moved(self, i, p):
         """A copy with end i (0 or -1) at p, kept straight across / up and down: the next
@@ -640,6 +660,11 @@ BLOCK_KINDS = ("symbol", "footprint")
 #   child  - a contact of a parent (takes the parent's tag)
 ROLES = ("device", "parent", "child")
 CONTACTS = ("", "NO", "NC", "NOTC", "NCTO", "NOTO", "NCTC")
+# what wires do through a symbol (wirenums.py): "" nothing (each side its own number),
+# "distribution" (a distribution block: its first pin's number goes on, with A, B, C... added,
+# to the wires on its other pins), "link" (an off-sheet connector: wires at connectors with
+# the same name are one wire, whatever sheet they're on)
+WIRINGS = ("", "distribution", "link")
 ATTR_NAMES = ["TAG", "DESC", "MFR", "CAT"]       # what every block reference can carry
 
 
@@ -649,7 +674,7 @@ class BlockDef:
 
     def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
                  category="", description="", role="device", contact="", prefix="",
-                 builtin=False):
+                 builtin=False, wiring=""):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -662,6 +687,7 @@ class BlockDef:
         self.contact = contact if contact in CONTACTS else ""
         self.prefix = prefix            # tag prefix: CR, M, PB... (page-number tags, later)
         self.builtin = bool(builtin)    # one of the program's own (not in your library folder)
+        self.wiring = wiring if wiring in WIRINGS else ""
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -669,7 +695,8 @@ class BlockDef:
                 "prefix": self.prefix, "tag_height": self.tag_height,
                 "tag_pos": list(self.tag_pos) if self.tag_pos is not None else None,
                 "pins": [{"name": p["name"], "pos": list(p["pos"])} for p in self.pins],
-                "entities": [e.to_dict() for e in self.entities]}
+                "entities": [e.to_dict() for e in self.entities]} | (
+                    {"wiring": self.wiring} if self.wiring else {})
 
     @classmethod
     def from_dict(cls, d, builtin=False):
@@ -677,7 +704,7 @@ class BlockDef:
                    [Entity.from_dict(e) for e in d.get("entities", [])], d.get("pins", []),
                    d.get("tag_pos"), d.get("tag_height", 0.1), d.get("category", ""),
                    d.get("description", ""), d.get("role", "device"), d.get("contact", ""),
-                   d.get("prefix", ""), builtin)
+                   d.get("prefix", ""), builtin, d.get("wiring", ""))
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
@@ -1025,6 +1052,14 @@ class Sheet:
             self.index.remove(eid)
             self.version += 1
             self.touched.add(eid)
+
+    def wires(self):
+        """The wires on this sheet (kept per sheet version, as inserts())."""
+        got = getattr(self, "_wires", None)
+        if got is None or got[0] != self.version:
+            got = self._wires = (self.version, [e for e in self.entities.values()
+                                                if isinstance(e, Wire)])
+        return got[1]
 
     def inserts(self):
         """The block references on this sheet (kept per sheet version: tags, contacts and
@@ -1501,11 +1536,20 @@ class _EditContext:
                 # sheets added, removed, moved or renumbered: device tags follow their pages
                 from .tags import sync_pages
                 sync_pages(self.ed, self.ed.project)
-            if sheets or any(op[0] == "ent" and "insert" in (
-                    (op[3] or {}).get("kind"), (op[4] or {}).get("kind")) for op in self.ed.ops):
+            kinds = set()
+            for op in self.ed.ops:
+                if op[0] == "ent":
+                    kinds.add((op[3] or {}).get("kind"))
+                    kinds.add((op[4] or {}).get("kind"))
+            if sheets or "insert" in kinds:
                 # a device added, removed or retagged: its contacts show its tag
                 from .tags import sync_children
                 sync_children(self.ed, self.ed.project)
+            if sheets or "insert" in kinds or "wire" in kinds or any(
+                    op[0] == "settings" for op in self.ed.ops):
+                # wires drawn, cut, joined or moved, symbols placed on them: wire numbers
+                from .wirenums import sync as number_wires
+                number_wires(self.ed, self.ed.project)
         except Exception:
             self.ed.project._apply(self.ed.ops, undo=True)
             raise

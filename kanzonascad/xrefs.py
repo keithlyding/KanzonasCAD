@@ -4,6 +4,8 @@ automatic.
 - Under a device that has contacts (a coil, a pushbutton operator...): one line per contact,
   "NO 6-D3" / "NC 7-B2", in sheet order then zone order.
 - Under each contact: where its device is ("6-D1"), or "?" when it isn't linked to one.
+- Under an off-sheet connector: where the connectors of the same name are ("7-A2"), or "?"
+  when it has no other end yet.
 - A device's listing can be switched off (attribute XREF = "0" on the device), and each
   contact can be left out of its device's listing (XREF = "0" on the contact).
 
@@ -82,6 +84,14 @@ def live_all(project):
             text = ("%s %s" % (mark, _where(project, cs, c))).strip()
             out[s.id].append((round(x, 6), round(y, 6), text, h))
             y -= h * LINE
+    # off-sheet connectors: where the same name's other ends are
+    from .wirenums import connectors
+    for name, ends in connectors(project).items():
+        for s, c in ends:
+            others = [_where(project, os_, oc) for os_, oc in ends if oc is not c]
+            bb = c.bbox()
+            out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - h, 6),
+                              ", ".join(others) if others else "?", h))
     for s, c in contacts:
         got = index.get(c.attrs.get("PARENT")) if c.attrs.get("PARENT") else None
         text = _where(project, got[0], got[1]) if got is not None else "?"

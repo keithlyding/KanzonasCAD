@@ -10,9 +10,11 @@ AutoCAD but want fewer commands, fewer settings and fewer surprises.
 - Wires that stay attached to symbols, and buses.
 - Device tags by page number (`CR601`), contacts linked to their coil, and cross-references
   that update themselves.
+- Wire numbers (`6001`) that number themselves, with distribution blocks (`6001A`) and
+  off-sheet connectors.
 - DXF in and out, PDF out.
 
-Coming next: wire numbers, more symbols (3-phase, PLC I/O), DWG import, panel layouts with
+Coming next: more symbols (3-phase, PLC I/O), DWG import, panel layouts with
 DIN rail and wire duct, and reports. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Press **F1** in the app for the user manual.
