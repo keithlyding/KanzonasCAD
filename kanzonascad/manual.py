@@ -96,6 +96,19 @@ in Project properties to fill in.</li>
 </ul>
 <p>A name in braces that isn't a field shows as typed, so a typo is easy to spot. Undo works
 on title block changes like on any other.</p>
+<p><b>Title block position</b> (Project properties, General) says where the title block sits:</p>
+<ul>
+<li><b>Lower right corner</b> (to start): the zones run the full width and height of the
+sheet, and the title block sits over the lower right corner.</li>
+<li><b>Right-hand strip</b>: the title block takes the whole right-hand column of the sheet.
+The zones stop at it (a line divides them from the strip) and are spread over the room left,
+so grid references (6-D1) never point into the title block.</li>
+<li><b>Bottom strip</b>: the same along the bottom of the sheet.</li>
+</ul>
+<p>The strip's width (or height) is that of the title block you drew. Tick <b>Replace the
+title block with one made for this position</b> to swap in a ready-made one, with the same
+fields, that fills the strip (or the corner); Undo puts your old one back. On a panel sheet
+with a scale the strip stays its size on paper.</p>
 
 <h2>Symbols, footprints and parts (the library)</h2>
 <p>Your <b>library</b> is a folder of its own (<code>Documents\\KanzonasCAD Library</code> to

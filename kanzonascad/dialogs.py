@@ -259,6 +259,19 @@ def project_properties(parent, project, tab=0):
     text_h.setSuffix(" in")
     text_h.setValue(float(st["text_height"]))
     form.addRow("Text height (new text)", text_h)
+    tbpos = QComboBox()
+    for key, label in (("corner", "Lower right corner"),
+                       ("right", "Right-hand strip (the zones stop at it)"),
+                       ("bottom", "Bottom strip (the zones stop at it)")):
+        tbpos.addItem(label, key)
+    tbpos.setCurrentIndex(max(tbpos.findData(st.get("tb_position", "corner")), 0))
+    form.addRow("Title block position", tbpos)
+    swap = QCheckBox("Replace the title block with one made for this position")
+    swap.setToolTip("A ready-made title block for the strip (or the corner), with the same "
+                    "fields; edit it afterward with Sheets > Edit title block. Undo puts the old "
+                    "one back.")
+    tbpos.currentIndexChanged.connect(lambda _i: swap.setChecked(False))
+    form.addRow("", swap)
     tabs.addTab(page, "General")
 
     # ---- Schematic -------------------------------------------------------------------------
@@ -352,6 +365,7 @@ def project_properties(parent, project, tab=0):
     settings = dict(st)
     settings.update(layout.values())
     settings["text_height"] = text_h.value()
+    settings["tb_position"] = tbpos.currentData()
     settings["tag_height"] = tag_h.value()
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_number_height"] = num_h.value()
@@ -366,11 +380,20 @@ def project_properties(parent, project, tab=0):
     changed_colors = {n: c for n, c in colors.items() if c != project.layer_color(n)
                       or n not in project.layers}
     if fields == project.fields and fmt == project.zone_format and settings == st \
-            and not changed_colors:
+            and not changed_colors and not swap.isChecked():
         return False
     with project.edit("Project properties") as ed:
         if fields != project.fields or fmt != project.zone_format:
             ed.project_fields(fields, fmt)
+        if swap.isChecked():
+            from .sheetframe import strip_title_block, default_title_block
+            tb = project.title_block
+            pos = tbpos.currentData()
+            for eid in list(tb.entities):
+                ed.remove(tb, eid)
+            for e in (strip_title_block(tb, pos) if pos in ("right", "bottom")
+                      else default_title_block(tb)):
+                ed.add(tb, e)
         if settings != st:
             ed.project_settings(settings)
         for name, color in changed_colors.items():
