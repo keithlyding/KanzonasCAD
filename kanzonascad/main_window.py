@@ -1671,6 +1671,8 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def about(self):
+        from .theme import app_icon
+        self.setWindowIcon(app_icon())          # (About shows the window's icon)
         QMessageBox.about(self, "About KanzonasCAD",
                           "<b>KanzonasCAD %s</b><br>Free electrical CAD for Windows and Linux."
                           "<br>Source: <a href='https://github.com/keithlyding/KanzonasCAD'>"

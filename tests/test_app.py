@@ -818,3 +818,11 @@ class ThemeTest(unittest.TestCase):
         finally:
             w._apply_theme("light", save=False)
             w.close()
+
+
+class IconTest(unittest.TestCase):
+    def test_the_app_icon_is_shipped_and_loads(self):
+        from kanzonascad.theme import app_icon
+        ic = app_icon()
+        self.assertFalse(ic.isNull())
+        self.assertGreaterEqual(max(s.width() for s in ic.availableSizes()), 256)

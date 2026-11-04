@@ -1,5 +1,7 @@
 # KanzonasCAD
 
+![KanzonasCAD](assets/kanzonascad-logo.png)
+
 A free, open-source electrical CAD program for Windows and Linux, for people who know
 AutoCAD but want fewer commands, fewer settings and fewer surprises.
 

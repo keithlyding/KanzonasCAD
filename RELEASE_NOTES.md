@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.10.1
+
+**New**
+- KanzonasCAD has its own icon: the KanzonasPDF cactus and sunflower with a green CAD tag. It
+  shows in the window, the taskbar, the Start menu and on .kzcad files.
+
 ## 0.10
 
 **New**
