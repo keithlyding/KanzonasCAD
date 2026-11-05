@@ -22,8 +22,11 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 MARK, FONTS, OUT = sys.argv[1:4]
+# --web: also the files for a website: 2x (sharp on high-density screens), and 2x with a
+# transparent background (for light backgrounds: the letters are near black)
+WEB = "--web" in sys.argv[4:]
 SS = 4                                   # drawn 4x and reduced: smooth edges
-W, H = 936, 325
+W, H = 936, 325                          # the layout, in px at 1x
 BG = (249, 249, 249)
 INK = (11, 12, 16)
 CAP = 85                                 # capital height, px
@@ -82,65 +85,101 @@ def draw(mask_img, f, placed, cap_top):
         d.text((x, cap_top - top), ch, font=f, fill=255)
 
 
-def paint(base, mask_img, top_rgb, bottom_rgb, y0, y1):
-    m = np.asarray(mask_img.resize((W, H), Image.LANCZOS)).astype(float)[..., None] / 255
-    t = np.clip((np.arange(H) - y0) / float(y1 - y0), 0, 1)[:, None, None]
-    col = np.array(top_rgb, float) + (np.array(bottom_rgb, float) - np.array(top_rgb, float)) * t
-    return base * (1 - m) + col * m
+def render(scale, transparent):
+    """Both logos at scale (1 or 2), opaque or with a transparent background:
+    {word: image}."""
+    K = SS * scale                       # drawing units per layout px
+    WO, HO = W * scale, H * scale
+
+    def paint(base, mask_img, top_rgb, bottom_rgb, y0, y1):
+        m = np.asarray(mask_img.resize((WO, HO), Image.LANCZOS)).astype(float)[..., None] / 255
+        t = np.clip((np.arange(HO) / scale - y0) / float(y1 - y0), 0, 1)[:, None, None]
+        col = np.array(top_rgb, float) + (np.array(bottom_rgb, float) - np.array(top_rgb, float)) * t
+        return base * (1 - m) + col * m, m[..., 0]
+
+    kan = font("SairaSemiCondensed-SemiBold.ttf", CAP * K)
+    word = font("SairaCondensed-SemiBold.ttf", CAP * K)
+    tagf = font("Inter[opsz,wght].ttf", 15 * K, Weight=450)
+    k_placed, k_right = layout(kan, "Kanzonas", X0 * K, -0.06)
+    GAP = 16 * K                            # from "Kanzonas" to the colored word, as before
+    # a round first letter (C) sits optically further away than a straight one (P): 3 px in
+    starts = {"PDF": k_right + GAP, "CAD": k_right + GAP - 3 * K}
+    ends = {w: layout(word, w, starts[w], -0.02)[1] for w in WORDS}
+    R = max(ends.values())                   # both words end here
+    ref = "VIEW • EDIT • ANNOTATE • REVIEW"
+    tag_track = (399 * K - tagf.getlength(ref)) / (len(ref) - 1) / tagf.size
 
 
-kan = font("SairaSemiCondensed-SemiBold.ttf", CAP * SS)
-word = font("SairaCondensed-SemiBold.ttf", CAP * SS)
-tagf = font("Inter[opsz,wght].ttf", 15 * SS, Weight=450)
-k_placed, k_right = layout(kan, "Kanzonas", X0 * SS, -0.06)
-GAP = 16 * SS                            # from "Kanzonas" to the colored word, as before
-# a round first letter (C) sits optically further away than a straight one (P): 3 px in
-starts = {"PDF": k_right + GAP, "CAD": k_right + GAP - 3 * SS}
-ends = {w: layout(word, w, starts[w], -0.02)[1] for w in WORDS}
-R = max(ends.values())                   # both words end here
-ref = "VIEW • EDIT • ANNOTATE • REVIEW"
-tag_track = (399 * SS - tagf.getlength(ref)) / (len(ref) - 1) / tagf.size
-
-mark = Image.open(MARK).convert('RGB').resize((W, H))
-for w, spec in WORDS.items():
-    # the spacing that makes this word end at R
-    lo, hi = -0.1, 0.3
-    for _i in range(30):
-        mid = (lo + hi) / 2
-        if layout(word, w, starts[w], mid)[1] > R:
-            hi = mid
+    mark = Image.open(MARK).convert('RGB').resize((W, H)).resize((WO, HO), Image.LANCZOS)
+    out = {}
+    for w, spec in WORDS.items():
+        # the spacing that makes this word end at R
+        lo, hi = -0.1, 0.3
+        for _i in range(30):
+            mid = (lo + hi) / 2
+            if layout(word, w, starts[w], mid)[1] > R:
+                hi = mid
+            else:
+                lo = mid
+        w_placed, w_right = layout(word, w, starts[w], lo)
+        base = Image.new('RGB', (WO, HO), BG)
+        base.paste(mark.crop((0, 0, 296 * scale, HO)), (0, 0))
+        arr = np.asarray(base).astype(float)
+        # what isn't background: the mark (by how far from the background it is), then each drawing
+        alpha = np.clip(np.abs(arr - np.array(BG, float)).max(2) / 24.0, 0, 1)
+        alpha[:, 296 * scale:] = 0
+        m = Image.new('L', (W * K, H * K), 0)
+        draw(m, kan, k_placed, CAP_TOP * K)
+        arr, a_ = paint(arr, m, INK, INK, 0, 1)
+        alpha = np.maximum(alpha, a_)
+        m = Image.new('L', (W * K, H * K), 0)
+        draw(m, word, w_placed, CAP_TOP * K)
+        arr, a_ = paint(arr, m, spec["top"], spec["bottom"], CAP_TOP, CAP_TOP + CAP)
+        alpha = np.maximum(alpha, a_)
+        # the rule: a dot and a line in the word's color fading to grey, ending with the word
+        m = Image.new('L', (W * K, H * K), 0)
+        d = ImageDraw.Draw(m)
+        y = 261 * K
+        d.ellipse((X0 * K - 1 * K, y - 4 * K, X0 * K + 7 * K, y + 4 * K), fill=255)
+        d.rectangle((X0 * K + 3 * K, y - 1.25 * K, R, y + 1.25 * K), fill=255)
+        mr = np.asarray(m.resize((WO, HO), Image.LANCZOS)).astype(float)[..., None] / 255
+        xs = np.clip((np.arange(WO) / scale - X0) / float(R / K - X0), 0, 1)[None, :, None]
+        c0 = (np.array(spec["top"], float) + np.array(spec["bottom"], float)) / 2
+        c1 = np.array((178, 178, 178), float)
+        col = c0 + (c1 - c0) * xs ** 0.8
+        arr = arr * (1 - mr) + col * mr
+        alpha = np.maximum(alpha, mr[..., 0])
+        # the tagline
+        t_placed, _r = layout(tagf, spec["tag"], 308 * K, tag_track)
+        grey = Image.new('L', (W * K, H * K), 0)
+        dots = Image.new('L', (W * K, H * K), 0)
+        top = ink(tagf, "H")[1]
+        for ch, x in t_placed:
+            ImageDraw.Draw(dots if ch == "•" else grey).text((x, 284 * K - top), ch, font=tagf, fill=255)
+        arr, a_ = paint(arr, grey, (100, 100, 104), (100, 100, 104), 0, 1)
+        alpha = np.maximum(alpha, a_)
+        arr, a_ = paint(arr, dots, spec["top"], spec["top"], 0, 1)
+        alpha = np.maximum(alpha, a_)
+        if transparent:
+            # the colors as they'd be with no background under them, and how solid each pixel is
+            a = np.clip(alpha, 1e-6, 1)[..., None]
+            rgb = np.clip((arr - np.array(BG, float) * (1 - a)) / a, 0, 255)
+            img = Image.fromarray(np.dstack([rgb, alpha[..., None] * 255]).round().astype(np.uint8), 'RGBA')
         else:
-            lo = mid
-    w_placed, w_right = layout(word, w, starts[w], lo)
-    base = Image.new('RGB', (W, H), BG)
-    base.paste(mark.crop((0, 0, 296, H)), (0, 0))
-    arr = np.asarray(base).astype(float)
-    m = Image.new('L', (W * SS, H * SS), 0)
-    draw(m, kan, k_placed, CAP_TOP * SS)
-    arr = paint(arr, m, INK, INK, 0, 1)
-    m = Image.new('L', (W * SS, H * SS), 0)
-    draw(m, word, w_placed, CAP_TOP * SS)
-    arr = paint(arr, m, spec["top"], spec["bottom"], CAP_TOP, CAP_TOP + CAP)
-    # the rule: a dot and a line in the word's color fading to grey, ending with the word
-    m = Image.new('L', (W * SS, H * SS), 0)
-    d = ImageDraw.Draw(m)
-    y = 261 * SS
-    d.ellipse((X0 * SS - 1 * SS, y - 4 * SS, X0 * SS + 7 * SS, y + 4 * SS), fill=255)
-    d.rectangle((X0 * SS + 3 * SS, y - 1.25 * SS, R, y + 1.25 * SS), fill=255)
-    mr = np.asarray(m.resize((W, H), Image.LANCZOS)).astype(float)[..., None] / 255
-    xs = np.clip((np.arange(W) - X0) / float(R / SS - X0), 0, 1)[None, :, None]
-    c0 = (np.array(spec["top"], float) + np.array(spec["bottom"], float)) / 2
-    c1 = np.array((178, 178, 178), float)
-    col = c0 + (c1 - c0) * xs ** 0.8
-    arr = arr * (1 - mr) + col * mr
-    # the tagline
-    t_placed, _r = layout(tagf, spec["tag"], 308 * SS, tag_track)
-    grey = Image.new('L', (W * SS, H * SS), 0)
-    dots = Image.new('L', (W * SS, H * SS), 0)
-    top = ink(tagf, "H")[1]
-    for ch, x in t_placed:
-        ImageDraw.Draw(dots if ch == "•" else grey).text((x, 284 * SS - top), ch, font=tagf, fill=255)
-    arr = paint(arr, grey, (100, 100, 104), (100, 100, 104), 0, 1)
-    arr = paint(arr, dots, spec["top"], spec["top"], 0, 1)
-    Image.fromarray(arr.round().astype(np.uint8)).save(os.path.join(OUT, spec["out"]))
-    print(w, "letters from", round(w_placed[0][1] / SS), "to", round(w_right / SS), "spacing %.3f" % lo)
+            img = Image.fromarray(arr.round().astype(np.uint8))
+        out[w] = (img, w_placed, w_right, lo)
+    return out
+
+
+for w, (img, placed, right, track) in render(1, False).items():
+    img.save(os.path.join(OUT, WORDS[w]["out"]))
+    print(w, "letters from", round(placed[0][1] / SS), "to", round(right / SS), "spacing %.3f" % track)
+if WEB:
+    web = os.path.join(OUT, "web")
+    os.makedirs(web, exist_ok=True)
+    names = {"PDF": "kanzonaspdf-logo", "CAD": "kanzonascad-logo"}
+    for scale, transparent, suffix in ((1, False, ""), (2, False, "@2x"), (1, True, "-transparent"),
+                                       (2, True, "-transparent@2x")):
+        for w, (img, *_rest) in render(scale, transparent).items():
+            img.save(os.path.join(web, names[w] + suffix + ".png"))
+    print("web files in", web)
