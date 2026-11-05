@@ -484,26 +484,18 @@ class MainWindow(BlockEditing, QMainWindow):
     def _build_ribbon(self):
         from .ribbon import Ribbon, split_button
         a = self.acts
-        self.layer_box = QComboBox()
-        self.layer_box.setMinimumWidth(130)
-        self.layer_box.setToolTip("Current layer (new objects go on it). With objects "
-                                  "selected, picking a layer moves them to it.")
-        self.layer_box.activated.connect(self._layer_picked)
-        # every layer with its light bulb (shown/hidden) and lock, a click away (AutoCAD's
-        # layer list)
-        from PySide6.QtWidgets import QToolButton as _TB
-        self.layer_states = _TB()
-        self.layer_states.setIcon(theme.icon("lay_states"))
-        self.layer_states.setToolTip("Layers: show or hide, lock or unlock, each one")
-        self.layer_states.setPopupMode(_TB.InstantPopup)
-        self.layer_states_menu = QMenu(self.layer_states)
-        self.layer_states_menu.aboutToShow.connect(self._fill_layer_states)
-        self.layer_states.setMenu(self.layer_states_menu)
+        # the current layer and the layer list, on the Home tab and again on the Panel tab
+        # (each tab its own widgets, kept the same: _fill_layers)
+        self.layer_boxes = []
+        self.layer_box, self.layer_states = self._layer_widgets()
+        self.layer_states_menu = self.layer_states.menu()
         # Circle, with its other ways beside it: the face shows the one used last
         self.circle_button = split_button([a[k] for k in self.CIRCLE_KEYS])
         for k in self.CIRCLE_KEYS:              # (also when picked from the Draw menu)
             a[k].triggered.connect(lambda _c=False, act=a[k]:
                                    self.circle_button.setDefaultAction(act))
+        self.panel_layer_box, self.panel_layer_states = self._layer_widgets()
+        self.panel_layer_box.setMinimumWidth(100)       # (the Panel tab is a full one)
         r = self.ribbon = Ribbon()
         r.add_tab("Home", [
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
@@ -531,14 +523,14 @@ class MainWindow(BlockEditing, QMainWindow):
         ])
         r.add_tab("Panel", [
             ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"]]),
-            ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"]]),
-            ("Real size", "large", [a["scale"], a["sheet_scale"]]),
-            ("Dimensions", "large", [a["dim_linear"], a["dim_aligned"]]),
+            ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"]]),
+            ("Real size", "small", [a["scale"], a["sheet_scale"]]),
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
             ("Arrange", "large", [a["align_obj"]]),
-            ("Parts", "large", [a["new_part"]]),
-            ("Look", "small", [a["object_color"], a["layers"]]),
-            ("Settings", "large", [a["panel_settings"]]),
+            ("Parts", "small", [a["new_part"], a["panel_settings"]]),
+            ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
+                                 a["object_color"], a["lay_off"], a["lay_on"]]),
         ])
         r.add_tab("Sheets", [
             ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
@@ -1233,16 +1225,36 @@ class MainWindow(BlockEditing, QMainWindow):
         m.exec(gpos)
 
     # ---- layers ----------------------------------------------------------------------------
+    def _layer_widgets(self):
+        """A current-layer box and a layer-list button for a ribbon tab (Home, Panel)."""
+        from PySide6.QtWidgets import QToolButton as _TB
+        box = QComboBox()
+        box.setMinimumWidth(130)
+        box.setToolTip("Current layer (new objects go on it). With objects "
+                       "selected, picking a layer moves them to it.")
+        box.activated.connect(lambda i, b=box: self._layer_picked(i, b))
+        self.layer_boxes.append(box)
+        # every layer with its light bulb (shown/hidden) and lock, a click away (AutoCAD's
+        # layer list)
+        states = _TB()
+        states.setIcon(theme.icon("lay_states"))
+        states.setToolTip("Layers: show or hide, lock or unlock, each one")
+        states.setPopupMode(_TB.InstantPopup)
+        menu = QMenu(states)
+        menu.aboutToShow.connect(lambda m=menu: self._fill_layer_states(m))
+        states.setMenu(menu)
+        return box, states
+
     def _fill_layers(self):
         v = self.view()
-        box = self.layer_box
-        box.blockSignals(True)
-        box.clear()
-        if v is not None:
-            for name, lay in v.project.layers.items():
-                box.addItem(dialogs._swatch(lay.color), name)
-            box.setCurrentText(v.layer())
-        box.blockSignals(False)
+        for box in self.layer_boxes:
+            box.blockSignals(True)
+            box.clear()
+            if v is not None:
+                for name, lay in v.project.layers.items():
+                    box.addItem(dialogs._swatch(lay.color), name)
+                box.setCurrentText(v.layer())
+            box.blockSignals(False)
         self.layer_label.setText("Layer: %s" % (v.layer() if v else ""))
 
     def _fill_osnap_menu(self):
@@ -1311,11 +1323,11 @@ class MainWindow(BlockEditing, QMainWindow):
                 self._quick.append(q)
         QTimer.singleShot(0, add)
 
-    def _fill_layer_states(self):
+    def _fill_layer_states(self, menu=None):
         """The layer list: a light bulb (shown) and a lock per layer, toggled with a click
         (each click one undoable step)."""
         from PySide6.QtWidgets import QWidgetAction, QCheckBox as _CB, QHBoxLayout as _HB
-        menu = self.layer_states_menu
+        menu = menu if menu is not None else self.layer_states_menu
         menu.clear()
         v = self.view()
         if v is None:
@@ -1355,11 +1367,11 @@ class MainWindow(BlockEditing, QMainWindow):
             for k, val in change.items())), {name: change})
         self._fill_layers()
 
-    def _layer_picked(self, i):
+    def _layer_picked(self, i, box=None):
         v = self.view()
         if v is None:
             return
-        name = self.layer_box.itemText(i)
+        name = (box or self.layer_box).itemText(i)
         ents = self._selected()
         if ents:
             with v.project.edit("Change layer") as ed:

@@ -13,6 +13,8 @@ build fails without them.
   Select unused for the empty ones) and click Delete. Empty layers go right away; for layers
   that still hold objects, it asks whether to delete them too or keep them. One Undo brings
   everything back.
+- The Panel tab has the layers too: the current layer, the list of layers to show, hide,
+  lock or unlock, Layers..., Color, Hide layer and Show all.
 
 **Fixed**
 - A layer used only by the title block could be deleted as if it were empty.
