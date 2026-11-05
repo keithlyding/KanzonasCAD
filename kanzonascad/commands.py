@@ -1556,11 +1556,20 @@ class _RunCmd(Command):
         self.p1 = None
         self._prompt_start()
 
+    def _straight(self, p):
+        """The end point straight across or up and down from the start, whichever way the
+        point lies (rail and duct go straight: a snap off the line only sets the length)."""
+        a = self.p1
+        if abs(p[0] - a[0]) >= abs(p[1] - a[1]):
+            return (p[0], a[1])
+        return (a[0], p[1])
+
     def point(self, p):
         if self.p1 is None:
             self.p1 = self.base = self.last = p
             self.ctx.prompt("Specify end point, or type the length (toward the cursor)")
             return
+        p = self._straight(p)
         if G.dist(self.p1, p) < 1e-6:
             return
         e = self.make(self.p1, p)
@@ -1572,7 +1581,10 @@ class _RunCmd(Command):
         self.finish()
 
     def preview(self, p):
-        if self.p1 is None or G.dist(self.p1, p) < 1e-6:
+        if self.p1 is None:
+            return []
+        p = self._straight(p)
+        if G.dist(self.p1, p) < 1e-6:
             return []
         return [self.make(self.p1, p)]
 

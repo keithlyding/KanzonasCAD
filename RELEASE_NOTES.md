@@ -20,6 +20,9 @@ build fails without them.
 - A layer used only by the title block could be deleted as if it were empty.
 - Black objects (or a black layer) no longer disappear on the black drawing: they are drawn
   white there, and still print black.
+- DIN rail and wire duct always go straight (a snap a little off the line made them slant),
+  and stretching an end keeps them straight. To center things on a rail, snap to a mounting
+  slot's center, the middle of an edge, or anywhere along its centerline.
 
 ## 0.12.3
 

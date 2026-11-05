@@ -1015,18 +1015,34 @@ class Run(Composite):
 
     def _compute_snaps(self):
         mid = ((self.p1[0] + self.p2[0]) / 2, (self.p1[1] + self.p2[1]) / 2)
+        L, h = self.length(), self.width / 2
+        # its ends and middle, its corners, and the middles of its long edges (to center
+        # something on it)
         return [("end", self.p1), ("end", self.p2), ("mid", mid)] + \
-            [("end", q) for q in self.corners()]
+            [("end", q) for q in self.corners()] + \
+            [("mid", self.at(L / 2, -h)), ("mid", self.at(L / 2, h))] + self._more_snaps()
+
+    def _more_snaps(self):
+        return []
+
+    def centerline(self):
+        """Its centerline, as a line (for snapping along it: not drawn)."""
+        return Line(self.p1, self.p2, layer=self.layer)
 
     def grips(self):
         mid = ((self.p1[0] + self.p2[0]) / 2, (self.p1[1] + self.p2[1]) / 2)
         return [self.p1, mid, self.p2]
 
     def with_grip(self, i, p):
-        if i == 0:
-            return self.copy(p1=list(p))
-        if i == 2:
-            return self.copy(p2=list(p))
+        # an end grip stretches it along its own line: it stays straight
+        if i in (0, 2):
+            (ux, uy), _n = self.axes()
+            other = self.p2 if i == 0 else self.p1
+            s = (p[0] - other[0]) * ux + (p[1] - other[1]) * uy
+            q = [other[0] + ux * s, other[1] + uy * s]
+            if G.dist(q, other) < 1e-9:
+                return self.copy()
+            return self.copy(p1=q) if i == 0 else self.copy(p2=q)
         return Entity.with_grip(self, i, p)
 
     def _map(self, fn, **_kw):
@@ -1049,21 +1065,33 @@ class Rail(Run):
         prof = RAIL_PROFILES.get(self.size)
         return "DIN rail " + (prof[0] if prof else self.size)
 
+    def _slots(self):
+        """[(start, end)] along it of its mounting slots: 15 x 5.2 mm every 25 mm on a 35 mm
+        rail (in proportion on others), and their size (length, width)."""
+        L = self.length()
+        f = self.width / (35 * MM_IN)
+        sl, sw, pitch = 15 * MM_IN * f, 5.2 * MM_IN * f, 25 * MM_IN * f
+        s = pitch / 2 - sl / 2
+        out = []
+        while s + sl <= L and len(out) < 2000:
+            out.append((s, s + sl))
+            s += pitch
+        return out, (sl, sw)
+
+    def _more_snaps(self):
+        # each mounting slot's center: things are centered on the rail's holes
+        slots, _size = self._slots()
+        return [("center", self.at((a + b) / 2, 0.0)) for a, b in slots]
+
     def _details(self):
         L, h = self.length(), self.width / 2
         lip = 5 * MM_IN * self.width / (35 * MM_IN)
         out = [Line(self.at(0, -(h - lip)), self.at(L, -(h - lip))),
                Line(self.at(0, h - lip), self.at(L, h - lip))]
-        # mounting slots: 15 x 5.2 mm every 25 mm on a 35 mm rail (in proportion on others)
-        f = self.width / (35 * MM_IN)
-        sl, sw, pitch = 15 * MM_IN * f, 5.2 * MM_IN * f, 25 * MM_IN * f
-        s = pitch / 2 - sl / 2
-        n = 0
-        while s + sl <= L and n < 2000:
-            out.append(Polyline([self.at(s, -sw / 2), self.at(s + sl, -sw / 2),
-                                 self.at(s + sl, sw / 2), self.at(s, sw / 2)], True))
-            s += pitch
-            n += 1
+        slots, (_sl, sw) = self._slots()
+        for a, b in slots:
+            out.append(Polyline([self.at(a, -sw / 2), self.at(b, -sw / 2),
+                                 self.at(b, sw / 2), self.at(a, sw / 2)], True))
         return out
 
 

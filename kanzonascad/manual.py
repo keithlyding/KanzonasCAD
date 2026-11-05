@@ -603,8 +603,11 @@ middle). Each moves only straight across (Left, Center, Right) or straight up an
 Middle, Bottom), by its outline; one Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
 one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
-slots. Stretch one with its end grips (or double-click it and type its length), move it with
-its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its
+slots. They always go straight across or straight up and down (a snap off that line only sets
+the length), and their end grips stretch them along their own line. To center something on
+one, snap to the center of a mounting slot (Center), the middle of a long edge (Midpoint) or
+anywhere along its centerline (Nearest, Perpendicular), or use Align objects. Stretch one
+with its end grips (or double-click it and type its length), move it with its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its
 size. Double-click a piece for its profile or size, length, manufacturer, catalog number and
 the length it is bought in (the project's to start: Project properties, Panel; 1 m rail and 6
 ft duct).</li>
