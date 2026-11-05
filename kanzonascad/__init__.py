@@ -1,3 +1,3 @@
-"""KanzonasCAD: free electrical CAD for Windows and Linux."""
+"0.11.12"
 
 __version__ = "0.11.9"

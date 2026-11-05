@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.12
+
+**Fixed**
+- Footprints made from a manufacturer's drawing (thousands of lines and arcs) no longer make
+  the program freeze: moving one, hovering over one and snapping near one are quick again.
+
 ## 0.11.9
 
 **Fixed**
