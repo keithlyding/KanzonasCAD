@@ -14,6 +14,11 @@ build fails without them.
   when it was drawn somewhere else, and, when it is bigger than the sheet, the sheet gets a
   scale it fits at (the drawing stays its real size). Importing into a sheet keeps its
   coordinates, as before.
+## 0.11.12
+
+**Fixed**
+- Footprints made from a manufacturer's drawing (thousands of lines and arcs) no longer make
+  the program freeze: moving one, hovering over one and snapping near one are quick again.
 
 ## 0.11.9
 

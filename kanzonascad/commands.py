@@ -624,6 +624,13 @@ class _TwoPoint(Command):
 class MoveCmd(_TwoPoint):
     name, title = "MOVE", "Move"
 
+    def shift(self, p):
+        """(objects, dx, dy): the preview is the objects shifted (the view draws them once
+        and slides the drawing, instead of rebuilding big blocks on every mouse move)."""
+        if self.from_pt is None:
+            return None
+        return self.ents, p[0] - self.from_pt[0], p[1] - self.from_pt[1]
+
     def result(self, p):
         dx, dy = p[0] - self.from_pt[0], p[1] - self.from_pt[1]
         return [e.moved(dx, dy) for e in self.ents]
@@ -638,6 +645,7 @@ class MoveCmd(_TwoPoint):
 
 class CopyCmd(_TwoPoint):
     name, title = "COPY", "Copy"
+    shift = MoveCmd.shift
 
     def second_prompt(self):
         self.ctx.prompt("Specify second point (Enter to finish)")
