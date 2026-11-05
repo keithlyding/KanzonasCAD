@@ -290,13 +290,14 @@ def restart_env(env=None):
         if key + "_ORIG" in env:            # (PyInstaller keeps the value it replaced)
             env[key] = env.pop(key + "_ORIG")
     if mount:
+        # (Linux only: lists of paths are joined with ":")
         mount = mount.rstrip("/")
         for key, value in list(env.items()):
-            parts = value.split(os.pathsep)
+            parts = value.split(":")
             kept = [p for p in parts if not (p == mount or p.startswith(mount + "/"))]
             if kept != parts:
                 if any(kept):
-                    env[key] = os.pathsep.join(kept)
+                    env[key] = ":".join(kept)
                 else:
                     del env[key]
     return env

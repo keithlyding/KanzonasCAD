@@ -107,7 +107,8 @@ class PortableWindowTest(unittest.TestCase):
             self.assertEqual(main_window.app_title(), "KanzonasCAD (portable)")
             w, v = window()
             try:
-                self.assertTrue(w.settings.fileName().startswith(app_dir))
+                self.assertTrue(os.path.abspath(w.settings.fileName()).startswith(
+                    os.path.abspath(app_dir)))
                 # the PortableApps.com Platform updates it: no checks of its own to start
                 self.assertFalse(w.acts["auto_updates"].isChecked())
                 self.assertFalse(w._checker().enabled())
