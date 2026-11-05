@@ -442,17 +442,25 @@ class CadView(QWidget):
         cands = [e for e in self.sheet().query(rect) if self.layer_visible(e.layer)]
         best = None
 
-        def offer(kind, q, frm=None):
+        def offer(kind, q, frm=None, inner=0):
             nonlocal best
             d = G.dist(p, q)
             if d <= r:
-                key = (SNAP_PRIORITY.get(kind, 3), d)
+                key = (SNAP_PRIORITY.get(kind, 3), inner, d)
                 if best is None or key < best[0]:
                     best = (key, kind, q, frm)
         for e in cands:
             for kind, q in e.snap_points():
                 if kind in modes:
                     offer(kind, q)
+            if isinstance(e, M.Insert):
+                # a block's own drawing snaps too (a footprint's corners, ends and middles,
+                # as in AutoCAD), after its pins and other objects' points of the same kind,
+                # so a wire still lands on a pin
+                for w in _local_parts(e, rect):
+                    for kind, q in w.snap_points():
+                        if kind in modes:
+                            offer(kind, q, inner=1)
         # what lies under the aperture, piece by piece: a block (a footprint made from a
         # maker's drawing: thousands of lines) gives only its own lines that come near, not all
         # of them (every piece of every block nearby against every other, on every mouse move,
@@ -580,13 +588,21 @@ class CadView(QWidget):
         # with Ortho, the crosshair shows the point on the Ortho line, not the mouse: the
         # snaps are looked for around it (around the mouse, one far off the line, by the
         # hidden mouse, pulled the line to it: "far away from where my cursor is")
+        # (a point a command measures, a dimension's two ends say, goes where the snap is:
+        # Ortho and Polar don't bend it)
+        free = getattr(cmd, "free_point", False)
         probe = p
-        if self.ortho_on and cmd.base is not None:
+        if self.ortho_on and cmd.base is not None and not free:
             probe = self._ortho(cmd.base, p)
         s = self.object_snap(probe)
         if s is not None:
             self.snap = s
             return s[1]
+        if free:
+            if self.snap_on:
+                k = self.snap_spacing
+                return (round(p[0] / k) * k, round(p[1] / k) * k)
+            return p
         if self.polar_on and not self.ortho_on and cmd.base is not None:
             lock = self._polar_lock(cmd.base, p)
             if lock is not None:
