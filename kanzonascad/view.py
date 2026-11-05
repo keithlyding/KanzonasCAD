@@ -5,7 +5,7 @@ wheel zoom at the cursor, middle-button pan) and the commands of commands.py.
 
 import math
 
-from PySide6.QtCore import Qt, QPointF, QRectF, Signal, QTimer
+from PySide6.QtCore import Qt, QPointF, QRectF, Signal
 from PySide6.QtGui import (QPainter, QPen, QColor, QBrush, QTransform, QPainterPath,
                            QPolygonF, QGuiApplication, QPixmap)
 from PySide6.QtWidgets import QWidget
@@ -94,7 +94,11 @@ class CadView(QWidget):
         self.setMinimumSize(200, 150)
         project.listeners.append(self._project_changed)
         self.idle_prompt()
-        QTimer.singleShot(0, lambda: self.zoom("sheet"))
+        # (the view's real size comes once its window is laid out: until the user zooms or
+        # pans, a resize fits it again; a later zoom of the program's, opening a drawing say,
+        # is no longer undone by a delayed one)
+        self._fit = None
+        self.zoom("sheet")
 
     # ---- context the commands use ----------------------------------------------------------
     def sheet(self):
@@ -324,13 +328,20 @@ class CadView(QWidget):
             vw, vh = max(self.width(), 100), max(self.height(), 100)
             self.scale = max(1e-3, min(vw / bw, vh / bh) * 0.94)
             self.center = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
+            self._fit = how
         elif how == "in":
             self.zoom_at(1.5, None)
         elif how == "out":
             self.zoom_at(1 / 1.5, None)
         self.update()
 
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if self._fit is not None:
+            self.zoom(self._fit)
+
     def zoom_at(self, factor, pos):
+        self._fit = None                # (the user's zoom: a resize keeps it)
         new = min(max(self.scale * factor, 2.0), 50000.0)
         if pos is None:
             self.scale = new
@@ -667,6 +678,7 @@ class CadView(QWidget):
         pos = e.position()
         self.setFocus()
         if e.button() == Qt.MiddleButton:
+            self._fit = None
             self._pan = (pos, self.center)
             self.setCursor(Qt.ClosedHandCursor)
             return

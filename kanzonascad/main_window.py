@@ -793,11 +793,22 @@ class MainWindow(QMainWindow):
                 p = M.Project.new()
                 p.sheets[0].title = os.path.splitext(os.path.basename(path))[0]
                 rep = fileio.import_dxf(p, p.sheets[0], path)
+                # (its coordinates are the other program's: put it on the page)
+                from . import scalefit
+                placed = scalefit.place_on_sheet(p, p.sheets[0])
                 p.undo_stack.clear()
                 p.saved_at = -1
                 d = self.add_document(p)
                 self._dxf_report(rep)
-                d.view.zoom("extents")
+                if placed == "moved":
+                    self.cmdline.add_history("The drawing was moved onto the sheet (it was "
+                                             "drawn away from it in the DXF).")
+                elif placed:
+                    self.cmdline.add_history(
+                        "The drawing is bigger than the sheet: the sheet's scale is %s (Fit; "
+                        "the drawing stays real size), and the drawing is in the middle. Sheet "
+                        "scale... changes it." % placed)
+                d.view.zoom("sheet")
             else:
                 p = M.Project.load(path)
                 d = self.add_document(p)

@@ -589,7 +589,14 @@ and after KanzonasCAD is closed and started again.</li>
 <li><b>New project</b> (Ctrl+N), <b>Open...</b> (Ctrl+O, a project, or a DXF or DWG drawing),
 <b>Open recent</b>, <b>Save</b> (Ctrl+S), <b>Save as...</b> (Ctrl+Shift+S),
 <b>Close project</b> (Ctrl+W), <b>Exit</b> (Ctrl+Q).</li>
-<li><b>Import DXF or DWG into this sheet...</b>: lines, polylines, circles, arcs, text,
+<li><b>Opening a DXF or DWG</b> (Open..., or a double-click on it) makes a new project of it
+and puts the drawing on the page, wherever the other program drew it: left where it is when
+it already lies on the sheet (a DXF exported from KanzonasCAD, or one drawn on a sheet of
+this size), moved to the middle of the sheet when it fits, and, when it is bigger than the
+sheet, the sheet gets the biggest scale it fits at (as <b>Fit</b> does; the drawing and its
+text stay their real size). The command line says what was done; Sheet scale... changes the
+scale.</li>
+<li><b>Import DXF or DWG into this sheet...</b>: keeps the drawing's own coordinates. lines, polylines, circles, arcs, text,
 ellipses and splines (as polylines), blocks and dimensions (exploded). Drawings in
 millimeters are converted to inches.</li>
 <li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version

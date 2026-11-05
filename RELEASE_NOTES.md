@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.10
+
+**Fixed**
+- Opening a DXF or DWG drawing (with a double-click, or Open...) showed it in a random place,
+  sometimes off the page. The drawing is now put on the sheet and shown: moved to the middle
+  when it was drawn somewhere else, and, when it is bigger than the sheet, the sheet gets a
+  scale it fits at (the drawing stays its real size). Importing into a sheet keeps its
+  coordinates, as before.
+
 ## 0.11.9
 
 **Fixed**
