@@ -141,14 +141,14 @@ class SheetScaleDialog(QDialog):
         self.center.setToolTip("The drawing doesn't lie inside the border at this scale where "
                                "it is now: move all of it (one undoable step)")
 
-        # the paper's way round: a tall, narrow cabinet may print bigger on a portrait sheet
+        # the sheet turned: a tall, narrow cabinet may print bigger on a tall sheet
         self.orient = QComboBox()
-        self.orient.setObjectName("orientation")
-        self.orient.addItem("Landscape (wide)", "landscape")
-        self.orient.addItem("Portrait (tall)", "portrait")
-        self.orient.setCurrentIndex(self.orient.findData(sheet.orientation))
-        self.orient.setToolTip("Turn the paper. The zones and the title block stay as they are "
-                               "(the title block in the lower right corner)")
+        self.orient.setObjectName("rotation")
+        for r, label in F.ROTATIONS:
+            self.orient.addItem(label, r)
+        self.orient.setCurrentIndex(max(self.orient.findData(sheet.rotation), 0))
+        self.orient.setToolTip("Turn the sheet: its border, zones and title block turn with "
+                               "it, the drawing stays upright (Ctrl+Shift+Plus / Minus)")
         self.suggest = QLabel()
         self.suggest.setObjectName("suggest")
         self.suggest.setWordWrap(True)
@@ -170,7 +170,7 @@ class SheetScaleDialog(QDialog):
         side.addWidget(self.usage)
         side.addWidget(self.center)
         orow = QHBoxLayout()
-        orow.addWidget(QLabel("Paper"))
+        orow.addWidget(QLabel("Sheet"))
         orow.addWidget(self.orient, 1)
         side.addLayout(orow)
         srow = QHBoxLayout()
@@ -202,28 +202,27 @@ class SheetScaleDialog(QDialog):
         self._turned()
 
     # ---- what is picked -----------------------------------------------------------------
-    def orientation(self):
+    def rotation(self):
         return self.orient.currentData()
+
+    def orientation(self):
+        return "portrait" if self.rotation() in (90, 270) else "landscape"
 
     def paper(self):
         """(width, height) of the paper as picked, inches."""
-        return F.as_turned(self.sheet, self.orientation()).paper_inches()
+        return F.as_rotated(self.sheet, self.rotation()).paper_inches()
 
     def _turned(self, *_a):
-        self.area, self.tb = F.room(self.project, F.as_turned(self.sheet, self.orientation()))
+        self.area, self.tb = F.room(self.project, F.as_rotated(self.sheet, self.rotation()))
         pw, ph = self.paper()
-        note = ("Paper: %s, %s. The drawing stays real size: the scale only sets how big it "
-                "prints. Text, tags and dimension numbers keep their printed size."
-                % (self.sheet.size.split(" (")[0], "%g x %g in" % (pw, ph)))
-        r = self.sheet.reserve
-        if self.orientation() == "portrait" and r and r[0] == "right":
-            note += (" The title block's strip down the right takes %g of the %g in across."
-                     % (r[1], pw))
-        self.paper_note.setText(note)
+        self.paper_note.setText(
+            "Paper: %s, %s. The drawing stays real size: the scale only sets how big it prints. "
+            "Text, tags and dimension numbers keep their printed size."
+            % (self.sheet.size.split(" (")[0], "%g x %g in" % (pw, ph)))
         self._changed()
 
     def _turn_suggested(self):
-        if self._suggested:
+        if self._suggested is not None:
             self.orient.setCurrentIndex(self.orient.findData(self._suggested))
             self.fit()
 
@@ -348,19 +347,20 @@ class SheetScaleDialog(QDialog):
         got = None
         if what is not None:
             cur = self.picked()
-            got = F.other_way(self.project, F.as_turned(self.sheet, self.orientation()),
+            got = F.other_way(self.project, F.as_rotated(self.sheet, self.rotation()),
                               what[0], what[1],
                               named=bool(cur[0]) if cur else bool(self.sheet.scale_name))
         self._suggested = got[0] if got else None
         self.suggest.setVisible(got is not None)
         self.turn_btn.setVisible(got is not None)
         if got:
-            way, (name, v) = got
+            rot, (name, v) = got
             here = F.best_scale(what[0], what[1], self.area, self.tb,
                                 named=bool(name))
-            self.suggest.setText("On %s paper it prints bigger: %s instead of %s." % (
+            way = "tall" if rot in (90, 270) else "wide"
+            self.suggest.setText("Turned %s it prints bigger: %s instead of %s." % (
                 way, _scale_text(name, v), _scale_text(*here)))
-            self.turn_btn.setText("Use %s" % way)
+            self.turn_btn.setText("Turn it")
 
     def fit(self):
         got = self.size_and_kind()
@@ -393,7 +393,7 @@ class SheetScaleDialog(QDialog):
             self.settings.setValue("panel/cabinet", ",".join("%g" % v for v in cab))
         F.apply(self.project, self.sheet, name, s, cabinet=cab,
                 center=self.box is not None and self.center.isChecked(),
-                orientation=self.orientation())
+                rotation=self.rotation())
         self.accept()
 
 
@@ -421,10 +421,10 @@ def _last_cabinet(settings):
 
 def sheet_scale(parent, project, sheet, settings=None):
     """Show the Sheet scale window. True when the scale (or cabinet) changed."""
-    before = (sheet.scale, sheet.scale_name, sheet.cabinet, sheet.orientation,
+    before = (sheet.scale, sheet.scale_name, sheet.cabinet, sheet.rotation,
               project.undo_stack[-1:])
     dlg = SheetScaleDialog(parent, project, sheet, settings)
     if dlg.exec() != QDialog.Accepted:
         return False
-    return (sheet.scale, sheet.scale_name, sheet.cabinet, sheet.orientation,
+    return (sheet.scale, sheet.scale_name, sheet.cabinet, sheet.rotation,
             project.undo_stack[-1:]) != before

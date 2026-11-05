@@ -138,8 +138,8 @@ def _title_block_place(project, sheet):
     in this sheet's corner, enlarged by the sheet's factor on a scaled panel sheet (so it
     prints the same size)."""
     tb = project.title_block
-    tx1, ty0 = tb.frame()[2], tb.frame()[1]
-    x1, y0 = sheet.frame()[2], sheet.frame()[1]
+    tx1, ty0 = tb.layout_frame()[2], tb.layout_frame()[1]
+    x1, y0 = sheet.layout_frame()[2], sheet.layout_frame()[1]
     k = sheet.k() if sheet is not tb else 1.0
     return (tx1, ty0), (x1 - tx1, y0 - ty0), k
 
@@ -156,19 +156,28 @@ def title_block_entities(project, sheet):
             c = c.copy(text=fill_fields(c.text, values))
         c.id = None
         out.append(c)
-    return out
+    return _turned(sheet, out)
+
+
+def _turned(sheet, ents):
+    """The frame's entities, laid out unturned, turned with the sheet."""
+    r = sheet.rotation if sheet is not None else 0
+    if not r:
+        return ents
+    dx, dy = sheet.turn_offset()
+    return [e.rotated((0.0, 0.0), r).moved(dx, dy) for e in ents]
 
 
 def border_entities(sheet):
     """The border and the zone strips (column numbers along the top, row letters down the
     left), on layer BORDER."""
     out = []
-    w, h = sheet.paper()
+    w, h = sheet.landscape_paper()
     k = sheet.k()
     m, s = sheet.MARGIN * k, sheet.STRIP * k
     _box(m, m, w - m, h - m, out, FRAME_LAYER)                  # border
-    fx0, fy0, fx1, fy1 = sheet.frame()
-    x0, y0, x1, y1 = sheet.zone_frame()        # (smaller than the frame beside a title strip)
+    fx0, fy0, fx1, fy1 = sheet.layout_frame()
+    x0, y0, x1, y1 = sheet.layout_zone_frame()  # (smaller than the frame beside a title strip)
     out.append(Line((fx0, fy1), (fx1, fy1), layer=FRAME_LAYER))  # under the column strip
     out.append(Line((fx0, fy0), (fx0, fy1), layer=FRAME_LAYER))  # right of the row strip
     if x1 < fx1 - 1e-9:                         # the title block strip down the right
@@ -191,7 +200,7 @@ def border_entities(sheet):
             out.append(Line((x0 - s, yy), (x0, yy), layer=FRAME_LAYER))
         out.append(Text((x0 - s / 2, y1 - (j + 0.5) * rh - th / 2), letters[j], th,
                         align="center", layer=FRAME_LAYER))
-    return out
+    return _turned(sheet, out)
 
 
 def frame_entities(project, sheet):
@@ -208,6 +217,6 @@ def title_block_rect(project, sheet):
     if bb is None:
         return None
     (cx, cy), (dx, dy), k = _title_block_place(project, sheet)
-    return ((bb[0] - cx) * k + cx + dx, (bb[1] - cy) * k + cy + dy,
-            (bb[2] - cx) * k + cx + dx, (bb[3] - cy) * k + cy + dy)
+    return sheet.turn_rect(((bb[0] - cx) * k + cx + dx, (bb[1] - cy) * k + cy + dy,
+                            (bb[2] - cx) * k + cx + dx, (bb[3] - cy) * k + cy + dy))
 

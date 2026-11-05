@@ -23,8 +23,9 @@ nobody understands).
   AutoCAD's object snaps, quick layer tools, one-click Text, Scoot and Align, title block
   position, Trim wire / Delete wire / Clean up wires, double landing, Delete component.
 - 0.11: project templates; Edit > Options.... 0.11.6: the Sheet scale window (preview, plain
-  words, Fit, cabinet size, a warning when the drawing doesn't fit). 0.11.7: portrait sheets
-  (zones and title block kept as they are: owner's choice).
+  words, Fit, cabinet size, a warning when the drawing doesn't fit). 0.11.7: rotating sheets
+  both ways (Ctrl+Shift+Plus / Minus): border, zones and title block turn with the sheet, the
+  drawing stays upright (owner's choice).
 - Multi-sheet projects with a sheet list and sheet types (schematic, panel, report, other):
   done since 0.1/0.2.
 

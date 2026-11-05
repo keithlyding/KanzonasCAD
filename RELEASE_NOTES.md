@@ -9,10 +9,11 @@ build fails without them.
 ## 0.11.7
 
 **New**
-- Portrait sheets: turn a sheet's paper to tall (Paper, in Sheet properties or the Sheet scale
-  window) for a tall, narrow cabinet. Its zones and title block stay as they are.
-- The Sheet scale window says when turning the paper would print the drawing bigger ("1:4
-  instead of 1:8") and does it in one click.
+- Rotate a sheet: Rotate sheet clockwise (Ctrl+Shift+Plus) and Rotate sheet counterclockwise
+  (Ctrl+Shift+Minus), in the Sheets menu. The border, zones and title block turn with the
+  sheet, and your drawing stays upright: a tall, narrow cabinet on a tall sheet.
+- The Sheet scale window says when turning the sheet would print the drawing bigger ("1:4
+  instead of 1:8") and turns it in one click.
 
 ## 0.11.6
 

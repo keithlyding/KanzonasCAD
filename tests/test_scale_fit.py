@@ -158,77 +158,117 @@ class SheetScaleWindowTest(unittest.TestCase):
         APP.processEvents()
 
 
-class PortraitTest(unittest.TestCase):
+class RotateSheetTest(unittest.TestCase):
     def setUp(self):
         self.p = M.Project.new()
         self.s = self.p.sheets[0]
 
-    def test_turned_paper_keeps_zones_and_title_block_corner(self):
-        cols, rows = self.s.cols, self.s.rows
-        with self.p.edit("portrait") as ed:
-            ed.sheet_meta(self.s, orientation="portrait")
-        self.assertEqual(self.s.paper_inches(), (11.0, 17.0))
-        self.assertEqual((self.s.cols, self.s.rows), (cols, rows))
+    def _corner_of_title_block(self):
         from kanzonascad.sheetframe import title_block_rect
         tb = title_block_rect(self.p, self.s)
-        x0, y0, x1, y1 = self.s.frame()
-        self.assertAlmostEqual(tb[2], x1)                   # lower right corner
-        self.assertAlmostEqual(tb[1], y0)
+        w, h = self.s.paper()
+        cx, cy = (tb[0] + tb[2]) / 2, (tb[1] + tb[3]) / 2
+        return ("bottom" if cy < h / 2 else "top") + " " + ("left" if cx < w / 2 else "right")
+
+    def test_frame_turns_with_the_sheet_both_ways(self):
+        self.assertEqual(self._corner_of_title_block(), "bottom right")
+        zone = self.s.zone_at(*self.s.turn(3.0, 3.0))
+        for clockwise, rot, paper, corner in ((True, 270, (11.0, 17.0), "bottom left"),
+                                              (True, 180, (17.0, 11.0), "top left"),
+                                              (False, 270, (11.0, 17.0), "bottom left"),
+                                              (False, 0, (17.0, 11.0), "bottom right"),
+                                              (False, 90, (11.0, 17.0), "top right")):
+            F.rotate(self.p, self.s, clockwise)
+            self.assertEqual(self.s.rotation, rot)
+            self.assertEqual(self.s.paper_inches(), paper)
+            self.assertEqual(self._corner_of_title_block(), corner)
+            # the zones turn too: a spot of the layout keeps its zone
+            self.assertEqual(self.s.zone_at(*self.s.turn(3.0, 3.0)), zone)
+            # the border and the title block's texts turn (rotated text), the frame inside
+            from kanzonascad.sheetframe import frame_entities
+            ents = frame_entities(self.p, self.s)
+            w, h = self.s.paper()
+            for e in ents:
+                bb = e.bbox()
+                self.assertTrue(-1e-6 <= bb[0] and bb[2] <= w + 1e-6 and -1e-6 <= bb[1] and
+                                bb[3] <= h + 1e-6, (rot, e))
+            texts = [e for e in ents if isinstance(e, M.Text)]
+            self.assertTrue(all(abs((t.angle - rot) % 360) < 1e-6 for t in texts))
         again = M.Project.from_dict(json.loads(json.dumps(self.p.to_dict())))
-        self.assertEqual(again.sheets[0].orientation, "portrait")
+        self.assertEqual(again.sheets[0].rotation, 90)
+
+    def test_drawing_stays_upright_and_on_the_page_one_step_each(self):
+        with self.p.edit("draw") as ed:
+            ln = ed.add(self.s, M.Line((3, 3), (8, 8)))
+            t = ed.add(self.s, M.Text((3, 2), "NOTE", 0.2))
+        steps = len(self.p.undo_stack)
+        F.rotate(self.p, self.s, True)
+        self.assertEqual(len(self.p.undo_stack), steps + 1)
+        self.assertEqual(self.s.entities[t.id].angle, 0.0)              # upright
+        a, b = self.s.entities[ln.id].p1, self.s.entities[ln.id].p2
+        self.assertAlmostEqual(b[0] - a[0], 5)                          # same shape
+        self.assertIsNone(F.outside(self.p, self.s))
         self.p.undo()
-        self.assertEqual(self.s.paper_inches(), (17.0, 11.0))
+        self.assertEqual(self.s.rotation, 0)
+        self.assertEqual(self.s.extents()[:2], (3.0, 2.0))
 
     def test_other_way_only_when_it_prints_bigger(self):
         w, h = F.cabinet_box([20, 48, 8])
-        way, (name, v) = F.other_way(self.p, self.s, w, h)
-        self.assertEqual((way, v), ("portrait", 0.25))      # 1:4 instead of 1:8
+        rot, (name, v) = F.other_way(self.p, self.s, w, h)
+        # 1:5 instead of 1:8 (turned, the title block stands tall in the lower left corner)
+        self.assertEqual((rot, v), (270, 0.2))
         self.assertIsNone(F.other_way(self.p, self.s, *F.cabinet_box([36, 24, 10])))
-        # turned, scaled and centered in one step
         with self.p.edit("draw") as ed:
             ed.add(self.s, M.Line((0, 0), (w, h)))
         steps = len(self.p.undo_stack)
-        F.apply(self.p, self.s, name, v, center=True, orientation="portrait")
+        F.apply(self.p, self.s, name, v, center=True, rotation=270)
         self.assertEqual(len(self.p.undo_stack), steps + 1)
-        self.assertEqual((self.s.orientation, self.s.scale), ("portrait", 0.25))
+        self.assertEqual((self.s.rotation, self.s.scale), (270, 0.2))
         self.assertIsNone(F.outside(self.p, self.s))
 
-    def test_pdf_page_is_portrait(self):
+    def test_pdf_page_is_tall(self):
         import os
+        import re
         import tempfile
         from kanzonascad import fileio
-        with self.p.edit("portrait") as ed:
-            ed.sheet_meta(self.s, orientation="portrait")
+        F.rotate(self.p, self.s, True)
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "p.pdf")
             fileio.export_pdf(self.p, path)
             with open(path, "rb") as f:
                 data = f.read()
-        import re
         box = re.search(rb"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)", data)
         self.assertIsNotNone(box)
         w, h = float(box.group(1)), float(box.group(2))
-        self.assertLess(w, h)                               # 11 x 17 in, tall
         self.assertAlmostEqual(h / w, 17 / 11, places=2)
 
-    def test_window_suggests_and_turns(self):
+    def test_shortcuts_menu_and_window(self):
         from kanzonascad.scale_dialog import SheetScaleDialog
         win, v = window()
         try:
             p, s = v.project, v.sheet()
+            keys = [k.toString() for k in win.acts["sheet_cw"].shortcuts()]
+            self.assertIn("Ctrl+Shift++", keys)
+            self.assertIn("Ctrl+Shift+-",
+                          [k.toString() for k in win.acts["sheet_ccw"].shortcuts()])
+            win.acts["sheet_cw"].trigger()
+            APP.processEvents()
+            self.assertEqual(s.rotation, 270)
+            win.acts["sheet_ccw"].trigger()
+            self.assertEqual(s.rotation, 0)
             d = SheetScaleDialog(win, p, s, None)
             for b, x in zip(d.cab, (20, 48, 8)):
                 b.setValue(x)
             d.fit()
             self.assertEqual(d.combo.currentText(), "1:8")
             self.assertFalse(d.suggest.isHidden())
-            self.assertIn("1:4 instead of 1:8", d.suggest.text())
+            self.assertIn("1:5 instead of 1:8", d.suggest.text())
             d._turn_suggested()
-            self.assertEqual((d.orientation(), d.combo.currentText()), ("portrait", "1:4"))
+            self.assertEqual((d.rotation(), d.combo.currentText()), (270, "1:5"))
             self.assertTrue(d.suggest.isHidden())
             d.grab()
             d._ok()
-            self.assertEqual((s.orientation, s.scale_text()), ("portrait", "1:4"))
+            self.assertEqual((s.rotation, s.scale_text()), (270, "1:5"))
         finally:
             v.project.saved_at = len(v.project.undo_stack)
             win.close()

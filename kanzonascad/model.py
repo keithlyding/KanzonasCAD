@@ -1473,8 +1473,10 @@ class Sheet:
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
         self.scale_name = ""                # its preset's name (1/4" = 1'-0"...), "" for 1:N
-        self.orientation = "landscape"      # or "portrait": the paper turned (a tall cabinet);
-                                            # its zones and title block stay as they are
+        self.rotation = 0                   # the sheet turned, degrees counterclockwise: 0, 90,
+                                            # 180 or 270 (a quarter turn clockwise). Its border,
+                                            # zones and title block turn with it; the drawing
+                                            # stays upright (a tall cabinet on a tall sheet)
         self.cabinet = None                 # a panel sheet's cabinet [width, height, depth]
                                             # (real inches, depth 0 when not given), or None:
                                             # what Sheet scale fits while nothing is drawn
@@ -1496,15 +1498,58 @@ class Sheet:
     # ---- size, border, zones -------------------------------------------------------------
     def paper(self):
         """The sheet's size in drawing units (its paper size at 1:1; 1/scale larger on a
-        scaled panel sheet)."""
+        scaled panel sheet), as turned."""
         w, h = self.paper_inches()
         k = self.k()
         return w * k, h * k
 
     def paper_inches(self):
-        """The real paper size (what prints): the size's, turned on a portrait sheet."""
+        """The real paper size (what prints): tall on a sheet turned a quarter turn."""
         w, h = SHEET_SIZES[self.size]
-        return (h, w) if self.orientation == "portrait" else (w, h)
+        return (h, w) if self.rotation in (90, 270) else (w, h)
+
+    @property
+    def orientation(self):
+        return "portrait" if self.rotation in (90, 270) else "landscape"
+
+    # The border, zones and title block are laid out on the paper unturned (landscape, its
+    # lower left corner at 0, 0) and then turned with the sheet: turn() takes a point of that
+    # layout to the sheet, unturn() back
+    def landscape_paper(self):
+        w, h = SHEET_SIZES[self.size]
+        k = self.k()
+        return w * k, h * k
+
+    def turn(self, x, y):
+        r = self.rotation
+        if not r:
+            return x, y
+        w, h = self.landscape_paper()
+        if r == 90:
+            return h - y, x
+        if r == 180:
+            return w - x, h - y
+        return y, w - x
+
+    def unturn(self, x, y):
+        r = self.rotation
+        if not r:
+            return x, y
+        w, h = self.landscape_paper()
+        if r == 90:
+            return y, h - x
+        if r == 180:
+            return w - x, h - y
+        return w - y, x
+
+    def turn_rect(self, rect):
+        (ax, ay), (bx, by) = self.turn(rect[0], rect[1]), self.turn(rect[2], rect[3])
+        return min(ax, bx), min(ay, by), max(ax, bx), max(ay, by)
+
+    def turn_offset(self):
+        """(dx, dy): turning by `rotation` about (0, 0), then moving by this, is turn()."""
+        w, h = self.landscape_paper()
+        return {0: (0.0, 0.0), 90: (h, 0.0), 180: (w, h), 270: (0.0, w)}[self.rotation]
 
     def k(self):
         """Drawing units per paper inch: 1 on a 1:1 sheet, 4 on a 1:4 one."""
@@ -1525,18 +1570,26 @@ class Sheet:
     STRIP = 0.25                        # height/width of the zone label strips (top, left)
 
     def frame(self):
-        """(x0, y0, x1, y1) of the drawing area: inside the border, below the column strip
-        along the top and right of the row strip down the left (none on the right or
-        bottom: they would only take room)."""
-        w, h = self.paper()
+        """(x0, y0, x1, y1) of the drawing area, as turned."""
+        return self.turn_rect(self.layout_frame())
+
+    def zone_frame(self):
+        """The part of the drawing area the zone grid covers, as turned."""
+        return self.turn_rect(self.layout_zone_frame())
+
+    def layout_frame(self):
+        """(x0, y0, x1, y1) of the drawing area on the unturned layout: inside the border,
+        below the column strip along the top and right of the row strip down the left (none
+        on the right or bottom: they would only take room)."""
+        w, h = self.landscape_paper()
         k = self.k()
         m, s = self.MARGIN * k, self.STRIP * k
         return (m + s, m, w - m, h - m - s)
 
-    def zone_frame(self):
-        """The part of the drawing area the zone grid covers: all of it, or what a title
-        block strip down the right or along the bottom leaves."""
-        x0, y0, x1, y1 = self.frame()
+    def layout_zone_frame(self):
+        """The part of the drawing area the zone grid covers on the unturned layout: all of
+        it, or what a title block strip down the right or along the bottom leaves."""
+        x0, y0, x1, y1 = self.layout_frame()
         if self.reserve:
             side, size = self.reserve
             size *= self.k()
@@ -1548,8 +1601,10 @@ class Sheet:
 
     def zone_at(self, x, y):
         """(row letter, column number) of a point, or None outside the zone grid. Columns
-        count left to right from col_start, rows top to bottom from the row_start letter."""
-        x0, y0, x1, y1 = self.zone_frame()
+        count left to right from col_start, rows top to bottom from the row_start letter
+        (on the sheet as it is laid out: turned, they turn with it)."""
+        x, y = self.unturn(x, y)
+        x0, y0, x1, y1 = self.layout_zone_frame()
         if not (x0 <= x <= x1 and y0 <= y <= y1):
             return None
         col = min(self.cols - 1, int((x - x0) / ((x1 - x0) / self.cols)))
@@ -1630,7 +1685,7 @@ class Sheet:
                 "number_order": self.number_order,
                 "number": self.number, "fields": dict(self.fields),
                 "scale": self.scale, "scale_name": self.scale_name,
-                "orientation": self.orientation,
+                "rotation": self.rotation,
                 "cabinet": list(self.cabinet) if self.cabinet else None,
                 "xref_frozen": self.xref_frozen,
                 "xref_shown": [list(t) for t in self.xref_shown]
@@ -1661,7 +1716,11 @@ class Sheet:
             self.scale = 1.0
         self.scale = self.scale if self.scale > 0 else 1.0
         self.scale_name = str(d.get("scale_name", "") or "")
-        self.orientation = "portrait" if d.get("orientation") == "portrait" else "landscape"
+        try:
+            r = int(round(float(d.get("rotation", 0) or 0))) % 360
+        except (TypeError, ValueError):
+            r = 0
+        self.rotation = r if r in (0, 90, 180, 270) else 0
         self.cabinet = _cabinet(d.get("cabinet"))
         self.xref_frozen = bool(d.get("xref_frozen", False))
         shown = d.get("xref_shown")
