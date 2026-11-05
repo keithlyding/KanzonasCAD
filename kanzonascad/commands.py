@@ -1292,7 +1292,8 @@ class MakeBlockCmd(Command):
         defn = M.BlockDef(d["name"], d["kind"], ents, pins, None, 0.1, d.get("category", ""),
                           d.get("description", ""), d.get("role", "device"),
                           d.get("contact", ""), d.get("prefix", ""),
-                          wiring=d.get("wiring", ""))
+                          wiring=d.get("wiring", ""), manufacturer=d.get("manufacturer", ""),
+                          family=d.get("family", ""), series=d.get("series", ""))
         if d["kind"] == "symbol":
             if tag_pt is not None:
                 defn.tag_pos = (tag_pt[0] - bx, tag_pt[1] - by)
@@ -1327,6 +1328,10 @@ class InsertCmd(Command):
     def __init__(self, ctx, defn, attrs=None):
         super().__init__(ctx)
         self.defn, self.attrs = defn, dict(attrs or {})
+        if getattr(defn, "manufacturer", "") and not self.attrs.get("MFR"):
+            # the block says who makes it: the copy's MFR, as a part's would (a part's own
+            # manufacturer, given in attrs, wins)
+            self.attrs["MFR"] = defn.manufacturer
         self.angle, self.mirror = 0.0, False
         self.pending = None             # a contact's point, waiting for its device
         self.cands = []

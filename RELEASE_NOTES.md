@@ -6,6 +6,22 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12
+
+**New**
+- Symbols and footprints can say who makes them: **Manufacturer**, **Family** and **Series**
+  (all optional). Each field explains itself, offers what your library already holds, and a
+  "?" button opens a short section of the manual about what they mean.
+- The Library popup searches them too, and two lists above the symbols show one
+  manufacturer's or one family's blocks. Placing a block fills in its manufacturer.
+- **Properties...** changes a library block's name, category, description, manufacturer,
+  family, series and pin names. Renaming it keeps your parts linked to it.
+- **Edit block...** opens a library block's drawing in a tab of its own, with its pins and tag
+  shown as texts you can move, rename, copy or erase. Change it with any command, then
+  **Save block**.
+- After a block is changed, KanzonasCAD asks whether to update its copies in your project:
+  one step (Undo takes it back), and the wires stay on the pins.
+
 ## 0.11.9
 
 **Fixed**

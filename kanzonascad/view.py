@@ -85,6 +85,8 @@ class CadView(QWidget):
         self._hover = None
         self._hot_grip = None
         self._picture = None            # (key, QPixmap): the drawing as last drawn
+        self.overlay = None             # f(painter, view): more drawn into the picture (the
+                                        # block editor's pin points)
         self._sel_cache = None
         self._prompt = ("", [], False)
         self.setMouseTracking(True)
@@ -852,6 +854,8 @@ class CadView(QWidget):
         p.setTransform(self.transform())
         self.renderer().paint(p, under=(lambda q: self._paint_grid(q, pal))
                               if self.grid_on else None)
+        if self.overlay is not None:
+            self.overlay(p, self)
         p.end()
         self._picture = (key, pm)
         return pm

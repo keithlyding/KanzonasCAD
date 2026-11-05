@@ -174,6 +174,66 @@ catalog number, or pick one of the library's parts for it. <b>Explode</b> (X) tu
 blocks back into plain lines and texts. Delete in the Library panel removes your own symbols,
 footprints and parts (the built-in symbols stay).</p>
 
+<a name="manufacturer-family-series"></a>
+<h3>Manufacturer, family and series</h3>
+<p>Every symbol and footprint can say who makes it, in three optional fields (Make block asks
+for them; <b>Block properties...</b> changes them). They are only for finding and grouping
+blocks: nothing else depends on them, and you can leave any of them blank.</p>
+<ul>
+<li><b>Manufacturer</b>: the company whose name is on the part's label: Allen-Bradley
+(Rockwell Automation), Siemens, Schneider Electric, Phoenix Contact...</li>
+<li><b>Family</b>: the product line within that manufacturer: ControlLogix, CompactLogix or
+PowerFlex 525 (Allen-Bradley); SIMATIC S7-1500 (Siemens)...</li>
+<li><b>Series</b>: the line or generation within the family, when the maker uses one. For
+Rockwell it is the hardware series letter on the label (Series A, B, C...); other makers use
+"series" for a sub-line of a family. Leave it blank if you don't need it.</li>
+</ul>
+<p>Makers name things differently, and there is no one right way: pick a way of writing each
+name and keep to it (Allen-Bradley or Rockwell Automation, not both), so your blocks group
+together. Each field offers what your library already holds (the families of the
+manufacturer typed, the series of that family); the list grows from what you type. The
+<b>?</b> button beside Manufacturer opens this section.</p>
+<p>In the Library popup, the search box also finds a manufacturer, family or series, and the
+two lists above the symbols (<b>All manufacturers</b>, <b>All families</b>) show only one
+manufacturer's blocks, or one family's; the manufacturer list also filters the Parts tab. A
+block's tooltip shows all three. Placing a block whose manufacturer is set fills in the placed
+copy's manufacturer (as a part does; a part's own manufacturer wins), and <b>New part...</b>
+with a symbol or footprint selected in the Library starts the part with that block and its
+manufacturer.</p>
+
+<h3>Changing a library block</h3>
+<p>Select a symbol or footprint in the Library popup (or one placed in the drawing) and use:</p>
+<ul>
+<li><b>Properties...</b> (a button in the Library popup, its right-click menu, or
+<b>Block properties...</b> in the Library menu): the details Make block asked for, filled in:
+name, category, description, manufacturer, family, series and, for a symbol, its part in
+cross-references, contact, tag prefix, wire numbers through it and its pin names in order
+(renaming pins; Edit block adds or removes them). Its kind can't change. Renaming it saves it
+under the new name, removes your file under the old one and points your parts at the new
+name.</li>
+<li><b>Edit block...</b> (a button in the Library popup, its right-click menu, or the Library
+menu and the Schematic and Panel tabs, for a block selected in the drawing): the library's
+copy of the block opens in a tab of its own, <b>Block: name</b>, as AutoCAD's Block Editor
+does. Change it with every normal command (Move, Copy, Trim, Text, grips, Undo...). The cross
+is the <b>base point</b> (on the locked layer BLOCK BASE POINT); each green text on layer BLOCK
+PINS is a <b>pin</b>: its insertion point, marked with a small ring, is where wires attach, and
+its text is the pin's name (edit the text to rename it, move it with its grip, copy it to add
+a pin, erase it to remove one); the blue text on BLOCK TAG is where the tag goes, and texts on
+BLOCK ATTRIBUTES are where a terminal's number or a PLC address shows. <b>Save block</b>
+(Library menu, the ribbon, or Save, Ctrl+S, in that tab) puts it back in your library: the
+pins keep their order, new ones come after. Closing the tab with changes not saved asks
+first.</li>
+</ul>
+<p>Changing a built-in JIC symbol saves your own copy of the same name, which takes its place
+(Delete in the Library brings the built-in one back). After saving, if the project in the
+drawing tab (for Edit block, the one it was opened from) has copies of the block, KanzonasCAD
+asks <b>Update the copies of ... in ...?</b> Yes changes them in one step (Undo takes it back):
+they take the new drawing, a renamed block's copies take its new name, and their tags,
+descriptions, manufacturers and catalog numbers stay. Wires stay on the pins (matched by
+name) and stretch to where the pins moved; a wire on a pin that is gone stays where it was,
+and the command line says how many. No keeps the old drawing. Other projects keep their own
+copies of the block as they were.</p>
+
 
 <h2>Device tags</h2>
 <p>Every device you place gets its tag by itself: the symbol's prefix, the page number and a

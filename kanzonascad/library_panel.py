@@ -6,7 +6,8 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTreeWidget,
                                QTreeWidgetItem, QLineEdit, QPushButton, QLabel, QDialog,
                                QFormLayout, QComboBox, QDialogButtonBox, QCheckBox,
-                               QMessageBox, QListWidget, QListWidgetItem, QPlainTextEdit)
+                               QMessageBox, QListWidget, QListWidgetItem, QPlainTextEdit,
+                               QToolButton, QMenu)
 
 from . import model as M
 from .library import Library, Part
@@ -35,9 +36,111 @@ def _hint(text):
     return lab
 
 
+# Manufacturer, family and series: what they mean, shown in the dialogs (the manual's section
+# "Manufacturer, family and series", its anchor MAKER_ANCHOR, says more)
+MAKER_ANCHOR = "manufacturer-family-series"
+MAKER_HELP = {
+    "manufacturer": ("Manufacturer", "Allen-Bradley, Siemens, Schneider Electric...",
+                     "The company whose name is on the part's label: Allen-Bradley (Rockwell "
+                     "Automation), Siemens, Schneider Electric, Phoenix Contact...\n"
+                     "Optional: it helps you find and group blocks."),
+    "family": ("Family", "ControlLogix, PowerFlex 525, SIMATIC S7-1500...",
+               "The product line within that manufacturer: ControlLogix, CompactLogix or "
+               "PowerFlex 525 (Allen-Bradley); SIMATIC S7-1500 (Siemens)...\n"
+               "Optional: it helps you find and group blocks."),
+    "series": ("Series", "Series A, B, C...",
+               "The line or generation within the family, when the maker uses one: for "
+               "Rockwell, the hardware series letter on the label (Series A, B, C...); other "
+               "makers use \"series\" for a sub-line.\nLeave it blank if you don't need it."),
+}
+
+
+def maker_fields(form, library, values=None, on_help=None):
+    """Manufacturer, Family and Series rows in a form: editable lists offering the values
+    already in the library (the families of the manufacturer typed, the series of that
+    family), a plain explanation in each one's placeholder and tooltip, and a "?" button
+    (on_help) opening the manual's section on them. Returns {field: QComboBox}."""
+    values = values or {}
+    boxes = {}
+    for key in ("manufacturer", "family", "series"):
+        label, example, tip = MAKER_HELP[key]
+        box = QComboBox()
+        box.setEditable(True)
+        box.setInsertPolicy(QComboBox.NoInsert)
+        box.lineEdit().setPlaceholderText(example)
+        box.setToolTip(tip)
+        box.setObjectName("maker_" + key)
+        boxes[key] = box
+        if key == "manufacturer" and on_help is not None:
+            holder = QWidget()
+            row = QHBoxLayout(holder)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addWidget(box, 1)
+            q = QToolButton()
+            q.setText("?")
+            q.setObjectName("maker_help")
+            q.setToolTip("What do manufacturer, family and series mean? (User manual)")
+            q.clicked.connect(lambda: on_help(MAKER_ANCHOR))
+            row.addWidget(q)
+            form.addRow(label, holder)
+            lab = form.labelForField(holder)
+        else:
+            form.addRow(label, box)
+            lab = form.labelForField(box)
+        if lab is not None:
+            lab.setToolTip(tip)
+
+    def fill(box, items):
+        text = box.currentText()
+        box.blockSignals(True)
+        box.clear()
+        box.addItems(items)
+        box.setEditText(text)
+        box.blockSignals(False)
+
+    def suggest(field):
+        return library.maker_values(field, boxes["manufacturer"].currentText(),
+                                    boxes["family"].currentText())
+
+    def refill_series():
+        fill(boxes["series"], suggest("series"))
+
+    def refill_family():
+        fill(boxes["family"], suggest("family"))
+        refill_series()
+    fill(boxes["manufacturer"], suggest("manufacturer"))
+    for key, box in boxes.items():
+        box.setEditText(values.get(key, ""))
+    refill_family()
+    boxes["manufacturer"].editTextChanged.connect(lambda _t: refill_family())
+    boxes["family"].editTextChanged.connect(lambda _t: refill_series())
+    return boxes
+
+
+def maker_tooltip(b):
+    """A block's tooltip in the Library: its description and who makes it."""
+    lines = [b.description or b.name]
+    for key in ("manufacturer", "family", "series"):
+        v = getattr(b, key, "")
+        if v:
+            lines.append("%s: %s" % (MAKER_HELP[key][0], v))
+    return "\n".join(lines)
+
+
+def _maker_match(b, mfr, family):
+    """Does a block pass the Library's Manufacturer and Family filters (None: any)?"""
+    if mfr is not None and b.manufacturer.strip().lower() != mfr.lower():
+        return False
+    if family is not None and b.family.strip().lower() != family.lower():
+        return False
+    return True
+
+
 class LibraryPanel(QWidget):
     insertRequested = Signal(object, object)        # BlockDef, attrs dict
     changed = Signal()
+    propertiesRequested = Signal(str, str)          # kind, block name (Properties...)
+    editRequested = Signal(str, str)                # kind, block name (Edit block...)
 
     def __init__(self, library, parent=None):
         super().__init__(parent)
@@ -45,9 +148,22 @@ class LibraryPanel(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(2, 2, 2, 2)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search (name, category, part number...)")
+        self.search.setPlaceholderText("Search (name, category, manufacturer, family, "
+                                       "part number...)")
         self.search.textChanged.connect(self.refresh)
         v.addWidget(self.search)
+        # browse by who makes them (the categories still group them below)
+        frow = QHBoxLayout()
+        self.mfr_filter = QComboBox()
+        self.mfr_filter.setToolTip("Show only this manufacturer's blocks (and parts)")
+        self.family_filter = QComboBox()
+        self.family_filter.setToolTip("Show only this family's blocks")
+        for box in (self.mfr_filter, self.family_filter):
+            box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            box.setMinimumContentsLength(12)
+            box.currentIndexChanged.connect(lambda _i: self.refresh())
+            frow.addWidget(box, 1)
+        v.addLayout(frow)
         self.tabs = QTabWidget()
         self.trees = {}
         for kind, title in (("symbol", "Symbols"), ("footprint", "Footprints")):
@@ -55,6 +171,8 @@ class LibraryPanel(QWidget):
             t.setHeaderHidden(True)
             t.setIconSize(QSize(ICON, ICON))
             t.itemDoubleClicked.connect(lambda it, _c, k=kind: self._insert_item(k, it))
+            t.setContextMenuPolicy(Qt.CustomContextMenu)
+            t.customContextMenuRequested.connect(lambda pos, k=kind: self._block_menu(k, pos))
             self.trees[kind] = t
             self.tabs.addTab(t, title)
         self.parts = QTreeWidget()
@@ -65,11 +183,20 @@ class LibraryPanel(QWidget):
         row = QHBoxLayout()
         self.b_insert = QPushButton("Insert")
         self.b_insert.clicked.connect(self.insert_current)
+        self.b_props = QPushButton("Properties...")
+        self.b_props.setToolTip("Change the selected block's name, category, description, "
+                                "manufacturer, family, series and (for a symbol) its pins' "
+                                "names")
+        self.b_props.clicked.connect(lambda: self._ask(self.propertiesRequested))
+        self.b_edit = QPushButton("Edit block...")
+        self.b_edit.setToolTip("Change the selected block's drawing, pins and tag in a tab "
+                               "of its own (Save block puts it back in the library)")
+        self.b_edit.clicked.connect(lambda: self._ask(self.editRequested))
         self.b_part = QPushButton("New part...")
         self.b_part.clicked.connect(lambda: self.edit_part(new=True))
         self.b_delete = QPushButton("Delete")
         self.b_delete.clicked.connect(self.delete_current)
-        for b in (self.b_insert, self.b_part, self.b_delete):
+        for b in (self.b_insert, self.b_props, self.b_edit, self.b_part, self.b_delete):
             row.addWidget(b)
         v.addLayout(row)
         self.info = _hint("")
@@ -77,17 +204,53 @@ class LibraryPanel(QWidget):
         self.refresh()
 
     # ---- filling ---------------------------------------------------------------------------
+    def _fill_filter(self, box, everything, values):
+        """A filter's list: "All ..." then the values; the one picked stays picked if it
+        is still there (else All)."""
+        cur = box.currentData()
+        box.blockSignals(True)
+        box.clear()
+        box.addItem(everything, None)
+        for val in values:
+            box.addItem(val, val)
+        i = box.findData(cur) if cur is not None else 0
+        box.setCurrentIndex(max(i, 0))
+        box.blockSignals(False)
+
     def refresh(self):
         q = self.search.text().strip().lower()
         problems = []
-        for kind, tree in self.trees.items():
-            tree.clear()
+        loaded = {}
+        for kind in self.trees:
             blocks, bad = self.library.blocks(kind)
             problems += bad
+            loaded[kind] = blocks
+        # the filters offer what the library holds (families: of the manufacturer picked)
+        mfrs, fams = {}, {}
+        for blocks in loaded.values():
+            for b in blocks.values():
+                if b.manufacturer.strip():
+                    mfrs.setdefault(b.manufacturer.strip().lower(), b.manufacturer.strip())
+        self._fill_filter(self.mfr_filter, "All manufacturers",
+                          sorted(mfrs.values(), key=str.lower))
+        mfr = self.mfr_filter.currentData()
+        for blocks in loaded.values():
+            for b in blocks.values():
+                if b.family.strip() and _maker_match(b, mfr, None):
+                    fams.setdefault(b.family.strip().lower(), b.family.strip())
+        self._fill_filter(self.family_filter, "All families",
+                          sorted(fams.values(), key=str.lower))
+        family = self.family_filter.currentData()
+        for kind, tree in self.trees.items():
+            tree.clear()
+            blocks = loaded[kind]
             cats = {}
             for name in sorted(blocks, key=str.lower):
                 b = blocks[name]
-                hay = " ".join((b.name, b.category, b.description)).lower()
+                if not _maker_match(b, mfr, family):
+                    continue
+                hay = " ".join((b.name, b.category, b.description, b.manufacturer, b.family,
+                                b.series)).lower()
                 if q and q not in hay:
                     continue
                 cat = b.category or "(no category)"
@@ -97,7 +260,7 @@ class LibraryPanel(QWidget):
                     tree.addTopLevelItem(parent)
                 it = QTreeWidgetItem([b.name + ("" if not b.builtin else "  (built in)")])
                 it.setIcon(0, QIcon(block_pixmap(b, ICON)))
-                it.setToolTip(0, b.description or b.name)
+                it.setToolTip(0, maker_tooltip(b))
                 it.setData(0, Qt.UserRole, b.name)
                 parent.addChild(it)
             tree.expandAll()
@@ -110,6 +273,8 @@ class LibraryPanel(QWidget):
         for p in parts:
             if q and q not in " ".join((p.manufacturer, p.catalog, p.description, p.symbol,
                                         p.footprint)).lower():
+                continue
+            if mfr is not None and p.manufacturer.strip().lower() != mfr.lower():
                 continue
             it = QTreeWidgetItem([p.label(), p.symbol or "-", p.footprint or "-"])
             it.setData(0, Qt.UserRole, p.id)
@@ -131,6 +296,35 @@ class LibraryPanel(QWidget):
             return kind, name
         it = self.parts.currentItem()
         return "part", (it.data(0, Qt.UserRole) if it is not None else None)
+
+    def current_block(self):
+        """(kind, name) of the symbol or footprint selected, or None."""
+        kind, key = self._current()
+        if kind == "part" or not key:
+            return None
+        return kind, key
+
+    def _ask(self, signal):
+        got = self.current_block()
+        if got is None:
+            QMessageBox.information(self, "Library", "Select a symbol or footprint first.")
+            return
+        signal.emit(*got)
+
+    def _block_menu(self, kind, pos):
+        tree = self.trees[kind]
+        it = tree.itemAt(pos)
+        if it is None or not it.data(0, Qt.UserRole):
+            return
+        tree.setCurrentItem(it)
+        m = QMenu(self)
+        m.addAction("Insert", self.insert_current)
+        m.addAction("Properties...", lambda: self._ask(self.propertiesRequested))
+        m.addAction("Edit block...", lambda: self._ask(self.editRequested))
+        m.addSeparator()
+        m.addAction("New part...", lambda: self.edit_part(new=True))
+        m.addAction("Delete", self.delete_current)
+        m.exec(tree.viewport().mapToGlobal(pos))
 
     def _insert_item(self, kind, item):
         name = item.data(0, Qt.UserRole)
@@ -193,25 +387,35 @@ class LibraryPanel(QWidget):
 
     def edit_part(self, new=False):
         part = None
+        start = {}
         if not new:
             kind, key = self._current()
             if kind != "part" or key is None:
                 return
             part = self.library.part(key)
-        p = part_dialog(self, self.library, part)
+        else:
+            # started from a selected symbol or footprint: it, and who makes it
+            got = self.current_block()
+            if got is not None:
+                defn = self.library.get(*got)
+                if defn is not None:
+                    start = {got[0]: defn.name, "manufacturer": defn.manufacturer}
+        p = part_dialog(self, self.library, part, **start)
         if p is not None:
             self.library.save_part(p)
             self.refresh()
             self.changed.emit()
 
 
-def part_dialog(parent, library, part=None, symbol=None, footprint=None):
+def part_dialog(parent, library, part=None, symbol=None, footprint=None, manufacturer=None):
     """A part's record: manufacturer, catalog number, description and the symbol and
-    footprint it links. Returns the Part, or None when cancelled."""
+    footprint it links. Returns the Part, or None when cancelled. (symbol, footprint,
+    manufacturer: a new part's start, from the block it is made for.)"""
     dlg = QDialog(parent)
     dlg.setWindowTitle("Part" if part else "New part")
     form = QFormLayout(dlg)
-    p = part or Part(symbol=symbol or "", footprint=footprint or "")
+    p = part or Part(symbol=symbol or "", footprint=footprint or "",
+                     manufacturer=manufacturer or "")
     mfr = QLineEdit(p.manufacturer)
     cat = QLineEdit(p.catalog)
     desc = QLineEdit(p.description)
@@ -248,16 +452,22 @@ def part_dialog(parent, library, part=None, symbol=None, footprint=None):
     return p
 
 
-def block_details_dialog(parent, library, kind_hint="symbol"):
-    """What Make block asks after the base point. Returns a dict or None."""
+def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help=None):
+    """What Make block asks after the base point; with defn, a library block's Properties...
+    (filled in from it, its kind fixed, no "replace" box; the pin names rename its pins in
+    order). on_help(anchor): opens the user manual there (the "?" button). Returns a dict or
+    None."""
+    title = "Make block" if defn is None else "%s: properties" % defn.name
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Make block")
+    dlg.setWindowTitle(title)
     form = QFormLayout(dlg)
     kind = QComboBox()
     kind.addItem("Schematic symbol (pins and a tag)", "symbol")
     kind.addItem("Panel footprint (the part's outline, real size)", "footprint")
-    kind.setCurrentIndex(0 if kind_hint == "symbol" else 1)
-    name = QLineEdit()
+    k0 = defn.kind if defn is not None else kind_hint
+    kind.setCurrentIndex(0 if k0 == "symbol" else 1)
+    kind.setEnabled(defn is None)
+    name = QLineEdit(defn.name if defn is not None else "")
     cat = QComboBox()
     cat.setEditable(True)
     cats = set()
@@ -265,15 +475,15 @@ def block_details_dialog(parent, library, kind_hint="symbol"):
         blocks, _bad = library.blocks(k)
         cats |= {b.category for b in blocks.values() if b.category}
     cat.addItems(sorted(cats))
-    cat.setCurrentText("")
-    desc = QLineEdit()
+    cat.setCurrentText(defn.category if defn is not None else "")
+    desc = QLineEdit(defn.description if defn is not None else "")
     role = QComboBox()
     for key, label in ROLE_LABELS:
         role.addItem(label, key)
     contact = QComboBox()
     for key, label in CONTACT_LABELS:
         contact.addItem(label, key)
-    prefix = QLineEdit()
+    prefix = QLineEdit(defn.prefix if defn is not None else "")
     prefix.setPlaceholderText("CR, M, PB, LS...")
     wiring = QComboBox()
     wiring.addItem("Nothing: each pin's wire has its own number", "")
@@ -281,7 +491,10 @@ def block_details_dialog(parent, library, kind_hint="symbol"):
                    "distribution")
     wiring.addItem("Off-sheet connector: the wire continues at the connector of the same name",
                    "link")
-    pins = QLineEdit()
+    if defn is not None:
+        for box, val in ((role, defn.role), (contact, defn.contact), (wiring, defn.wiring)):
+            box.setCurrentIndex(max(box.findData(val), 0))
+    pins = QLineEdit(", ".join(p["name"] for p in defn.pins) if defn is not None else "")
     pins.setPlaceholderText("1, 2  (or A1, A2; 13, 14...)")
     replace = QCheckBox("Replace the selected objects with the block")
     replace.setChecked(True)
@@ -289,15 +502,24 @@ def block_details_dialog(parent, library, kind_hint="symbol"):
     form.addRow("Name", name)
     form.addRow("Category", cat)
     form.addRow("Description", desc)
+    makers = maker_fields(form, library, {k: getattr(defn, k) for k in M.MAKER_FIELDS}
+                          if defn is not None else None, on_help)
+    pin_label = "Pin names, in the order you'll pick them" if defn is None else \
+        "Pin names, in order"
     sym_rows = [("Part in cross-references", role), ("Contact", contact),
                 ("Tag prefix", prefix), ("Wire numbers through it", wiring),
-                ("Pin names, in the order you'll pick them", pins)]
+                (pin_label, pins)]
     for label, w in sym_rows:
         form.addRow(label, w)
-    form.addRow("", replace)
-    note = _hint("Footprints: scale the manufacturer's drawing to its real size first (Scale, "
-                 "then Reference: pick a known length and type its real length, e.g. 45mm).")
-    form.addRow(note)
+    if defn is None:
+        form.addRow("", replace)
+        form.addRow(_hint("Footprints: scale the manufacturer's drawing to its real size "
+                          "first (Scale, then Reference: pick a known length and type its "
+                          "real length, e.g. 45mm)."))
+    else:
+        form.addRow(_hint("Saved to your library%s. Edit block... changes its drawing, "
+                          "pins and tag." % (" as your own copy (the built-in one stays "
+                                             "underneath)" if defn.builtin else "")))
     form.addRow(_buttons(dlg))
 
     def kind_changed():
@@ -309,26 +531,60 @@ def block_details_dialog(parent, library, kind_hint="symbol"):
                 lab.setEnabled(sym)
     kind.currentIndexChanged.connect(kind_changed)
     kind_changed()
+
+    def pin_list():
+        return [t.strip() for t in pins.text().replace(";", ",").split(",") if t.strip()]
     while True:
         if dlg.exec() != QDialog.Accepted:
             return None
         n = name.text().strip()
         if not n:
-            QMessageBox.information(dlg, "Make block", "Give the block a name.")
+            QMessageBox.information(dlg, title, "Give the block a name.")
             continue
         k = kind.currentData()
-        if library.has_own(k, n) and QMessageBox.question(
-                dlg, "Make block", "Your library already has a %s named %s. Replace it?"
-                % ("symbol" if k == "symbol" else "footprint", n)) != QMessageBox.Yes:
+        what = "symbol" if k == "symbol" else "footprint"
+        if defn is not None and k == "symbol" and len(pin_list()) != len(defn.pins):
+            QMessageBox.information(dlg, title, "Type one name for each of its %d pin(s), in "
+                                    "order (Edit block... adds or removes pins)."
+                                    % len(defn.pins))
             continue
+        if defn is None or n != defn.name:
+            if library.has_own(k, n):
+                if QMessageBox.question(dlg, title, "Your library already has a %s named %s. "
+                                        "Replace it?" % (what, n)) != QMessageBox.Yes:
+                    continue
+            elif defn is not None and library.get(k, n) is not None:
+                if QMessageBox.question(dlg, title, "%s is one of the built-in symbols. Put "
+                                        "yours in its place?" % n) != QMessageBox.Yes:
+                    continue
         break
-    return {"kind": kind.currentData(), "name": name.text().strip(),
-            "category": cat.currentText().strip(), "description": desc.text().strip(),
-            "role": role.currentData(), "contact": contact.currentData(),
-            "prefix": prefix.text().strip().upper(), "wiring": wiring.currentData(),
-            "pin_names": [t.strip() for t in pins.text().replace(";", ",").split(",")
-                          if t.strip()],
-            "replace": replace.isChecked()}
+    out = {"kind": kind.currentData(), "name": name.text().strip(),
+           "category": cat.currentText().strip(), "description": desc.text().strip(),
+           "role": role.currentData(), "contact": contact.currentData(),
+           "prefix": prefix.text().strip().upper(), "wiring": wiring.currentData(),
+           "pin_names": pin_list()}
+    out.update({k: box.currentText().strip() for k, box in makers.items()})
+    if defn is None:
+        out["replace"] = replace.isChecked()
+    return out
+
+
+def block_with_details(defn, details):
+    """A library block with the Properties... dialog's answers: its new BlockDef and how its
+    pins were renamed {old name: new name}."""
+    d = defn.to_dict()
+    for k in ("name", "category", "description") + M.MAKER_FIELDS:
+        d[k] = details.get(k, d.get(k, ""))
+    if defn.kind == "symbol":
+        for k in ("role", "contact", "prefix", "wiring"):
+            d[k] = details.get(k, d.get(k, ""))
+    pin_map = {}
+    names = details.get("pin_names") or []
+    if defn.kind == "symbol" and len(names) == len(defn.pins):
+        for p, new in zip(d["pins"], names):
+            pin_map[p["name"]] = new
+            p["name"] = new
+    return M.BlockDef.from_dict(d), pin_map
 
 
 def attributes_dialog(parent, library, ins, project=None, sheet=None):
