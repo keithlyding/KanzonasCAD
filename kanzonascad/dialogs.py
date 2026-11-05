@@ -399,6 +399,9 @@ def project_properties(parent, project, tab=0):
     for k in ("Revision", "Date"):
         if k in project.fields and k not in fields:     # (shown from the revision history)
             fields[k] = project.fields[k]
+    for k in list(fields):
+        if not fields[k] and k not in project.fields:   # (a field the project never had, left
+            del fields[k]                               # empty: Drawn date in an older one)
     settings = dict(st)
     settings.update(layout.values())
     settings["text_height"] = text_h.value()

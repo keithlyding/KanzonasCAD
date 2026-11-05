@@ -54,8 +54,9 @@ references follow the zones as they are set: change them and every reference upd
 <li><b>Project properties...</b> (or double-click the title block): what belongs to the whole
 project, in three tabs:
 <ul>
-<li><b>General</b>: the title block fields (customer, project, drawing number, drawn by, checked
-by, date, revision, and any field of your own the title block uses), the <b>grid reference
+<li><b>General</b>: the title block fields (customer, project, drawing number, drawn by, drawn
+date (today's when the project is made), checked by, date, revision, and any field of your own
+the title block uses), the <b>grid reference
 format</b> (<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1) and the height of new text.</li>
 <li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
 uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
@@ -107,8 +108,15 @@ to bring in your company's title block and move it into the lower right corner. 
 <p>A text that contains a field name in braces shows that field's value on every sheet:</p>
 <ul>
 <li><code>{{Customer}}</code>, <code>{{Project}}</code>, <code>{{Drawing number}}</code>,
-<code>{{Drawn by}}</code>, <code>{{Checked by}}</code>, <code>{{Date}}</code>,
-<code>{{Revision}}</code> - from Project properties.</li>
+<code>{{Drawn by}}</code>, <code>{{Drawn date}}</code>, <code>{{Checked by}}</code>,
+<code>{{Date}}</code>, <code>{{Revision}}</code> - from Project properties.
+<code>{{Drawn date}}</code> is set to the day the project is made (or made from a template);
+in a project from before it existed, it shows the typed Date. <code>{{Date}}</code> and
+<code>{{Revision}}</code> follow the revision history once there is one (see
+<b>Revisions</b>): <code>{{Date}}</code> is the revision date.</li>
+<li><code>{{Print date}}</code> - when the paper copy was made: the date and time a PDF or
+DXF export was written (11/05/2026 3:14 PM); on screen, today's date. The built-in title
+blocks show it small, as PRINTED ..., so anyone holding a print can tell how old it is.</li>
 <li><code>{{Sheet}}</code> (the page number), <code>{{Sheets}}</code> (how many sheets) and
 <code>{{Sheet title}}</code> and <code>{{Scale}}</code> (1:4, 3" = 1'-0"...) - from each
 sheet. <code>{{Sheet}} OF {{Sheets}}</code> gives
@@ -135,6 +143,13 @@ they come from the history), so sheet 5 can be at revision 2 while the others ar
 revision typed in a sheet's own Sheet properties still wins on that sheet. With no history,
 they show what Project properties says, as before. A new project made from a template starts
 with no history.</p>
+<p>Dates on the drawing: the <b>drawn date</b> (when it was started), the <b>revision date</b>
+(the latest revision's, which an issue is: "Issued for construction" is a revision's
+description) and the <b>print date</b>. The built-in title blocks show DRAWN BY, DRAWN (the
+drawn date), CHECKED BY and REV DATE, and the print stamp; a project made before 0.12.9 keeps
+its title block: tick <b>Replace the title block with one made for this position</b> in
+Project properties to get the new one (Undo puts the old one back), or add the fields to it in
+Edit title block.</p>
 <p>A name in braces that isn't a field shows as typed, so a typo is easy to spot. Undo works
 on title block changes like on any other.</p>
 <p><b>Title block position</b> (Project properties, General) says where the title block sits:</p>
