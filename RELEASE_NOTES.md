@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.11
+
+**Fixed**
+- The list of running object snaps (the arrow next to OSNAP in the status bar) stays open
+  while you tick and untick snaps, so you can set several in a row. Click outside it or press
+  Esc when done.
+
 ## 0.11.8
 
 **New**

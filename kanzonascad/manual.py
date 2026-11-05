@@ -447,8 +447,9 @@ follows it out), <b>Parallel</b> (PAR: hover over a line, then move roughly its 
 last point: the new line runs parallel to it) and <b>Apparent intersection</b> (APP: hover
 over two lines, then near where they would meet if they were longer).</li>
 <li><b>Turning snaps on and off</b>: the arrow on the status bar's <b>OSNAP</b> button lists
-every snap with a check mark; click one to turn it on or off (Select all, Clear all, Object
-snap settings... there too). <b>Drafting settings...</b> has the same checkboxes. Endpoint,
+every snap with a check mark; click one to turn it on or off. The list stays open, so you
+can tick several in a row (Select all and Clear all too); click outside it or press Esc when
+done (Object snap settings... is there too). <b>Drafting settings...</b> has the same checkboxes. Endpoint,
 Midpoint, Center, Node, Quadrant, Intersection and Insertion are on to start; the choice is
 kept between sessions; F3 turns them all off and on at once.</li>
 <li><b>A snap for one point</b>: at a point prompt, type its short name (PER, TAN, NEA,

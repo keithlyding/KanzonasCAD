@@ -66,6 +66,32 @@ class Document(QWidget):
         return "Untitled"
 
 
+class StayOpenMenu(QMenu):
+    """A menu that stays open while its tick boxes are clicked (the running snaps: several
+    are set in one go). A tick box, or an action marked stay_open, does its work and leaves
+    the menu up; anything else closes it, as usual, and so do a click outside it and Esc."""
+
+    def _keeps_open(self, a):
+        return a is not None and a.isEnabled() and not a.isSeparator() and \
+            (a.isCheckable() or a.property("stay_open"))
+
+    def mouseReleaseEvent(self, e):
+        a = self.actionAt(e.position().toPoint())
+        if self._keeps_open(a):
+            a.trigger()
+            e.accept()
+            return
+        super().mouseReleaseEvent(e)
+
+    def keyPressEvent(self, e):
+        a = self.activeAction()
+        if e.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space) and self._keeps_open(a):
+            a.trigger()
+            e.accept()
+            return
+        super().keyPressEvent(e)
+
+
 def _scale_name(name, val):
     tmp = M.Sheet()
     tmp.scale, tmp.scale_name = val, name
@@ -542,7 +568,7 @@ class MainWindow(QMainWindow):
             if key == "osnap":
                 # as AutoCAD's: the arrow lists every snap, ticked or not, a click away
                 b.setPopupMode(QToolButton.MenuButtonPopup)
-                self.osnap_menu = QMenu(b)
+                self.osnap_menu = StayOpenMenu(b)
                 self.osnap_menu.aboutToShow.connect(self._fill_osnap_menu)
                 b.setMenu(self.osnap_menu)
                 b.setToolTip(b.toolTip() + "; the arrow: which snaps run")
@@ -1182,14 +1208,25 @@ class MainWindow(QMainWindow):
         v = self.view()
         if v is None:
             return
+        ticks = []
         for key, name, typed in OS.MODES:
             act = m.addAction("%s  (%s)" % (name, typed))
             act.setCheckable(True)
             act.setChecked(key in v.osnap_modes)
             act.toggled.connect(lambda on, k=key: self._set_osnap(k, on))
+            ticks.append(act)
+
+        def every(on):
+            # (the menu stays open: its ticks follow)
+            self._set_osnap_all(on)
+            for t in ticks:
+                t.blockSignals(True)
+                t.setChecked(on)
+                t.blockSignals(False)
         m.addSeparator()
-        m.addAction("Select all", lambda: self._set_osnap_all(True))
-        m.addAction("Clear all", lambda: self._set_osnap_all(False))
+        for label, on in (("Select all", True), ("Clear all", False)):
+            a = m.addAction(label, lambda on=on: every(on))
+            a.setProperty("stay_open", True)
         m.addSeparator()
         m.addAction("Object snap settings...", self.drafting_settings)
 
