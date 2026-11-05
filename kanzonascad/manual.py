@@ -540,6 +540,10 @@ cursor's square fills in: that is what a click selects.</li>
 press there and <b>drag</b> to move the selection, and let go where it goes (on the snap grid,
 and straight with Ortho). Hold <b>Ctrl</b> when you let go to leave the originals and drop a
 <b>copy</b> (a + shows). Undo puts it back. For exact distances use Move or Copy objects.</li>
+<li><b>Ctrl+arrow keys</b> move the selection one snap step (Drafting settings, 1/8 inch to
+start) left, right, up or down; <b>Ctrl+Shift+arrow</b> a tenth of a step, for fine placement.
+Each press is one Undo; wires on a moved symbol's pins come along, and objects on locked
+layers stay.</li>
 <li>Over a <b>grip</b> of a selected object, the square jumps onto the grip and the arrow shows:
 a click there starts stretching it.</li>
 <li>Click an object to add it to the selection; <b>Shift</b>+click removes it.</li>
@@ -660,6 +664,7 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>Enter / Space</td><td>Finish a step; repeat the last command</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection</td></tr>
 <tr><td>Delete</td><td>Erase the selection</td></tr>
+<tr><td>Ctrl+arrows / Ctrl+Shift+arrows</td><td>Move the selection one snap step / a tenth of one</td></tr>
 <tr><td>Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S</td><td>New / Open / Save / Save as</td></tr>
 <tr><td>Ctrl+W / Ctrl+Q</td><td>Close project / Exit</td></tr>
 <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>

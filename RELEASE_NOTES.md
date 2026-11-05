@@ -8,6 +8,10 @@ build fails without them.
 
 ## 0.11.11
 
+**New**
+- Ctrl+arrow keys move the selected objects one snap step (1/8 inch to start);
+  Ctrl+Shift+arrow keys move them a tenth of that. Wires on a moved symbol come along.
+
 **Fixed**
 - The list of running object snaps (the arrow next to OSNAP in the status bar) stays open
   while you tick and untick snaps, so you can set several in a row. Click outside it or press
