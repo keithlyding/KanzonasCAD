@@ -235,7 +235,13 @@ is the <b>base point</b> (on the locked layer BLOCK BASE POINT); each green text
 PINS is a <b>pin</b>: its insertion point, marked with a small ring, is where wires attach, and
 its text is the pin's name (edit the text to rename it, move it with its grip, copy it to add
 a pin, erase it to remove one); the blue text on BLOCK TAG is where the tag goes, and texts on
-BLOCK ATTRIBUTES are where a terminal's number or a PLC address shows. <b>Save block</b>
+BLOCK ATTRIBUTES are where a terminal's number or a PLC address shows. A footprint has a pink
+<b>DIN RAIL</b> text on layer BLOCK DIN RAIL: its insertion point (a ring, with a dashed line
+across the part where the rail's centerline runs) is the middle of the part's rail clip. Move
+it to where the rail's center crosses the part (its height on the part is what counts on a
+rail across; snap to the clip's drawing if it has one) and the part sits right on the rail
+when placed; left where it opened, it stays the middle of the drawing (also when the drawing
+changes); erased, it goes back to that. <b>Save block</b>
 (Library menu, the ribbon, or Save, Ctrl+S, in that tab) puts it back in your library: the
 pins keep their order, new ones come after. Closing the tab with changes not saved asks
 first. <b>Save block as...</b> (Library menu and the ribbon, in that tab) saves it under a new
@@ -613,13 +619,25 @@ Middle, Bottom), by its outline; one Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
 one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
 slots. They always go straight across or straight up and down (a snap off that line only sets
-the length), and their end grips stretch them along their own line. To center something on
-one, snap to the center of a mounting slot (Center), the middle of a long edge (Midpoint) or
-anywhere along its centerline (Nearest, Perpendicular), or use Align objects. Stretch one
+the length), and their end grips stretch them along their own line. Stretch one
 with its end grips (or double-click it and type its length), move it with its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its
 size. Double-click a piece for its profile or size, length, manufacturer, catalog number and
 the length it is bought in (the project's to start: Project properties, Panel; 1 m rail and 6
 ft duct).</li>
+<li><b>Footprints snap onto DIN rail.</b> While you place a footprint (Insert), move it,
+copy it or drag it, once its <b>DIN rail point</b> (the middle of its rail clip) comes over a
+rail it locks onto the rail's centerline and slides along the rail with the mouse, whatever
+its base point is; a short yellow line and "On DIN rail" show it. Brought within about ten
+pixels of the end of a footprint already on that rail, it butts against it ("On DIN rail,
+against the next one"), as devices sit side by side on a real rail; a copy butts against the
+one it was copied from. It works on rails across and up and down, and on footprints turned
+either way. Take it off the rail by moving it away; with the object snaps off (F3) it isn't
+held at all. Moving a rail together with what is on it moves them all as they are. A
+footprint's DIN rail point is the middle of its drawing unless its block says otherwise:
+parts whose clip isn't halfway up (many breakers, contactors, power supplies) get theirs in
+<b>Edit block...</b> (see <b>Changing a library block</b>). The rail's own snaps still work
+for anything else: a mounting slot's center (Center, for an end stop or a screw), the middle
+of a long edge (Midpoint), its centerline (Nearest, Perpendicular), and Align objects.</li>
 <li><b>Panel materials...</b> (Panel tab) lists the project's rail and duct per size and part:
 the pieces and their cut lengths, the total length, and how many stock lengths that takes
 (the cuts packed into stock lengths, longest first; saw cuts take no width). <b>Save as

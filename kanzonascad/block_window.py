@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QInputDialog, QLineEdit, QMessageBox
 
 from . import block_editor as BE
 from . import model as M
+from .geometry import bbox_union
 
 TITLE = "KanzonasCAD"
 
@@ -21,23 +22,40 @@ def is_block_doc(d):
 
 def paint_pins(p, view):
     """The block editor's pin points: a small ring at each pin marker's insertion point (the
-    exact spot a wire attaches), drawn into the view's picture of the drawing."""
+    exact spot a wire attaches); a footprint's DIN rail point: a ring and a dashed line
+    across the block where the rail's centerline runs. Drawn into the view's picture of the
+    drawing."""
     s = view.sheet()
     key = (s.id, s.version)
     got = getattr(view, "_pin_marks", None)
     if got is None or got[0] != key:
-        got = view._pin_marks = (key, [e.pos for e in s.entities.values()
-                                       if isinstance(e, M.Text) and e.layer == BE.LAYER_PINS])
-    lay = view.project.layers.get(BE.LAYER_PINS)
-    if lay is not None and not lay.visible:
-        return
+        texts = [e for e in s.entities.values() if isinstance(e, M.Text)]
+        bb = None
+        for e in s.entities.values():
+            if e.layer not in BE.MARKER_LAYERS:
+                bb = bbox_union(bb, e.bbox())
+        got = view._pin_marks = (key, [e.pos for e in texts if e.layer == BE.LAYER_PINS],
+                                 [e.pos for e in texts if e.layer == BE.LAYER_RAIL], bb)
     r = 4.0 / view.scale
-    pen = QPen(QColor(BE.MARKER_LAYERS[BE.LAYER_PINS]), 1.5)
-    pen.setCosmetic(True)
-    p.setPen(pen)
     p.setBrush(Qt.NoBrush)
-    for x, y in got[1]:
-        p.drawEllipse(QPointF(x, y), r, r)
+    lay = view.project.layers.get(BE.LAYER_PINS)
+    if lay is None or lay.visible:
+        pen = QPen(QColor(BE.MARKER_LAYERS[BE.LAYER_PINS]), 1.5)
+        pen.setCosmetic(True)
+        p.setPen(pen)
+        for x, y in got[1]:
+            p.drawEllipse(QPointF(x, y), r, r)
+    lay = view.project.layers.get(BE.LAYER_RAIL)
+    if got[2] and (lay is None or lay.visible):
+        pen = QPen(QColor(BE.MARKER_LAYERS[BE.LAYER_RAIL]), 1.5, Qt.DashLine)
+        pen.setCosmetic(True)
+        p.setPen(pen)
+        bb = got[3]
+        for x, y in got[2]:
+            p.drawEllipse(QPointF(x, y), r, r)
+            if bb is not None:
+                m = 12.0 / view.scale
+                p.drawLine(QPointF(min(bb[0], x) - m, y), QPointF(max(bb[2], x) + m, y))
 
 
 def zoom_block(view):
@@ -193,7 +211,8 @@ class BlockEditing:
                "name; copy one to add a pin, erase one to remove it)%s; the cross is the base "
                "point. Save block puts it back in the library."
                % (defn.name, ", the blue text is where its tag goes" if
-                  defn.kind == "symbol" else ""))
+                  defn.kind == "symbol" else ", the pink DIN RAIL text is the middle of its "
+                  "rail clip (move it to where the rail's centerline crosses the part)"))
         if lib is None:
             msg += " (It wasn't in your library: Save block adds it.)"
         self._say(msg, 12000)

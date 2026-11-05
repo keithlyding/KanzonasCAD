@@ -21,6 +21,7 @@ PICKBOX = 5             # pick reach, pixels
 GRIP = 7                # grip square, pixels
 GRIP_LIMIT = 100        # grips are shown for at most this many selected objects (GRIPOBJLIMIT)
 from . import osnap as OS
+from . import railsnap
 SNAP_PRIORITY = OS.PRIORITY
 
 
@@ -123,6 +124,7 @@ class CadView(QWidget):
         # pressing on a selected object: {"start", "ents", "moved"} until the button is let go
         # (dragged: the selection moves, or with Ctrl a copy goes, where it is dropped)
         self._drag = None
+        self._rail_hit = None        # (the rail magnet's last catch: railsnap.magnet)
         self._hover = None
         self._hot_grip = None
         self._picture = None            # (key, QPixmap): the drawing as last drawn
@@ -688,7 +690,7 @@ class CadView(QWidget):
         self._preview = set()
         self.set_selection(self.sel - found if remove else self.sel | found)
 
-    def _drag_delta(self, d, p):
+    def _drag_delta(self, d, p, copy=None):
         """How far a dragged selection goes: from where it was grabbed to p, on the snap grid
         and straight across or up and down with Ortho, as a Move would."""
         s = d["start"]
@@ -701,6 +703,23 @@ class CadView(QWidget):
         if self.snap_on:
             k = self.snap_spacing
             dx, dy = round(dx / k) * k, round(dy / k) * k
+        if copy is None:                # (the preview: Ctrl held now makes a copy)
+            copy = bool(QGuiApplication.keyboardModifiers() & Qt.ControlModifier)
+        return self.rail_magnet(d["ents"], dx, dy, copy)
+
+    RAIL_PIXELS = 10        # how near (on the screen) a footprint locks onto a rail or neighbor
+
+    def rail_magnet(self, ents, dx, dy, copy=False):
+        """(dx, dy) for objects shifted by (dx, dy): a footprint among them whose rail point
+        comes over a DIN rail locks onto its centerline, and butts against a footprint on the
+        rail whose end is near (railsnap.magnet). With the object snaps off (F3), as given.
+        What it did is kept for the marker (_paint_rail)."""
+        self._rail_hit = None
+        if not self.osnap_on:
+            return dx, dy
+        dx, dy, hit = railsnap.magnet(self.sheet(), ents, dx, dy,
+                                      self.RAIL_PIXELS / max(self.scale, 1e-9), copy)
+        self._rail_hit = hit
         return dx, dy
 
     def cursor_hint(self):
@@ -837,8 +856,8 @@ class CadView(QWidget):
         if e.button() == Qt.LeftButton and d is not None:
             self._drag = None
             if d["moved"]:
-                dx, dy = self._drag_delta(d, self.to_world(e.position()))
                 copy = bool(e.modifiers() & Qt.ControlModifier)
+                dx, dy = self._drag_delta(d, self.to_world(e.position()), copy)
                 if abs(dx) > 1e-12 or abs(dy) > 1e-12:
                     sheet = self.sheet()
                     with self.edit("Copy" if copy else "Move") as ed:
@@ -1025,6 +1044,7 @@ class CadView(QWidget):
         p.save()
         p.setTransform(self.transform())
         cmd = self.cmd
+        self._rail_hit = None
         if cmd is not None and self.cursor is not None and not cmd.selecting() \
                 and not cmd.picking:
             pt = self.resolve(self.cursor)
@@ -1056,6 +1076,7 @@ class CadView(QWidget):
         self._paint_window(p)
         self._paint_tracking(p)
         self._paint_snap(p)
+        self._paint_rail(p)
         self._paint_polar(p)
         self._paint_crosshair(p, pal)
         p.end()
@@ -1339,6 +1360,31 @@ class CadView(QWidget):
         name = OS.NAMES.get(kind, kind)
         fm = p.fontMetrics()
         box = QRectF(x + r + 6, y + r + 4, fm.horizontalAdvance(name) + 8, fm.height() + 2)
+        p.setPen(QPen(QColor(90, 90, 90)))
+        p.setBrush(QColor(255, 255, 225) if not self.dark else QColor(40, 40, 40))
+        p.drawRect(box)
+        p.setPen(QColor(0, 0, 0) if not self.dark else QColor(230, 230, 230))
+        p.drawText(box, Qt.AlignCenter, name)
+
+    def _paint_rail(self, p):
+        """The rail magnet's marker: the footprint's rail point on the rail's centerline, a
+        short stretch of the centerline through it, and what it did beside it."""
+        hit = getattr(self, "_rail_hit", None)
+        if hit is None or self.cursor is None:
+            return
+        rail = hit["rail"]
+        (ux, uy), _n = rail.axes()
+        c = self.to_screen(hit["point"])
+        k = 14.0
+        a = QPointF(c.x() - ux * k, c.y() + uy * k)       # (screen y runs down)
+        b = QPointF(c.x() + ux * k, c.y() - uy * k)
+        p.setPen(QPen(QColor("#e8c000"), 2))
+        p.setBrush(Qt.NoBrush)
+        p.drawLine(a, b)
+        p.drawEllipse(c, 4, 4)
+        name = "On DIN rail, against the next one" if hit["butted"] else "On DIN rail"
+        fm = p.fontMetrics()
+        box = QRectF(c.x() + 12, c.y() + 10, fm.horizontalAdvance(name) + 8, fm.height() + 2)
         p.setPen(QPen(QColor(90, 90, 90)))
         p.setBrush(QColor(255, 255, 225) if not self.dark else QColor(40, 40, 40))
         p.drawRect(box)

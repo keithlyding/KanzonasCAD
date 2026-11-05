@@ -1148,7 +1148,7 @@ class BlockDef:
     def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
                  category="", description="", role="device", contact="", prefix="",
                  builtin=False, wiring="", attr_texts=(), manufacturer="", family="",
-                 series="", catalog=""):
+                 series="", catalog="", rail_pos=None):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -1172,6 +1172,9 @@ class BlockDef:
         self.family = str(family or "")
         self.series = str(series or "")
         self.catalog = str(catalog or "")   # its part number (1756-A10...): placed, its CAT
+        # a footprint's DIN rail point: the middle of its rail clip, which lines up with the
+        # rail's centerline (None: the middle of its drawing; see rail_point)
+        self.rail_pos = _pt(rail_pos) if rail_pos is not None else None
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -1184,7 +1187,8 @@ class BlockDef:
                     {"attr_texts": [{"attr": a["attr"], "pos": list(a["pos"]),
                                      "height": a["height"]} for a in self.attr_texts]}
                     if self.attr_texts else {}) | {
-                    k: getattr(self, k) for k in MAKER_FIELDS if getattr(self, k)}
+                    k: getattr(self, k) for k in MAKER_FIELDS if getattr(self, k)} | (
+                    {"rail_pos": list(self.rail_pos)} if self.rail_pos is not None else {})
 
     @classmethod
     def from_dict(cls, d, builtin=False):
@@ -1194,11 +1198,23 @@ class BlockDef:
                    d.get("description", ""), d.get("role", "device"), d.get("contact", ""),
                    d.get("prefix", ""), builtin, d.get("wiring", ""),
                    d.get("attr_texts", ()), d.get("manufacturer", ""), d.get("family", ""),
-                   d.get("series", ""), d.get("catalog", ""))
+                   d.get("series", ""), d.get("catalog", ""), d.get("rail_pos"))
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
         return a == b
+
+    def rail_point(self):
+        """Where a footprint sits on a DIN rail: its rail point when one is set (Edit block),
+        else the middle of its drawing."""
+        if self.rail_pos is not None:
+            return self.rail_pos
+        bb = None
+        for e in self.entities:
+            bb = G.bbox_union(bb, e.bbox())
+        if bb is None:
+            return (0.0, 0.0)
+        return ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
 
     def extents(self):
         bb = None

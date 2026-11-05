@@ -599,6 +599,7 @@ class _TwoPoint(Command):
     """Select objects, a base point, then a second point (Move, Copy) or value."""
     selects = True
     verb = ""
+    copies = False                      # (Copy: the objects stay, neighbors on a rail)
 
     def begin(self):
         self.ents = _selected(self.ctx)
@@ -615,6 +616,13 @@ class _TwoPoint(Command):
     def second_prompt(self):
         self.ctx.prompt("Specify second point")
 
+    def delta(self, p):
+        """How far the objects go for the second point p: a footprint coming over a DIN rail
+        locks onto it (CadView.rail_magnet; the same for the preview and the click)."""
+        dx, dy = p[0] - self.from_pt[0], p[1] - self.from_pt[1]
+        mag = getattr(self.ctx, "rail_magnet", None)
+        return mag(self.ents, dx, dy, self.copies) if mag is not None else (dx, dy)
+
     def preview(self, p):
         if self.from_pt is None:
             return []
@@ -629,10 +637,11 @@ class MoveCmd(_TwoPoint):
         and slides the drawing, instead of rebuilding big blocks on every mouse move)."""
         if self.from_pt is None:
             return None
-        return self.ents, p[0] - self.from_pt[0], p[1] - self.from_pt[1]
+        dx, dy = self.delta(p)
+        return self.ents, dx, dy
 
     def result(self, p):
-        dx, dy = p[0] - self.from_pt[0], p[1] - self.from_pt[1]
+        dx, dy = self.delta(p)
         return [e.moved(dx, dy) for e in self.ents]
 
     def apply(self, p):
@@ -645,13 +654,14 @@ class MoveCmd(_TwoPoint):
 
 class CopyCmd(_TwoPoint):
     name, title = "COPY", "Copy"
+    copies = True
     shift = MoveCmd.shift
 
     def second_prompt(self):
         self.ctx.prompt("Specify second point (Enter to finish)")
 
     def result(self, p):
-        dx, dy = p[0] - self.from_pt[0], p[1] - self.from_pt[1]
+        dx, dy = self.delta(p)
         out = []
         for e in self.ents:
             c = e.moved(dx, dy)
@@ -1400,12 +1410,23 @@ class InsertCmd(Command):
         return M.Insert(self.defn.name, p, self.angle, 1.0, self.mirror, self.attrs, defn,
                         tag_h, layer=layer)
 
+    def _on_rail(self, p):
+        """A footprint's insertion point, its rail point locked onto a DIN rail it comes
+        over (CadView.rail_magnet)."""
+        mag = getattr(self.ctx, "rail_magnet", None)
+        if self.defn.kind != "footprint" or mag is None:
+            return p
+        dx, dy = mag([self._make(p, self.defn)], 0.0, 0.0)
+        return (p[0] + dx, p[1] + dy)
+
     def preview(self, p):
-        return [self._make(self.pending if self.pending is not None else p, self.defn)]
+        return [self._make(self.pending if self.pending is not None else self._on_rail(p),
+                           self.defn)]
 
     def point(self, p):
         if self.pending is not None:
             return                      # (waiting for the contact's device)
+        p = self._on_rail(p)
         d = self.defn
         if d.wiring == "link" and not self.attrs.get("TAG"):
             # an off-sheet connector: its name pairs it with the other end
