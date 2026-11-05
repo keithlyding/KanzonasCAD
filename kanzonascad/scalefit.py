@@ -286,3 +286,35 @@ def rotate(project, sheet, clockwise=True):
     r = (sheet.rotation + (-90 if clockwise else 90)) % 360
     apply(project, sheet, sheet.scale_name, sheet.scale, rotation=r)
     return r
+
+
+def place_on_sheet(project, sheet):
+    """A drawing opened from a DXF or DWG put on the page (its coordinates are the other
+    program's: often far from KanzonasCAD's sheet). Left where it is when it already lies on
+    the paper (a DXF exported from KanzonasCAD, border and all, or one drawn on a sheet of
+    this size); else moved to the middle of the free room at the sheet's scale when it fits;
+    else the sheet gets the biggest scale it fits at (Fit; the drawing stays real size) and
+    it is centered. Returns what was done: None, "moved" or the new scale's text."""
+    box = drawing_box(sheet)
+    if box is None:
+        return None
+    k = sheet.k()
+    w, h = sheet.paper()
+    tol = 0.01 * k
+    if box[0] >= -tol and box[1] >= -tol and box[2] <= w + tol and box[3] <= h + tol:
+        return None
+    area, tb = room(project, sheet)
+    bw, bh = box[2] - box[0], box[3] - box[1]
+    name, v = sheet.scale_name, sheet.scale
+    rescale = not fits(bw, bh, v, area, tb)
+    if rescale:
+        name, v = best_scale(bw, bh, area, tb, named=bool(sheet.scale_name))
+    dx, dy = centering(box, v, area, tb)
+    with project.edit("Place the drawing") as ed:
+        if rescale:
+            # (sheet_meta, not sheet_scale: the DXF's texts are its own real size, not
+            # KanzonasCAD's paper-sized ones, and keep their height)
+            ed.sheet_meta(sheet, scale=float(v), scale_name=name)
+        for e in list(sheet.entities.values()):
+            ed.change(sheet, e.moved(dx, dy))
+    return sheet.scale_text() if rescale else "moved"

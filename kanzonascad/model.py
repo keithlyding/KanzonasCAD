@@ -1109,6 +1109,7 @@ CONTACTS = ("", "NO", "NC", "NOTC", "NCTO", "NOTO", "NCTC")
 # the same name are one wire, whatever sheet they're on)
 WIRINGS = ("", "distribution", "link")
 ATTR_NAMES = ["TAG", "DESC", "MFR", "CAT"]       # what every block reference can carry
+MAKER_FIELDS = ("manufacturer", "family", "series")     # a block's optional maker details
 
 
 class BlockDef:
@@ -1117,7 +1118,8 @@ class BlockDef:
 
     def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
                  category="", description="", role="device", contact="", prefix="",
-                 builtin=False, wiring="", attr_texts=()):
+                 builtin=False, wiring="", attr_texts=(), manufacturer="", family="",
+                 series=""):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -1135,6 +1137,11 @@ class BlockDef:
         # "height": h}] (a terminal's number, a PLC point's address...)
         self.attr_texts = [{"attr": str(a["attr"]), "pos": _pt(a["pos"]),
                             "height": float(a.get("height", 0.08))} for a in attr_texts]
+        # who makes it, for finding and grouping blocks (optional; see the manual's
+        # "Manufacturer, family and series"): Allen-Bradley / ControlLogix / B...
+        self.manufacturer = str(manufacturer or "")
+        self.family = str(family or "")
+        self.series = str(series or "")
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -1146,7 +1153,8 @@ class BlockDef:
                     {"wiring": self.wiring} if self.wiring else {}) | (
                     {"attr_texts": [{"attr": a["attr"], "pos": list(a["pos"]),
                                      "height": a["height"]} for a in self.attr_texts]}
-                    if self.attr_texts else {})
+                    if self.attr_texts else {}) | {
+                    k: getattr(self, k) for k in MAKER_FIELDS if getattr(self, k)}
 
     @classmethod
     def from_dict(cls, d, builtin=False):
@@ -1155,7 +1163,8 @@ class BlockDef:
                    d.get("tag_pos"), d.get("tag_height", 0.1), d.get("category", ""),
                    d.get("description", ""), d.get("role", "device"), d.get("contact", ""),
                    d.get("prefix", ""), builtin, d.get("wiring", ""),
-                   d.get("attr_texts", ()))
+                   d.get("attr_texts", ()), d.get("manufacturer", ""), d.get("family", ""),
+                   d.get("series", ""))
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
@@ -1859,6 +1868,16 @@ class Edit:
         old = p.blocks.get(defn.name)
         self.ops.append(["block", defn.name, old.to_dict() if old else None, defn.to_dict()])
         p._set_block(defn.name, defn.to_dict())
+
+    def drop_block(self, name):
+        """Take a block definition out of the project (its references, if any are left, show
+        an X where they sit)."""
+        p = self.project
+        old = p.blocks.get(name)
+        if old is None:
+            return
+        self.ops.append(["block", name, old.to_dict(), None])
+        p._set_block(name, None)
 
     def layer(self, name, before, after):
         """before/after: a Layer's dict, or None (added / removed)."""

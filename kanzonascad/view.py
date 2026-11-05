@@ -5,7 +5,7 @@ wheel zoom at the cursor, middle-button pan) and the commands of commands.py.
 
 import math
 
-from PySide6.QtCore import Qt, QPointF, QRectF, Signal, QTimer
+from PySide6.QtCore import Qt, QPointF, QRectF, Signal
 from PySide6.QtGui import (QPainter, QPen, QColor, QBrush, QTransform, QPainterPath,
                            QPolygonF, QGuiApplication, QPixmap)
 from PySide6.QtWidgets import QWidget
@@ -22,6 +22,32 @@ GRIP = 7                # grip square, pixels
 GRIP_LIMIT = 100        # grips are shown for at most this many selected objects (GRIPOBJLIMIT)
 from . import osnap as OS
 SNAP_PRIORITY = OS.PRIORITY
+
+
+
+def _step_text(dx, dy):
+    """'0.125 in right', '0.0125 in up'..."""
+    if abs(dx) >= abs(dy):
+        return "%g in %s" % (abs(dx), "right" if dx > 0 else "left")
+    return "%g in %s" % (abs(dy), "up" if dy > 0 else "down")
+
+
+GLOW_LIMIT = 6000           # path elements past which the hover glow is drawn plainly
+
+
+def _local_parts(e, rect):
+    """The plain entities of e whose box touches rect: e itself, or, for a block reference,
+    the lines, arcs and texts of its drawing that come into rect (its drawing in sheet
+    coordinates is kept on the reference)."""
+    if not isinstance(e, M.Insert):
+        return [e]
+    x0, y0, x1, y1 = rect
+    out = []
+    for w in e.world_entities():
+        b = w.bbox()
+        if b[0] <= x1 and b[2] >= x0 and b[1] <= y1 and b[3] >= y0:
+            out.append(w)
+    return out
 
 
 class CadView(QWidget):
@@ -85,6 +111,11 @@ class CadView(QWidget):
         self._hover = None
         self._hot_grip = None
         self._picture = None            # (key, QPixmap): the drawing as last drawn
+        self._lit = None                # (key, QPixmap): that, with the selection lit
+        self._shift_cache = None        # (key, objects, paths): what a Move preview slides
+        self._glow_paths = {}           # id -> (entity, paths): the hover glow's, kept
+        self.overlay = None             # f(painter, view): more drawn into the picture (the
+                                        # block editor's pin points)
         self._sel_cache = None
         self._prompt = ("", [], False)
         self.setMouseTracking(True)
@@ -94,7 +125,11 @@ class CadView(QWidget):
         self.setMinimumSize(200, 150)
         project.listeners.append(self._project_changed)
         self.idle_prompt()
-        QTimer.singleShot(0, lambda: self.zoom("sheet"))
+        # (the view's real size comes once its window is laid out: until the user zooms or
+        # pans, a resize fits it again; a later zoom of the program's, opening a drawing say,
+        # is no longer undone by a delayed one)
+        self._fit = None
+        self.zoom("sheet")
 
     # ---- context the commands use ----------------------------------------------------------
     def sheet(self):
@@ -324,13 +359,20 @@ class CadView(QWidget):
             vw, vh = max(self.width(), 100), max(self.height(), 100)
             self.scale = max(1e-3, min(vw / bw, vh / bh) * 0.94)
             self.center = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
+            self._fit = how
         elif how == "in":
             self.zoom_at(1.5, None)
         elif how == "out":
             self.zoom_at(1 / 1.5, None)
         self.update()
 
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if self._fit is not None:
+            self.zoom(self._fit)
+
     def zoom_at(self, factor, pos):
+        self._fit = None                # (the user's zoom: a resize keeps it)
         new = min(max(self.scale * factor, 2.0), 50000.0)
         if pos is None:
             self.scale = new
@@ -356,7 +398,15 @@ class CadView(QWidget):
                 continue
             if only is not None and not isinstance(e, only):
                 continue
-            d = e.distance(p)
+            # (a block: only its pieces that reach the pickbox can be within it; measuring
+            # every piece of a big footprint on every mouse move made hovering lag)
+            if isinstance(e, M.Insert):
+                parts = _local_parts(e, rect)
+                if not parts:
+                    continue
+                d = min(w.distance(p) for w in parts)
+            else:
+                d = e.distance(p)
             if d <= r and (bd is None or d < bd):
                 best, bd = e, d
         return best
@@ -388,7 +438,18 @@ class CadView(QWidget):
             for kind, q in e.snap_points():
                 if kind in modes:
                     offer(kind, q)
-        near = [e for e in cands if e.distance(p) <= r][:40]
+        # what lies under the aperture, piece by piece: a block (a footprint made from a
+        # maker's drawing: thousands of lines) gives only its own lines that come near, not all
+        # of them (every piece of every block nearby against every other, on every mouse move,
+        # froze the program for seconds)
+        near = []
+        for e in cands:
+            for part in _local_parts(e, rect):
+                if part.distance(p) <= r:
+                    near.append(part)
+            if len(near) >= 40:
+                break
+        near = near[:40]
         if "int" in modes:
             for i in range(len(near)):
                 for j in range(i + 1, len(near)):
@@ -667,6 +728,7 @@ class CadView(QWidget):
         pos = e.position()
         self.setFocus()
         if e.button() == Qt.MiddleButton:
+            self._fit = None
             self._pan = (pos, self.center)
             self.setCursor(Qt.ClosedHandCursor)
             return
@@ -820,7 +882,32 @@ class CadView(QWidget):
         if k == Qt.Key_Delete and self.cmd is None and self.sel:
             self.run(C.EraseCmd)
             return
+        arrows = {Qt.Key_Left: (-1, 0), Qt.Key_Right: (1, 0), Qt.Key_Up: (0, 1),
+                  Qt.Key_Down: (0, -1)}
+        if k in arrows and e.modifiers() & Qt.ControlModifier and self.cmd is None \
+                and self.sel:
+            fine = bool(e.modifiers() & Qt.ShiftModifier)
+            ux, uy = arrows[k]
+            step = self.snap_spacing / (10.0 if fine else 1.0)
+            self.nudge(ux * step, uy * step)
+            return
         super().keyPressEvent(e)
+
+    def nudge(self, dx, dy):
+        """Ctrl+arrow: the selection moved one snap step (Ctrl+Shift+arrow: a tenth of one),
+        as a Move would (one undoable step; wires stay on the pins they land on). Objects on
+        locked layers stay."""
+        sheet = self.sheet()
+        ents = [sheet.entities[i] for i in self.sel if i in sheet.entities and
+                not self.layer_locked(sheet.entities[i].layer)]
+        if not ents:
+            return 0
+        with self.edit("Move") as ed:
+            for ent in ents:
+                ed.change(sheet, ent.moved(dx, dy))
+        self.messaged.emit("Moved %d object(s) %s" % (len(ents), _step_text(dx, dy)))
+        self.update()
+        return len(ents)
 
     # ---- painting --------------------------------------------------------------------------
     def _drawing_key(self):
@@ -852,24 +939,54 @@ class CadView(QWidget):
         p.setTransform(self.transform())
         self.renderer().paint(p, under=(lambda q: self._paint_grid(q, pal))
                               if self.grid_on else None)
+        if self.overlay is not None:
+            self.overlay(p, self)
         p.end()
         self._picture = (key, pm)
         return pm
 
+    def _lit_picture(self, pal):
+        """The drawing's picture with the selection, and what a click or the window would
+        select, lit: made again only when one of them changes (lighting a big footprint took
+        a fifth of a second, on every mouse move)."""
+        base = self._drawing_picture(pal)
+        s = self.sheet()
+        h = self._hover
+        hover = h.id if h is not None and h.id in s.entities and self._window is None else None
+        key = (self._picture[0], frozenset(self.sel), frozenset(self._preview), hover)
+        got = self._lit
+        if got is not None and got[0] == key:
+            return got[1]
+        pm = QPixmap(base)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setTransform(self.transform())
+        self._paint_selection(p, pal)
+        p.end()
+        self._lit = (key, pm)
+        return pm
+
     def paintEvent(self, _e):
         pal = Palette(self.dark)
-        pm = self._drawing_picture(pal)
+        pm = self._lit_picture(pal)
         p = QPainter(self)
         p.drawPixmap(0, 0, pm)
         p.setRenderHint(QPainter.Antialiasing, True)
         p.save()
         p.setTransform(self.transform())
-        self._paint_selection(p, pal)
         cmd = self.cmd
         if cmd is not None and self.cursor is not None and not cmd.selecting() \
                 and not cmd.picking:
             pt = self.resolve(self.cursor)
-            prev = cmd.preview(pt)
+            sh = cmd.shift(pt) if hasattr(cmd, "shift") else None
+            prev = None if sh is not None else cmd.preview(pt)
+            if sh is not None:
+                ents, dx, dy = sh
+                self._paint_shifted(p, pal, ents, dx, dy)
+                pen = QPen(pal.select, 0)
+                pen.setCosmetic(True)
+                p.setPen(pen)
+                p.drawLine(QPointF(*cmd.from_pt), QPointF(*pt))
             if prev:
                 strokes, fills = entities_path(prev)
                 pen = QPen(pal.select, 0)
@@ -883,15 +1000,7 @@ class CadView(QWidget):
         d = self._drag
         if d is not None and d["moved"] and self.cursor is not None:
             dx, dy = self._drag_delta(d, self.cursor)
-            strokes, fills = entities_path([e.moved(dx, dy) for e in d["ents"]])
-            pen = QPen(pal.select, 0)
-            pen.setCosmetic(True)
-            p.setPen(pen)
-            p.setBrush(Qt.NoBrush)
-            p.drawPath(strokes)
-            p.setPen(Qt.NoPen)
-            p.setBrush(pal.select)
-            p.drawPath(fills)
+            self._paint_shifted(p, pal, d["ents"], dx, dy)
         p.restore()
         self._paint_grips(p, pal)
         self._paint_window(p)
@@ -926,6 +1035,29 @@ class CadView(QWidget):
                 pts.append(QPointF(i * k, j * k))
         p.drawPoints(QPolygonF(pts))
 
+    def _paint_shifted(self, p, pal, ents, dx, dy):
+        """Objects drawn shifted by (dx, dy) (a Move, Copy or drag on its way): their drawing
+        is made once and slid along, not made again on every mouse move (a footprint from a
+        maker's drawing, thousands of lines and arcs, froze the program)."""
+        key = tuple(id(e) for e in ents)
+        got = self._shift_cache
+        if got is None or got[0] != key:
+            got = self._shift_cache = (key, list(ents), entities_path(ents))
+        strokes, fills = got[2]
+        p.save()
+        p.translate(dx, dy)
+        pen = QPen(pal.select, 0)
+        pen.setCosmetic(True)
+        p.setPen(pen)
+        p.setBrush(Qt.NoBrush)
+        # (one-pixel lines without smoothing, as the drawing itself: several times faster)
+        p.setRenderHint(QPainter.Antialiasing, False)
+        p.drawPath(strokes)
+        p.setPen(Qt.NoPen)
+        p.setBrush(pal.select)
+        p.drawPath(fills)               # (texts too: smoothed, a big block's took 100+ ms)
+        p.restore()
+
     def _paint_selection(self, p, pal):
         s = self.sheet()
         key = (s.version, frozenset(self.sel))
@@ -938,10 +1070,14 @@ class CadView(QWidget):
         pen.setStyle(Qt.DashLine)
         p.setPen(pen)
         p.setBrush(Qt.NoBrush)
+        # (without smoothing, as the drawing: a big selected footprint took a second to light)
+        smooth = p.testRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.Antialiasing, False)
         p.drawPath(strokes)
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(51, 153, 255, 140))
         p.drawPath(fills)
+        p.setRenderHint(QPainter.Antialiasing, smooth)
         lit = [s.entities[i] for i in self._preview if i in s.entities]
         h = self._hover
         if h is not None and h.id in s.entities and self._window is None:
@@ -952,24 +1088,44 @@ class CadView(QWidget):
     def _paint_glow(self, p, ents):
         """Light up what a click (or the window/lasso) would select: a soft wide halo under a
         bright, thicker line."""
-        strokes, fills = entities_path(ents)
-        halo = QColor(80, 170, 255, 90)
-        pen = QPen(halo, 9)
+        if len(ents) == 1:
+            # (the one under the cursor: kept, so passing back and forth over a big block
+            # doesn't make its drawing again each time)
+            e = ents[0]
+            got = self._glow_paths.get(id(e))
+            if got is None or got[0] is not e:
+                if len(self._glow_paths) > 32:
+                    self._glow_paths.clear()
+                got = self._glow_paths[id(e)] = (e, entities_path([e]))
+            strokes, fills = got[1]
+        else:
+            strokes, fills = entities_path(ents)
+        # a big block (a footprint from a maker's drawing) gets the bright line only, not
+        # smoothed: its soft halo took seconds to draw, just from the mouse passing over it
+        big = strokes.elementCount() + fills.elementCount() > GLOW_LIMIT
+        smooth = p.testRenderHint(QPainter.Antialiasing)
+        if not big:
+            halo = QColor(80, 170, 255, 90)
+            pen = QPen(halo, 9)
+            pen.setCosmetic(True)
+            pen.setCapStyle(Qt.RoundCap)
+            pen.setJoinStyle(Qt.RoundJoin)
+            p.setPen(pen)
+            p.setBrush(Qt.NoBrush)
+            p.drawPath(strokes)
+            p.drawPath(fills)
+        else:
+            p.setRenderHint(QPainter.Antialiasing, False)
+        bright = QColor(150, 210, 255)
+        pen = QPen(bright, 2.5 if not big else 2)
         pen.setCosmetic(True)
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
         p.setPen(pen)
         p.setBrush(Qt.NoBrush)
-        p.drawPath(strokes)
-        p.drawPath(fills)
-        bright = QColor(150, 210, 255)
-        pen = QPen(bright, 2.5)
-        pen.setCosmetic(True)
-        p.setPen(pen)
         p.drawPath(strokes)
         p.setPen(Qt.NoPen)
         p.setBrush(bright)
         p.drawPath(fills)
+        p.setRenderHint(QPainter.Antialiasing, smooth)
 
     def _paint_grips(self, p, pal):
         if self.cmd is not None and not isinstance(self.cmd, C.GripCmd):

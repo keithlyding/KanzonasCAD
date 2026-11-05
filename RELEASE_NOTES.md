@@ -6,6 +6,41 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12
+
+**New**
+- Symbols and footprints can say who makes them: **Manufacturer**, **Family** and **Series**
+  (all optional). Each field explains itself, offers what your library already holds, and a
+  "?" button opens a short section of the manual about what they mean.
+- The Library popup searches them too, and two lists above the symbols show one
+  manufacturer's or one family's blocks. Placing a block fills in its manufacturer.
+- **Properties...** changes a library block's name, category, description, manufacturer,
+  family, series and pin names. Renaming it keeps your parts linked to it.
+- **Edit block...** opens a library block's drawing in a tab of its own, with its pins and tag
+  shown as texts you can move, rename, copy or erase. Change it with any command, then
+  **Save block**.
+- After a block is changed, KanzonasCAD asks whether to update its copies in your project:
+  one step (Undo takes it back), and the wires stay on the pins.
+- **Align objects** on the Panel tab lines up footprints, DIN rail and duct: left, center,
+  right, top, middle or bottom, to one of them you pick.
+- Ctrl+arrow keys move the selected objects one snap step (1/8 inch to start);
+  Ctrl+Shift+arrow keys move them a tenth of that. Wires on a moved symbol come along.
+
+**Fixed**
+- Footprints made from a manufacturer's drawing (thousands of lines and arcs) no longer make
+  the program freeze: moving one, hovering over one and snapping near one are quick again.
+- Opening a DXF or DWG drawing (with a double-click, or Open...) showed it in a random place,
+  sometimes off the page. The drawing is now put on the sheet and shown: moved to the middle
+  when it was drawn somewhere else, and, when it is bigger than the sheet, the sheet gets a
+  scale it fits at (the drawing stays its real size). Importing into a sheet keeps its
+  coordinates, as before.
+- Import DXF or DWG remembers the folder you last imported from.
+- The list of running object snaps (the arrow next to OSNAP in the status bar) stays open
+  while you tick and untick snaps, so you can set several in a row. Click outside it or press
+  Esc when done.
+- Make block on a panel sheet starts on Panel footprint (on Schematic symbol on other
+  sheets).
+
 ## 0.11.9
 
 **Fixed**

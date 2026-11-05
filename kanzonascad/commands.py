@@ -624,6 +624,13 @@ class _TwoPoint(Command):
 class MoveCmd(_TwoPoint):
     name, title = "MOVE", "Move"
 
+    def shift(self, p):
+        """(objects, dx, dy): the preview is the objects shifted (the view draws them once
+        and slides the drawing, instead of rebuilding big blocks on every mouse move)."""
+        if self.from_pt is None:
+            return None
+        return self.ents, p[0] - self.from_pt[0], p[1] - self.from_pt[1]
+
     def result(self, p):
         dx, dy = p[0] - self.from_pt[0], p[1] - self.from_pt[1]
         return [e.moved(dx, dy) for e in self.ents]
@@ -638,6 +645,7 @@ class MoveCmd(_TwoPoint):
 
 class CopyCmd(_TwoPoint):
     name, title = "COPY", "Copy"
+    shift = MoveCmd.shift
 
     def second_prompt(self):
         self.ctx.prompt("Specify second point (Enter to finish)")
@@ -1292,7 +1300,8 @@ class MakeBlockCmd(Command):
         defn = M.BlockDef(d["name"], d["kind"], ents, pins, None, 0.1, d.get("category", ""),
                           d.get("description", ""), d.get("role", "device"),
                           d.get("contact", ""), d.get("prefix", ""),
-                          wiring=d.get("wiring", ""))
+                          wiring=d.get("wiring", ""), manufacturer=d.get("manufacturer", ""),
+                          family=d.get("family", ""), series=d.get("series", ""))
         if d["kind"] == "symbol":
             if tag_pt is not None:
                 defn.tag_pos = (tag_pt[0] - bx, tag_pt[1] - by)
@@ -1327,6 +1336,10 @@ class InsertCmd(Command):
     def __init__(self, ctx, defn, attrs=None):
         super().__init__(ctx)
         self.defn, self.attrs = defn, dict(attrs or {})
+        if getattr(defn, "manufacturer", "") and not self.attrs.get("MFR"):
+            # the block says who makes it: the copy's MFR, as a part's would (a part's own
+            # manufacturer, given in attrs, wins)
+            self.attrs["MFR"] = defn.manufacturer
         self.angle, self.mirror = 0.0, False
         self.pending = None             # a contact's point, waiting for its device
         self.cands = []
@@ -1710,6 +1723,85 @@ class AlignDevicesCmd(Command):
         self.ctx.set_selection(set())
 
 
+class AlignObjectsCmd(Command):
+    """ALIGNOBJ: line up the selected objects (footprints, DIN rail, duct...) by an edge or
+    their middles, as drawing programs' Align does: Left, Center, Right, Top, Middle or Bottom,
+    then click the object to line them up with (Enter: the selection's own outer edge, or
+    its middle). Each moves straight across (Left, Center, Right) or straight up and down
+    (Top, Middle, Bottom); one undoable step; wires on a moved symbol's pins follow."""
+    name, title = "ALIGNOBJ", "Align objects"
+    selects = True
+    WAYS = {"L": "left", "C": "center", "R": "right", "T": "top", "M": "middle",
+            "B": "bottom"}
+
+    def begin(self):
+        self.ents = _selected(self.ctx)
+        self.way = None
+        if len(self.ents) < 2:
+            self.ctx.message("Select two or more objects to line up")
+            self.finish()
+            return
+        self.ctx.prompt("Line them up by", [("Left", "L"), ("Center", "C"), ("Right", "R"),
+                                            ("Top", "T"), ("Middle", "M"), ("Bottom", "B")])
+
+    def text(self, s):
+        k = s.strip().upper()[:1]
+        if self.way is None and k in self.WAYS:
+            self.way = self.WAYS[k]
+            self.picking = True
+            self.ctx.prompt("Click the object to line them up with (Enter: the selection's "
+                            "own %s)" % ("middle" if self.way in ("center", "middle")
+                                         else "%s edge" % self.way))
+            return True
+        return False
+
+    @staticmethod
+    def _at(bb, way):
+        """The edge or middle of a box that `way` lines up."""
+        return {"left": bb[0], "right": bb[2], "center": (bb[0] + bb[2]) / 2,
+                "bottom": bb[1], "top": bb[3], "middle": (bb[1] + bb[3]) / 2}[way]
+
+    def pick(self, p):
+        e = self.ctx.pick_entity(p)
+        if e is None:
+            self.ctx.message("Click an object (Enter: line them up with the selection's "
+                             "own edge)")
+            return
+        self._apply(e.bbox(), keep=e.id)
+
+    def enter(self):
+        if self.selecting():
+            return Command.enter(self)
+        if self.way is None:
+            self.finish()
+            return
+        boxes = [e.bbox() for e in self.ents]
+        x0 = min(b[0] for b in boxes)
+        y0 = min(b[1] for b in boxes)
+        x1 = max(b[2] for b in boxes)
+        y1 = max(b[3] for b in boxes)
+        self._apply((x0, y0, x1, y1))
+
+    def _apply(self, ref, keep=None):
+        target = self._at(ref, self.way)
+        across = self.way in ("left", "center", "right")
+        sheet = self.ctx.sheet()
+        moved = 0
+        with self.ctx.edit(self.title) as ed:
+            for e in self.ents:
+                cur = sheet.entities.get(e.id)
+                if cur is None or cur.id == keep:
+                    continue
+                d = target - self._at(cur.bbox(), self.way)
+                if abs(d) <= 1e-9:
+                    continue
+                ed.change(sheet, cur.moved(d, 0.0) if across else cur.moved(0.0, d))
+                moved += 1
+        self.ctx.message("Lined up %d object(s) by their %s" % (
+            moved, self.way if self.way in ("center", "middle") else self.way + " edges"))
+        self.finish()
+
+
 class TrimWireCmd(Command):
     """TRIMWIRE (AutoCAD Electrical's Trim Wire): click a wire and the piece clicked goes, up
     to the nearest wire or pin on either side (to its end when there is none). No cutting
@@ -2011,6 +2103,7 @@ COMMANDS = {
     "DUCT": (DuctCmd, ["WIREWAY", "WD"]),
     "SCOOT": (ScootCmd, ["AESCOOT"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
+    "ALIGNOBJ": (AlignObjectsCmd, ["ALO"]),
     "LAYOFF": (LayerOffCmd, []),
     "LAYISO": (LayerIsoCmd, []),
     "LAYON": (LayerOnCmd, []),

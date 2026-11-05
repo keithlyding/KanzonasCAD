@@ -158,8 +158,8 @@ the part's symbol or its footprint.</p>
 the two ends of a dimension you know (the part's width say) and type its real length
 (<code>45mm</code> or <code>1.77</code>).</li>
 <li>Select it and use <b>Make block</b> (B). Pick the <b>base point</b> (the point it is placed
-by), then fill in the name, kind (schematic symbol or panel footprint), category and
-description. For a symbol also: its part in cross-references (a device on its own, a coil or
+by), then fill in the name, kind (schematic symbol or panel footprint: it starts on panel
+footprint on a panel sheet, on schematic symbol otherwise), category and description. For a symbol also: its part in cross-references (a device on its own, a coil or
 operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...),
 what wire numbers do through it (nothing; a distribution block; an off-sheet connector: see
 Wire numbers) and the pin names.</li>
@@ -173,6 +173,66 @@ footprint.</p>
 catalog number, or pick one of the library's parts for it. <b>Explode</b> (X) turns placed
 blocks back into plain lines and texts. Delete in the Library panel removes your own symbols,
 footprints and parts (the built-in symbols stay).</p>
+
+<a name="manufacturer-family-series"></a>
+<h3>Manufacturer, family and series</h3>
+<p>Every symbol and footprint can say who makes it, in three optional fields (Make block asks
+for them; <b>Block properties...</b> changes them). They are only for finding and grouping
+blocks: nothing else depends on them, and you can leave any of them blank.</p>
+<ul>
+<li><b>Manufacturer</b>: the company whose name is on the part's label: Allen-Bradley
+(Rockwell Automation), Siemens, Schneider Electric, Phoenix Contact...</li>
+<li><b>Family</b>: the product line within that manufacturer: ControlLogix, CompactLogix or
+PowerFlex 525 (Allen-Bradley); SIMATIC S7-1500 (Siemens)...</li>
+<li><b>Series</b>: the line or generation within the family, when the maker uses one. For
+Rockwell it is the hardware series letter on the label (Series A, B, C...); other makers use
+"series" for a sub-line of a family. Leave it blank if you don't need it.</li>
+</ul>
+<p>Makers name things differently, and there is no one right way: pick a way of writing each
+name and keep to it (Allen-Bradley or Rockwell Automation, not both), so your blocks group
+together. Each field offers what your library already holds (the families of the
+manufacturer typed, the series of that family); the list grows from what you type. The
+<b>?</b> button beside Manufacturer opens this section.</p>
+<p>In the Library popup, the search box also finds a manufacturer, family or series, and the
+two lists above the symbols (<b>All manufacturers</b>, <b>All families</b>) show only one
+manufacturer's blocks, or one family's; the manufacturer list also filters the Parts tab. A
+block's tooltip shows all three. Placing a block whose manufacturer is set fills in the placed
+copy's manufacturer (as a part does; a part's own manufacturer wins), and <b>New part...</b>
+with a symbol or footprint selected in the Library starts the part with that block and its
+manufacturer.</p>
+
+<h3>Changing a library block</h3>
+<p>Select a symbol or footprint in the Library popup (or one placed in the drawing) and use:</p>
+<ul>
+<li><b>Properties...</b> (a button in the Library popup, its right-click menu, or
+<b>Block properties...</b> in the Library menu): the details Make block asked for, filled in:
+name, category, description, manufacturer, family, series and, for a symbol, its part in
+cross-references, contact, tag prefix, wire numbers through it and its pin names in order
+(renaming pins; Edit block adds or removes them). Its kind can't change. Renaming it saves it
+under the new name, removes your file under the old one and points your parts at the new
+name.</li>
+<li><b>Edit block...</b> (a button in the Library popup, its right-click menu, or the Library
+menu and the Schematic and Panel tabs, for a block selected in the drawing): the library's
+copy of the block opens in a tab of its own, <b>Block: name</b>, as AutoCAD's Block Editor
+does. Change it with every normal command (Move, Copy, Trim, Text, grips, Undo...). The cross
+is the <b>base point</b> (on the locked layer BLOCK BASE POINT); each green text on layer BLOCK
+PINS is a <b>pin</b>: its insertion point, marked with a small ring, is where wires attach, and
+its text is the pin's name (edit the text to rename it, move it with its grip, copy it to add
+a pin, erase it to remove one); the blue text on BLOCK TAG is where the tag goes, and texts on
+BLOCK ATTRIBUTES are where a terminal's number or a PLC address shows. <b>Save block</b>
+(Library menu, the ribbon, or Save, Ctrl+S, in that tab) puts it back in your library: the
+pins keep their order, new ones come after. Closing the tab with changes not saved asks
+first.</li>
+</ul>
+<p>Changing a built-in JIC symbol saves your own copy of the same name, which takes its place
+(Delete in the Library brings the built-in one back). After saving, if the project in the
+drawing tab (for Edit block, the one it was opened from) has copies of the block, KanzonasCAD
+asks <b>Update the copies of ... in ...?</b> Yes changes them in one step (Undo takes it back):
+they take the new drawing, a renamed block's copies take its new name, and their tags,
+descriptions, manufacturers and catalog numbers stay. Wires stay on the pins (matched by
+name) and stretch to where the pins moved; a wire on a pin that is gone stays where it was,
+and the command line says how many. No keeps the old drawing. Other projects keep their own
+copies of the block as they were.</p>
 
 
 <h2>Device tags</h2>
@@ -447,8 +507,9 @@ follows it out), <b>Parallel</b> (PAR: hover over a line, then move roughly its 
 last point: the new line runs parallel to it) and <b>Apparent intersection</b> (APP: hover
 over two lines, then near where they would meet if they were longer).</li>
 <li><b>Turning snaps on and off</b>: the arrow on the status bar's <b>OSNAP</b> button lists
-every snap with a check mark; click one to turn it on or off (Select all, Clear all, Object
-snap settings... there too). <b>Drafting settings...</b> has the same checkboxes. Endpoint,
+every snap with a check mark; click one to turn it on or off. The list stays open, so you
+can tick several in a row (Select all and Clear all too); click outside it or press Esc when
+done (Object snap settings... is there too). <b>Drafting settings...</b> has the same checkboxes. Endpoint,
 Midpoint, Center, Node, Quadrant, Intersection and Insertion are on to start; the choice is
 kept between sessions; F3 turns them all off and on at once.</li>
 <li><b>A snap for one point</b>: at a point prompt, type its short name (PER, TAN, NEA,
@@ -512,6 +573,12 @@ their heights with it (in one undoable step).</li>
 bring a manufacturer's drawing to real size with Scale, Reference before it becomes a
 footprint.</li>
 <li><b>{{Scale}}</b> in the title block shows the sheet's scale (Edit title block to add it).</li>
+<li><b>Align objects</b> (ALIGNOBJ, ALO; Modify menu, Panel tab) lines up footprints, DIN rail,
+duct or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right</b>,
+<b>Top</b>, <b>Middle</b> or <b>Bottom</b> (L, C, R, T, M, B), then click the one to line
+them up with, or press Enter to line them up with the selection's own outer edge (or its
+middle). Each moves only straight across (Left, Center, Right) or straight up and down (Top,
+Middle, Bottom), by its outline; one Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
 one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
 slots. Stretch one with its end grips (or double-click it and type its length), move it with
@@ -539,6 +606,10 @@ cursor's square fills in: that is what a click selects.</li>
 press there and <b>drag</b> to move the selection, and let go where it goes (on the snap grid,
 and straight with Ortho). Hold <b>Ctrl</b> when you let go to leave the originals and drop a
 <b>copy</b> (a + shows). Undo puts it back. For exact distances use Move or Copy objects.</li>
+<li><b>Ctrl+arrow keys</b> move the selection one snap step (Drafting settings, 1/8 inch to
+start) left, right, up or down; <b>Ctrl+Shift+arrow</b> a tenth of a step, for fine placement.
+Each press is one Undo; wires on a moved symbol's pins come along, and objects on locked
+layers stay.</li>
 <li>Over a <b>grip</b> of a selected object, the square jumps onto the grip and the arrow shows:
 a click there starts stretching it.</li>
 <li>Click an object to add it to the selection; <b>Shift</b>+click removes it.</li>
@@ -589,9 +660,17 @@ and after KanzonasCAD is closed and started again.</li>
 <li><b>New project</b> (Ctrl+N), <b>Open...</b> (Ctrl+O, a project, or a DXF or DWG drawing),
 <b>Open recent</b>, <b>Save</b> (Ctrl+S), <b>Save as...</b> (Ctrl+Shift+S),
 <b>Close project</b> (Ctrl+W), <b>Exit</b> (Ctrl+Q).</li>
-<li><b>Import DXF or DWG into this sheet...</b>: lines, polylines, circles, arcs, text,
-ellipses and splines (as polylines), blocks and dimensions (exploded). Drawings in
-millimeters are converted to inches.</li>
+<li><b>Opening a DXF or DWG</b> (Open..., or a double-click on it) makes a new project of it
+and puts the drawing on the page, wherever the other program drew it: left where it is when
+it already lies on the sheet (a DXF exported from KanzonasCAD, or one drawn on a sheet of
+this size), moved to the middle of the sheet when it fits, and, when it is bigger than the
+sheet, the sheet gets the biggest scale it fits at (as <b>Fit</b> does; the drawing and its
+text stay their real size). The command line says what was done; Sheet scale... changes the
+scale.</li>
+<li><b>Import DXF or DWG into this sheet...</b> keeps the drawing's own coordinates. It reads
+lines, polylines, circles, arcs, text, ellipses and splines (as polylines), blocks and
+dimensions (exploded); drawings in millimeters are converted to inches. It opens in the folder
+you last imported from (manufacturers' drawings usually sit together).</li>
 <li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version
 since 2018 too) open and import directly, with nothing to install: KanzonasCAD reads them with
 its own DWG reader (ezdwg, free and open source). If it can't read one and the free
@@ -659,6 +738,7 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>Enter / Space</td><td>Finish a step; repeat the last command</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection</td></tr>
 <tr><td>Delete</td><td>Erase the selection</td></tr>
+<tr><td>Ctrl+arrows / Ctrl+Shift+arrows</td><td>Move the selection one snap step / a tenth of one</td></tr>
 <tr><td>Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S</td><td>New / Open / Save / Save as</td></tr>
 <tr><td>Ctrl+W / Ctrl+Q</td><td>Close project / Exit</td></tr>
 <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>
