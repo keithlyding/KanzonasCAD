@@ -487,6 +487,40 @@ class SelectionFeelTest(unittest.TestCase):
         self.assertEqual(v._preview, set())
 
 
+class OrthoSnapTest(unittest.TestCase):
+    """With Ortho on, the crosshair is on the Ortho line, so the snaps are looked for there,
+    not around the hidden mouse (the owner: it "snaps to osnap points that are really far
+    away from where my cursor is")."""
+
+    def setUp(self):
+        self.win, self.v = window()
+        self.v.snap_on = self.v.polar_on = False
+        self.v.osnap_on = self.v.ortho_on = True
+        self.v.osnap_modes = {"end"}
+        with self.v.project.edit("lines") as ed:
+            ed.add(self.v.sheet(), M.Line((5, 3), (6, 3)))      # off the Ortho line
+            ed.add(self.v.sheet(), M.Line((8, 0), (8, -1)))     # an end on it
+        self.v.run(C.LineCmd)
+        type_in(self.v, "0,0")
+
+    def tearDown(self):
+        self.v.project.saved_at = len(self.v.project.undo_stack)
+        self.win.close()
+
+    def r(self):
+        return 10 / self.v.scale                        # (the aperture, in drawing units)
+
+    def test_a_point_off_the_line_by_the_mouse_doesnt_pull_it(self):
+        q = self.v.resolve((5.0 + self.r() / 3, 3.0 - self.r() / 3))   # the mouse by (5, 3)
+        self.assertEqual(q[1], 0.0)                     # still straight across
+        self.assertIsNone(self.v.snap)
+
+    def test_a_point_on_the_line_snaps(self):
+        q = self.v.resolve((8.0 + self.r() / 3, 3 * self.r()))   # mouse well above (8, 0)
+        self.assertEqual(self.v.snap[0], "end")
+        self.assertEqual(tuple(q), (8.0, 0.0))
+
+
 class PolarTest(unittest.TestCase):
     def setUp(self):
         self.win, self.v = window()

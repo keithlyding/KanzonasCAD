@@ -12,6 +12,8 @@ build fails without them.
 - A quick drag to select (press, move fast, let go) selected nothing. It now selects as a
   window from where you pressed to where you let go: left to right what is wholly inside,
   right to left what it crosses too. Drawing a loop around objects is still a lasso.
+- With Ortho on, object snaps no longer grab points far from the crosshair: they are looked
+  for where the crosshair is, on the Ortho line, not where the mouse really is.
 
 ## 0.12
 

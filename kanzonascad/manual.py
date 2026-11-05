@@ -516,7 +516,10 @@ kept between sessions; F3 turns them all off and on at once.</li>
 END...) and Enter, or <b>Shift + right-click</b> and pick it from the list: the next point
 uses that snap only, ticked or not, even with F3 off. NON gives the next point no snap.</li>
 <li><b>Grid display</b> (F7, GRID): dots across the drawing area.</li>
-<li><b>Ortho mode</b> (F8, ORTHO): lines straight across or up and down.</li>
+<li><b>Ortho mode</b> (F8, ORTHO): lines straight across or up and down. The crosshair stays
+on that line, and object snaps are looked for around it (not around where the mouse really
+is), so an end or pin on the line snaps and one off to the side doesn't pull the line to
+it.</li>
 <li><b>Polar tracking</b> (F10, POLAR): near one of the set angles (from the last point), the
 cursor locks onto that direction: a green dashed line and a tip show the distance and angle
 (<i>Polar: 2.5 &lt; 45&deg;</i>). Typing a number then goes that far along it. The angles are

@@ -577,7 +577,13 @@ class CadView(QWidget):
         wants_point = cmd is not None and not cmd.selecting() and not cmd.picking
         if not wants_point:
             return p
-        s = self.object_snap(p)
+        # with Ortho, the crosshair shows the point on the Ortho line, not the mouse: the
+        # snaps are looked for around it (around the mouse, one far off the line, by the
+        # hidden mouse, pulled the line to it: "far away from where my cursor is")
+        probe = p
+        if self.ortho_on and cmd.base is not None:
+            probe = self._ortho(cmd.base, p)
+        s = self.object_snap(probe)
         if s is not None:
             self.snap = s
             return s[1]
