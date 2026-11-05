@@ -15,6 +15,10 @@ build fails without them.
 - Hold Shift with a window or lasso to take everything it catches out of the selection (as
   Shift+click does for one object).
 
+**Fixed**
+- Imported DXF and DWG drawings lost their dimension values and all their multi-line text
+  (MTEXT): they come through now, each where it belongs.
+
 ## 0.12.2
 
 **Fixed**

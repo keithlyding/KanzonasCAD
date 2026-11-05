@@ -681,8 +681,8 @@ sheet, the sheet gets the biggest scale it fits at (as <b>Fit</b> does; the draw
 text stay their real size). The command line says what was done; Sheet scale... changes the
 scale.</li>
 <li><b>Import DXF or DWG into this sheet...</b> keeps the drawing's own coordinates. It reads
-lines, polylines, circles, arcs, text, ellipses and splines (as polylines), blocks and
-dimensions (exploded); drawings in millimeters are converted to inches. It opens in the folder
+lines, polylines, circles, arcs, text and multi-line text (MTEXT), ellipses and splines (as
+polylines), blocks and dimensions (exploded, with their values); drawings in millimeters are converted to inches. It opens in the folder
 you last imported from (manufacturers' drawings usually sit together).</li>
 <li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version
 since 2018 too) open and import directly, with nothing to install: KanzonasCAD reads them with
