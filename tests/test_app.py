@@ -458,6 +458,17 @@ class SelectionFeelTest(unittest.TestCase):
         drag(self.v, self.loop(False))
         self.assertEqual(self.v.sel, {self.a.id, self.b.id})
 
+    def test_quick_drag_is_a_window(self):
+        # (the owner: "if I ... move my mouse too quickly, the select doesn't take": a fast
+        # drag gives a few points nearly on a line, a lasso with nothing inside it)
+        right = [(1.5 + 0.38 * i, 1.0 + 0.32 * i + (0.02 if i % 2 else 0)) for i in range(6)]
+        drag(self.v, right)                                     # left to right: window
+        self.assertEqual(self.v.sel, {self.a.id})
+        self.v.set_selection(set())
+        left = [(3.4 - 0.3 * i, 2.6 - 0.24 * i + (0.02 if i % 2 else 0)) for i in range(6)]
+        drag(self.v, left)                                      # right to left: crossing
+        self.assertEqual(self.v.sel, {self.a.id, self.b.id})
+
     def test_hover_and_window_preview_light_up(self):
         from PySide6.QtCore import QPointF
         v = self.v
@@ -474,6 +485,40 @@ class SelectionFeelTest(unittest.TestCase):
         click(v, (3.6, 2.4))
         self.assertEqual(v.sel, {self.a.id})
         self.assertEqual(v._preview, set())
+
+
+class OrthoSnapTest(unittest.TestCase):
+    """With Ortho on, the crosshair is on the Ortho line, so the snaps are looked for there,
+    not around the hidden mouse (the owner: it "snaps to osnap points that are really far
+    away from where my cursor is")."""
+
+    def setUp(self):
+        self.win, self.v = window()
+        self.v.snap_on = self.v.polar_on = False
+        self.v.osnap_on = self.v.ortho_on = True
+        self.v.osnap_modes = {"end"}
+        with self.v.project.edit("lines") as ed:
+            ed.add(self.v.sheet(), M.Line((5, 3), (6, 3)))      # off the Ortho line
+            ed.add(self.v.sheet(), M.Line((8, 0), (8, -1)))     # an end on it
+        self.v.run(C.LineCmd)
+        type_in(self.v, "0,0")
+
+    def tearDown(self):
+        self.v.project.saved_at = len(self.v.project.undo_stack)
+        self.win.close()
+
+    def r(self):
+        return 10 / self.v.scale                        # (the aperture, in drawing units)
+
+    def test_a_point_off_the_line_by_the_mouse_doesnt_pull_it(self):
+        q = self.v.resolve((5.0 + self.r() / 3, 3.0 - self.r() / 3))   # the mouse by (5, 3)
+        self.assertEqual(q[1], 0.0)                     # still straight across
+        self.assertIsNone(self.v.snap)
+
+    def test_a_point_on_the_line_snaps(self):
+        q = self.v.resolve((8.0 + self.r() / 3, 3 * self.r()))   # mouse well above (8, 0)
+        self.assertEqual(self.v.snap[0], "end")
+        self.assertEqual(tuple(q), (8.0, 0.0))
 
 
 class PolarTest(unittest.TestCase):
