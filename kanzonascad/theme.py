@@ -51,6 +51,17 @@ def app_icon():
                               "icon.png"))
 
 
+def logo_pixmap(height):
+    """KanzonasCAD's logo (the cactus and sunflower, the name, the tagline) at the given
+    height, shipped inside the package (made by tools/make_logos.py)."""
+    import os
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QPixmap
+    pm = QPixmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources",
+                              "logo.png"))
+    return pm.scaledToHeight(height, Qt.SmoothTransformation) if not pm.isNull() else pm
+
+
 def is_dark():
     return _mode == "dark"
 

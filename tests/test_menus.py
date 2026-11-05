@@ -31,3 +31,20 @@ class MenusTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AboutTest(unittest.TestCase):
+    def test_about_shows_the_logo_and_version(self):
+        from PySide6.QtWidgets import QLabel
+        from kanzonascad import __version__
+        win, v = window()
+        try:
+            dlg = win.about_dialog()
+            logo = dlg.findChild(QLabel, "about_logo")
+            self.assertFalse(logo.pixmap().isNull())
+            self.assertEqual(logo.pixmap().height(), 110)
+            texts = " ".join(l.text() for l in dlg.findChildren(QLabel))
+            self.assertIn(__version__, texts)
+            dlg.deleteLater()
+        finally:
+            win.close()

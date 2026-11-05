@@ -1939,10 +1939,30 @@ class MainWindow(QMainWindow):
         lay.addWidget(b)
         dlg.exec()
 
+    def about_dialog(self):
+        """Help > About KanzonasCAD: the logo, the version and where the source is (as
+        KanzonasPDF's)."""
+        from .theme import logo_pixmap
+        dlg = QDialog(self)
+        dlg.setWindowTitle("About KanzonasCAD")
+        lay = QVBoxLayout(dlg)
+        logo = QLabel()
+        logo.setObjectName("about_logo")
+        logo.setPixmap(logo_pixmap(110))
+        logo.setStyleSheet("background: #f9f9f9; border-radius: 6px; padding: 6px;")
+        lay.addWidget(logo)
+        text = QLabel("Version %s. Free electrical CAD for Windows and Linux.<br><br>"
+                      "Free software under the MIT License.<br>"
+                      "Source code and downloads: "
+                      "<a href='https://github.com/keithlyding/KanzonasCAD'>"
+                      "github.com/keithlyding/KanzonasCAD</a>" % __version__)
+        text.setOpenExternalLinks(True)
+        text.setWordWrap(True)
+        lay.addWidget(text)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok)
+        btns.accepted.connect(dlg.accept)
+        lay.addWidget(btns)
+        return dlg
+
     def about(self):
-        from .theme import app_icon
-        self.setWindowIcon(app_icon())          # (About shows the window's icon)
-        QMessageBox.about(self, "About KanzonasCAD",
-                          "<b>KanzonasCAD %s</b><br>Free electrical CAD for Windows and Linux."
-                          "<br>Source: <a href='https://github.com/keithlyding/KanzonasCAD'>"
-                          "github.com/keithlyding/KanzonasCAD</a><br>MIT License." % __version__)
+        self.about_dialog().exec()
