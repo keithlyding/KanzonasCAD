@@ -64,7 +64,7 @@ uses unless it has its own (8 rows, A to H, and 10 columns to start), the device
 </ul></li>
 <li><b>Edit title block</b>: see below.</li>
 <li><b>Layers...</b>: add, rename, recolor, switch off and lock layers, and choose the current
-layer. The Layer box on the Home tab picks the current layer; with objects selected, picking
+layer. The Layer box on the Home tab (and on the Panel tab) picks the current layer; with objects selected, picking
 a layer moves them to it.</li>
 </ul>
 
@@ -77,7 +77,8 @@ SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Pan
 Project properties set those colors, which recolors everything on them.</p>
 <p><b>Layers</b>, as in AutoCAD: a hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
-Locked, color, current layer). Quicker, on the Home tab's Layers group and the Modify menu:</p>
+Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the layer box, the layer list,
+Layers..., Color, Hide layer and Show all too) and the Modify menu:</p>
 <ul>
 <li>The <b>layer list</b> button next to the current layer: every layer with its light bulb
 (click to hide or show it) and lock (click to lock or unlock it).</li>
