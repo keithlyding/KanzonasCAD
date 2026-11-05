@@ -144,6 +144,10 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
+- Revisions (owner, Nov 2026; 0.12.8): a revision history per project, numbered 0, 1, 2...,
+  each covering all sheets or the ones named; the title block's {Revision} and {Date} follow
+  the latest revision of each sheet. Footprints show a label of the user's choice per copy
+  (tag, part number, description, block name), set for a selection (0.12.7).
 - One `.kzcad` file per project (all sheets inside). It is plain JSON, readable by anyone: the
   working file, shared with other KanzonasCAD users as it is. DXF and PDF are for people
   without KanzonasCAD.

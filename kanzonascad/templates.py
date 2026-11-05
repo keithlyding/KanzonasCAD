@@ -33,6 +33,7 @@ def new_from(path):
     ValueError when it can't be read."""
     p = M.Project.load(path)
     p.path = None                       # (a new project: Save asks where; never the template)
+    p.revisions = []                    # (a new drawing starts its own history)
     p.undo_stack = []
     p.redo_stack = []
     p.saved_at = 0

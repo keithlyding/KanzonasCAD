@@ -368,6 +368,13 @@ class MainWindow(BlockEditing, QMainWindow):
         A("sheet_props", "&Sheet properties...", self.sheet_properties, label="Sheet")
         A("project_props", "&Project properties...", self.project_properties, label="Project")
         A("layers", "&Layers...", self.layers_dialog, label="Layers")
+        A("revisions", "Re&visions...", lambda: self.revisions(), icon="revisions",
+          label="Revisions",
+          tip="The drawing's revision history: the title block's {Revision} and {Date} show "
+              "the latest")
+        A("new_revision", "&New revision...", lambda: self.revisions(add=True),
+          icon="new_revision", label="New revision",
+          tip="Add the next revision (0, 1, 2...), dated today")
         A("edit_tb", "Edit &title block", self._toggle_title_block, checkable=True,
           icon="title_block", label="Edit title block",
           tip="Draw and change the title block (lines and texts; {Field} in a text shows "
@@ -427,7 +434,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 ("name", "Show &block name", "its library footprint's name"),
                 ("", "&No label", "no label")):
             A("fp_label_" + (key or "none"), text, lambda _c=False, k=key: self.footprint_label(k),
-              icon="text", label=text.replace("&", ""),
+              icon="fp_label", label=text.replace("&", ""),
               tip="The selected footprints show %s" % tip)
         A("manual", "&User manual", lambda: self.show_manual(), "F1", label="Manual")
         A("check_updates", "Check for &updates...", lambda: self.check_updates(True),
@@ -492,7 +499,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 lm = m.addMenu("&Footprint label")
                 for lk in self.LABEL_KEYS:
                     lm.addAction(a[lk])
-                lm.menuAction().setIcon(theme.icon("text"))
+                lm.menuAction().setIcon(theme.icon("fp_label"))
             else:
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
@@ -500,7 +507,8 @@ class MainWindow(BlockEditing, QMainWindow):
                   None, "renumber",
                   "xref_update", "xref_freeze", "xref_auto", None, "materials", None,
                   "sheet_props",
-                  "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
+                  "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers",
+                  None, "new_revision", "revisions"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
@@ -578,6 +586,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Rotate", "small", [a["sheet_cw"], a["sheet_ccw"]]),
             ("Properties", "large", [a["sheet_props"], a["project_props"], a["layers"]]),
             ("Title block", "large", [a["edit_tb"]]),
+            ("Revisions", "large", [a["new_revision"], a["revisions"]]),
         ])
         r.add_tab("Output", [
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
@@ -1653,6 +1662,23 @@ class MainWindow(BlockEditing, QMainWindow):
         v = self.view()
         if v is not None:
             dialogs.project_properties(self, v.project, tab if isinstance(tab, int) else 0)
+
+    def revisions(self, add=False):
+        """Revisions... / New revision...: the revision history, changed in one undoable
+        step. True when changed."""
+        v = self.view()
+        if v is None:
+            return False
+        from .revisions_dialog import edit_revisions
+        new = edit_revisions(self, v.project, add)
+        if new is None:
+            return False
+        with v.project.edit("New revision" if add else "Revisions") as ed:
+            ed.project_revisions(new)
+        last = new[-1] if new else None
+        self._say("Revision %s, %s" % (last["rev"], last["date"]) if last
+                  else "No revisions: the title block shows the typed revision and date")
+        return True
 
     LABEL_KEYS = ("fp_label_tag", "fp_label_cat", "fp_label_desc", "fp_label_name",
                   "fp_label_none")

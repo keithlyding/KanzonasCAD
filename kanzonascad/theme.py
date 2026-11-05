@@ -33,7 +33,8 @@ ICONS = {
     # sheets / project
     "sheet_add": "file-document-outline", "sheet_del": "file-remove-outline",
     "sheet_up": "arrow-up", "sheet_down": "arrow-down", "sheet_props": "file-cog-outline",
-    "project_props": "folder-cog-outline", "layers": "layers-outline", "title_block": "table-edit",
+    "project_props": "folder-cog-outline", "revisions": "history",
+    "new_revision": "file-document-edit-outline", "fp_label": "label-outline", "layers": "layers-outline", "title_block": "table-edit",
     "black_bg": "invert-colors",
     "make_block": "shape-plus", "explode": "shape-outline", "library": "bookshelf",
     "edit_block": "vector-square-edit", "save_block": "content-save-check-outline",
