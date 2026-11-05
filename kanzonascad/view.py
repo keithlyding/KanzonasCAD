@@ -24,6 +24,13 @@ from . import osnap as OS
 SNAP_PRIORITY = OS.PRIORITY
 
 
+
+def _step_text(dx, dy):
+    """'0.125 in right', '0.0125 in up'..."""
+    if abs(dx) >= abs(dy):
+        return "%g in %s" % (abs(dx), "right" if dx > 0 else "left")
+    return "%g in %s" % (abs(dy), "up" if dy > 0 else "down")
+
 class CadView(QWidget):
     promptChanged = Signal(str, list, bool)     # text, [(label, key)], typing
     messaged = Signal(str)
@@ -832,7 +839,32 @@ class CadView(QWidget):
         if k == Qt.Key_Delete and self.cmd is None and self.sel:
             self.run(C.EraseCmd)
             return
+        arrows = {Qt.Key_Left: (-1, 0), Qt.Key_Right: (1, 0), Qt.Key_Up: (0, 1),
+                  Qt.Key_Down: (0, -1)}
+        if k in arrows and e.modifiers() & Qt.ControlModifier and self.cmd is None \
+                and self.sel:
+            fine = bool(e.modifiers() & Qt.ShiftModifier)
+            ux, uy = arrows[k]
+            step = self.snap_spacing / (10.0 if fine else 1.0)
+            self.nudge(ux * step, uy * step)
+            return
         super().keyPressEvent(e)
+
+    def nudge(self, dx, dy):
+        """Ctrl+arrow: the selection moved one snap step (Ctrl+Shift+arrow: a tenth of one),
+        as a Move would (one undoable step; wires stay on the pins they land on). Objects on
+        locked layers stay."""
+        sheet = self.sheet()
+        ents = [sheet.entities[i] for i in self.sel if i in sheet.entities and
+                not self.layer_locked(sheet.entities[i].layer)]
+        if not ents:
+            return 0
+        with self.edit("Move") as ed:
+            for ent in ents:
+                ed.change(sheet, ent.moved(dx, dy))
+        self.messaged.emit("Moved %d object(s) %s" % (len(ents), _step_text(dx, dy)))
+        self.update()
+        return len(ents)
 
     # ---- painting --------------------------------------------------------------------------
     def _drawing_key(self):

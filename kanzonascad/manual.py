@@ -158,8 +158,8 @@ the part's symbol or its footprint.</p>
 the two ends of a dimension you know (the part's width say) and type its real length
 (<code>45mm</code> or <code>1.77</code>).</li>
 <li>Select it and use <b>Make block</b> (B). Pick the <b>base point</b> (the point it is placed
-by), then fill in the name, kind (schematic symbol or panel footprint), category and
-description. For a symbol also: its part in cross-references (a device on its own, a coil or
+by), then fill in the name, kind (schematic symbol or panel footprint: it starts on panel
+footprint on a panel sheet, on schematic symbol otherwise), category and description. For a symbol also: its part in cross-references (a device on its own, a coil or
 operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...),
 what wire numbers do through it (nothing; a distribution block; an off-sheet connector: see
 Wire numbers) and the pin names.</li>
@@ -447,8 +447,9 @@ follows it out), <b>Parallel</b> (PAR: hover over a line, then move roughly its 
 last point: the new line runs parallel to it) and <b>Apparent intersection</b> (APP: hover
 over two lines, then near where they would meet if they were longer).</li>
 <li><b>Turning snaps on and off</b>: the arrow on the status bar's <b>OSNAP</b> button lists
-every snap with a check mark; click one to turn it on or off (Select all, Clear all, Object
-snap settings... there too). <b>Drafting settings...</b> has the same checkboxes. Endpoint,
+every snap with a check mark; click one to turn it on or off. The list stays open, so you
+can tick several in a row (Select all and Clear all too); click outside it or press Esc when
+done (Object snap settings... is there too). <b>Drafting settings...</b> has the same checkboxes. Endpoint,
 Midpoint, Center, Node, Quadrant, Intersection and Insertion are on to start; the choice is
 kept between sessions; F3 turns them all off and on at once.</li>
 <li><b>A snap for one point</b>: at a point prompt, type its short name (PER, TAN, NEA,
@@ -539,6 +540,10 @@ cursor's square fills in: that is what a click selects.</li>
 press there and <b>drag</b> to move the selection, and let go where it goes (on the snap grid,
 and straight with Ortho). Hold <b>Ctrl</b> when you let go to leave the originals and drop a
 <b>copy</b> (a + shows). Undo puts it back. For exact distances use Move or Copy objects.</li>
+<li><b>Ctrl+arrow keys</b> move the selection one snap step (Drafting settings, 1/8 inch to
+start) left, right, up or down; <b>Ctrl+Shift+arrow</b> a tenth of a step, for fine placement.
+Each press is one Undo; wires on a moved symbol's pins come along, and objects on locked
+layers stay.</li>
 <li>Over a <b>grip</b> of a selected object, the square jumps onto the grip and the arrow shows:
 a click there starts stretching it.</li>
 <li>Click an object to add it to the selection; <b>Shift</b>+click removes it.</li>
@@ -666,6 +671,7 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>Enter / Space</td><td>Finish a step; repeat the last command</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection</td></tr>
 <tr><td>Delete</td><td>Erase the selection</td></tr>
+<tr><td>Ctrl+arrows / Ctrl+Shift+arrows</td><td>Move the selection one snap step / a tenth of one</td></tr>
 <tr><td>Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S</td><td>New / Open / Save / Save as</td></tr>
 <tr><td>Ctrl+W / Ctrl+Q</td><td>Close project / Exit</td></tr>
 <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>
