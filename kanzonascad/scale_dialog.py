@@ -16,16 +16,23 @@ GOOD, WARN, BAD = "#2e7d32", "#b26a00", "#c62828"
 
 
 class Preview(QWidget):
-    """The sheet's paper, its border, the title block and the drawing at the scale picked."""
+    """The sheet's paper, its border, the title block and the drawing at the scale picked.
+
+    Made with its dialog as its Qt parent, and it reads the dialog through parentWidget(),
+    keeping no reference of its own. Before, it had no parent (and, put in a layout not yet on
+    a widget, PySide left it owned by Python although Qt then gave it the dialog as parent),
+    and its reference back to the dialog made a cycle: the dialog, which QDialog.exec() hands
+    back to Python, outlived Sheet scale and was freed later by the garbage collector together
+    with this widget, Python and Qt both deleting them, in whatever order the collector
+    picked. That crashed (a segfault in the unit tests, about one run in four)."""
 
     def __init__(self, dlg):
-        super().__init__()
-        self.dlg = dlg
+        super().__init__(dlg)
         self.setMinimumSize(QSize(360, 240))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def paintEvent(self, _e):
-        d = self.dlg
+        d = self.parentWidget()
         pw, ph = d.paper()
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
@@ -183,7 +190,7 @@ class SheetScaleDialog(QDialog):
         self.preview = Preview(self)
         body = QHBoxLayout()
         body.addWidget(self.preview, 3)
-        sidew = QWidget()
+        sidew = QWidget(self)               # (its parent from the start: see Preview)
         sidew.setLayout(side)
         sidew.setMaximumWidth(360)
         body.addWidget(sidew, 2)

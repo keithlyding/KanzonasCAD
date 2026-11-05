@@ -125,6 +125,32 @@ class SheetScaleWindowTest(unittest.TestCase):
         self.assertEqual(self.s.scale_text(), "1:8")
         self.assertEqual(self.s.cabinet, [30.0, 48.0, 12.0])
 
+    def test_closed_window_goes_at_once(self):
+        """Sheet scale, opened and cancelled, leaves nothing for the garbage collector: no
+        reference cycle keeps the window, and none of its widgets is owned by Python while Qt
+        gives it a parent. Both together let the collector free a window's widgets in any
+        order later on, and the unit tests crashed (segfault) about one run in four."""
+        import shiboken6
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import QWidget
+        from kanzonascad.scale_dialog import SheetScaleDialog, sheet_scale
+        d = SheetScaleDialog(self.win, self.p, self.s, None)
+        # (not through findChildren, which itself hands what it finds to the parent)
+        wrong = [type(w).__name__ for w in shiboken6.getAllValidWrappers()
+                 if isinstance(w, QWidget) and w is not d and w.window() is d
+                 and shiboken6.ownedByPython(w)]
+        self.assertEqual(wrong, [])
+        d.deleteLater()
+        del d
+        for _i in range(3):
+            # (Cancel as a person would: findChildren here would hand the window back to Qt)
+            QTimer.singleShot(0, lambda: APP.activeModalWidget().reject())
+            self.assertFalse(sheet_scale(self.win, self.p, self.s, None))
+        APP.processEvents()
+        # gone already (a window kept by a cycle stays a child of the main window until a
+        # collection)
+        self.assertEqual(self.win.findChildren(SheetScaleDialog), [])
+
     def test_too_big_says_so_and_fit_moves_it(self):
         from kanzonascad.scale_dialog import SheetScaleDialog
         with self.p.edit("draw") as ed:
