@@ -312,6 +312,14 @@ class MainWindow(QMainWindow):
         A("sheet_del", "&Delete sheet", self.delete_sheet, label="Delete sheet")
         A("sheet_up", "Move sheet &up", lambda: self.move_sheet(-1), label="Move up")
         A("sheet_down", "Move sheet do&wn", lambda: self.move_sheet(1), label="Move down")
+        A("sheet_cw", "Rotate sheet &clockwise", lambda: self.rotate_sheet(True),
+          ["Ctrl+Shift++", "Ctrl+Shift+="], icon="sheet_cw", label="Clockwise",
+          tip="Turn this sheet a quarter turn clockwise: its border, zones and title block turn "
+              "with it, the drawing stays upright (a tall cabinet on a tall sheet)")
+        A("sheet_ccw", "Rotate sheet counterc&lockwise", lambda: self.rotate_sheet(False),
+          ["Ctrl+Shift+-", "Ctrl+Shift+_"], icon="sheet_ccw", label="Counterclockwise",
+          tip="Turn this sheet a quarter turn counterclockwise: its border, zones and title "
+              "block turn with it, the drawing stays upright")
         A("sheet_props", "&Sheet properties...", self.sheet_properties, label="Sheet")
         A("project_props", "&Project properties...", self.project_properties, label="Project")
         A("layers", "&Layers...", self.layers_dialog, label="Layers")
@@ -409,7 +417,8 @@ class MainWindow(QMainWindow):
                   "lay_on", "lay_lock", "lay_unlock"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
-        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", None, "renumber",
+        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_cw", "sheet_ccw",
+                  None, "renumber",
                   "xref_update", "xref_freeze", "xref_auto", None, "materials", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers"):
@@ -487,6 +496,7 @@ class MainWindow(QMainWindow):
         r.add_tab("Sheets", [
             ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
             ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
+            ("Rotate", "small", [a["sheet_cw"], a["sheet_ccw"]]),
             ("Properties", "large", [a["sheet_props"], a["project_props"], a["layers"]]),
             ("Title block", "large", [a["edit_tb"]]),
         ])
@@ -1392,6 +1402,21 @@ class MainWindow(QMainWindow):
                                                              v.sheet().scale_text()))
         self._update_ui()
 
+    def rotate_sheet(self, clockwise=True):
+        """Rotate sheet clockwise / counterclockwise (Ctrl+Shift+Plus / Minus): a quarter turn,
+        the border, zones and title block with it, the drawing upright and kept on the page."""
+        v = self.view()
+        if v is None or v.sheet() is v.project.title_block:
+            return
+        from . import scalefit
+        p, s = v.project, v.sheet()
+        scalefit.rotate(p, s, clockwise)
+        self.cmdline.add_history("Sheet %s turned %s (%s)" % (
+            p.sheet_number(s), "clockwise" if clockwise else "counterclockwise",
+            dict(scalefit.ROTATIONS)[s.rotation].lower()))
+        v.zoom("sheet")                 # (the sheet changed shape: show all of it)
+        self._update_ui()
+
     def _show_scale(self, project, sheet):
         """The status bar's scale, amber with a tip when the drawing doesn't fit the sheet."""
         from . import scalefit
@@ -1837,6 +1862,8 @@ class MainWindow(QMainWindow):
             a[key].blockSignals(False)
         a["xref_freeze"].setEnabled(bool(has and not on_tb))
         a["sheet_scale"].setEnabled(bool(has and not on_tb))
+        a["sheet_cw"].setEnabled(bool(has and not on_tb))
+        a["sheet_ccw"].setEnabled(bool(has and not on_tb))
         self.scale_label.setVisible(bool(has and not on_tb))
         if has and not on_tb:
             self._show_scale(p, v.sheet())

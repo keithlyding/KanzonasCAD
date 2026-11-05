@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.7
+
+**New**
+- Rotate a sheet: Rotate sheet clockwise (Ctrl+Shift+Plus) and Rotate sheet counterclockwise
+  (Ctrl+Shift+Minus), in the Sheets menu. The border, zones and title block turn with the
+  sheet, and your drawing stays upright: a tall, narrow cabinet on a tall sheet.
+- The Sheet scale window says when turning the sheet would print the drawing bigger ("1:4
+  instead of 1:8") and turns it in one click.
+
 ## 0.11.6
 
 **New**

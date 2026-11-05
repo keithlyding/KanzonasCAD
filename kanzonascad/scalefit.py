@@ -26,19 +26,46 @@ def room(project, sheet):
         from .sheetframe import title_block_rect
         r = title_block_rect(project, sheet)
         if r is not None:
-            tb = (r[0] / k - MARGIN, r[1] / k, r[2] / k, r[3] / k + MARGIN)
+            tb = (r[0] / k - MARGIN, r[1] / k - MARGIN, r[2] / k + MARGIN, r[3] / k + MARGIN)
     return area, tb
+
+
+def as_rotated(sheet, rotation):
+    """A stand-in for `sheet` turned to `rotation` (degrees counterclockwise: 0, 90, 180,
+    270), for asking room() what that would give. The sheet itself if it is already so."""
+    if sheet.rotation == rotation:
+        return sheet
+    tmp = M.Sheet(size=sheet.size, cols=sheet.cols, rows=sheet.rows)
+    tmp.scale, tmp.scale_name, tmp.reserve = sheet.scale, sheet.scale_name, sheet.reserve
+    tmp.rotation = rotation
+    return tmp
+
+
+def quarter_turn(rotation):
+    """The rotation a quarter turn clockwise from `rotation` (Rotate sheet clockwise)."""
+    return (rotation - 90) % 360
+
+
+def other_way(project, sheet, w, h, named=False):
+    """(rotation, (name, scale)) when a quarter turn (clockwise) lets a drawing w x h (real
+    inches) print bigger than the sheet as it is turned now, else None."""
+    here = best_scale(w, h, *room(project, sheet), named=named)
+    r = quarter_turn(sheet.rotation)
+    there = best_scale(w, h, *room(project, as_rotated(sheet, r)), named=named)
+    return (r, there) if there[1] > here[1] + 1e-12 else None
 
 
 def free_boxes(area, tb):
     """The rectangles (paper inches) a drawing can sit in without touching the title block:
-    the whole area, or, with a title block in the corner, the part above it and the part
-    left of it (the largest first)."""
-    if tb is None or tb[0] >= area[2] or tb[3] <= area[1]:
+    the whole area, or, with a title block in a corner (wherever the sheet's turn put it),
+    the parts beside it, above or below it (the largest first)."""
+    if tb is None or tb[0] >= area[2] or tb[2] <= area[0] or tb[1] >= area[3] or \
+            tb[3] <= area[1]:
         return [area]
-    above = (area[0], max(area[1], tb[3]), area[2], area[3])
-    left = (area[0], area[1], min(area[2], tb[0]), area[3])
-    boxes = [b for b in (above, left) if b[2] > b[0] and b[3] > b[1]]
+    a0, a1, a2, a3 = area
+    cands = [(a0, a1, min(a2, tb[0]), a3), (max(a0, tb[2]), a1, a2, a3),
+             (a0, a1, a2, min(a3, tb[1])), (a0, max(a1, tb[3]), a2, a3)]
+    boxes = [b for b in cands if b[2] - b[0] > 1e-6 and b[3] - b[1] > 1e-6]
     boxes.sort(key=lambda b: -(b[2] - b[0]) * (b[3] - b[1]))
     return boxes
 
@@ -149,9 +176,11 @@ def outside(project, sheet):
     if b[0] < area[0] - MARGIN - tol or b[1] < area[1] - MARGIN - tol or \
             b[2] > area[2] + MARGIN + tol or b[3] > area[3] + MARGIN + tol:
         return "past the border"
-    if tb is not None and b[0] < tb[2] and b[2] > tb[0] + MARGIN + tol and \
-            b[1] < tb[3] - MARGIN - tol and b[3] > tb[1]:
-        return "over the title block"
+    if tb is not None:
+        t = (tb[0] + MARGIN, tb[1] + MARGIN, tb[2] - MARGIN, tb[3] - MARGIN)  # (the block)
+        if b[0] < t[2] - tol and b[2] > t[0] + tol and b[1] < t[3] - tol and \
+                b[3] > t[1] + tol:
+            return "over the title block"
     return None
 
 
@@ -190,21 +219,52 @@ def fit_for(project, sheet):
     return best_scale(w, h, area, tb, named=bool(sheet.scale_name))
 
 
-def apply(project, sheet, name, scale, cabinet=False, center=False):
+def turned_offset(project, sheet, rotation, scale=None):
+    """(dx, dy) real inches that keeps what is drawn on the page when the sheet is turned to
+    `rotation` (at `scale`, the sheet's own when None): the same distance from the paper's
+    middle, or, when that leaves it outside, the middle of the room it fits best. None when
+    nothing is drawn or nothing need move."""
+    box = drawing_box(sheet)
+    if box is None:
+        return None
+    scale = sheet.scale if scale is None else scale
+    tmp = as_rotated(sheet, rotation)
+    tmp_scaled = M.Sheet(size=tmp.size)
+    tmp_scaled.rotation, tmp_scaled.scale, tmp_scaled.reserve = rotation, scale, tmp.reserve
+    w0, h0 = (v / scale for v in sheet.paper_inches())     # (both papers at the new scale)
+    w1, h1 = (v / scale for v in tmp_scaled.paper_inches())
+    dx, dy = (w1 - w0) / 2, (h1 - h0) / 2
+    moved = (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy)
+    area, tb = room(project, tmp_scaled)
+    if not placed_inside(moved, scale, area, tb):
+        c = centering(box, scale, area, tb)
+        if c is not None:
+            dx, dy = c
+    return (dx, dy) if abs(dx) > 1e-9 or abs(dy) > 1e-9 else None
+
+
+def apply(project, sheet, name, scale, cabinet=False, center=False, rotation=None):
     """Give a sheet a scale in one undoable edit, with (when cabinet isn't False) its cabinet
-    size, and (center) what is drawn moved to the middle of the room it fits best at that
-    scale. Returns (dx, dy) moved, or None."""
+    size, (rotation) the sheet turned, and (center) what is drawn moved to the middle of the
+    room it fits best at that scale (turned, what is drawn is kept on the page anyway).
+    Returns (dx, dy) moved, or None."""
+    rotation = sheet.rotation if rotation is None else rotation % 360
+    turn = rotation != sheet.rotation
     moved = None
     if center:
         box = drawing_box(sheet)
         if box is not None:
-            area, tb = room(project, sheet)
+            area, tb = room(project, as_rotated(sheet, rotation))
             moved = centering(box, scale, area, tb)
+    elif turn:
+        moved = turned_offset(project, sheet, rotation, scale)
     changes = abs(scale - sheet.scale) > 1e-12 or name != sheet.scale_name
     new_cab = M._cabinet(cabinet) if cabinet is not False else sheet.cabinet
-    if not changes and new_cab == sheet.cabinet and not moved:
+    if not changes and new_cab == sheet.cabinet and not moved and not turn:
         return None
-    with project.edit("Sheet scale") as ed:
+    with project.edit("Rotate sheet" if turn and not changes else "Sheet scale") as ed:
+        if turn:
+            ed.sheet_meta(sheet, rotation=rotation)
         if changes:
             ed.sheet_scale(sheet, scale, name)
         if new_cab != sheet.cabinet:
@@ -213,3 +273,16 @@ def apply(project, sheet, name, scale, cabinet=False, center=False):
             for e in list(sheet.entities.values()):
                 ed.change(sheet, e.moved(*moved))
     return moved
+
+
+ROTATIONS = [(0, "Upright (as laid out)"), (270, "Turned clockwise"), (180, "Upside down"),
+             (90, "Turned counterclockwise")]
+
+
+def rotate(project, sheet, clockwise=True):
+    """Turn a sheet a quarter turn (Rotate sheet clockwise / counterclockwise): its border,
+    zones and title block with it, the drawing upright and kept on the page. One undoable
+    edit. Returns the new rotation."""
+    r = (sheet.rotation + (-90 if clockwise else 90)) % 360
+    apply(project, sheet, sheet.scale_name, sheet.scale, rotation=r)
+    return r

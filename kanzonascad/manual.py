@@ -486,6 +486,15 @@ of the title block. With nothing drawn yet, give the <b>Cabinet size</b> (width,
 optionally, depth, in inches): Fit then makes room for the cabinet's front and, with a depth,
 its side beside it, so you can draw the outside of the cabinet as well as the backplate. The
 size is kept with the sheet, and the next panel sheet offers the one you used last.</li>
+<li><b>Rotate sheet clockwise</b> (Ctrl+Shift+Plus) and <b>Rotate sheet counterclockwise</b>
+(Ctrl+Shift+Minus), in the Sheets menu and on the Sheets tab, turn a sheet a quarter turn, for
+a tall, narrow cabinet on a tall sheet. The border, the zones and the title block turn with it,
+as if you turned the paper; the drawing stays upright and stays on the page (one undoable
+step). Grid references follow the turned zones. Sheet properties and the Sheet scale window
+set it too (<b>Rotation</b>: upright, turned clockwise, upside down, turned counterclockwise).
+When a quarter turn would print the drawing (or the cabinet) bigger, the Sheet scale window
+says so ("Turned tall it prints bigger: 1:5 instead of 1:8") with a <b>Turn it</b> button; Fit
+never turns a sheet by itself. PDF pages print the sheet as turned.</li>
 <li>Click <b>Scale 1:4</b> in the status bar for a short list: <b>Fit</b> (with the scale it
 would pick), the common scales, and <b>More...</b> (the Sheet scale window). A sheet's scale
 is also in Sheet properties.</li>
@@ -655,6 +664,7 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>
 <tr><td>Ctrl+X / Ctrl+C / Ctrl+V / Ctrl+A</td><td>Cut / Copy / Paste / Select all</td></tr>
 <tr><td>Ctrl+Shift+E / Ctrl+0 / Ctrl+= / Ctrl+-</td><td>Zoom extents / sheet / in / out</td></tr>
+<tr><td>Ctrl+Shift+Plus / Ctrl+Shift+Minus</td><td>Rotate sheet clockwise / counterclockwise</td></tr>
 </table>
 
 <h2>Help</h2>
