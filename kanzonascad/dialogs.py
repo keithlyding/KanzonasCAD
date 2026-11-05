@@ -126,9 +126,19 @@ def sheet_properties(parent, project, sheet):
         scale.setEditText(sheet.scale_text())
     scale.setToolTip("Panel sheets: draw everything at real size; the scale only sets how big "
                      "it prints. Type 1:6 for a scale that isn't listed.")
+    from .scalefit import ROTATIONS
+    orient = QComboBox()
+    orient.setObjectName("rotation")
+    for r, label in ROTATIONS:
+        orient.addItem(label, r)
+    orient.setCurrentIndex(max(orient.findData(sheet.rotation), 0))
+    orient.setToolTip("Turn this sheet (a tall cabinet on a tall sheet): its border, zones and "
+                      "title block turn with it, the drawing stays upright. Ctrl+Shift+Plus / "
+                      "Ctrl+Shift+Minus turn it a quarter turn")
     form.addRow("Title", title)
     form.addRow("Type", kind)
     form.addRow("Scale", scale)
+    form.addRow("Rotation", orient)
     form.addRow("Numbering order", order)
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
@@ -170,12 +180,23 @@ def sheet_properties(parent, project, sheet):
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     new_scale = picked != (sheet.scale_name, sheet.scale)
-    if all(before.get(k) == v for k, v in changes.items()) and not new_scale:
+    if all(before.get(k) == v for k, v in changes.items()) and not new_scale and \
+            orient.currentData() == sheet.rotation:
         return False
+    rot = orient.currentData()
+    turn = rot != sheet.rotation
+    if turn:
+        from . import scalefit
+        moved = scalefit.turned_offset(project, sheet, rot)
     with project.edit("Sheet properties") as ed:
         ed.sheet_meta(sheet, **changes)
         if new_scale:
             ed.sheet_scale(sheet, picked[1], picked[0])
+        if turn:
+            ed.sheet_meta(sheet, rotation=rot)
+            if moved:
+                for e in list(sheet.entities.values()):
+                    ed.change(sheet, e.moved(*moved))
     return True
 
 

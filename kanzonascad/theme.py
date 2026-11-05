@@ -22,6 +22,7 @@ ICONS = {
     "circle": "circle-outline", "arc": "chart-arc", "text": "format-text",
     # modify
     "move": "cursor-move", "copy": "content-duplicate", "rotate": "rotate-right-variant",
+    "sheet_cw": "file-rotate-right-outline", "sheet_ccw": "file-rotate-left-outline",
     "scale": "resize", "mirror": "reflect-horizontal", "erase": "eraser", "trim": "scissors-cutting",
     # view
     "zoom_ext": "fit-to-page-outline", "zoom_in": "magnify-plus-outline",
