@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.4
+
+**Fixed**
+- Opening a damaged DXF file could garble long multi-line text; DXF files saved in the Korean
+  Johab code page couldn't be read. (The DXF library, ezdxf, updated to 1.4.5.)
+
 ## 0.11.3
 
 **New**
