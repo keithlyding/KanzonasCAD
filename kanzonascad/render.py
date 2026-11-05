@@ -113,6 +113,8 @@ class Palette:
             return self.ink
         if not self.dark and q.lightness() > 215:   # white-ish on white paper: draw dark
             return self.ink
+        if self.dark and q.lightness() < 40:        # black-ish on the black drawing: light
+            return self.ink                         # (as AutoCAD's color 7; it prints black)
         return q
 
 

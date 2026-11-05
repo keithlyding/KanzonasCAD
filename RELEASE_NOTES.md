@@ -18,6 +18,8 @@ build fails without them.
 
 **Fixed**
 - A layer used only by the title block could be deleted as if it were empty.
+- Black objects (or a black layer) no longer disappear on the black drawing: they are drawn
+  white there, and still print black.
 
 ## 0.12.3
 

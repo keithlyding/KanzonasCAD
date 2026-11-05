@@ -78,7 +78,10 @@ own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel 
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
 layer it sits on, or its own color if you gave it one. Wires go on layer WIRES, symbols on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
-Project properties set those colors, which recolors everything on them.</p>
+Project properties set those colors, which recolors everything on them. On the black drawing,
+black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
+black, so nothing disappears (as AutoCAD's color 7); their color stays as you set it, and they
+print in it.</p>
 <p><b>Layers</b>, as in AutoCAD: a hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
 Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the layer box, the layer list,
