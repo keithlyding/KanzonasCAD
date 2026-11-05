@@ -4,7 +4,7 @@ Backups: every Save first copies the file as it was into a folder beside it,
 "<name> backups", stamped with the time; the newest few are kept (KEEP).
 
 Autosave: every few minutes, each project with unsaved changes is written to the recovery
-folder (not over your file). Saving or closing it normally removes that copy, so a copy
+folder (not over your file; in a portable copy, recovery in its data folder). Saving or closing it normally removes that copy, so a copy
 still there at start-up means KanzonasCAD didn't close normally: it offers to recover it.
 """
 
@@ -74,6 +74,10 @@ def recovery_folder():
     env = os.environ.get("KANZONASCAD_RECOVERY")
     if env:
         return env
+    from . import paths
+    portable = paths.portable_data_dir()
+    if portable:                        # (a portable copy: beside the program, in data)
+        return os.path.join(portable, "recovery")
     from PySide6.QtCore import QStandardPaths       # (only here: where the app keeps data)
     base = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
     return os.path.join(base or os.path.expanduser("~"), "recovery")

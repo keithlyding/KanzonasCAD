@@ -14,7 +14,12 @@ Artwork and type: the app icon, logo and their cactus and sunflower are the owne
 `tools/make_logos.py` makes both apps' logos.
 
 The ribbon (`kanzonascad/ribbon.py`) and theme (`kanzonascad/theme.py`) come from KanzonasPDF
-(same owner), so the two apps look alike.
+(same owner), so the two apps look alike. So does the packaging (`kanzonascad/paths.py`, the
+self-updating parts of `kanzonascad/updates.py`, `packaging/linux/`,
+`tools/make_portableapps.py`, `tools/make_paf_icon.py`), so the two install and update alike.
+
+The Linux AppImage starts with the AppImage runtime (MIT, https://github.com/AppImage/type2-runtime),
+packed by appimagetool (MIT, https://github.com/AppImage/appimagetool).
 
 Code taken from KatieCAD (https://github.com/Merecete/KatieCAD, MIT License,
 Copyright (c) 2026 Merecete) will be listed here with the files it went into. None yet.

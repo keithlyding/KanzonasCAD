@@ -49,6 +49,28 @@ for everyone, after Windows' administrator prompt.
 **Uninstall:** Windows **Settings > Apps > Installed apps > KanzonasCAD > Uninstall**. Your
 projects and your library (in Documents) are kept.
 
+**Portable (no install; nothing left on the PC):** download
+**`KanzonasCAD-v<version>-portable.zip`**, unzip it anywhere (a USB stick, a network drive) and
+run `KanzonasCAD\KanzonasCAD.exe`. Your settings, library and recovery copies stay in the
+`data` folder beside it (because of the `portable.txt` file there). **Update now** replaces
+the program files and keeps the `data` folder; or unzip a newer one over the same folder.
+A PortableApps.com package (KanzonasCAD Portable) is made by every build too; see
+[docs/portableapps.md](docs/portableapps.md).
+
+## Install on Linux (the easy way)
+
+Download **`KanzonasCAD-x86_64.AppImage`** from the
+**[Releases page](https://github.com/keithlyding/KanzonasCAD/releases)** (64-bit PC; Ubuntu
+22.04, Debian 12, Fedora 36 or newer), make it executable (`chmod +x
+KanzonasCAD-x86_64.AppImage`, or Properties > Permissions > Allow executing file as program)
+and run it. No installation or administrator rights needed. If it complains about FUSE or
+`libfuse.so.2`: `sudo apt install libfuse2` (Ubuntu 22.04, Debian 12), `sudo apt install
+libfuse2t64` (Ubuntu 24.04 and later), `sudo dnf install fuse-libs` (Fedora), or start it with
+`--appimage-extract-and-run`. **Update now** replaces the AppImage with the new one (same name
+and place) and starts it again. The same program is also a plain folder,
+`KanzonasCAD-v<version>-linux.tar.gz` (unpack it and run `KanzonasCAD/KanzonasCAD`; it
+doesn't update itself).
+
 The rest of this page runs KanzonasCAD from its source code instead: for trying changes before
 they're released, or on a PC where you can't run a setup.
 
@@ -161,7 +183,7 @@ Back to the tested version: `git checkout main` (or double-click `update.bat`).
 
 Starting over is always safe: delete the `KanzonasCAD` folder and repeat step 4.
 
-## Install on Linux
+## Install from source on Linux
 
     sudo apt install python3 python3-pip python3-venv git      # Debian/Ubuntu
     git clone https://github.com/keithlyding/KanzonasCAD.git
