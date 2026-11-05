@@ -301,6 +301,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
         self._cmd_act("scoot", "Sc&oot", C.ScootCmd, "Scoot")
         self._cmd_act("align_dev", "&Align devices", C.AlignDevicesCmd, "Align")
+        self._cmd_act("align_obj", "Align ob&jects", C.AlignObjectsCmd, "Align")
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("del_wire", "&Delete wire", C.DeleteWireCmd, "Delete wire")
         self._cmd_act("clean_wires", "Clea&n up wires", C.CleanWiresCmd, "Clean up")
@@ -454,7 +455,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
-                  "scoot", "align_dev", None, "trim_wire", "del_wire", "clean_wires", "del_comp", None,
+                  "scoot", "align_dev", "align_obj", None, "trim_wire", "del_wire", "clean_wires", "del_comp", None,
                   "object_color", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             m.addSeparator() if k is None else m.addAction(a[k])
@@ -534,6 +535,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Real size", "large", [a["scale"], a["sheet_scale"]]),
             ("Dimensions", "large", [a["dim_linear"], a["dim_aligned"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
+            ("Arrange", "large", [a["align_obj"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
             ("Settings", "large", [a["panel_settings"]]),
@@ -987,6 +989,12 @@ class MainWindow(BlockEditing, QMainWindow):
         from PySide6.QtGui import QDesktopServices
         QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
+    def _import_dir(self):
+        """Where Import DXF or DWG starts: the folder imported from last (manufacturers'
+        drawings usually sit together), else the projects' folder."""
+        d = self.settings.value("import_dir", "") or ""
+        return d if d and os.path.isdir(d) else self._last_dir()
+
     def _last_dir(self):
         return self.settings.value("last_dir", os.path.expanduser("~"))
 
@@ -1019,10 +1027,11 @@ class MainWindow(BlockEditing, QMainWindow):
         d = self.doc()
         if d is None:
             return
-        path, _f = QFileDialog.getOpenFileName(self, "Import DXF or DWG", self._last_dir(),
+        path, _f = QFileDialog.getOpenFileName(self, "Import DXF or DWG", self._import_dir(),
                                                "Drawings (*.dxf *.dwg);;DXF (*.dxf);;DWG (*.dwg)")
         if not path:
             return
+        self.settings.setValue("import_dir", os.path.dirname(path))
         try:
             rep = fileio.import_dxf(d.project, d.view.sheet(), path)
         except Exception as ex:
@@ -1914,7 +1923,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev",
-                  "trim_wire", "del_wire", "clean_wires", "del_comp"):
+                  "align_obj", "trim_wire", "del_wire", "clean_wires", "del_comp"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())
         a["save_block"].setEnabled(in_block)

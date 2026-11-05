@@ -573,6 +573,12 @@ their heights with it (in one undoable step).</li>
 bring a manufacturer's drawing to real size with Scale, Reference before it becomes a
 footprint.</li>
 <li><b>{{Scale}}</b> in the title block shows the sheet's scale (Edit title block to add it).</li>
+<li><b>Align objects</b> (ALIGNOBJ, ALO; Modify menu, Panel tab) lines up footprints, DIN rail,
+duct or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right</b>,
+<b>Top</b>, <b>Middle</b> or <b>Bottom</b> (L, C, R, T, M, B), then click the one to line
+them up with, or press Enter to line them up with the selection's own outer edge (or its
+middle). Each moves only straight across (Left, Center, Right) or straight up and down (Top,
+Middle, Bottom), by its outline; one Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
 one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
 slots. Stretch one with its end grips (or double-click it and type its length), move it with
@@ -661,9 +667,10 @@ this size), moved to the middle of the sheet when it fits, and, when it is bigge
 sheet, the sheet gets the biggest scale it fits at (as <b>Fit</b> does; the drawing and its
 text stay their real size). The command line says what was done; Sheet scale... changes the
 scale.</li>
-<li><b>Import DXF or DWG into this sheet...</b>: keeps the drawing's own coordinates. lines, polylines, circles, arcs, text,
-ellipses and splines (as polylines), blocks and dimensions (exploded). Drawings in
-millimeters are converted to inches.</li>
+<li><b>Import DXF or DWG into this sheet...</b> keeps the drawing's own coordinates. It reads
+lines, polylines, circles, arcs, text, ellipses and splines (as polylines), blocks and
+dimensions (exploded); drawings in millimeters are converted to inches. It opens in the folder
+you last imported from (manufacturers' drawings usually sit together).</li>
 <li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version
 since 2018 too) open and import directly, with nothing to install: KanzonasCAD reads them with
 its own DWG reader (ezdwg, free and open source). If it can't read one and the free
