@@ -126,9 +126,17 @@ def sheet_properties(parent, project, sheet):
         scale.setEditText(sheet.scale_text())
     scale.setToolTip("Panel sheets: draw everything at real size; the scale only sets how big "
                      "it prints. Type 1:6 for a scale that isn't listed.")
+    orient = QComboBox()
+    orient.setObjectName("orientation")
+    orient.addItem("Landscape (wide)", "landscape")
+    orient.addItem("Portrait (tall)", "portrait")
+    orient.setCurrentIndex(orient.findData(sheet.orientation))
+    orient.setToolTip("Turn this sheet's paper (a tall cabinet): its zones and the title block "
+                      "stay as they are, the title block in the lower right corner")
     form.addRow("Title", title)
     form.addRow("Type", kind)
     form.addRow("Scale", scale)
+    form.addRow("Paper", orient)
     form.addRow("Numbering order", order)
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
@@ -166,7 +174,7 @@ def sheet_properties(parent, project, sheet):
         fields.pop("Revision", None)
     changes = dict(title=title.text().strip(), number=number.text().strip() or None,
                    own_layout=own.isChecked(), fields=fields, kind=kind.currentData(),
-                   number_order=order.currentData())
+                   number_order=order.currentData(), orientation=orient.currentData())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     new_scale = picked != (sheet.scale_name, sheet.scale)

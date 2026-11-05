@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.7
+
+**New**
+- Portrait sheets: turn a sheet's paper to tall (Paper, in Sheet properties or the Sheet scale
+  window) for a tall, narrow cabinet. Its zones and title block stay as they are.
+- The Sheet scale window says when turning the paper would print the drawing bigger ("1:4
+  instead of 1:8") and does it in one click.
+
 ## 0.11.6
 
 **New**

@@ -158,5 +158,81 @@ class SheetScaleWindowTest(unittest.TestCase):
         APP.processEvents()
 
 
+class PortraitTest(unittest.TestCase):
+    def setUp(self):
+        self.p = M.Project.new()
+        self.s = self.p.sheets[0]
+
+    def test_turned_paper_keeps_zones_and_title_block_corner(self):
+        cols, rows = self.s.cols, self.s.rows
+        with self.p.edit("portrait") as ed:
+            ed.sheet_meta(self.s, orientation="portrait")
+        self.assertEqual(self.s.paper_inches(), (11.0, 17.0))
+        self.assertEqual((self.s.cols, self.s.rows), (cols, rows))
+        from kanzonascad.sheetframe import title_block_rect
+        tb = title_block_rect(self.p, self.s)
+        x0, y0, x1, y1 = self.s.frame()
+        self.assertAlmostEqual(tb[2], x1)                   # lower right corner
+        self.assertAlmostEqual(tb[1], y0)
+        again = M.Project.from_dict(json.loads(json.dumps(self.p.to_dict())))
+        self.assertEqual(again.sheets[0].orientation, "portrait")
+        self.p.undo()
+        self.assertEqual(self.s.paper_inches(), (17.0, 11.0))
+
+    def test_other_way_only_when_it_prints_bigger(self):
+        w, h = F.cabinet_box([20, 48, 8])
+        way, (name, v) = F.other_way(self.p, self.s, w, h)
+        self.assertEqual((way, v), ("portrait", 0.25))      # 1:4 instead of 1:8
+        self.assertIsNone(F.other_way(self.p, self.s, *F.cabinet_box([36, 24, 10])))
+        # turned, scaled and centered in one step
+        with self.p.edit("draw") as ed:
+            ed.add(self.s, M.Line((0, 0), (w, h)))
+        steps = len(self.p.undo_stack)
+        F.apply(self.p, self.s, name, v, center=True, orientation="portrait")
+        self.assertEqual(len(self.p.undo_stack), steps + 1)
+        self.assertEqual((self.s.orientation, self.s.scale), ("portrait", 0.25))
+        self.assertIsNone(F.outside(self.p, self.s))
+
+    def test_pdf_page_is_portrait(self):
+        import os
+        import tempfile
+        from kanzonascad import fileio
+        with self.p.edit("portrait") as ed:
+            ed.sheet_meta(self.s, orientation="portrait")
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "p.pdf")
+            fileio.export_pdf(self.p, path)
+            with open(path, "rb") as f:
+                data = f.read()
+        import re
+        box = re.search(rb"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)", data)
+        self.assertIsNotNone(box)
+        w, h = float(box.group(1)), float(box.group(2))
+        self.assertLess(w, h)                               # 11 x 17 in, tall
+        self.assertAlmostEqual(h / w, 17 / 11, places=2)
+
+    def test_window_suggests_and_turns(self):
+        from kanzonascad.scale_dialog import SheetScaleDialog
+        win, v = window()
+        try:
+            p, s = v.project, v.sheet()
+            d = SheetScaleDialog(win, p, s, None)
+            for b, x in zip(d.cab, (20, 48, 8)):
+                b.setValue(x)
+            d.fit()
+            self.assertEqual(d.combo.currentText(), "1:8")
+            self.assertFalse(d.suggest.isHidden())
+            self.assertIn("1:4 instead of 1:8", d.suggest.text())
+            d._turn_suggested()
+            self.assertEqual((d.orientation(), d.combo.currentText()), ("portrait", "1:4"))
+            self.assertTrue(d.suggest.isHidden())
+            d.grab()
+            d._ok()
+            self.assertEqual((s.orientation, s.scale_text()), ("portrait", "1:4"))
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            win.close()
+
+
 if __name__ == "__main__":
     unittest.main()

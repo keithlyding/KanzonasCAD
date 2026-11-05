@@ -30,6 +30,27 @@ def room(project, sheet):
     return area, tb
 
 
+def as_turned(sheet, orientation):
+    """A stand-in for `sheet` with its paper turned to `orientation` ("landscape" or
+    "portrait"), for asking room() what the other way would give. The sheet itself if it is
+    already that way."""
+    if sheet.orientation == orientation:
+        return sheet
+    tmp = M.Sheet(size=sheet.size, cols=sheet.cols, rows=sheet.rows)
+    tmp.scale, tmp.scale_name, tmp.reserve = sheet.scale, sheet.scale_name, sheet.reserve
+    tmp.orientation = orientation
+    return tmp
+
+
+def other_way(project, sheet, w, h, named=False):
+    """(orientation, (name, scale)) when turning the sheet's paper lets a drawing w x h (real
+    inches) print bigger than its own way does, else None."""
+    here = best_scale(w, h, *room(project, sheet), named=named)
+    other = "landscape" if sheet.orientation == "portrait" else "portrait"
+    there = best_scale(w, h, *room(project, as_turned(sheet, other)), named=named)
+    return (other, there) if there[1] > here[1] + 1e-12 else None
+
+
 def free_boxes(area, tb):
     """The rectangles (paper inches) a drawing can sit in without touching the title block:
     the whole area, or, with a title block in the corner, the part above it and the part
@@ -190,21 +211,25 @@ def fit_for(project, sheet):
     return best_scale(w, h, area, tb, named=bool(sheet.scale_name))
 
 
-def apply(project, sheet, name, scale, cabinet=False, center=False):
+def apply(project, sheet, name, scale, cabinet=False, center=False, orientation=None):
     """Give a sheet a scale in one undoable edit, with (when cabinet isn't False) its cabinet
-    size, and (center) what is drawn moved to the middle of the room it fits best at that
-    scale. Returns (dx, dy) moved, or None."""
+    size, (orientation) its paper turned, and (center) what is drawn moved to the middle of
+    the room it fits best at that scale. Returns (dx, dy) moved, or None."""
+    orientation = orientation or sheet.orientation
     moved = None
     if center:
         box = drawing_box(sheet)
         if box is not None:
-            area, tb = room(project, sheet)
+            area, tb = room(project, as_turned(sheet, orientation))
             moved = centering(box, scale, area, tb)
     changes = abs(scale - sheet.scale) > 1e-12 or name != sheet.scale_name
     new_cab = M._cabinet(cabinet) if cabinet is not False else sheet.cabinet
-    if not changes and new_cab == sheet.cabinet and not moved:
+    turn = orientation != sheet.orientation
+    if not changes and new_cab == sheet.cabinet and not moved and not turn:
         return None
     with project.edit("Sheet scale") as ed:
+        if turn:
+            ed.sheet_meta(sheet, orientation=orientation)
         if changes:
             ed.sheet_scale(sheet, scale, name)
         if new_cab != sheet.cabinet:

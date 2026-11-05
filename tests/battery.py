@@ -476,7 +476,14 @@ def every_command(log, out):
             # a project for the next phase
             if phase == "sheet" and win.view() is None:
                 win.new_project()
+        # Check for updates (manual) asked GitHub: its answer, arriving after this window is
+        # done with, opened a message box no one closed (the next test hung). Cancel it: a
+        # cancelled check says nothing
+        checker = getattr(win, "_update_checker", None)
+        if checker is not None and getattr(checker, "_reply", None) is not None:
+            checker._reply.abort()
         win.close()
+        win.deleteLater()
     finally:
         sys.excepthook = hook
     if errors:

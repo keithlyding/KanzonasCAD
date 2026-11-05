@@ -26,7 +26,7 @@ class Preview(QWidget):
 
     def paintEvent(self, _e):
         d = self.dlg
-        pw, ph = d.sheet.paper_inches()
+        pw, ph = d.paper()
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         p.fillRect(self.rect(), self.palette().window())
@@ -141,10 +141,22 @@ class SheetScaleDialog(QDialog):
         self.center.setToolTip("The drawing doesn't lie inside the border at this scale where "
                                "it is now: move all of it (one undoable step)")
 
-        pw, ph = sheet.paper_inches()
-        paper = QLabel("Paper: %s. The drawing stays real size: the scale only sets how big "
-                       "it prints. Text, tags and dimension numbers keep their printed size."
-                       % sheet.size)
+        # the paper's way round: a tall, narrow cabinet may print bigger on a portrait sheet
+        self.orient = QComboBox()
+        self.orient.setObjectName("orientation")
+        self.orient.addItem("Landscape (wide)", "landscape")
+        self.orient.addItem("Portrait (tall)", "portrait")
+        self.orient.setCurrentIndex(self.orient.findData(sheet.orientation))
+        self.orient.setToolTip("Turn the paper. The zones and the title block stay as they are "
+                               "(the title block in the lower right corner)")
+        self.suggest = QLabel()
+        self.suggest.setObjectName("suggest")
+        self.suggest.setWordWrap(True)
+        self.turn_btn = QPushButton()
+        self.turn_btn.setObjectName("turn")
+        self.turn_btn.clicked.connect(self._turn_suggested)
+        self._suggested = None
+        self.paper_note = paper = QLabel()
         paper.setWordWrap(True)
         paper.setStyleSheet("color: gray;")
 
@@ -157,6 +169,14 @@ class SheetScaleDialog(QDialog):
         side.addWidget(self.words)
         side.addWidget(self.usage)
         side.addWidget(self.center)
+        orow = QHBoxLayout()
+        orow.addWidget(QLabel("Paper"))
+        orow.addWidget(self.orient, 1)
+        side.addLayout(orow)
+        srow = QHBoxLayout()
+        srow.addWidget(self.suggest, 1)
+        srow.addWidget(self.turn_btn)
+        side.addLayout(srow)
         side.addWidget(group)
         side.addWidget(paper)
         side.addStretch(1)
@@ -173,14 +193,40 @@ class SheetScaleDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.addLayout(body, 1)
         lay.addWidget(buttons)
-        self.resize(820, 460)
+        self.resize(840, 540)
         self._center_touched = False
         self.center.toggled.connect(self._center_clicked)
         self.combo.currentIndexChanged.connect(self._changed)
         self.combo.editTextChanged.connect(self._changed)
-        self._changed()
+        self.orient.currentIndexChanged.connect(self._turned)
+        self._turned()
 
     # ---- what is picked -----------------------------------------------------------------
+    def orientation(self):
+        return self.orient.currentData()
+
+    def paper(self):
+        """(width, height) of the paper as picked, inches."""
+        return F.as_turned(self.sheet, self.orientation()).paper_inches()
+
+    def _turned(self, *_a):
+        self.area, self.tb = F.room(self.project, F.as_turned(self.sheet, self.orientation()))
+        pw, ph = self.paper()
+        note = ("Paper: %s, %s. The drawing stays real size: the scale only sets how big it "
+                "prints. Text, tags and dimension numbers keep their printed size."
+                % (self.sheet.size.split(" (")[0], "%g x %g in" % (pw, ph)))
+        r = self.sheet.reserve
+        if self.orientation() == "portrait" and r and r[0] == "right":
+            note += (" The title block's strip down the right takes %g of the %g in across."
+                     % (r[1], pw))
+        self.paper_note.setText(note)
+        self._changed()
+
+    def _turn_suggested(self):
+        if self._suggested:
+            self.orient.setCurrentIndex(self.orient.findData(self._suggested))
+            self.fit()
+
     def picked(self):
         """(name, scale) in the box, or None when it can't be read."""
         from .dialogs import _scale_of
@@ -293,7 +339,28 @@ class SheetScaleDialog(QDialog):
             self.usage.setText(text)
             self.usage.setStyleSheet("color: %s;" % {"good": GOOD, "warn": WARN,
                                                        "bad": BAD}[st])
+        self._show_suggestion()
         self.preview.update()
+
+    def _show_suggestion(self):
+        """Offer the other way round when it prints bigger (never turned without asking)."""
+        what = self.size_and_kind()
+        got = None
+        if what is not None:
+            cur = self.picked()
+            got = F.other_way(self.project, F.as_turned(self.sheet, self.orientation()),
+                              what[0], what[1],
+                              named=bool(cur[0]) if cur else bool(self.sheet.scale_name))
+        self._suggested = got[0] if got else None
+        self.suggest.setVisible(got is not None)
+        self.turn_btn.setVisible(got is not None)
+        if got:
+            way, (name, v) = got
+            here = F.best_scale(what[0], what[1], self.area, self.tb,
+                                named=bool(name))
+            self.suggest.setText("On %s paper it prints bigger: %s instead of %s." % (
+                way, _scale_text(name, v), _scale_text(*here)))
+            self.turn_btn.setText("Use %s" % way)
 
     def fit(self):
         got = self.size_and_kind()
@@ -325,8 +392,15 @@ class SheetScaleDialog(QDialog):
         if cab and self.settings is not None:
             self.settings.setValue("panel/cabinet", ",".join("%g" % v for v in cab))
         F.apply(self.project, self.sheet, name, s, cabinet=cab,
-                center=self.box is not None and self.center.isChecked())
+                center=self.box is not None and self.center.isChecked(),
+                orientation=self.orientation())
         self.accept()
+
+
+def _scale_text(name, v):
+    tmp = M.Sheet()
+    tmp.scale, tmp.scale_name = v, name
+    return tmp.scale_text()
 
 
 def _num(x):
@@ -347,8 +421,10 @@ def _last_cabinet(settings):
 
 def sheet_scale(parent, project, sheet, settings=None):
     """Show the Sheet scale window. True when the scale (or cabinet) changed."""
-    before = (sheet.scale, sheet.scale_name, sheet.cabinet, project.undo_stack[-1:])
+    before = (sheet.scale, sheet.scale_name, sheet.cabinet, sheet.orientation,
+              project.undo_stack[-1:])
     dlg = SheetScaleDialog(parent, project, sheet, settings)
     if dlg.exec() != QDialog.Accepted:
         return False
-    return (sheet.scale, sheet.scale_name, sheet.cabinet, project.undo_stack[-1:]) != before
+    return (sheet.scale, sheet.scale_name, sheet.cabinet, sheet.orientation,
+            project.undo_stack[-1:]) != before

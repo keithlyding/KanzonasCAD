@@ -1473,6 +1473,8 @@ class Sheet:
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
         self.scale_name = ""                # its preset's name (1/4" = 1'-0"...), "" for 1:N
+        self.orientation = "landscape"      # or "portrait": the paper turned (a tall cabinet);
+                                            # its zones and title block stay as they are
         self.cabinet = None                 # a panel sheet's cabinet [width, height, depth]
                                             # (real inches, depth 0 when not given), or None:
                                             # what Sheet scale fits while nothing is drawn
@@ -1495,13 +1497,14 @@ class Sheet:
     def paper(self):
         """The sheet's size in drawing units (its paper size at 1:1; 1/scale larger on a
         scaled panel sheet)."""
-        w, h = SHEET_SIZES[self.size]
+        w, h = self.paper_inches()
         k = self.k()
         return w * k, h * k
 
     def paper_inches(self):
-        """The real paper size (what prints)."""
-        return SHEET_SIZES[self.size]
+        """The real paper size (what prints): the size's, turned on a portrait sheet."""
+        w, h = SHEET_SIZES[self.size]
+        return (h, w) if self.orientation == "portrait" else (w, h)
 
     def k(self):
         """Drawing units per paper inch: 1 on a 1:1 sheet, 4 on a 1:4 one."""
@@ -1627,6 +1630,7 @@ class Sheet:
                 "number_order": self.number_order,
                 "number": self.number, "fields": dict(self.fields),
                 "scale": self.scale, "scale_name": self.scale_name,
+                "orientation": self.orientation,
                 "cabinet": list(self.cabinet) if self.cabinet else None,
                 "xref_frozen": self.xref_frozen,
                 "xref_shown": [list(t) for t in self.xref_shown]
@@ -1657,6 +1661,7 @@ class Sheet:
             self.scale = 1.0
         self.scale = self.scale if self.scale > 0 else 1.0
         self.scale_name = str(d.get("scale_name", "") or "")
+        self.orientation = "portrait" if d.get("orientation") == "portrait" else "landscape"
         self.cabinet = _cabinet(d.get("cabinet"))
         self.xref_frozen = bool(d.get("xref_frozen", False))
         shown = d.get("xref_shown")

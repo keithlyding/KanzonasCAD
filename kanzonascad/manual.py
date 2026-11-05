@@ -486,6 +486,12 @@ of the title block. With nothing drawn yet, give the <b>Cabinet size</b> (width,
 optionally, depth, in inches): Fit then makes room for the cabinet's front and, with a depth,
 its side beside it, so you can draw the outside of the cabinet as well as the backplate. The
 size is kept with the sheet, and the next panel sheet offers the one you used last.</li>
+<li><b>Paper</b>: a sheet is <b>Landscape (wide)</b> or <b>Portrait (tall)</b>, in the Sheet
+scale window and in Sheet properties. Turning it keeps its zones (as many across and down as
+before) and its title block, in the lower right corner. When the other way round would print
+the drawing (or the cabinet) bigger, the Sheet scale window says so ("On portrait paper it
+prints bigger: 1:4 instead of 1:8") with a <b>Use portrait</b> button; Fit never turns the
+paper by itself. PDF pages print the same way round.</li>
 <li>Click <b>Scale 1:4</b> in the status bar for a short list: <b>Fit</b> (with the scale it
 would pick), the common scales, and <b>More...</b> (the Sheet scale window). A sheet's scale
 is also in Sheet properties.</li>
