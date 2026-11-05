@@ -6,13 +6,13 @@ Makes assets/kanzonascad-logo.png here, and kanzonas-logo-source.png for Kanzona
 assets/; then run its tools_make_assets.py).
 
 - MARK.png: the owner's logo whose left part (the cactus, sunflower and page) is kept as is.
-- "Kanzonas": Saira Semi Condensed SemiBold, a little tighter than normal, near black.
+- "Kanzonas": Roboto Condensed Medium, a little tighter than normal, near black.
 - "PDF" (red, as the app icon: #b30000 to #800000) and "CAD" (green): Saira Condensed SemiBold,
   the same size; "PDF" a little wider spaced so both words end at the same place, so the two
   logos line up on the left and the right when stacked.
 - A rule under them, from a dot in the word's color fading to grey, ending with the word.
 - The tagline: Inter, grey, its bullets in the word's color.
-Fonts (all SIL Open Font License, Google Fonts): SairaSemiCondensed-SemiBold.ttf,
+Fonts (all SIL Open Font License, Google Fonts): RobotoCondensed[wght].ttf,
 SairaCondensed-SemiBold.ttf, Inter[opsz,wght].ttf.
 """
 import os
@@ -97,10 +97,10 @@ def render(scale, transparent):
         col = np.array(top_rgb, float) + (np.array(bottom_rgb, float) - np.array(top_rgb, float)) * t
         return base * (1 - m) + col * m, m[..., 0]
 
-    kan = font("SairaSemiCondensed-SemiBold.ttf", CAP * K)
+    kan = font("RobotoCondensed[wght].ttf", CAP * K, Weight=500)
     word = font("SairaCondensed-SemiBold.ttf", CAP * K)
     tagf = font("Inter[opsz,wght].ttf", 15 * K, Weight=450)
-    k_placed, k_right = layout(kan, "Kanzonas", X0 * K, -0.06)
+    k_placed, k_right = layout(kan, "Kanzonas", X0 * K, -0.02)
     GAP = 16 * K                            # from "Kanzonas" to the colored word, as before
     # a round first letter (C) sits optically further away than a straight one (P): 3 px in
     starts = {"PDF": k_right + GAP, "CAD": k_right + GAP - 3 * K}
