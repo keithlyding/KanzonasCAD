@@ -641,7 +641,7 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 </table>
 
 <h2>Help</h2>
-<p><b>User manual</b> (F1) opens this page. <b>About KanzonasCAD</b> shows the version.</p>
+<p><b>User manual</b> (F1) opens this page. <b>About KanzonasCAD</b> shows the logo, the version and where the source code is.</p>
 
 <h2>Installing</h2>
 <p>On Windows, <b>KanzonasCAD-v&lt;version&gt;-setup.exe</b> from the Releases page installs

@@ -6,6 +6,11 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.3
+
+**New**
+- A refreshed logo, matching KanzonasPDF's letter for letter. Help > About KanzonasCAD now shows it.
+
 ## 0.11.2
 
 **Fixed**
