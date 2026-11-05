@@ -1862,7 +1862,8 @@ def clean_revision(r):
             "sheets": None if sheets is None else [int(i) for i in sheets]}
 
 
-PROJECT_FIELDS = ["Customer", "Project", "Drawing number", "Drawn by", "Checked by", "Date",
+PROJECT_FIELDS = ["Customer", "Project", "Drawing number", "Drawn by", "Drawn date",
+                  "Checked by", "Date",
                   "Revision"]
 
 
@@ -2059,6 +2060,7 @@ class Project:
         s.id = p.new_sheet_id()
         p.sheets.append(s)
         p._default_title_block()
+        p.fields["Drawn date"] = today_text()     # (started today; Project properties changes it)
         return p
 
     def _default_title_block(self):

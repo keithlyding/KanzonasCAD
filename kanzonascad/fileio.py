@@ -8,7 +8,7 @@ import sys
 
 from . import model as M
 from . import geometry as G
-from .sheetframe import frame_entities, FRAME_LAYER
+from .sheetframe import frame_entities, printing, FRAME_LAYER
 
 MM = 1 / 25.4
 # $INSUNITS -> inches per drawing unit (0 = unitless: taken as inches)
@@ -64,7 +64,8 @@ def export_dxf(project, sheet, path, include_frame=True):
             ents.append(M.Polyline(crossings.loop_points(p, u, r), layer="WIRES"
                                    if "WIRES" in project.layers else "0"))
     if include_frame:
-        ents = frame_entities(project, sheet) + ents
+        with printing():                # ({Print date}: now)
+            ents = frame_entities(project, sheet) + ents
     # the cross-references, as plain texts on layer SYMBOLS
     from .xrefs import texts as xref_texts
     for t in xref_texts(project, sheet):
@@ -540,8 +541,9 @@ def export_pdf(project, path, sheets=None, line_width=0.008, mono=True):
             # a scaled panel sheet: its real-size drawing shrunk onto the paper (line widths
             # stay paper widths)
             painter.scale(dpi * s.scale, -dpi * s.scale)
-            SheetRenderer(project, s, dark=False, mono=mono).paint(
-                painter, pen_width=line_width * s.k())
+            with printing():            # ({Print date}: now)
+                SheetRenderer(project, s, dark=False, mono=mono).paint(
+                    painter, pen_width=line_width * s.k())
     finally:
         if painter is not None:
             painter.end()

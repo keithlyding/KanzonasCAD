@@ -9,6 +9,7 @@ every sheet's drawing area, with every {Field} in its texts replaced by that fie
 """
 
 import re
+from contextlib import contextmanager
 
 from .model import Line, Text
 
@@ -23,7 +24,7 @@ VALUE_H = 0.1
 TITLE_H = 0.16
 
 # fields every title block can use besides the project's own (Project properties)
-SHEET_FIELDS = ["Sheet", "Sheets", "Sheet title"]
+SHEET_FIELDS = ["Sheet", "Sheets", "Sheet title", "Print date"]
 _FIELD = re.compile(r"\{([^{}]+)\}")
 # the revision history's fields: the latest revision's, and "Rev 1" (the latest), "Rev 2"
 # (the one before)... for a revision table in the title block
@@ -36,6 +37,36 @@ def is_auto_field(name):
     """A field KanzonasCAD fills by itself (not one to type in Project properties)."""
     return name in SHEET_FIELDS or name == "Scale" or name in REV_FIELDS or \
         bool(_REV_ROW.match(name))
+
+
+_printing = []                  # the moment of a PDF or DXF export under way (printing())
+
+
+@contextmanager
+def printing():
+    """While a PDF or DXF is written: {Print date} is the date and time of it (on screen, it
+    is today's date)."""
+    _printing.append(stamp_now())
+    try:
+        yield
+    finally:
+        _printing.pop()
+
+
+def stamp_now():
+    """Now, as the print stamp writes it: 11/05/2026 3:14 PM."""
+    import datetime
+    t = datetime.datetime.now()
+    return "%s %d:%02d %s" % (t.strftime("%m/%d/%Y"), t.hour % 12 or 12, t.minute,
+                              "AM" if t.hour < 12 else "PM")
+
+
+def print_date():
+    """{Print date}: the export's moment while one is written, else today's date."""
+    if _printing:
+        return _printing[-1]
+    from .model import today_text
+    return today_text()
 
 
 def sheet_revisions(project, sheet):
@@ -69,23 +100,34 @@ def default_title_block(sheet):
               y0 + 3 * TB_ROW + TB_TITLE_ROW]
     third = tw / 3
     half = tw / 2
+    q = tw / 6.5                # (the drawn-by row's four cells: 1.75, 1.5, 1.75, 1.5 in)
     _cell(out, bx0, rows_y[0], bx0 + 1.5 * third, rows_y[1], "DRAWING NO.", "{Drawing number}")
     _cell(out, bx0 + 1.5 * third, rows_y[0], bx0 + 2 * third, rows_y[1], "REV", "{Revision}")
     _cell(out, bx0 + 2 * third, rows_y[0], bx1, rows_y[1], "SHEET", "{Sheet} OF {Sheets}")
-    _cell(out, bx0, rows_y[1], bx0 + third, rows_y[2], "DRAWN BY", "{Drawn by}")
-    _cell(out, bx0 + third, rows_y[1], bx0 + 2 * third, rows_y[2], "CHECKED BY", "{Checked by}")
-    _cell(out, bx0 + 2 * third, rows_y[1], bx1, rows_y[2], "DATE", "{Date}")
+    xs = [bx0, bx0 + 1.75 * q, bx0 + 3.25 * q, bx0 + 5.0 * q, bx1]
+    for (label, value), a, b in zip((("DRAWN BY", "{Drawn by}"), ("DRAWN", "{Drawn date}"),
+                                     ("CHECKED BY", "{Checked by}"), ("REV DATE", "{Date}")),
+                                    xs, xs[1:]):
+        _cell(out, a, rows_y[1], b, rows_y[2], label, value)
     _cell(out, bx0, rows_y[2], bx0 + half, rows_y[3], "CUSTOMER", "{Customer}")
     _cell(out, bx0 + half, rows_y[2], bx1, rows_y[3], "PROJECT", "{Project}")
     _cell(out, bx0, rows_y[3], bx1, rows_y[4], "SHEET TITLE", "{Sheet title}", TITLE_H)
+    out.append(_stamp(bx1 - 0.12, rows_y[3] + 0.03))      # (inside the title cell, low)
     return out
+
+
+def _stamp(x, y):
+    """The print stamp (when the paper copy was made), small, its right end at x (kept inside
+    the title block: its outline sets a strip's size)."""
+    return Text((x, y), "PRINTED {Print date}", LABEL_H, align="right")
 
 
 STRIP_W = 1.75                  # a right-hand strip title block's width
 STRIP_ROW = 0.375               # its rows' height (and a bottom strip's height, twice)
 STRIP_FIELDS = [("SHEET", "{Sheet} OF {Sheets}"), ("REV", "{Revision}"),
-                ("DRAWING NO.", "{Drawing number}"), ("SCALE", "{Scale}"), ("DATE", "{Date}"),
-                ("CHECKED BY", "{Checked by}"), ("DRAWN BY", "{Drawn by}"),
+                ("DRAWING NO.", "{Drawing number}"), ("SCALE", "{Scale}"),
+                ("REV DATE", "{Date}"), ("CHECKED BY", "{Checked by}"),
+                ("DRAWN", "{Drawn date}"), ("DRAWN BY", "{Drawn by}"),
                 ("PROJECT", "{Project}"), ("CUSTOMER", "{Customer}")]
 
 
@@ -103,11 +145,13 @@ def strip_title_block(sheet, side):
             _cell(out, bx0, y, x1, y + STRIP_ROW, label, value)
             y += STRIP_ROW
         _cell(out, bx0, y, x1, y + 2 * STRIP_ROW, "SHEET TITLE", "{Sheet title}", TITLE_H)
+        out.append(_stamp(x1 - 0.12, y1 - 0.06 - LABEL_H))
         return out
     h = 2 * STRIP_ROW
     cells = [("CUSTOMER", "{Customer}", 2.0), ("PROJECT", "{Project}", 2.0),
              ("SHEET TITLE", "{Sheet title}", 3.0), ("DRAWN BY", "{Drawn by}", 1.0),
-             ("CHECKED BY", "{Checked by}", 1.0), ("DATE", "{Date}", 1.0),
+             ("DRAWN", "{Drawn date}", 0.9), ("CHECKED BY", "{Checked by}", 1.0),
+             ("REV DATE", "{Date}", 0.9),
              ("SCALE", "{Scale}", 0.9), ("DRAWING NO.", "{Drawing number}", 1.6),
              ("REV", "{Revision}", 0.5), ("SHEET", "{Sheet} OF {Sheets}", 0.9)]
     total = sum(c[2] for c in cells)
@@ -116,6 +160,8 @@ def strip_title_block(sheet, side):
     for label, value, w in cells:
         _cell(out, x, y0, x + w * k, y0 + h, label, value,
               TITLE_H if label == "SHEET TITLE" else VALUE_H)
+        if label == "SHEET TITLE":
+            out.append(_stamp(x + w * k - 0.12, y0 + 0.03))   # (inside the title cell, low)
         x += w * k
     return out
 
@@ -126,6 +172,10 @@ def field_values(project, sheet):
     v["Sheets"] = str(len(project.sheets))
     v["Sheet title"] = sheet.title
     v["Scale"] = sheet.scale_text()
+    v["Print date"] = print_date()
+    # (a project from before Drawn date: the date typed in Project properties)
+    if not str(v.get("Drawn date", "")).strip():
+        v["Drawn date"] = project.fields.get("Date", "")
     # the revision history: the latest revision that applies to this sheet gives {Revision}
     # and {Date}; Rev 1 is the latest, Rev 2 the one before... (empty past the oldest)
     hist = sheet_revisions(project, sheet) if getattr(project, "revisions", None) else []

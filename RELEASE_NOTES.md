@@ -6,6 +6,17 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.9
+
+**New**
+- The drawn date fills itself in: a new project starts with today's date ({Drawn date}).
+- A print stamp: {Print date} shows when a PDF or DXF was made, so a paper copy shows how old
+  it is. The built-in title blocks show DRAWN, REV DATE and PRINTED (a project made before
+  this keeps its title block: Project properties can swap in the new one).
+
+**Fixed**
+- KanzonasCAD could crash some time after the Sheet scale window had been opened and closed.
+
 ## 0.12.8
 
 **New**
