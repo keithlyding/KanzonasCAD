@@ -12,6 +12,8 @@ build fails without them.
 - The list of running object snaps (the arrow next to OSNAP in the status bar) stays open
   while you tick and untick snaps, so you can set several in a row. Click outside it or press
   Esc when done.
+- Make block on a panel sheet starts on Panel footprint (on Schematic symbol on other
+  sheets).
 
 ## 0.11.8
 

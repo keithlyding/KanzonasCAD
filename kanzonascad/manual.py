@@ -158,8 +158,8 @@ the part's symbol or its footprint.</p>
 the two ends of a dimension you know (the part's width say) and type its real length
 (<code>45mm</code> or <code>1.77</code>).</li>
 <li>Select it and use <b>Make block</b> (B). Pick the <b>base point</b> (the point it is placed
-by), then fill in the name, kind (schematic symbol or panel footprint), category and
-description. For a symbol also: its part in cross-references (a device on its own, a coil or
+by), then fill in the name, kind (schematic symbol or panel footprint: it starts on panel
+footprint on a panel sheet, on schematic symbol otherwise), category and description. For a symbol also: its part in cross-references (a device on its own, a coil or
 operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...),
 what wire numbers do through it (nothing; a distribution block; an off-sheet connector: see
 Wire numbers) and the pin names.</li>

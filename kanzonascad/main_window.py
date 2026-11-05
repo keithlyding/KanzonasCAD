@@ -1599,7 +1599,10 @@ class MainWindow(QMainWindow):
     def ask_block_details(self, ents):
         """Make block asks this after its base point (see commands.MakeBlockCmd)."""
         from .library_panel import block_details_dialog
-        return block_details_dialog(self, self.library, "symbol")
+        v = self.view()
+        # (on a panel sheet, what you make a block of is a footprint, as a rule)
+        hint = "footprint" if v is not None and v.sheet().kind == "panel" else "symbol"
+        return block_details_dialog(self, self.library, hint)
 
     def save_block_to_library(self, defn):
         try:

@@ -74,5 +74,32 @@ class OsnapMenuTest(unittest.TestCase):
         self.assertFalse(self.m.isVisible())
 
 
+class MakeBlockKindTest(unittest.TestCase):
+    """Make block starts on Panel footprint on a panel sheet, Schematic symbol otherwise."""
+
+    def test_kind_follows_the_sheet(self):
+        from PySide6.QtWidgets import QComboBox, QDialog
+        from kanzonascad import library_panel
+        win, v = window()
+        seen = []
+        real = QDialog.exec
+
+        def look(dlg):
+            seen.append(dlg.findChildren(QComboBox)[0].currentData())
+            return QDialog.Rejected
+        QDialog.exec = look
+        try:
+            win.ask_block_details([])
+            with v.project.edit("panel") as ed:
+                ed.sheet_meta(v.sheet(), kind="panel")
+            win.ask_block_details([])
+        finally:
+            QDialog.exec = real
+            v.project.saved_at = len(v.project.undo_stack)
+            win.close()
+        self.assertEqual(seen, ["symbol", "footprint"])
+        self.assertTrue(library_panel)
+
+
 if __name__ == "__main__":
     unittest.main()
