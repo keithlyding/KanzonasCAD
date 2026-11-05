@@ -621,7 +621,9 @@ Each press is one Undo; wires on a moved symbol's pins come along, and objects o
 layers stay.</li>
 <li>Over a <b>grip</b> of a selected object, the square jumps onto the grip and the arrow shows:
 a click there starts stretching it.</li>
-<li>Click an object to add it to the selection; <b>Shift</b>+click removes it.</li>
+<li>Click an object to add it to the selection; <b>Shift</b>+click removes it. Hold
+<b>Shift</b> for a window or lasso too, and what it catches is removed from the selection
+instead of added (as in AutoCAD).</li>
 <li><b>Window</b>: click in an empty spot, move, and click again. <b>Left to right</b> (blue)
 selects what is wholly inside; <b>right to left</b> (green, dashed) also selects what it
 crosses.</li>

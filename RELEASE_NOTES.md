@@ -12,6 +12,8 @@ build fails without them.
 - The ribbon shows each group's name under its buttons (Rail and duct, Dimensions, Blocks...),
   so things are easier to find. View > Ribbon group names turns them off.
 - Typing PANDUIT starts Wire duct.
+- Hold Shift with a window or lasso to take everything it catches out of the selection (as
+  Shift+click does for one object).
 
 ## 0.12.2
 

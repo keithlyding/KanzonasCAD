@@ -458,6 +458,29 @@ class SelectionFeelTest(unittest.TestCase):
         drag(self.v, self.loop(False))
         self.assertEqual(self.v.sel, {self.a.id, self.b.id})
 
+    def test_shift_window_and_lasso_take_out_of_the_selection(self):
+        # (the owner: "When trying to deselect something, I can only click each device
+        # individually")
+        v = self.v
+        both = {self.a.id, self.b.id}
+        v.set_selection(set(both))
+        drag(v, self.loop(True), mods=Qt.ShiftModifier)          # a window lasso: a only
+        self.assertEqual(v.sel, {self.b.id})
+        v.set_selection(set(both))
+        drag(v, self.loop(False), mods=Qt.ShiftModifier)         # crossing: both
+        self.assertEqual(v.sel, set())
+        v.set_selection(set(both))
+        right = [(1.5 + 0.38 * i, 1.0 + 0.32 * i) for i in range(6)]
+        drag(v, right, mods=Qt.ShiftModifier)                    # a quick drag: a window
+        self.assertEqual(v.sel, {self.b.id})
+        v.set_selection(set(both))
+        click(v, (1.5, 1.0), mods=Qt.ShiftModifier)              # click, click window
+        click(v, (3.4, 2.6), mods=Qt.ShiftModifier)
+        self.assertEqual(v.sel, {self.b.id})
+        click(v, (1.4, 1.0))                                     # without Shift: adds
+        click(v, (3.4, 2.6))
+        self.assertEqual(v.sel, both)
+
     def test_quick_drag_is_a_window(self):
         # (the owner: "if I ... move my mouse too quickly, the select doesn't take": a fast
         # drag gives a few points nearly on a line, a lasso with nothing inside it)
