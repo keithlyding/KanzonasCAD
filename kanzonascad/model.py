@@ -1890,6 +1890,8 @@ class Project:
         self.redo_stack = []
         self.saved_at = 0           # len(undo_stack) when last saved (or -1: never matches)
         self.listeners = []         # called with no arguments after each change
+        self.revision = 0           # counts the changes (edits, undo, redo): the views keep a
+                                    # picture of the drawing until it moves on
 
     def make_sheet(self, title=""):
         """A new sheet laid out as the project says (not yet in the project)."""
@@ -1996,6 +1998,7 @@ class Project:
         self._changed()
 
     def _changed(self):
+        self.revision += 1
         self.sync_reserve()
         for f in list(self.listeners):
             f()

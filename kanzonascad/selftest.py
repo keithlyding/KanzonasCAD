@@ -19,6 +19,7 @@ BUDGET = {
     "edit_add": 2.0,            # 1,000 lines added one edit each, on that sheet
     "edit_move": 2.0,           # 1,000 lines moved in one edit, then drawn
     "hover": 0.01,              # one mouse move over the dense sheet (per move)
+    "snap_move": 0.03,          # one mouse move in a command, snaps on, and the screen drawn
     "peak_mb": 800,
     "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings
 }
@@ -475,12 +476,51 @@ def run(log_path):
                                          Qt.NoButton, Qt.NoButton, Qt.NoModifier))
         dh = (time.perf_counter() - t) / n
         assert dh < BUDGET["hover"] * 3, "a mouse move took %.1f ms" % (dh * 1000)
+        # in a command, with the running snaps on, the screen drawn after each move (the
+        # crosshair, snap marker and rubber band over the picture the view keeps of the
+        # drawing, not every one of the 60,000 lines again), zoomed out and zoomed in
+        from . import commands as C
+        v.osnap_on = True
+        v.run(C.LineCmd)
+        v.input_text("5,5")
+        v.repaint()
+        ds = 0.0
+        r = v.renderer()
+        drawn = [0]
+        real_paint = r.paint
+
+        def counted(*a, **k):
+            drawn[0] += 1
+            return real_paint(*a, **k)
+        r.paint = counted
+        try:
+            for zoom in (1.0, 40.0):
+                v.zoom("sheet")
+                v.scale *= zoom
+                v.repaint()
+                drawn[0] = 0
+                t = time.perf_counter()
+                for i in range(n):
+                    pos = QPointF(200 + i * 7, 300 + i * 3)
+                    app.sendEvent(v, QMouseEvent(QEvent.MouseMove, pos, v.mapToGlobal(pos),
+                                                 Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+                    v.repaint()
+                ds = max(ds, (time.perf_counter() - t) / n)
+                # (the time depends on the machine; this doesn't: no object is drawn again)
+                assert drawn[0] == 0, "the drawing was drawn again on %d of %d mouse moves" % (
+                    drawn[0], n)
+        finally:
+            r.paint = real_paint
+        v.cancel()
+        assert ds < BUDGET["snap_move"], "a mouse move with snaps, drawn, took %.1f ms" % (
+            ds * 1000)
         p.saved_at = len(p.undo_stack)
         w.close_tab(w.tabs.indexOf(d))
         mb = _peak_mb()
         assert mb < BUDGET["peak_mb"], "peak memory %.0f MB" % mb
         return ("open+draw %.2f s, 10 zooms %.2f s, 1,000 adds %.2f s, 1,000 moved %.2f s, "
-                "hover %.1f ms, peak %.0f MB" % (dt, dz, da, dm, dh * 1000, mb))
+                "hover %.1f ms, snap move drawn %.1f ms, peak %.0f MB"
+                % (dt, dz, da, dm, dh * 1000, ds * 1000, mb))
     log.check("speed budget (60,000-line sheet)", big_sheet)
 
     w = state.get("win")

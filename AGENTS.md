@@ -130,8 +130,13 @@ To change one, change it there, then copy its files in as its `brand/README.md` 
 
 ## Performance budget (checked by the self-test "speed budget")
 On a 60,000-line sheet: opened and drawn < 5 s, ten zoomed repaints < 2 s, 1,000 lines added
-one edit each < 2 s, 1,000 lines moved in one edit < 2 s, a mouse move < 30 ms, peak memory
-< 800 MB. Typical today: 0.6 s, 0.2 s, 0.4 s, 0.06 s, 0.5 ms, 180 MB.
+one edit each < 2 s, 1,000 lines moved in one edit < 2 s, a mouse move < 30 ms, a mouse move in
+a command with the snaps on and the screen drawn < 30 ms (zoomed out and in), peak memory
+< 800 MB. Typical today: 0.6 s, 0.2 s, 0.4 s, 0.06 s, 0.5 ms, a few ms, 180 MB. The view keeps a
+picture of the drawing (`CadView._drawing_picture`), drawn again only when its key changes (the
+view, the project's revision, the sheet, the title block, the layers): a mouse move only draws
+the crosshair, snap marker and rubber band over it. Anything that changes how the drawing looks
+must change that key (an edit does).
 
 ## Plans and decisions
 The order of work and the owner's decisions are in docs/ROADMAP.md: read it before starting a

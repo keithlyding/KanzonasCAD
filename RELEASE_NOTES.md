@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.9
+
+**Fixed**
+- Moving the mouse while drawing, with object snaps on, no longer lags behind on a busy sheet
+  (it was worst zoomed out, and still noticeable zoomed in). The crosshair and snap markers
+  now follow the mouse without the whole drawing being drawn again on every move.
+
 ## 0.11.8
 
 **New**
