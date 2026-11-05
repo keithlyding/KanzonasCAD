@@ -41,6 +41,7 @@ class CommandLine(QWidget):
         self.options.setSpacing(2)
         row.addLayout(self.options)
         self.edit = QLineEdit()
+        self.edit.setAcceptDrops(False)     # (a file dropped here goes to the window: opened)
         self.edit.setFont(mono)
         self.edit.setPlaceholderText("Type a command (L, PL, REC, C, A, T, M, CO, RO, SC, MI, "
                                      "E, TR, Z) and press Enter")

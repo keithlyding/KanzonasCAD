@@ -121,6 +121,7 @@ class MainWindow(BlockEditing, QMainWindow):
         # (portable: settings.ini in the data folder beside the program, not the registry)
         self.settings = paths.settings()
         self.setWindowTitle(app_title())
+        self.setAcceptDrops(True)       # (DXF, DWG and projects dragged in from Explorer)
         self.resize(1400, 900)
         self._untitled = 0
 
@@ -1081,6 +1082,83 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         self._dxf_report(rep)
         d.view.zoom("extents")
+
+    # ---- files dragged in (Explorer, a file manager) ----------------------------------------
+    DROP_TYPES = (".dxf", ".dwg", M.FILE_SUFFIX)
+
+    @classmethod
+    def _dropped_paths(cls, mime):
+        """The local files of a drag that KanzonasCAD takes (DXF, DWG, projects)."""
+        if mime is None or not mime.hasUrls():
+            return []
+        out = []
+        for u in mime.urls():
+            p = u.toLocalFile()
+            if p and p.lower().endswith(cls.DROP_TYPES) and os.path.isfile(p):
+                out.append(p)
+        return out
+
+    def dragEnterEvent(self, e):
+        if self._dropped_paths(e.mimeData()):
+            e.acceptProposedAction()
+        else:
+            e.ignore()
+
+    def dragMoveEvent(self, e):
+        if self._dropped_paths(e.mimeData()):
+            e.acceptProposedAction()
+        else:
+            e.ignore()
+
+    def dropEvent(self, e):
+        paths = self._dropped_paths(e.mimeData())
+        if not paths:
+            e.ignore()
+            return
+        e.acceptProposedAction()
+        d = self.doc()
+        at = None
+        if d is not None:
+            v = d.view
+            q = v.mapFrom(self, e.position().toPoint())
+            if v.rect().contains(q):
+                at = v.to_world(q)
+        self.drop_files(paths, at)
+
+    def drop_files(self, paths, at=None):
+        """Files dropped on the window. A DXF or DWG dropped on the drawing (at: the point it
+        was let go, on the sheet shown) is imported into that sheet with its middle there,
+        several side by side, one undoable step each, and selected; dropped anywhere else
+        (the tab bar, the ribbon, an empty window) it opens as a project of its own, as
+        Open... does. A project opens."""
+        d = self.doc()
+        imported = []
+        for path in paths:
+            drawing = path.lower().endswith((".dxf", ".dwg"))
+            if not drawing or d is None or at is None:
+                self.open_path(path)
+                continue
+            try:
+                rep = fileio.import_dxf(d.project, d.view.sheet(), path, at,
+                                        "left" if imported else "center")
+            except Exception as ex:     # (any reader failure: told, as Import does)
+                QMessageBox.warning(self, APP, "Couldn't read %s:\n%s" % (path, ex))
+                continue
+            self.settings.setValue("import_dir", os.path.dirname(path))
+            self._dxf_report(rep)
+            imported += rep["ids"]
+            bb = rep.get("bbox")
+            if bb is not None:
+                # the next file goes beside this one, not on top of it
+                gap = max(bb[2] - bb[0], bb[3] - bb[1]) * 0.1
+                at = (bb[2] + gap, at[1])
+            self.cmdline.add_history("%s dropped on the drawing: imported where it was let go "
+                                     "(Import DXF or DWG into this sheet... keeps its own "
+                                     "coordinates)" % os.path.basename(path))
+        if imported:
+            d.view.set_selection(set(imported))
+            d.view.update()
+        return imported
 
     def _dxf_report(self, rep):
         msg = "Imported %d object(s); drawing units: %s." % (rep["count"], rep["units"])

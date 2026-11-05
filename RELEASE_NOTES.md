@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.10
+
+**New**
+- Drag a DXF or DWG from Explorer onto the drawing to import it right there (it comes in
+  selected, ready to move). Drop it anywhere else in the window to open it as its own
+  project; dropping a KanzonasCAD project opens it.
+
 ## 0.12.9
 
 **New**
