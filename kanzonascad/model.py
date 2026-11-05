@@ -1209,6 +1209,15 @@ class BlockDef:
         else the middle of its drawing."""
         if self.rail_pos is not None:
             return self.rail_pos
+        return self.middle()
+
+    def label_point(self):
+        """Where a footprint's label goes: its label spot when one is set (Edit block: the
+        tag spot), else the middle of its drawing."""
+        return self.tag_pos if self.tag_pos is not None else self.middle()
+
+    def middle(self):
+        """The middle of its drawing (pins left out)."""
         bb = None
         for e in self.entities:
             bb = G.bbox_union(bb, e.bbox())
@@ -1225,16 +1234,23 @@ class BlockDef:
         return bb or (0.0, 0.0, 0.0, 0.0)
 
 
+# what a footprint's label shows (Footprint label): the attribute, or its block's name
+LABELS = {"tag": "TAG", "cat": "CAT", "desc": "DESC", "name": None}
+LABEL_NAMES = {"tag": "Tag", "cat": "Part number", "desc": "Description", "name": "Block name"}
+
+
 @_register
 class Insert(Entity):
     """A block placed on a sheet: at pos, turned by angle, sized by scale, optionally flipped
     (mirror: the block's own y turned over before turning), with its attributes (TAG, DESC,
-    MFR, CAT and the part it is). defn is the BlockDef it shows (the project's copy)."""
+    MFR, CAT and the part it is). defn is the BlockDef it shows (the project's copy). label:
+    what a footprint shows on it ("" nothing, or a key of LABELS)."""
     kind = "insert"
-    __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "_world")
+    __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "label",
+                 "_world")
 
     def __init__(self, block, pos, angle=0.0, scale=1.0, mirror=False, attrs=None, defn=None,
-                 tag_h=None, **kw):
+                 tag_h=None, label="", **kw):
         super().__init__(**kw)
         self.block = str(block)
         self.pos = _pt(pos)
@@ -1244,6 +1260,7 @@ class Insert(Entity):
         self.attrs = {k: str(v) for k, v in (attrs or {}).items()}
         self.defn = defn
         self.tag_h = float(tag_h) if tag_h else None    # tag height (None: the block's)
+        self.label = label if label in LABELS else ""
         self._world = None
 
     def _data(self):
@@ -1253,14 +1270,16 @@ class Insert(Entity):
             d["mirror"] = True
         if self.tag_h:
             d["tag_h"] = self.tag_h
+        if self.label:
+            d["label"] = self.label
         return d
 
     @classmethod
     def _from(cls, d, blocks):
         return cls(d["block"], d["pos"], d.get("angle", 0.0), d.get("scale", 1.0),
                    d.get("mirror", False), d.get("attrs", {}), blocks.get(d["block"]),
-                   d.get("tag_h"), layer=d.get("layer", "0"), color=d.get("color"),
-                   id=d.get("id"))
+                   d.get("tag_h"), d.get("label", ""), layer=d.get("layer", "0"),
+                   color=d.get("color"), id=d.get("id"))
 
     def copy(self, **changes):
         d = self.to_dict()
@@ -1285,11 +1304,36 @@ class Insert(Entity):
     def tag_text(self):
         """The tag shown on the sheet (None for a footprint or a symbol without a tag spot)."""
         d = self.defn
+        if d is not None and d.kind == "footprint":
+            return self.label_text()
         if d is None or d.kind != "symbol" or d.tag_pos is None:
             return None
         tag = self.attrs.get("TAG", "")
         return Text(self.to_world(d.tag_pos), tag or (d.prefix + "?" if d.prefix else "?"),
                     (self.tag_h or d.tag_height) * self.scale, 0.0, "center")
+
+    def label_value(self):
+        """What a footprint's label says ("?" when that attribute is empty), or None."""
+        d = self.defn
+        if not self.label or d is None:
+            return None
+        if self.label == "name":
+            return d.name
+        v = self.attrs.get(LABELS[self.label], "")
+        if not v and self.label == "cat":
+            v = d.catalog
+        return v or "?"
+
+    def label_text(self):
+        """A footprint's label (Footprint label): at its block's label spot, centered, paper-
+        sized (tag_h), read from the bottom or the right as it is turned. None: no label."""
+        v = self.label_value()
+        if v is None:
+            return None
+        a = self.angle % 180.0
+        ang = 90.0 if 45.0 <= a < 135.0 else 0.0
+        return Text(self.to_world(self.defn.label_point()), v, self.tag_h or 0.125, ang,
+                    "center", "middle")
 
     def world_entities(self):
         """The block's content placed on the sheet, plus the tag text."""
@@ -1906,6 +1950,9 @@ class Edit:
                 for e in list(s.entities.values()):
                     if isinstance(e, Insert) and e.defn is not None and e.defn.kind == "symbol":
                         self.change(s, e.copy(tag_h=after["tag_height"]))
+                    elif isinstance(e, Insert) and e.label:
+                        # a footprint's label: paper-sized, as the tags
+                        self.change(s, e.copy(tag_h=after["tag_height"] * s.k()))
 
     def block(self, defn):
         """Put a block definition in the project (or replace the one of that name); block

@@ -241,7 +241,9 @@ across the part where the rail's centerline runs) is the middle of the part's ra
 it to where the rail's center crosses the part (its height on the part is what counts on a
 rail across; snap to the clip's drawing if it has one) and the part sits right on the rail
 when placed; left where it opened, it stays the middle of the drawing (also when the drawing
-changes); erased, it goes back to that. <b>Save block</b>
+changes); erased, it goes back to that. The blue <b>LABEL</b> text on layer BLOCK TAG is
+where its <b>Footprint label</b> goes, the same way: left where it opened, the middle of the
+drawing; moved, that spot. <b>Save block</b>
 (Library menu, the ribbon, or Save, Ctrl+S, in that tab) puts it back in your library: the
 pins keep their order, new ones come after. Closing the tab with changes not saved asks
 first. <b>Save block as...</b> (Library menu and the ribbon, in that tab) saves it under a new
@@ -624,6 +626,17 @@ with its end grips (or double-click it and type its length), move it with its mi
 size. Double-click a piece for its profile or size, length, manufacturer, catalog number and
 the length it is bought in (the project's to start: Project properties, Panel; 1 m rail and 6
 ft duct).</li>
+<li><b>Footprint label</b> (Modify menu, the Panel tab's Footprints group, or a right-click
+with footprints selected): the selected footprints show, written across them, their
+<b>Show tag</b> (M1, CR3), <b>Show part number</b> (its catalog number; the block's own when
+the copy has none), <b>Show description</b> or <b>Show block name</b>, or <b>No label</b>
+(as they start). Select one or many, pick one: one step, Undo takes it back. Each footprint
+keeps its own choice, so some can show part numbers and others tags. The label is centered on
+the part (or at its block's label spot, set in Edit block), turned up the page or reading from
+the right as the part is turned, and paper-sized like the tags (Project properties: tag
+height). An empty tag or description shows "?". It prints and goes into PDF and DXF exports.
+Changing the tag, part number or description (double-click the footprint) changes the
+label.</li>
 <li><b>Footprints snap onto DIN rail.</b> While you place a footprint (Insert), move it,
 copy it or drag it, once its <b>DIN rail point</b> (the middle of its rail clip) comes over a
 rail it locks onto the rail's centerline and slides along the rail with the mouse, whatever

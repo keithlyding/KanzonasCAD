@@ -9,6 +9,8 @@ The sheet holds:
   - the tag's place as a text on layer BLOCK TAG (centered on its baseline, as a placed tag);
   - the attributes shown besides the tag (a terminal's number...) as texts on layer
     BLOCK ATTRIBUTES, their text the attribute's name (TERM, ADDR...);
+  - a footprint's label spot (Footprint label) as the text LABEL on layer BLOCK TAG,
+    automatic (the middle of the drawing) while it stays where it opened;
   - a footprint's DIN rail point (the middle of its rail clip, which lines up with the rail's
     centerline) as the text DIN RAIL on layer BLOCK DIN RAIL: its insertion point is the
     point. Left where it opened on a footprint that had none, it stays automatic (the middle
@@ -33,6 +35,7 @@ LAYER_RAIL = "BLOCK DIN RAIL"
 MARKER_LAYERS = {LAYER_BASE: "#808080", LAYER_PINS: "#2f9e44", LAYER_TAG: "#00a0ff",
                  LAYER_ATTRS: "#c08000", LAYER_RAIL: "#d0308f"}
 RAIL_TEXT = "DIN RAIL"
+LABEL_TEXT = "LABEL"
 PIN_HEIGHT = 0.06
 PAPER = "ANSI A (11 x 8.5)"
 ROOM = (4.5, 3.25)              # paper inches each way from the base point the block may use
@@ -138,6 +141,10 @@ def open_block(defn):
     if defn.kind == "symbol" and defn.tag_pos is not None:
         put(M.Text(at(defn.tag_pos), (defn.prefix + "?") if defn.prefix else "TAG",
                    defn.tag_height, 0.0, "center", layer=LAYER_TAG), ("tag", 0))
+    elif defn.kind == "footprint":
+        # where its label goes (Footprint label): left alone, the middle of the drawing
+        put(M.Text(at(defn.label_point()), LABEL_TEXT, PIN_HEIGHT * n, 0.0, "center", "middle",
+                   layer=LAYER_TAG), ("tag", 0))
     for i, a in enumerate(defn.attr_texts):
         put(M.Text(at(a["pos"]), a["attr"], a["height"], 0.0, "center", layer=LAYER_ATTRS),
             ("attr", i))
@@ -197,6 +204,12 @@ def to_block(project, sess):
             pos = old.pins[i]["pos"] if stays and i is not None else back(e.pos)
             pins.append((0 if i is not None else 1, i if i is not None else eid, eid,
                          {"name": name, "pos": pos}, i))
+        elif marker and e.layer == LAYER_TAG and old.kind == "footprint":
+            # a footprint's label spot: left where it opened, as it was (automatic stays so)
+            if what and what[0] == "tag" and stays:
+                tags.append((0, eid, old.tag_pos, old.tag_height))
+            else:
+                tags.append((1, eid, back(e.pos), old.tag_height))
         elif marker and e.layer == LAYER_TAG:
             if what and what[0] == "tag":
                 tags.append((0, eid, old.tag_pos if stays else back(e.pos),
@@ -235,7 +248,8 @@ def to_block(project, sess):
     tags.sort(key=lambda t: (t[0], t[1]))
     rails.sort(key=lambda t: (t[0], t[1]))
     if len(tags) > 1:
-        warnings.append("%d tag markers: the first one was used" % len(tags))
+        warnings.append("%d %s markers: the first one was used"
+                        % (len(tags), "label" if old.kind == "footprint" else "tag"))
     if len(rails) > 1:
         warnings.append("%d DIN rail markers: the first one was used" % len(rails))
     names = [p[3]["name"] for p in pins]
@@ -258,7 +272,7 @@ def to_block(project, sess):
             pin_map[old.pins[p[4]]["name"]] = p[3]["name"]
         base[p[2]] = (s.entities[p[2]].to_dict(), ("pin", k))
     if tags:
-        defn.tag_pos = M._pt(tags[0][2])
+        defn.tag_pos = M._pt(tags[0][2]) if tags[0][2] is not None else None
         defn.tag_height = float(tags[0][3])
         base[tags[0][1]] = (s.entities[tags[0][1]].to_dict(), ("tag", 0))
     else:
