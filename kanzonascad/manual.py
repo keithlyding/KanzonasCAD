@@ -63,8 +63,12 @@ uses unless it has its own (8 rows, A to H, and 10 columns to start), the device
 <li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors.</li>
 </ul></li>
 <li><b>Edit title block</b>: see below.</li>
-<li><b>Layers...</b>: add, rename, recolor, switch off and lock layers, and choose the current
-layer. The Layer box on the Home tab picks the current layer; with objects selected, picking
+<li><b>Layers...</b>: add, rename, recolor, switch off, lock and delete layers, and choose the
+current layer. To clean up (after importing a DXF, say), select several layers (Ctrl+click,
+Shift+click) or click <b>Select unused</b> (the empty ones), then <b>Delete</b>: empty layers
+go at once; if some hold objects (on any sheet or in the title block), it lists them and asks
+whether to delete them too, with everything on them, or keep them. Layer 0 always stays, and
+one Undo brings it all back. The Layer box on the Home tab (and on the Panel tab) picks the current layer; with objects selected, picking
 a layer moves them to it.</li>
 </ul>
 
@@ -74,10 +78,14 @@ own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel 
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
 layer it sits on, or its own color if you gave it one. Wires go on layer WIRES, symbols on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
-Project properties set those colors, which recolors everything on them.</p>
+Project properties set those colors, which recolors everything on them. On the black drawing,
+black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
+black, so nothing disappears (as AutoCAD's color 7); their color stays as you set it, and they
+print in it.</p>
 <p><b>Layers</b>, as in AutoCAD: a hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
-Locked, color, current layer). Quicker, on the Home tab's Layers group and the Modify menu:</p>
+Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the layer box, the layer list,
+Layers..., Color, Hide layer and Show all too) and the Modify menu:</p>
 <ul>
 <li>The <b>layer list</b> button next to the current layer: every layer with its light bulb
 (click to hide or show it) and lock (click to lock or unlock it).</li>
@@ -595,8 +603,11 @@ middle). Each moves only straight across (Left, Center, Right) or straight up an
 Middle, Bottom), by its outline; one Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
 one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
-slots. Stretch one with its end grips (or double-click it and type its length), move it with
-its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its
+slots. They always go straight across or straight up and down (a snap off that line only sets
+the length), and their end grips stretch them along their own line. To center something on
+one, snap to the center of a mounting slot (Center), the middle of a long edge (Midpoint) or
+anywhere along its centerline (Nearest, Perpendicular), or use Align objects. Stretch one
+with its end grips (or double-click it and type its length), move it with its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its
 size. Double-click a piece for its profile or size, length, manufacturer, catalog number and
 the length it is bought in (the project's to start: Project properties, Panel; 1 m rail and 6
 ft duct).</li>

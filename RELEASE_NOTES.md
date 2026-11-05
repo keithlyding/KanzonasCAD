@@ -6,6 +6,24 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.4
+
+**New**
+- Delete several layers at once: in Layers..., select them (Ctrl+click or Shift+click, or
+  Select unused for the empty ones) and click Delete. Empty layers go right away; for layers
+  that still hold objects, it asks whether to delete them too or keep them. One Undo brings
+  everything back.
+- The Panel tab has the layers too: the current layer, the list of layers to show, hide,
+  lock or unlock, Layers..., Color, Hide layer and Show all.
+
+**Fixed**
+- A layer used only by the title block could be deleted as if it were empty.
+- Black objects (or a black layer) no longer disappear on the black drawing: they are drawn
+  white there, and still print black.
+- DIN rail and wire duct always go straight (a snap a little off the line made them slant),
+  and stretching an end keeps them straight. To center things on a rail, snap to a mounting
+  slot's center, the middle of an edge, or anywhere along its centerline.
+
 ## 0.12.3
 
 **New**

@@ -467,7 +467,12 @@ class CadView(QWidget):
         # froze the program for seconds)
         near = []
         for e in cands:
-            for part in _local_parts(e, rect):
+            parts = _local_parts(e, rect)
+            if isinstance(e, M.Run):
+                # (a rail's or duct's centerline: Nearest and Perpendicular along it, to
+                # center something on it)
+                parts = parts + [e.centerline()]
+            for part in parts:
                 if part.distance(p) <= r:
                     near.append(part)
             if len(near) >= 40:
