@@ -7,7 +7,7 @@ import math
 
 from PySide6.QtCore import Qt, QPointF, QRectF, Signal, QTimer
 from PySide6.QtGui import (QPainter, QPen, QColor, QBrush, QTransform, QPainterPath,
-                           QPolygonF, QGuiApplication)
+                           QPolygonF, QGuiApplication, QPixmap)
 from PySide6.QtWidgets import QWidget
 
 from . import geometry as G
@@ -84,6 +84,7 @@ class CadView(QWidget):
         self._drag = None
         self._hover = None
         self._hot_grip = None
+        self._picture = None            # (key, QPixmap): the drawing as last drawn
         self._sel_cache = None
         self._prompt = ("", [], False)
         self.setMouseTracking(True)
@@ -822,15 +823,47 @@ class CadView(QWidget):
         super().keyPressEvent(e)
 
     # ---- painting --------------------------------------------------------------------------
+    def _drawing_key(self):
+        """What the picture of the drawing depends on: the view (size, zoom, pan, colors,
+        grid) and the drawing (the project's changes, the sheet, the title block, the
+        layers). The same key: the same picture."""
+        s = self.sheet()
+        p = self.project
+        return (self.width(), self.height(), self.devicePixelRatioF(), self.scale,
+                self.center, self.dark, self.grid_on, self.grid_spacing, s.id, s.version,
+                p.revision, p.title_block.version,
+                tuple((n, l.color, l.visible) for n, l in p.layers.items()))
+
+    def _drawing_picture(self, pal):
+        """The paper, grid, border, title block and drawing as a picture, drawn again only
+        when what it shows changes: a mouse move (the crosshair, a snap marker, a rubber
+        band) only puts it on the screen, instead of drawing every object again (a busy
+        sheet took tens of milliseconds a move, more zoomed out)."""
+        key = self._drawing_key()
+        got = self._picture
+        if got is not None and got[0] == key:
+            return got[1]
+        dpr = self.devicePixelRatioF()
+        pm = QPixmap(max(1, round(self.width() * dpr)), max(1, round(self.height() * dpr)))
+        pm.setDevicePixelRatio(dpr)
+        p = QPainter(pm)
+        p.fillRect(QRectF(0, 0, self.width(), self.height()), pal.backdrop)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setTransform(self.transform())
+        self.renderer().paint(p, under=(lambda q: self._paint_grid(q, pal))
+                              if self.grid_on else None)
+        p.end()
+        self._picture = (key, pm)
+        return pm
+
     def paintEvent(self, _e):
-        p = QPainter(self)
         pal = Palette(self.dark)
-        p.fillRect(self.rect(), pal.backdrop)
+        pm = self._drawing_picture(pal)
+        p = QPainter(self)
+        p.drawPixmap(0, 0, pm)
         p.setRenderHint(QPainter.Antialiasing, True)
         p.save()
         p.setTransform(self.transform())
-        r = self.renderer()
-        r.paint(p, under=(lambda q: self._paint_grid(q, pal)) if self.grid_on else None)
         self._paint_selection(p, pal)
         cmd = self.cmd
         if cmd is not None and self.cursor is not None and not cmd.selecting() \
