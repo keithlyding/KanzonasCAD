@@ -14,6 +14,8 @@ build fails without them.
 - Typing PANDUIT starts Wire duct.
 - Hold Shift with a window or lasso to take everything it catches out of the selection (as
   Shift+click does for one object).
+- Blocks can carry a catalog (part) number too: Make block and Block properties ask for it,
+  placing the block fills it in, and the Library's search finds it.
 
 **Fixed**
 - Imported DXF and DWG drawings lost their dimension values and all their multi-line text

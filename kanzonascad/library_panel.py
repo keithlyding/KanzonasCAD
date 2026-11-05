@@ -114,7 +114,28 @@ def maker_fields(form, library, values=None, on_help=None):
     refill_family()
     boxes["manufacturer"].editTextChanged.connect(lambda _t: refill_family())
     boxes["family"].editTextChanged.connect(lambda _t: refill_series())
+    # the catalog (part) number: one part's own, nothing to suggest
+    cat = QLineEdit(values.get("catalog", "") or "")
+    cat.setObjectName("maker_catalog")
+    cat.setPlaceholderText(CATALOG_HELP[1])
+    cat.setToolTip(CATALOG_HELP[2])
+    form.addRow(CATALOG_HELP[0], cat)
+    lab = form.labelForField(cat)
+    if lab is not None:
+        lab.setToolTip(CATALOG_HELP[2])
+    boxes["catalog"] = cat
     return boxes
+
+
+CATALOG_HELP = ("Catalog number", "1756-A10, 1769-L33ER, 3RT2015-1BB41...",
+                "The manufacturer's part number for this exact part (on its label and in its "
+                "catalog). Placing the block fills it in as the copy's catalog number (CAT). "
+                "Leave it empty for a generic symbol used by many parts: link those with "
+                "New part... instead.")
+
+
+def _text_of(box):
+    return box.currentText() if isinstance(box, QComboBox) else box.text()
 
 
 def maker_tooltip(b):
@@ -124,6 +145,8 @@ def maker_tooltip(b):
         v = getattr(b, key, "")
         if v:
             lines.append("%s: %s" % (MAKER_HELP[key][0], v))
+    if getattr(b, "catalog", ""):
+        lines.append("%s: %s" % (CATALOG_HELP[0], b.catalog))
     return "\n".join(lines)
 
 
@@ -250,7 +273,7 @@ class LibraryPanel(QWidget):
                 if not _maker_match(b, mfr, family):
                     continue
                 hay = " ".join((b.name, b.category, b.description, b.manufacturer, b.family,
-                                b.series)).lower()
+                                b.series, b.catalog)).lower()
                 if q and q not in hay:
                     continue
                 cat = b.category or "(no category)"
@@ -399,7 +422,8 @@ class LibraryPanel(QWidget):
             if got is not None:
                 defn = self.library.get(*got)
                 if defn is not None:
-                    start = {got[0]: defn.name, "manufacturer": defn.manufacturer}
+                    start = {got[0]: defn.name, "manufacturer": defn.manufacturer,
+                             "catalog": defn.catalog}
         p = part_dialog(self, self.library, part, **start)
         if p is not None:
             self.library.save_part(p)
@@ -407,15 +431,16 @@ class LibraryPanel(QWidget):
             self.changed.emit()
 
 
-def part_dialog(parent, library, part=None, symbol=None, footprint=None, manufacturer=None):
+def part_dialog(parent, library, part=None, symbol=None, footprint=None, manufacturer=None,
+                catalog=None):
     """A part's record: manufacturer, catalog number, description and the symbol and
     footprint it links. Returns the Part, or None when cancelled. (symbol, footprint,
-    manufacturer: a new part's start, from the block it is made for.)"""
+    manufacturer, catalog: a new part's start, from the block it is made for.)"""
     dlg = QDialog(parent)
     dlg.setWindowTitle("Part" if part else "New part")
     form = QFormLayout(dlg)
     p = part or Part(symbol=symbol or "", footprint=footprint or "",
-                     manufacturer=manufacturer or "")
+                     manufacturer=manufacturer or "", catalog=catalog or "")
     mfr = QLineEdit(p.manufacturer)
     cat = QLineEdit(p.catalog)
     desc = QLineEdit(p.description)
@@ -563,7 +588,7 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
            "role": role.currentData(), "contact": contact.currentData(),
            "prefix": prefix.text().strip().upper(), "wiring": wiring.currentData(),
            "pin_names": pin_list()}
-    out.update({k: box.currentText().strip() for k, box in makers.items()})
+    out.update({k: _text_of(box).strip() for k, box in makers.items()})
     if defn is None:
         out["replace"] = replace.isChecked()
     return out

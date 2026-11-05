@@ -161,7 +161,8 @@ the two ends of a dimension you know (the part's width say) and type its real le
 (<code>45mm</code> or <code>1.77</code>).</li>
 <li>Select it and use <b>Make block</b> (B). Pick the <b>base point</b> (the point it is placed
 by), then fill in the name, kind (schematic symbol or panel footprint: it starts on panel
-footprint on a panel sheet, on schematic symbol otherwise), category and description. For a symbol also: its part in cross-references (a device on its own, a coil or
+footprint on a panel sheet, on schematic symbol otherwise), category and description, and,
+if you like, its manufacturer, family, series and catalog number (see below). For a symbol also: its part in cross-references (a device on its own, a coil or
 operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...),
 what wire numbers do through it (nothing; a distribution block; an off-sheet connector: see
 Wire numbers) and the pin names.</li>
@@ -189,6 +190,11 @@ PowerFlex 525 (Allen-Bradley); SIMATIC S7-1500 (Siemens)...</li>
 <li><b>Series</b>: the line or generation within the family, when the maker uses one. For
 Rockwell it is the hardware series letter on the label (Series A, B, C...); other makers use
 "series" for a sub-line of a family. Leave it blank if you don't need it.</li>
+<li><b>Catalog number</b>: the manufacturer's part number for this exact part, as on its label
+and in its catalog (1756-A10, 1769-L33ER, 3RT2015-1BB41...). Placing the block fills it in as
+the placed copy's catalog number (CAT), as a part does. Give one when the block is one part
+(a footprint usually is); leave it empty for a generic symbol many parts use, and link those
+parts to it with <b>New part...</b> instead.</li>
 </ul>
 <p>Makers name things differently, and there is no one right way: pick a way of writing each
 name and keep to it (Allen-Bradley or Rockwell Automation, not both), so your blocks group

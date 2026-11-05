@@ -189,7 +189,7 @@ class BlockWindowTest(unittest.TestCase):
         with mock.patch.object(LP, "part_dialog",
                                lambda *a, **k: got.update(k) or None):
             panel.edit_part(new=True)
-        self.assertEqual(got, {"symbol": "Test coil", "manufacturer": "Siemens"})
+        self.assertEqual(got, {"symbol": "Test coil", "manufacturer": "Siemens", "catalog": ""})
 
     def test_make_block_takes_the_fields_and_help_opens_the_manual(self):
         v = self.v

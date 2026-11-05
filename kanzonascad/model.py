@@ -1109,7 +1109,8 @@ CONTACTS = ("", "NO", "NC", "NOTC", "NCTO", "NOTO", "NCTC")
 # the same name are one wire, whatever sheet they're on)
 WIRINGS = ("", "distribution", "link")
 ATTR_NAMES = ["TAG", "DESC", "MFR", "CAT"]       # what every block reference can carry
-MAKER_FIELDS = ("manufacturer", "family", "series")     # a block's optional maker details
+# a block's optional maker details: who makes it, and its catalog (part) number
+MAKER_FIELDS = ("manufacturer", "family", "series", "catalog")
 
 
 class BlockDef:
@@ -1119,7 +1120,7 @@ class BlockDef:
     def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
                  category="", description="", role="device", contact="", prefix="",
                  builtin=False, wiring="", attr_texts=(), manufacturer="", family="",
-                 series=""):
+                 series="", catalog=""):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -1142,6 +1143,7 @@ class BlockDef:
         self.manufacturer = str(manufacturer or "")
         self.family = str(family or "")
         self.series = str(series or "")
+        self.catalog = str(catalog or "")   # its part number (1756-A10...): placed, its CAT
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -1164,7 +1166,7 @@ class BlockDef:
                    d.get("description", ""), d.get("role", "device"), d.get("contact", ""),
                    d.get("prefix", ""), builtin, d.get("wiring", ""),
                    d.get("attr_texts", ()), d.get("manufacturer", ""), d.get("family", ""),
-                   d.get("series", ""))
+                   d.get("series", ""), d.get("catalog", ""))
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
