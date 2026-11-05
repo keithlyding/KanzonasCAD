@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.8
+
+**New**
+- A violet icon, so KanzonasCAD is easy to tell apart from KanzonasPDF on the taskbar, the
+  desktop and the Start menu (both were red). The logo in Help > About is violet to match.
+  Your projects, library and settings are not affected.
+
 ## 0.11.7
 
 **New**
