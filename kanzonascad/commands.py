@@ -1496,6 +1496,12 @@ class DimLinearCmd(Command):
     def _height(self):
         return float(self.ctx.project.settings.get("dim_height", 0.1)) * self.ctx.sheet().k()
 
+    @property
+    def free_point(self):
+        """The two points measured go where they are picked (the snap): Ortho and Polar
+        don't bend them (the dimension line's place is still Ortho's)."""
+        return len(self.pts) < 2
+
     def point(self, p):
         self.pts.append(p)
         self.base = self.last = p

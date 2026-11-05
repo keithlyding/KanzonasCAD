@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.2
+
+**Fixed**
+- Measuring: the second point of a dimension snaps again with Ortho on (Ortho no longer bends
+  the points a dimension measures), and the corners, ends and middles of footprints and other
+  placed blocks snap too, as in AutoCAD. Wires still go to a symbol's pins first.
+
 ## 0.12.1
 
 **Fixed**

@@ -506,6 +506,9 @@ has hovered over, as AutoCAD's tracking (a small green cross marks what was pick
 follows it out), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the
 last point: the new line runs parallel to it) and <b>Apparent intersection</b> (APP: hover
 over two lines, then near where they would meet if they were longer).</li>
+<li><b>Blocks snap too</b>: the ends, middles, centers and quadrants of a placed symbol's or
+footprint's own drawing (a footprint's corners, for a dimension), as in AutoCAD. A pin, or an
+ordinary object's point of the same kind, comes first, so a wire still lands on a pin.</li>
 <li><b>Turning snaps on and off</b>: the arrow on the status bar's <b>OSNAP</b> button lists
 every snap with a check mark; click one to turn it on or off. The list stays open, so you
 can tick several in a row (Select all and Clear all too); click outside it or press Esc when
@@ -519,7 +522,7 @@ uses that snap only, ticked or not, even with F3 off. NON gives the next point n
 <li><b>Ortho mode</b> (F8, ORTHO): lines straight across or up and down. The crosshair stays
 on that line, and object snaps are looked for around it (not around where the mouse really
 is), so an end or pin on the line snaps and one off to the side doesn't pull the line to
-it.</li>
+it. (A dimension's two measured points aren't bent by Ortho.)</li>
 <li><b>Polar tracking</b> (F10, POLAR): near one of the set angles (from the last point), the
 cursor locks onto that direction: a green dashed line and a tip show the distance and angle
 (<i>Polar: 2.5 &lt; 45&deg;</i>). Typing a number then goes that far along it. The angles are
@@ -596,9 +599,10 @@ CSV...</b> writes it for a spreadsheet or a purchase order. The bill of material
 takes it in.</li>
 <li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Panel
 tab, measure the true distance, so they're right at any scale; they show inches with two
-decimals (12.50"). Their grips move the measured points and the line; they go on layer
-DIMENSIONS (its color: Project properties, Panel). Dimension text height: Project
-properties.</li>
+decimals (12.50"). The two points they measure go where you pick them (the snap): Ortho and
+Polar don't bend them, only the dimension line's place. Their grips move the measured points
+and the line; they go on layer DIMENSIONS (its color: Project properties, Panel). Dimension
+text height: Project properties.</li>
 </ul>
 
 <h2>Selecting and grips</h2>
