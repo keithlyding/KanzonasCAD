@@ -674,11 +674,14 @@ class CadView(QWidget):
                 found.add(e.id)
         return found
 
-    def _finish_window(self, end):
+    def _finish_window(self, end, shift=False):
+        """The window or lasso done: what it caught is added to the selection, or, with
+        Shift (held when it started or when it ends), taken out of it (as AutoCAD's)."""
         found = self._window_ids(end)
+        remove = shift or self._window.get("remove", False)
         self._window = None
         self._preview = set()
-        self.set_selection(self.sel | found)
+        self.set_selection(self.sel - found if remove else self.sel | found)
 
     def _drag_delta(self, d, p):
         """How far a dragged selection goes: from where it was grabbed to p, on the snap grid
@@ -796,7 +799,8 @@ class CadView(QWidget):
             return
         # idle, or a command selecting objects
         if self._window is not None:
-            self._finish_window(p)          # the second click of a click-click window
+            # (the second click of a click-click window)
+            self._finish_window(p, bool(e.modifiers() & Qt.ShiftModifier))
             return
         if cmd is None:
             g = self.grip_at(pos)
@@ -814,7 +818,8 @@ class CadView(QWidget):
             else:
                 self.set_selection(self.sel | {ent.id})
             return
-        self._window = {"start": p, "pressed": True, "lasso": None, "crossing": None}
+        self._window = {"start": p, "pressed": True, "lasso": None, "crossing": None,
+                        "remove": bool(e.modifiers() & Qt.ShiftModifier)}
         self._preview = set()
         self.update()
 
@@ -851,7 +856,8 @@ class CadView(QWidget):
         w = self._window
         if e.button() == Qt.LeftButton and w is not None and w["pressed"]:
             if w["lasso"] is not None:
-                self._finish_window(self.to_world(e.position()))
+                self._finish_window(self.to_world(e.position()),
+                                    bool(e.modifiers() & Qt.ShiftModifier))
             else:
                 w["pressed"] = False        # a click: the window follows until the next click
 

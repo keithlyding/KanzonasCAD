@@ -1301,7 +1301,8 @@ class MakeBlockCmd(Command):
                           d.get("description", ""), d.get("role", "device"),
                           d.get("contact", ""), d.get("prefix", ""),
                           wiring=d.get("wiring", ""), manufacturer=d.get("manufacturer", ""),
-                          family=d.get("family", ""), series=d.get("series", ""))
+                          family=d.get("family", ""), series=d.get("series", ""),
+                          catalog=d.get("catalog", ""))
         if d["kind"] == "symbol":
             if tag_pt is not None:
                 defn.tag_pos = (tag_pt[0] - bx, tag_pt[1] - by)
@@ -1340,6 +1341,8 @@ class InsertCmd(Command):
             # the block says who makes it: the copy's MFR, as a part's would (a part's own
             # manufacturer, given in attrs, wins)
             self.attrs["MFR"] = defn.manufacturer
+        if getattr(defn, "catalog", "") and not self.attrs.get("CAT"):
+            self.attrs["CAT"] = defn.catalog         # (its catalog number, as a part's)
         self.angle, self.mirror = 0.0, False
         self.pending = None             # a contact's point, waiting for its device
         self.cands = []
@@ -2106,7 +2109,7 @@ COMMANDS = {
     "DIMLINEAR": (DimLinearCmd, ["DLI", "DIM"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
-    "DUCT": (DuctCmd, ["WIREWAY", "WD"]),
+    "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)
     "SCOOT": (ScootCmd, ["AESCOOT"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
     "ALIGNOBJ": (AlignObjectsCmd, ["ALO"]),

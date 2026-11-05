@@ -17,9 +17,11 @@ and reports come next.</i></p>
 <h2>The window</h2>
 <ul>
 <li><b>Menus and ribbon</b> along the top, as in KanzonasPDF. The ribbon's tabs are
-<b>Home</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>. Double-click a tab name (or
-<b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
-<b>Ribbon group names</b> shows the group names under the buttons.</li>
+<b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>; each
+group of buttons has its name under it (Rail and duct, Dimensions, Blocks...). Double-click a
+tab name (or <b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
+<b>Ribbon group names</b> (View) turns the names off, for a more compact ribbon, and on
+again.</li>
 <li><b>Project tabs</b>: each open project has its own tab.</li>
 <li><b>Sheets panel</b> on the left: the project's sheets with their page numbers. Click one to
 show it, double-click to open its properties, right-click for more.</li>
@@ -159,7 +161,8 @@ the two ends of a dimension you know (the part's width say) and type its real le
 (<code>45mm</code> or <code>1.77</code>).</li>
 <li>Select it and use <b>Make block</b> (B). Pick the <b>base point</b> (the point it is placed
 by), then fill in the name, kind (schematic symbol or panel footprint: it starts on panel
-footprint on a panel sheet, on schematic symbol otherwise), category and description. For a symbol also: its part in cross-references (a device on its own, a coil or
+footprint on a panel sheet, on schematic symbol otherwise), category and description, and,
+if you like, its manufacturer, family, series and catalog number (see below). For a symbol also: its part in cross-references (a device on its own, a coil or
 operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...),
 what wire numbers do through it (nothing; a distribution block; an off-sheet connector: see
 Wire numbers) and the pin names.</li>
@@ -187,6 +190,11 @@ PowerFlex 525 (Allen-Bradley); SIMATIC S7-1500 (Siemens)...</li>
 <li><b>Series</b>: the line or generation within the family, when the maker uses one. For
 Rockwell it is the hardware series letter on the label (Series A, B, C...); other makers use
 "series" for a sub-line of a family. Leave it blank if you don't need it.</li>
+<li><b>Catalog number</b>: the manufacturer's part number for this exact part, as on its label
+and in its catalog (1756-A10, 1769-L33ER, 3RT2015-1BB41...). Placing the block fills it in as
+the placed copy's catalog number (CAT), as a part does. Give one when the block is one part
+(a footprint usually is); leave it empty for a generic symbol many parts use, and link those
+parts to it with <b>New part...</b> instead.</li>
 </ul>
 <p>Makers name things differently, and there is no one right way: pick a way of writing each
 name and keep to it (Allen-Bradley or Rockwell Automation, not both), so your blocks group
@@ -473,7 +481,7 @@ between the two points (slanted too).</td></tr>
 <tr><td>DIN rail</td><td>DINRAIL, RAIL, DR</td><td>Real-size DIN rail from its start to its end
 (or type the length toward the cursor). Before the first click: <b>7.5</b> (TS35 x 7.5 mm, to
 start), <b>15</b> (TS35 x 15 mm) or <b>MINI</b> (TS15).</td></tr>
-<tr><td>Wire duct</td><td>DUCT, WIREWAY, WD</td><td>Real-size wire duct, the same way. Before
+<tr><td>Wire duct</td><td>DUCT, WIREWAY, WD, PANDUIT</td><td>Real-size wire duct, the same way. Before
 the first click, type its size, width x depth: <code>2x3</code> (inches) or
 <code>50x75mm</code>.</td></tr>
 </table>
@@ -619,7 +627,9 @@ Each press is one Undo; wires on a moved symbol's pins come along, and objects o
 layers stay.</li>
 <li>Over a <b>grip</b> of a selected object, the square jumps onto the grip and the arrow shows:
 a click there starts stretching it.</li>
-<li>Click an object to add it to the selection; <b>Shift</b>+click removes it.</li>
+<li>Click an object to add it to the selection; <b>Shift</b>+click removes it. Hold
+<b>Shift</b> for a window or lasso too, and what it catches is removed from the selection
+instead of added (as in AutoCAD).</li>
 <li><b>Window</b>: click in an empty spot, move, and click again. <b>Left to right</b> (blue)
 selects what is wholly inside; <b>right to left</b> (green, dashed) also selects what it
 crosses.</li>
@@ -677,8 +687,8 @@ sheet, the sheet gets the biggest scale it fits at (as <b>Fit</b> does; the draw
 text stay their real size). The command line says what was done; Sheet scale... changes the
 scale.</li>
 <li><b>Import DXF or DWG into this sheet...</b> keeps the drawing's own coordinates. It reads
-lines, polylines, circles, arcs, text, ellipses and splines (as polylines), blocks and
-dimensions (exploded); drawings in millimeters are converted to inches. It opens in the folder
+lines, polylines, circles, arcs, text and multi-line text (MTEXT), ellipses and splines (as
+polylines), blocks and dimensions (exploded, with their values); drawings in millimeters are converted to inches. It opens in the folder
 you last imported from (manufacturers' drawings usually sit together).</li>
 <li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version
 since 2018 too) open and import directly, with nothing to install: KanzonasCAD reads them with

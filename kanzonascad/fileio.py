@@ -222,14 +222,25 @@ def _read(de, k, out, skipped, depth):
             out.append(M.Text(P(pos), de.plain_text(), de.dxf.get("height", 0.125) * k,
                               de.dxf.get("rotation", 0.0), align, valign, **kw))
         elif t == "MTEXT":
+            # (a dimension's number is an MTEXT too: reading its direction as a slice of
+            # ezdxf's vector raised, and every MTEXT was skipped, dimension values with them)
             h = de.dxf.get("char_height", 0.125) * k
-            ang = math.degrees(math.atan2(*reversed(de.get_text_direction()[:2])))
+            d = de.get_text_direction()
+            ang = math.degrees(math.atan2(d[1], d[0]))
             lines = de.plain_text().split("\n")
             x, y = P(de.dxf.insert)
+            # placed by its attachment point (1-9: top/middle/bottom, left/center/right; a
+            # dimension's number is middle center, on its dimension line)
+            ap = int(de.dxf.get("attachment_point", 1) or 1)
+            row, col = divmod(max(1, min(9, ap)) - 1, 3)
+            step = h * 1.6667
+            total = h + (len(lines) - 1) * step
+            top = (0.0, total / 2, total)[row]          # how far its top is above the point
+            align = ("left", "center", "right")[col]
             for i, line in enumerate(lines):
                 if line.strip():
-                    pos = G.polar((x, y), h * (1 + i * 1.6667), ang - 90)
-                    out.append(M.Text(pos, line, h, ang, **kw))
+                    pos = G.polar((x, y), top - i * step, ang + 90)
+                    out.append(M.Text(pos, line, h, ang, align, "top", **kw))
         elif t in ("ELLIPSE", "SPLINE"):
             pts = [P(v) for v in de.flattening(0.002 / max(k, 1e-9))]
             if len(pts) >= 2:
