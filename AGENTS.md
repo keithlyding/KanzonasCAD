@@ -115,8 +115,11 @@ finds becomes a fix and a unit test of its own.
 - The AppImage's release name never changes (`KanzonasCAD-x86_64.AppImage`): Update now puts
   the new one at the old one's place (`updates.AppImageUpdater`, `replace_appimage`). The
   other downloads carry the version in their names.
-- The PortableApps.com icon `assets/portableapps-appicon.ico` is made by
-  `tools/make_paf_icon.py` from `assets/kanzonascad.png`: run it again when the icon changes.
+- The icon: the owner's pictures `assets/kanzonascad-icon-source.png` (the app: a violet tile,
+  "CAD" in violet, as in the logo) and `assets/kanzonascad-setup-source.png` (the installer: a
+  blue tile). `tools/make_icons.py` makes the .png and .ico files from them, then
+  `tools/make_paf_icon.py` the PortableApps.com icon `assets/portableapps-appicon.ico` from
+  `assets/kanzonascad.png`: run both when the icon changes.
 
 ## Logos
 Every Kanzonas logo comes from the Kanzonas-Site repository's `brand/` folder
