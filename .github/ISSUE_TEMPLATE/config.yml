@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/keithlyding/KanzonasCAD/security/advisories/new
+    about: A file that makes the app run code, write files elsewhere or expose data. Not a public issue, please.
+  - name: User manual
+    url: https://github.com/keithlyding/KanzonasCAD/blob/main/kanzonascad/manual.py
+    about: In the app, press F1 (Help > User manual).
