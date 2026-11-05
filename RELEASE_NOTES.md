@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.6
+
+**New**
+- Footprints snap onto DIN rail: while you place, move, copy or drag one, it locks onto the
+  rail's centerline as soon as it comes over a rail, and slides along it. Bring it close to a
+  part already on the rail and it butts right up against it.
+- Each footprint can say where its rail clip is (for parts whose clip isn't halfway up): in
+  Edit block, move the pink DIN RAIL marker to the middle of the clip.
+
 ## 0.12.5
 
 **New**

@@ -8,7 +8,11 @@ The sheet holds:
     pin's name (the editor marks the exact point with a small circle);
   - the tag's place as a text on layer BLOCK TAG (centered on its baseline, as a placed tag);
   - the attributes shown besides the tag (a terminal's number...) as texts on layer
-    BLOCK ATTRIBUTES, their text the attribute's name (TERM, ADDR...).
+    BLOCK ATTRIBUTES, their text the attribute's name (TERM, ADDR...);
+  - a footprint's DIN rail point (the middle of its rail clip, which lines up with the rail's
+    centerline) as the text DIN RAIL on layer BLOCK DIN RAIL: its insertion point is the
+    point. Left where it opened on a footprint that had none, it stays automatic (the middle
+    of the drawing).
 
 Saving (to_block) reads them back: pins in their old order first (a deleted marker drops its
 pin), new ones after; anything else on the sheet becomes the block's drawing. What wasn't
@@ -25,8 +29,10 @@ LAYER_BASE = "BLOCK BASE POINT"
 LAYER_PINS = "BLOCK PINS"
 LAYER_TAG = "BLOCK TAG"
 LAYER_ATTRS = "BLOCK ATTRIBUTES"
+LAYER_RAIL = "BLOCK DIN RAIL"
 MARKER_LAYERS = {LAYER_BASE: "#808080", LAYER_PINS: "#2f9e44", LAYER_TAG: "#00a0ff",
-                 LAYER_ATTRS: "#c08000"}
+                 LAYER_ATTRS: "#c08000", LAYER_RAIL: "#d0308f"}
+RAIL_TEXT = "DIN RAIL"
 PIN_HEIGHT = 0.06
 PAPER = "ANSI A (11 x 8.5)"
 ROOM = (4.5, 3.25)              # paper inches each way from the base point the block may use
@@ -62,7 +68,8 @@ class Session:
         """Properties... changed the block (name, category...): saving keeps those."""
         d = self.defn.to_dict()
         d.update({k: v for k, v in defn.to_dict().items()
-                  if k not in ("entities", "pins", "tag_pos", "tag_height", "attr_texts")})
+                  if k not in ("entities", "pins", "tag_pos", "tag_height", "attr_texts",
+                               "rail_pos")})
         new = M.BlockDef.from_dict(d)
         # (a pin renamed there keeps its place and marker)
         if len(defn.pins) == len(new.pins):
@@ -134,6 +141,9 @@ def open_block(defn):
     for i, a in enumerate(defn.attr_texts):
         put(M.Text(at(a["pos"]), a["attr"], a["height"], 0.0, "center", layer=LAYER_ATTRS),
             ("attr", i))
+    if defn.kind == "footprint":
+        put(M.Text(at(defn.rail_point()), RAIL_TEXT, PIN_HEIGHT * n, 0.0, "left", "middle",
+                   layer=LAYER_RAIL), ("rail", 0))
     p.undo_stack, p.redo_stack = [], []
     p.saved_at = 0
     s.touched = set()
@@ -158,7 +168,7 @@ def to_block(project, sess):
 
     def back(q):
         return (_round(q[0] - ox), _round(q[1] - oy))
-    ents, pins, attrs, tags = [], [], [], []
+    ents, pins, attrs, tags, rails = [], [], [], [], []
     warnings = []
     for eid, e in s.entities.items():
         if e.layer == LAYER_BASE:
@@ -168,8 +178,17 @@ def to_block(project, sess):
         what = got[1] if got is not None else None
         # (a marker only renamed or resized keeps its point exactly)
         stays = got is not None and isinstance(e, M.Text) and got[0].get("pos") == list(e.pos)
-        marker = isinstance(e, M.Text) and e.layer in (LAYER_PINS, LAYER_TAG, LAYER_ATTRS)
-        if marker and e.layer == LAYER_PINS:
+        marker = isinstance(e, M.Text) and e.layer in (LAYER_PINS, LAYER_TAG, LAYER_ATTRS,
+                                                       LAYER_RAIL)
+        if marker and e.layer == LAYER_RAIL:
+            if old.kind != "footprint":
+                continue
+            # left where it opened: as it was (automatic stays automatic)
+            if what and what[0] == "rail" and stays:
+                rails.append((0, eid, old.rail_pos))
+            else:
+                rails.append((1, eid, back(e.pos)))
+        elif marker and e.layer == LAYER_PINS:
             name = e.text.strip()
             if not name:
                 warnings.append("a pin marker with no name was left out")
@@ -214,8 +233,11 @@ def to_block(project, sess):
     pins.sort(key=lambda t: (t[0], t[1]))
     attrs.sort(key=lambda t: (t[0], t[1]))
     tags.sort(key=lambda t: (t[0], t[1]))
+    rails.sort(key=lambda t: (t[0], t[1]))
     if len(tags) > 1:
         warnings.append("%d tag markers: the first one was used" % len(tags))
+    if len(rails) > 1:
+        warnings.append("%d DIN rail markers: the first one was used" % len(rails))
     names = [p[3]["name"] for p in pins]
     dup = sorted({n for n in names if names.count(n) > 1})
     if dup:
@@ -241,6 +263,9 @@ def to_block(project, sess):
         base[tags[0][1]] = (s.entities[tags[0][1]].to_dict(), ("tag", 0))
     else:
         defn.tag_pos = None
+    defn.rail_pos = M._pt(rails[0][2]) if rails and rails[0][2] is not None else None
+    if rails:
+        base[rails[0][1]] = (s.entities[rails[0][1]].to_dict(), ("rail", 0))
     defn.attr_texts = []
     for k, a in enumerate(attrs):
         defn.attr_texts.append({"attr": a[3]["attr"], "pos": M._pt(a[3]["pos"]),

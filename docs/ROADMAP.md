@@ -99,6 +99,10 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
      - Each piece can carry a part (manufacturer, catalog number, stock length: rail 1 m or
        2 m, duct 6 ft to start). The bill of materials lists total length per size and part,
        the number of stock pieces it takes (rounded up) and each cut length.
+     - Footprints onto rail (owner, Nov 2026; 0.12.6): placed, moved, copied or dragged, a
+       footprint locks onto a rail's centerline by its rail point and slides along; near a
+       neighbor on the rail it butts against it. Each footprint block may set its rail point
+       (the middle of its clip) in Edit block; else the middle of its drawing.
 6. **Part assignment**: projects keep their own copies of the parts they use (as they do of
    blocks), so a part leaving the library never breaks a drawing.
    - Symbol, footprint and part stay three separate things; the symbol never knows the brand.
