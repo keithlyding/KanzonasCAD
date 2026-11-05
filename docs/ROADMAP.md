@@ -26,6 +26,13 @@ nobody understands).
   words, Fit, cabinet size, a warning when the drawing doesn't fit). 0.11.7: rotating sheets
   both ways (Ctrl+Shift+Plus / Minus): border, zones and title block turn with the sheet, the
   drawing stays upright (owner's choice).
+- 0.12: blocks' Manufacturer, Family and Series (owner, Nov 2026: "Family is good. Add series
+  as well. I also need some sort of help with nomenclature": placeholders, tooltips and a "?"
+  opening the manual's section; suggestions grow from what is typed, no built-in list); the
+  Library's Manufacturer and Family filters; a library block's Properties...; Edit block...
+  (owner's decision: it edits the library's copy, in a tab of its own, as AutoCAD's Block
+  Editor) and Save block; then "Update the N copies of ... in ...?" each time (default Yes),
+  wires kept on the pins. Other projects keep their own copies.
 - Multi-sheet projects with a sheet list and sheet types (schematic, panel, report, other):
   done since 0.1/0.2.
 
@@ -120,8 +127,9 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    - Changes made by others show up without reopening (the folders are watched); conflict
      copies left by a sync app ("parts (Keith's PC).json"...) are pointed out, not listed as
      parts.
-   - Later: "Update from library" lists a project's blocks that are older than the library's
-     and updates only the ones chosen.
+   - Next: "Update blocks from library": lists a project's blocks that differ from the
+     library's and updates only the ones chosen (0.12 updates the open project's copies right
+     after a block is changed; other projects keep theirs until then).
 8. **Reports**: bill of materials (DIN rail and wire duct by length and stock pieces), wire list, terminal strip list (Report sheets; CSV and Excel
    via openpyxl, MIT, imported only when exporting).
 9. **PDF export opening in KanzonasPDF** when it is installed (export exists).

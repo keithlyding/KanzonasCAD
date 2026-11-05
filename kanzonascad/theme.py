@@ -36,6 +36,8 @@ ICONS = {
     "project_props": "folder-cog-outline", "layers": "layers-outline", "title_block": "table-edit",
     "black_bg": "invert-colors",
     "make_block": "shape-plus", "explode": "shape-outline", "library": "bookshelf",
+    "edit_block": "vector-square-edit", "save_block": "content-save-check-outline",
+    "block_props": "card-text-outline",
     "part": "tag-plus-outline", "color": "palette-outline", "wire": "vector-polyline-edit", "bus": "reorder-horizontal", "sheets": "file-multiple-outline",
     # help
     "manual": "help-circle-outline", "about": "information-outline", "updates": "update", "renumber": "numeric", "dim_linear": "ruler", "scoot": "arrow-left-right-bold-outline", "trim_wire": "content-cut", "del_wire": "vector-polyline-remove", "clean_wires": "broom", "del_comp": "delete-variant", "align_dev": "format-align-middle", "wire_cross": "vector-curve", "lay_off": "lightbulb-off-outline", "lay_iso": "lightbulb-on-outline", "lay_on": "lightbulb-group-outline", "lay_lock": "lock-outline", "lay_unlock": "lock-open-variant-outline", "lay_states": "layers-triple-outline", "rail": "minus-thick", "duct": "view-sequential-outline", "materials": "format-list-numbered", "dim_aligned": "ruler-square", "sheet_scale": "scale-balance", "xref_update": "refresh", "xref_freeze": "snowflake", "xref_auto": "autorenew", "shortcuts": "keyboard-outline",

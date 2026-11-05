@@ -17,6 +17,7 @@ from . import dialogs
 from . import fileio
 from . import model as M
 from . import theme
+from .block_window import BlockEditing, is_block_doc
 from .commandline import CommandLine
 from .render import install_text_measure
 from .view import CadView
@@ -61,6 +62,8 @@ class Document(QWidget):
         lay.addWidget(self.view)
 
     def name(self):
+        if is_block_doc(self):                  # (a block editor: Edit block...)
+            return "Block: %s" % self.block_session.name
         if self.project.path:
             return os.path.splitext(os.path.basename(self.project.path))[0]
         return "Untitled"
@@ -98,7 +101,7 @@ def _scale_name(name, val):
     return tmp.scale_text()
 
 
-class MainWindow(QMainWindow):
+class MainWindow(BlockEditing, QMainWindow):
     def __init__(self):
         super().__init__()
         install_text_measure()
@@ -144,6 +147,8 @@ class MainWindow(QMainWindow):
                                or None)
         self.library_panel = LibraryPanel(self.library)
         self.library_panel.insertRequested.connect(self.insert_block)
+        self.library_panel.propertiesRequested.connect(self.block_properties)
+        self.library_panel.editRequested.connect(self.edit_block)
         # a popup, as AutoCAD Electrical's icon menu: the drawing keeps the whole width
         dlg = self.library_dialog = QDialog(self, Qt.Tool)
         dlg.setWindowTitle("Library")
@@ -382,7 +387,18 @@ class MainWindow(QMainWindow):
           icon="part", label="New part")
         A("library_folder", "Library &folder...", self.choose_library_folder, icon="open",
           label="Library folder")
-        A("manual", "&User manual", self.show_manual, "F1", label="Manual")
+        A("block_props", "Block p&roperties...", lambda: self.block_properties(),
+          icon="block_props", label="Block properties",
+          tip="The selected block's name, category, description, manufacturer, family and "
+              "series, saved to your library")
+        A("edit_block", "&Edit block...", lambda: self.edit_block(), icon="edit_block",
+          label="Edit block",
+          tip="Change the selected block's drawing, pins and tag in your library, in a tab "
+              "of its own")
+        A("save_block", "Sa&ve block", self.save_block, icon="save_block", label="Save block",
+          tip="Put the block open in this tab back in your library (and update its copies in "
+              "the project if you say so)")
+        A("manual", "&User manual", lambda: self.show_manual(), "F1", label="Manual")
         A("check_updates", "Check for &updates...", lambda: self.check_updates(True),
           icon="updates", label="Updates")
         A("auto_updates", "Check for updates &automatically", self._toggle_auto_updates,
@@ -451,7 +467,8 @@ class MainWindow(QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
-                  "explode", None, "new_part", "library_folder"):
+                  "explode", None, "block_props", "edit_block", "save_block", None,
+                  "new_part", "library_folder"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Help")
         m.addAction(a["manual"])
@@ -502,6 +519,7 @@ class MainWindow(QMainWindow):
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"],
                                   a["del_comp"]]),
+            ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
@@ -512,6 +530,7 @@ class MainWindow(QMainWindow):
         ])
         r.add_tab("Panel", [
             ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"]]),
+            ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"]]),
             ("Real size", "large", [a["scale"], a["sheet_scale"]]),
             ("Dimensions", "large", [a["dim_linear"], a["dim_aligned"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
@@ -777,6 +796,8 @@ class MainWindow(QMainWindow):
         return True
 
     def _maybe_save(self, d):
+        if is_block_doc(d):
+            return self._ask_save_block(d)
         if not d.project.is_modified():
             return True
         self.tabs.setCurrentWidget(d)
@@ -848,6 +869,8 @@ class MainWindow(QMainWindow):
         d = self.doc()
         if d is None:
             return False
+        if is_block_doc(d):
+            return self.save_block()
         if not d.project.path:
             return self.save_as()
         return self._save_to(d, d.project.path)
@@ -856,6 +879,8 @@ class MainWindow(QMainWindow):
         d = self.doc()
         if d is None:
             return False
+        if is_block_doc(d):
+            return self.save_block()
         start = d.project.path or os.path.join(self._last_dir(), d.name() + M.FILE_SUFFIX)
         path, _f = QFileDialog.getSaveFileName(self, "Save project", start,
                                                "KanzonasCAD project (*.kzcad)")
@@ -893,7 +918,7 @@ class MainWindow(QMainWindow):
         n = 0
         for i in range(self.tabs.count()):
             d = self.tabs.widget(i)
-            if isinstance(d, Document) and d.project.is_modified():
+            if isinstance(d, Document) and d.project.is_modified() and not is_block_doc(d):
                 try:
                     backup.write_autosave(d.project, d.autosave_key)
                     n += 1
@@ -1613,7 +1638,7 @@ class MainWindow(QMainWindow):
         v = self.view()
         # (on a panel sheet, what you make a block of is a footprint, as a rule)
         hint = "footprint" if v is not None and v.sheet().kind == "panel" else "symbol"
-        return block_details_dialog(self, self.library, hint)
+        return block_details_dialog(self, self.library, hint, on_help=self.show_manual)
 
     def save_block_to_library(self, defn):
         try:
@@ -1891,6 +1916,9 @@ class MainWindow(QMainWindow):
                   "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev",
                   "trim_wire", "del_wire", "clean_wires", "del_comp"):
             a[k].setEnabled(has)
+        in_block = is_block_doc(self.doc())
+        a["save_block"].setEnabled(in_block)
+        a["save_block"].setVisible(in_block)
         a["undo"].setEnabled(bool(has and p.undo_stack))
         a["redo"].setEnabled(bool(has and p.redo_stack))
         sel = bool(has and v.sel)
@@ -2221,20 +2249,27 @@ class MainWindow(QMainWindow):
         QApplication.instance().quit()
 
     # ---- help ------------------------------------------------------------------------------
-    def show_manual(self):
+    def show_manual(self, anchor=None):
+        """Help > User manual; anchor: open it at that section (the "?" buttons)."""
+        self.manual_dialog(anchor).exec()
+
+    def manual_dialog(self, anchor=None):
         from . import manual
         dlg = QDialog(self)
         dlg.setWindowTitle("KanzonasCAD user manual")
         dlg.resize(820, 700)
         lay = QVBoxLayout(dlg)
-        tb = QTextBrowser()
+        tb = dlg.browser = QTextBrowser()
         tb.setOpenExternalLinks(True)
         tb.setHtml(manual.html())
         lay.addWidget(tb)
         b = QDialogButtonBox(QDialogButtonBox.Close)
         b.rejected.connect(dlg.accept)
         lay.addWidget(b)
-        dlg.exec()
+        if anchor:
+            # (once it is laid out: before that there is nowhere to scroll)
+            QTimer.singleShot(0, tb, lambda: tb.scrollToAnchor(anchor))
+        return dlg
 
     def about_dialog(self):
         """Help > About KanzonasCAD: the logo, the version and where the source is (as

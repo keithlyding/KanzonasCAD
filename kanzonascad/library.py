@@ -144,6 +144,64 @@ class Library:
     def has_own(self, kind, name):
         return os.path.exists(self._path(kind, name))
 
+    def save_block_as(self, defn, old_name=None):
+        """Write a changed block (Properties..., Edit block...). Renamed (old_name given and
+        different) from one of your own: your file under the old name goes, and the parts
+        that linked to it link to the new name. A built-in symbol is never changed (yours, of
+        the same name, takes its place; renamed, it stays, with the parts linking to it).
+        Returns (the file written, how many parts were relinked)."""
+        renamed = bool(old_name) and old_name != defn.name
+        own_old = renamed and self.has_own(defn.kind, old_name)
+        old_path = self._path(defn.kind, old_name) if renamed else None
+        path = self.save_block(defn)
+        moved = 0
+        if own_old:
+            field = "symbol" if defn.kind == "symbol" else "footprint"
+            parts = self.parts()
+            for p in parts:
+                if getattr(p, field) == old_name:
+                    setattr(p, field, defn.name)
+                    moved += 1
+            if moved:
+                self.save_parts(parts)
+            # (on Windows "Coil" and "coil" are one file: the one just written)
+            if os.path.normcase(old_path) != os.path.normcase(path):
+                os.remove(old_path)
+        return path, moved
+
+    # ---- manufacturer, family, series ------------------------------------------------------
+    def maker_values(self, field, manufacturer=None, family=None):
+        """The values of a block field ("manufacturer", "family" or "series") already in the
+        library, sorted (case-insensitively, each spelled as first met): only the families of
+        a manufacturer and the series of a manufacturer's family when those are given (""
+        or None: any). Manufacturers also come from your parts."""
+        if field not in ("manufacturer", "family", "series"):
+            raise ValueError(field)
+        seen = {}
+
+        def take(v):
+            v = (v or "").strip()
+            if v and v.lower() not in seen:
+                seen[v.lower()] = v
+
+        def same(a, b):
+            return not b or (a or "").strip().lower() == b.strip().lower()
+        for kind in FOLDERS:
+            blocks, _bad = self.blocks(kind)
+            for b in blocks.values():
+                if field != "manufacturer" and not same(b.manufacturer, manufacturer):
+                    continue
+                if field == "series" and not same(b.family, family):
+                    continue
+                take(getattr(b, field))
+        if field == "manufacturer":
+            try:
+                for p in self.parts():
+                    take(p.manufacturer)
+            except (OSError, ValueError):
+                pass                # (an unreadable parts.json: the Library panel says so)
+        return sorted(seen.values(), key=str.lower)
+
     # ---- parts -----------------------------------------------------------------------------
     def _parts_path(self):
         return os.path.join(self.folder, "parts.json")
