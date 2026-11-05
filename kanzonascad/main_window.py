@@ -66,6 +66,12 @@ class Document(QWidget):
         return "Untitled"
 
 
+def _scale_name(name, val):
+    tmp = M.Sheet()
+    tmp.scale, tmp.scale_name = val, name
+    return tmp.scale_text()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -282,10 +288,10 @@ class MainWindow(QMainWindow):
           label="Materials",
           tip="The DIN rail and wire duct this project takes: lengths, stock pieces and cuts "
               "(save as CSV)")
-        A("sheet_scale", "Sheet sc&ale...", self.sheet_properties, icon="sheet_scale",
+        A("sheet_scale", "Sheet sc&ale...", self.sheet_scale, icon="sheet_scale",
           label="Sheet scale",
-          tip="This sheet's scale (Sheet properties): the drawing stays real size, the scale "
-              "sets how big it prints")
+          tip="This sheet's scale, with a preview: the drawing stays real size, the scale "
+              "sets how big it prints. Fit picks it from the drawing or the cabinet's size")
 
         A("renumber", "&Renumber sheet", self.renumber_sheet, icon="renumber",
           label="Renumber sheet",
@@ -535,10 +541,12 @@ class MainWindow(QMainWindow):
         sb.addPermanentWidget(self.layer_label)
         # the sheet's scale (a panel sheet at 1:4...): click to change it
         self.scale_label = QToolButton()
+        self.scale_label.setObjectName("scale_label")
         self.scale_label.setAutoRaise(True)
-        self.scale_label.setToolTip("This sheet's scale: the drawing is real size, the scale "
-                                    "sets how big it prints. Click to change it.")
-        self.scale_label.clicked.connect(self.sheet_properties)
+        self.scale_label.setPopupMode(QToolButton.InstantPopup)
+        self.scale_menu = QMenu(self.scale_label)
+        self.scale_menu.aboutToShow.connect(self._fill_scale_menu)
+        self.scale_label.setMenu(self.scale_menu)
         sb.addPermanentWidget(self.scale_label)
         # shown while a sheet's cross-references aren't what the drawing says
         self.xref_warning = QToolButton()
@@ -1004,6 +1012,17 @@ class MainWindow(QMainWindow):
                                                "PDF (*.pdf)")
         if not path:
             return
+        from . import scalefit
+        p = d.project
+        bad = ["%s (%s, %s)" % (p.sheet_number(s), s.title, why) for s, why in
+               ((s, scalefit.outside(p, s)) for s in p.sheets
+                if s.kind == "panel" or abs(s.scale - 1.0) > 1e-12) if why]
+        if bad and QMessageBox.question(
+                self, APP, "The drawing doesn't fit on sheet(s) %s at their scale: it would "
+                "print cut off or under the title block.\n\nExport anyway? (No: go back and "
+                "use Fit, in the status bar's Scale or Sheet scale...)" % ", ".join(bad)) \
+                != QMessageBox.Yes:
+            return
         try:
             n = fileio.export_pdf(d.project, path)
         except Exception as ex:
@@ -1327,6 +1346,9 @@ class MainWindow(QMainWindow):
             ed.add_sheet(s, p.sheets.index(cur) + 1)
         v.show_sheet(s.id)
         self._fill_sheets()
+        if s.kind == "panel":
+            self.cmdline.add_history("New panel sheet: Sheet scale (Panel tab, or Scale in the "
+                                     "status bar) can pick its scale from the cabinet's size.")
 
     def delete_sheet(self):
         v = self.view()
@@ -1358,6 +1380,92 @@ class MainWindow(QMainWindow):
             with p.edit("Move sheet") as ed:
                 ed.move_sheet(i, j)
             self._fill_sheets()
+
+    # ---- the sheet's scale (scalefit, scale_dialog) ------------------------------------------
+    def sheet_scale(self):
+        v = self.view()
+        if v is None or v.sheet() is v.project.title_block:
+            return
+        from .scale_dialog import sheet_scale
+        if sheet_scale(self, v.project, v.sheet(), self.settings):
+            self.cmdline.add_history("Sheet %s: scale %s" % (v.project.sheet_number(v.sheet()),
+                                                             v.sheet().scale_text()))
+        self._update_ui()
+
+    def _show_scale(self, project, sheet):
+        """The status bar's scale, amber with a tip when the drawing doesn't fit the sheet."""
+        from . import scalefit
+        why = None
+        if sheet.kind == "panel" or abs(sheet.scale - 1.0) > 1e-12:
+            why = scalefit.outside(project, sheet)
+        text = "Scale " + sheet.scale_text()
+        if why:
+            self.scale_label.setText(text + "  - doesn't fit")
+            self.scale_label.setStyleSheet("color: %s; font-weight: bold;" % "#b26a00")
+            self.scale_label.setToolTip("The drawing runs %s at %s. Click: Fit picks a scale it "
+                                        "fits at (and moves it to the middle if needed)."
+                                        % (why, sheet.scale_text()))
+        else:
+            self.scale_label.setText(text)
+            self.scale_label.setStyleSheet("")
+            self.scale_label.setToolTip("This sheet's scale: the drawing is real size, the "
+                                        "scale sets how big it prints. Click to change it.")
+
+    def _fill_scale_menu(self):
+        m = self.scale_menu
+        m.clear()
+        v = self.view()
+        if v is None or v.sheet() is v.project.title_block:
+            return
+        s = v.sheet()
+        from . import scalefit
+        fit = scalefit.fit_for(v.project, s)
+        a = m.addAction("Fit (%s)" % _scale_name(*fit) if fit else "Fit...")
+        a.setObjectName("scale_fit")
+        a.setToolTip("The biggest scale at which the drawing (or the cabinet) fits the sheet")
+        a.triggered.connect(self.fit_scale)
+        m.addSeparator()
+        for name, val in scalefit.presets_like(s.scale_name):
+            act = m.addAction(_scale_name(name, val))
+            act.setCheckable(True)
+            act.setChecked(name == s.scale_name and abs(val - s.scale) < 1e-12)
+            act.triggered.connect(lambda _c=False, n=name, x=val: self._set_scale(n, x))
+        m.addSeparator()
+        m.addAction("More...", self.sheet_scale)
+
+    def _set_scale(self, name, val):
+        v = self.view()
+        if v is None:
+            return
+        from . import scalefit
+        s = v.sheet()
+        scalefit.apply(v.project, s, name, val)
+        self.cmdline.add_history("Sheet %s: scale %s" % (v.project.sheet_number(s),
+                                                         s.scale_text()))
+        self._update_ui()
+
+    def fit_scale(self):
+        """Fit: the biggest scale at which what is drawn (or the cabinet) fits, the drawing
+        moved to the middle when it wouldn't lie inside where it is. With neither, the Sheet
+        scale window (for the cabinet's size)."""
+        v = self.view()
+        if v is None or v.sheet() is v.project.title_block:
+            return
+        from . import scalefit
+        p, s = v.project, v.sheet()
+        fit = scalefit.fit_for(p, s)
+        if fit is None:
+            self.sheet_scale()
+            return
+        name, val = fit
+        box = scalefit.drawing_box(s)
+        area, tb = scalefit.room(p, s)
+        move = box is not None and not scalefit.placed_inside(box, val, area, tb)
+        scalefit.apply(p, s, name, val, center=move)
+        self.cmdline.add_history("Sheet %s: Fit, scale %s%s" % (
+            p.sheet_number(s), s.scale_text(), " (the drawing moved to the middle)" if move
+            else ""))
+        self._update_ui()
 
     def sheet_properties(self):
         v = self.view()
@@ -1731,7 +1839,7 @@ class MainWindow(QMainWindow):
         a["sheet_scale"].setEnabled(bool(has and not on_tb))
         self.scale_label.setVisible(bool(has and not on_tb))
         if has and not on_tb:
-            self.scale_label.setText("Scale " + v.sheet().scale_text())
+            self._show_scale(p, v.sheet())
         stale = []
         if has:
             from .xrefs import out_of_date
