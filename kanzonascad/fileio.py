@@ -136,9 +136,29 @@ def read_dxf(path, include_paperspace=False, units=None):
     out, skipped = [], {}
     for de in doc.modelspace():
         _read(de, k, out, skipped, 0)
+    # some makers' drawings are drawn in a layout (paper space), model space all but empty:
+    # then the layouts' drawing comes in too (their viewports don't: they show model space)
+    from_layouts = 0
+    if include_paperspace or len(out) < PAPER_FALLBACK:
+        paper, pskip = [], {}
+        for layout in doc.layouts:
+            if layout.is_modelspace:
+                continue
+            for de in layout:
+                if de.dxftype() != "VIEWPORT":
+                    _read(de, k, paper, pskip, 0)
+        if include_paperspace or len(paper) > len(out):
+            out += paper
+            from_layouts = len(paper)
+            for t, n in pskip.items():
+                skipped[t] = skipped.get(t, 0) + n
     unit_name = {0: "unitless (taken as inches)", 1: "inches", 2: "feet", 4: "millimeters",
                  5: "centimeters", 6: "meters"}.get(units, "units %d (taken as inches)" % units)
-    return out, {"layers": layers, "skipped": skipped, "units": unit_name}
+    return out, {"layers": layers, "skipped": skipped, "units": unit_name,
+                 "from_layouts": from_layouts}
+
+
+PAPER_FALLBACK = 20     # model space with fewer pieces than this: the layouts are read too
 
 
 def _dxf_layer_color(dl):
@@ -182,13 +202,71 @@ def _read(de, k, out, skipped, depth):
     def P(v):
         return (v[0] * k, v[1] * k)
     try:
+        ocs = _ocs(de)
         if t == "LINE":
             out.append(M.Line(P(de.dxf.start), P(de.dxf.end), **kw))
+        elif t in ("CIRCLE", "ARC") and ocs is not None:
+            # drawn in its own plane (a mirrored block's arcs face down: AutoCAD keeps them
+            # so); seen from above: mirrored exactly, or, tilted, its points
+            ext = de.dxf.extrusion
+            c = P(ocs.to_wcs(de.dxf.center))
+            if abs(ext[0]) < 1e-9 and abs(ext[1]) < 1e-9:
+                if t == "CIRCLE":
+                    out.append(M.Circle(c, de.dxf.radius * k, **kw))
+                else:
+                    out.append(M.Arc(c, de.dxf.radius * k, 180.0 - de.dxf.end_angle,
+                                     180.0 - de.dxf.start_angle, **kw))
+            else:
+                pts = [P(v) for v in de.flattening(0.002 / max(k, 1e-9))]
+                if len(pts) >= 2:
+                    out.append(M.Polyline(pts, t == "CIRCLE", **kw))
+        elif t in ("LWPOLYLINE", "POLYLINE") and ocs is not None and \
+                (t == "LWPOLYLINE" or de.is_2d_polyline):
+            from ezdxf import path as ezpath
+            pts = [P(v) for v in ezpath.make_path(de).flattening(0.002 / max(k, 1e-9))]
+            if len(pts) >= 2:
+                out.append(M.Polyline(pts, False, **kw))
         elif t == "CIRCLE":
             out.append(M.Circle(P(de.dxf.center), de.dxf.radius * k, **kw))
         elif t == "ARC":
             out.append(M.Arc(P(de.dxf.center), de.dxf.radius * k, de.dxf.start_angle,
                              de.dxf.end_angle, **kw))
+        elif t == "POLYLINE" and (de.is_poly_face_mesh or de.is_polygon_mesh):
+            # a mesh: its edges, seen from above
+            for sub in de.virtual_entities():
+                _read(sub, k, out, skipped, depth + 1)
+        elif t == "POLYLINE" and de.is_3d_polyline:
+            # a "3D" polyline (often flat on the sheet: AutoCAD and makers' drawings save them
+            # so): its points seen from above (it was left out, and with it most of a drawing)
+            pts = [P(v.dxf.location) for v in de.vertices]
+            if len(pts) >= 2:
+                out.append(M.Polyline(pts, de.is_closed, **kw))
+        elif t in ("SOLID", "TRACE", "3DFACE"):
+            # a filled triangle or quadrilateral: its outline (corners 0, 1, 3, 2 for a SOLID)
+            vs = [de.dxf.get(n) for n in ("vtx0", "vtx1", "vtx2", "vtx3")]
+            vs = [v for v in vs if v is not None]
+            if ocs is not None and t != "3DFACE":
+                vs = [ocs.to_wcs(v) for v in vs]
+            if t in ("SOLID", "TRACE") and len(vs) == 4:
+                vs = [vs[0], vs[1], vs[3], vs[2]]
+            pts = []
+            for v in vs:
+                q = P(v)
+                if not pts or G.dist(q, pts[-1]) > 1e-9:
+                    pts.append(q)
+            if len(pts) >= 2:
+                out.append(M.Polyline(pts, len(pts) > 2, **kw))
+        elif t == "HATCH":
+            # its boundaries, seen from above (the fill isn't drawn: it would hide what is
+            # under it)
+            from ezdxf import path as ezpath
+            n = len(out)
+            for p in ezpath.from_hatch(de):
+                pts = [P(v) for v in p.flattening(0.002 / max(k, 1e-9))]
+                if len(pts) >= 2:
+                    out.append(M.Polyline(pts, False, **kw))
+            if len(out) == n:
+                skipped[t] = skipped.get(t, 0) + 1
         elif t in ("LWPOLYLINE", "POLYLINE"):
             if t == "POLYLINE" and not de.is_2d_polyline:
                 skipped[t] = skipped.get(t, 0) + 1
@@ -219,8 +297,19 @@ def _read(de, k, out, skipped, depth):
                 valign = "middle"
             if (halign in (1, 2, 4) or vnum) and de.dxf.hasattr("align_point"):
                 pos = de.dxf.align_point
+            rot = de.dxf.get("rotation", 0.0)
+            if ocs is not None:
+                # a mirrored block's text: where it is, seen from above, and kept readable
+                # (it runs the other way: its other end at the point)
+                pos = ocs.to_wcs(pos)
+                d = ocs.to_wcs((math.cos(math.radians(rot)), math.sin(math.radians(rot)), 0)) \
+                    - ocs.to_wcs((0, 0, 0))
+                rot = math.degrees(math.atan2(d[1], d[0]))
+                if 90.0 < rot % 360.0 <= 270.0:
+                    rot += 180.0
+                    align = {"left": "right", "right": "left"}.get(align, align)
             out.append(M.Text(P(pos), de.plain_text(), de.dxf.get("height", 0.125) * k,
-                              de.dxf.get("rotation", 0.0), align, valign, **kw))
+                              rot, align, valign, **kw))
         elif t == "MTEXT":
             # (a dimension's number is an MTEXT too: reading its direction as a slice of
             # ezdxf's vector raised, and every MTEXT was skipped, dimension values with them)
@@ -245,7 +334,13 @@ def _read(de, k, out, skipped, depth):
             pts = [P(v) for v in de.flattening(0.002 / max(k, 1e-9))]
             if len(pts) >= 2:
                 out.append(M.Polyline(pts, False, **kw))
-        elif t in ("INSERT", "DIMENSION", "LEADER", "MLEADER") and depth < 12:
+        elif t == "INSERT" and depth < 12 and de.mcount > 1:
+            # a MINSERT (rows and columns of one block): each copy
+            for one in de.multi_insert():
+                _read(one, k, out, skipped, depth + 1)
+        elif t in ("INSERT", "DIMENSION", "ARC_DIMENSION", "LARGE_RADIAL_DIMENSION", "LEADER",
+                   "MLEADER", "MULTILEADER", "MLINE") and depth < 12:
+            # (AutoCAD's multileader is MULTILEADER: it was left out)
             for sub in de.virtual_entities():
                 n = len(out)
                 _read(sub, k, out, skipped, depth + 1)
@@ -264,10 +359,45 @@ def _read(de, k, out, skipped, depth):
                                   **kw))
         elif t == "POINT":
             skipped[t] = skipped.get(t, 0) + 1
+        elif depth < 12 and _proxy_parts(de, k, out, skipped, depth, layer):
+            pass
         else:
             skipped[t] = skipped.get(t, 0) + 1
     except Exception:                   # (reported to the user: "Skipped: X (unreadable)")
         skipped[t + " (unreadable)"] = skipped.get(t + " (unreadable)", 0) + 1
+
+
+def _ocs(de):
+    """A planar entity's own coordinate system when it isn't the page's (its extrusion not
+    straight up: a mirrored block's arcs, circles, polylines and text), else None."""
+    try:
+        if not de.dxf.hasattr("extrusion"):
+            return None
+        ext = de.dxf.extrusion
+    except AttributeError:
+        return None
+    if abs(ext[0]) < 1e-9 and abs(ext[1]) < 1e-9 and ext[2] > 0:
+        return None
+    return de.ocs()
+
+
+def _proxy_parts(de, k, out, skipped, depth, layer):
+    """An object of a type KanzonasCAD doesn't know (AutoCAD Electrical's, Mechanical's,
+    Civil's... saved with its look, "proxy graphics"): the lines, arcs and texts of that
+    look. True when it gave any."""
+    if not hasattr(de, "virtual_entities"):
+        return False
+    try:
+        subs = list(de.virtual_entities())
+    except Exception:       # (no proxy graphics or unreadable: then reported as left out)
+        return False
+    n = len(out)
+    for sub in subs:
+        _read(sub, k, out, skipped, depth + 1)
+    for e in out[n:]:
+        if e.layer == "0":
+            e.layer = layer
+    return len(out) > n
 
 
 # ============================================================================================

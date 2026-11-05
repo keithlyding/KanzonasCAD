@@ -6,6 +6,24 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.5
+
+**New**
+- Duplicate a symbol or footprint to make one that is almost the same: Duplicate... in the
+  Library (or Library > Duplicate block...) asks for a new name, copies everything but the
+  catalog number, and opens the copy in Edit block right away.
+- Save block as... in a block's tab saves it under a new name and leaves the original as it
+  was.
+
+**Fixed**
+- Imported DXF and DWG drawings that came in with only a few lines: flat 3D polylines,
+  hatches (their outlines), solids, multileaders, arrays of blocks (MINSERT) and objects from
+  AutoCAD Electrical or Mechanical were left out; now they come in.
+- Arcs, circles and text inside mirrored blocks landed mirrored in the wrong place.
+- A drawing kept in its layout (paper space) instead of model space came in all but empty;
+  it is now read from its layout.
+- Anything still left out is named in a message after the import.
+
 ## 0.12.4
 
 **New**

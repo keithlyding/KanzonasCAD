@@ -238,7 +238,16 @@ a pin, erase it to remove one); the blue text on BLOCK TAG is where the tag goes
 BLOCK ATTRIBUTES are where a terminal's number or a PLC address shows. <b>Save block</b>
 (Library menu, the ribbon, or Save, Ctrl+S, in that tab) puts it back in your library: the
 pins keep their order, new ones come after. Closing the tab with changes not saved asks
-first.</li>
+first. <b>Save block as...</b> (Library menu and the ribbon, in that tab) saves it under a new
+name instead, with its catalog number left blank: the block it was opened from stays as it
+was in your library, and the tab goes on editing the new one.</li>
+<li><b>Duplicate...</b> (a button in the Library popup, its right-click menu, or
+<b>Duplicate block...</b> in the Library menu and the Schematic and Panel tabs, for a block
+selected in the drawing): to make a block that is almost like one you have (a footprint of
+the next size up, a contactor with another contact arrangement), it asks for a name (offering
+"name copy"), saves a copy under it in your library with everything the same but the catalog
+number, left blank, and opens the copy in Edit block right away to be changed. Set its
+details (catalog number, series...) with Properties....</li>
 </ul>
 <p>Changing a built-in JIC symbol saves your own copy of the same name, which takes its place
 (Delete in the Library brings the built-in one back). After saving, if the project in the
@@ -698,9 +707,16 @@ sheet, the sheet gets the biggest scale it fits at (as <b>Fit</b> does; the draw
 text stay their real size). The command line says what was done; Sheet scale... changes the
 scale.</li>
 <li><b>Import DXF or DWG into this sheet...</b> keeps the drawing's own coordinates. It reads
-lines, polylines, circles, arcs, text and multi-line text (MTEXT), ellipses and splines (as
-polylines), blocks and dimensions (exploded, with their values); drawings in millimeters are converted to inches. It opens in the folder
-you last imported from (manufacturers' drawings usually sit together).</li>
+lines, polylines (2D and 3D, flattened onto the page; polyface and mesh polylines as their
+edges), circles, arcs, text and multi-line text (MTEXT), ellipses and splines (as polylines),
+blocks and dimensions (exploded, with their values), and the outlines of hatches, solids,
+traces and 3D faces (their fills aren't drawn); drawings in millimeters are converted to
+inches. Points and objects with no 2D shape (3D solids, regions, images) are left out, and a
+message names them. A drawing whose model space is empty or nearly so (fewer than 20
+objects) but whose layouts (paper space) hold more is read from its layouts instead, as many
+manufacturers' and older drawings keep their geometry there; the command line says so.
+Opening a DXF or DWG reads it the same way. It opens in the folder you last imported from
+(manufacturers' drawings usually sit together).</li>
 <li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version
 since 2018 too) open and import directly, with nothing to install: KanzonasCAD reads them with
 its own DWG reader (ezdwg, free and open source). If it can't read one and the free

@@ -95,6 +95,18 @@ class StayOpenMenu(QMenu):
         super().keyPressEvent(e)
 
 
+def _kind_name(dxftype):
+    """A DXF object type in words, for the import message."""
+    t = dxftype.replace(" (unreadable)", "")
+    name = {"3DSOLID": "3D solids", "REGION": "regions", "BODY": "bodies", "IMAGE": "pictures",
+            "OLE2FRAME": "embedded objects", "ACAD_TABLE": "tables", "MLINE": "multilines",
+            "WIPEOUT": "wipeouts", "ACAD_PROXY_ENTITY": "AutoCAD add-on objects",
+            "HATCH": "hatches", "POLYLINE": "polylines", "TOLERANCE": "tolerances",
+            "XLINE": "construction lines", "RAY": "rays", "SHAPE": "shapes",
+            "VIEWPORT": "viewports", "MESH": "meshes"}.get(t, t.lower())
+    return name + (" (unreadable)" if t != dxftype else "")
+
+
 def _scale_name(name, val):
     tmp = M.Sheet()
     tmp.scale, tmp.scale_name = val, name
@@ -149,6 +161,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self.library_panel.insertRequested.connect(self.insert_block)
         self.library_panel.propertiesRequested.connect(self.block_properties)
         self.library_panel.editRequested.connect(self.edit_block)
+        self.library_panel.duplicateRequested.connect(self.duplicate_block)
         # a popup, as AutoCAD Electrical's icon menu: the drawing keeps the whole width
         dlg = self.library_dialog = QDialog(self, Qt.Tool)
         dlg.setWindowTitle("Library")
@@ -399,6 +412,14 @@ class MainWindow(BlockEditing, QMainWindow):
         A("save_block", "Sa&ve block", self.save_block, icon="save_block", label="Save block",
           tip="Put the block open in this tab back in your library (and update its copies in "
               "the project if you say so)")
+        A("dup_block", "&Duplicate block...", lambda: self.duplicate_block(),
+          icon="block_props", label="Duplicate block",
+          tip="Copy the selected block under a new name in your library (catalog number left "
+              "blank) and open the copy in Edit block")
+        A("save_block_as", "Save block &as...", self.save_block_as, icon="save_block",
+          label="Save block as",
+          tip="Save the block open in this tab to your library under a new name (the one it "
+              "was opened from stays as it was)")
         A("manual", "&User manual", lambda: self.show_manual(), "F1", label="Manual")
         A("check_updates", "Check for &updates...", lambda: self.check_updates(True),
           icon="updates", label="Updates")
@@ -468,7 +489,8 @@ class MainWindow(BlockEditing, QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
-                  "explode", None, "block_props", "edit_block", "save_block", None,
+                  "explode", None, "block_props", "edit_block", "dup_block", "save_block",
+                  "save_block_as", None,
                   "new_part", "library_folder"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Help")
@@ -512,7 +534,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"],
                                   a["del_comp"]]),
-            ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"]]),
+            ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"],
+                                 a["dup_block"], a["save_block_as"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
@@ -523,7 +546,8 @@ class MainWindow(BlockEditing, QMainWindow):
         ])
         r.add_tab("Panel", [
             ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"]]),
-            ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"]]),
+            ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"],
+                                 a["dup_block"], a["save_block_as"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
@@ -1037,10 +1061,23 @@ class MainWindow(BlockEditing, QMainWindow):
         msg = "Imported %d object(s); drawing units: %s." % (rep["count"], rep["units"])
         if rep.get("reader") == "ODA File Converter":
             msg += " (Read with the ODA File Converter.)"
+        if rep.get("from_layouts"):
+            msg += (" Its model space was all but empty: %d object(s) came from its layout "
+                    "(paper space)." % rep["from_layouts"])
         if rep["skipped"]:
             msg += " Skipped: " + ", ".join("%s x%d" % kv for kv in sorted(rep["skipped"].items()))
         self.cmdline.add_history(msg)
         self.statusBar().showMessage(msg, 8000)
+        # what was left out, said where it can't be missed (a drawing that came in with only a
+        # few lines gave no sign why). Points aren't drawn anyway (a dimension's are hidden)
+        left = {t: n for t, n in rep["skipped"].items() if t != "POINT"}
+        if left:
+            QMessageBox.information(
+                self, "Import", "Imported %d object(s). Left out, as KanzonasCAD can't draw "
+                "them: %s.\n\nIf something you need is missing, saving the drawing as DXF in "
+                "the program that made it (exploding what's left out first) usually brings it "
+                "in." % (rep["count"], ", ".join("%s (%d)" % (_kind_name(t), n)
+                                                  for t, n in sorted(left.items()))))
 
     def export_dxf(self):
         d = self.doc()
@@ -1941,6 +1978,8 @@ class MainWindow(BlockEditing, QMainWindow):
         in_block = is_block_doc(self.doc())
         a["save_block"].setEnabled(in_block)
         a["save_block"].setVisible(in_block)
+        a["save_block_as"].setEnabled(in_block)
+        a["save_block_as"].setVisible(in_block)
         a["undo"].setEnabled(bool(has and p.undo_stack))
         a["redo"].setEnabled(bool(has and p.redo_stack))
         sel = bool(has and v.sel)
