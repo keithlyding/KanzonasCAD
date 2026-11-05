@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=KanzonasCAD
+GenericName=Electrical CAD
+Comment=Draw electrical schematics and panel layouts
+Exec=KanzonasCAD %F
+Icon=kanzonascad
+Terminal=false
+Categories=Graphics;Science;Engineering;
+Keywords=CAD;electrical;schematic;wiring;panel;DXF;DWG;
+StartupNotify=true
+StartupWMClass=KanzonasCAD

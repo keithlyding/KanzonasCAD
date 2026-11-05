@@ -365,6 +365,67 @@ def run(log_path):
         assert not gaps, "missing from the manual: %s" % gaps
     log.check("user manual covers every command", manual)
 
+    def storage():
+        # where settings, the library and recovery copies go (portable: the data folder
+        # beside the program, or the PortableApps.com package's Data folder)
+        from . import paths, library, backup
+        st = state["win"].settings
+        st.setValue("selftest/last_run", "ok")
+        st.sync()
+        assert st.status() == st.Status.NoError, "settings can't be written: %s" % st.status()
+        st.remove("selftest")           # (written and read back: nothing of it is kept)
+        if not paths.is_portable():
+            if sys.platform == "win32":
+                return "(installed: registry + AppData)"
+            return "(settings: %s)" % st.fileName()
+        base = paths.portable_data_dir()
+        ini = os.path.join(base, "settings.ini")
+        assert os.path.normcase(os.path.abspath(st.fileName())) == \
+            os.path.normcase(os.path.abspath(ini)), "portable settings in %s" % st.fileName()
+        assert os.path.isfile(ini), "portable settings file missing"
+        saved = {k: os.environ.pop(k, None) for k in ("KANZONASCAD_LIBRARY",
+                                                      "KANZONASCAD_RECOVERY")}
+        try:
+            lib, rec = library.default_folder(), backup.recovery_folder()
+        finally:
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
+        for what, folder in (("library", lib), ("recovery", rec)):
+            assert os.path.normcase(folder).startswith(os.path.normcase(base) + os.sep), \
+                "portable %s folder outside the data folder: %s" % (what, folder)
+        return "(portable: %s%s)" % (base, ", updated by its platform"
+                                     if paths.platform_updates() else "")
+    log.check("storage location", storage)
+
+    def update_files():
+        # the packaged app reaches GitHub over TLS; the portable zip's update keeps the data
+        # folder; the AppImage helpers see an AppImage
+        import zipfile
+        from PySide6.QtNetwork import QSslSocket
+        from . import updates
+        assert QSslSocket.supportsSsl(), "no TLS support: update checks can't reach GitHub"
+        app_dir = os.path.join(tmp, "app")
+        os.makedirs(app_dir, exist_ok=True)
+        good = os.path.join(tmp, "portable.zip")
+        with zipfile.ZipFile(good, "w") as z:
+            z.writestr("KanzonasCAD/KanzonasCAD.exe", "exe")
+            z.writestr("KanzonasCAD/portable.txt", "portable")
+            z.writestr("KanzonasCAD/_internal/a.dll", "dll")
+            z.writestr("KanzonasCAD/data/settings.ini", "theirs")
+        new = updates.unpack(good, app_dir)
+        assert os.path.isfile(os.path.join(new, "_internal", "a.dll"))
+        assert not os.path.exists(os.path.join(new, "data")), "update would replace settings"
+        bat = updates.swap_script(4242, new, app_dir)
+        assert "PID eq 4242" in bat and os.path.join(new, "data") in bat
+        fake = os.path.join(tmp, "fake.AppImage")
+        with open(fake, "wb") as f:
+            f.write(b"\x7fELF\x02\x01\x01\x00AI\x02" + b"\x00" * 64)
+        assert updates.is_appimage_file(fake) and not updates.is_appimage_file(good)
+        return "(TLS: %s; this copy updates by: %s)" % (QSslSocket.activeBackend(),
+                                                         updates.how())
+    log.check("updates (portable zip, AppImage)", update_files)
+
     def big_sheet():
         import random
         w = state["win"]

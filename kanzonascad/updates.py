@@ -15,7 +15,15 @@ How it updates depends on how KanzonasCAD runs:
   downloaded and checked the same way; it is unpacked beside the program and, once
   KanzonasCAD has closed, a small script copies it over the old files and starts the new
   version (ZipUpdater).
-- The Linux build: tells, and opens the release page (no self-update yet).
+- The portable Windows copy (portable.txt beside KanzonasCAD.exe, see paths.py): the same,
+  with the release's portable zip; the data folder (settings, library, recovery) is never
+  touched. The PortableApps.com package (updates=off in portable.txt) is updated by the
+  PortableApps.com Platform: it only tells, and doesn't check by itself unless asked to.
+- The Linux AppImage (as KanzonasPDF's): the release's KanzonasCAD-x86_64.AppImage is
+  downloaded next to the running one ($APPIMAGE), checked the same way and that it is an
+  AppImage; it takes the old file's place in one step (a rename on the same disk), and is
+  started again once KanzonasCAD has closed (AppImageUpdater, replace_appimage).
+- The Linux folder (the tar.gz): tells, and opens the release page.
 """
 
 import hashlib
@@ -38,6 +46,8 @@ API = "https://api.github.com/repos/" + REPO + "/releases?per_page=30"
 RELEASES_PAGE = "https://github.com/" + REPO + "/releases"
 DAY = 24 * 3600
 STAGING = "_update"              # folder beside KanzonasCAD.exe holding the unpacked version
+APPIMAGE = "KanzonasCAD-x86_64.AppImage"    # the Linux release file (its name never changes)
+APPIMAGE_MAX_BYTES = 1500 * 1000 * 1000     # a download past this stops (the build allows 400 MB)
 GITHUB_HOSTS = ("github.com", "objects.githubusercontent.com",
                 "release-assets.githubusercontent.com")
 NOTES_OPEN = "<!-- kanzonascad-notes -->"
@@ -126,6 +136,10 @@ def setup_asset_name(version):
     return "KanzonasCAD-v%s-setup.exe" % version
 
 
+def portable_asset_name(version):
+    return "KanzonasCAD-v%s-portable.zip" % version
+
+
 def _sha256_hex(asset):
     digest = (asset or {}).get("digest") or ""
     if not isinstance(digest, str) or not digest.startswith("sha256:"):
@@ -175,16 +189,117 @@ def installed(folder):
 
 
 def how():
-    """'source', 'installer' (installed with the setup: the next setup updates it), 'windows'
-    (the zip build: it can replace itself), or 'tell'."""
+    """'source', 'appimage' (the Linux AppImage: the new one takes its place), 'portable' (the
+    portable Windows copy: the portable zip replaces its program files), 'installer'
+    (installed with the setup: the next setup updates it), 'windows' (the zip build: it can
+    replace itself), or 'tell' (the PortableApps.com package, the Linux folder...)."""
+    from . import paths
     if source_folder():
         return "source"
+    if running_appimage():
+        return "appimage"
     folder = app_folder()
+    if folder and paths.is_portable():
+        if paths.platform_updates():
+            return "tell"               # (the PortableApps.com Platform updates it)
+        return "portable" if os.access(folder, os.W_OK) else "tell"
     if installed(folder):
         return "installer"
     if folder and os.access(folder, os.W_OK):
         return "windows"
     return "tell"
+
+
+# ---- the Linux AppImage (as KanzonasPDF's) -----------------------------------------------------
+def running_appimage():
+    """The AppImage file KanzonasCAD runs from on Linux ($APPIMAGE, set by the AppImage's own
+    start-up), or None (Windows, the Linux folder, or run from source)."""
+    if not sys.platform.startswith("linux"):
+        return None
+    path = os.environ.get("APPIMAGE") or ""
+    # (the file itself, not a link to it: the update is renamed over what it names, and a
+    # link replaced by the new file would leave the real one old)
+    return os.path.realpath(path) if path and os.path.isfile(path) else None
+
+
+def appimage_unwritable(path):
+    """Why the AppImage at path can't be replaced by this user (text to show), or None when
+    it can: the new file is written next to it and renamed over it, so its folder must take
+    new files."""
+    import stat
+    folder = os.path.dirname(os.path.abspath(path))
+    if not os.access(folder, os.W_OK | os.X_OK):
+        return "You don't have permission to change the folder it is in (%s)." % folder
+    try:
+        st = os.stat(folder)
+        if st.st_mode & stat.S_ISVTX and os.stat(path).st_uid != os.getuid() \
+                and st.st_uid != os.getuid():
+            # (a shared folder like /tmp: only a file's owner may replace it)
+            return "It belongs to another user."
+    except OSError as e:
+        return str(e)
+    return None
+
+
+def is_appimage_file(path):
+    """The file at path is a Linux program packed as an AppImage (type 2: an ELF program with
+    AI 2 in its header)."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(11)
+    except OSError:
+        return False
+    return head[:4] == b"\x7fELF" and head[8:11] == b"AI\x02"
+
+
+def replace_appimage(new, target):
+    """Put the checked new AppImage at target in one step: executable like the old one (and
+    by its owner in any case; never changeable by other users, even if the old one was), then
+    renamed over it. The running program keeps its own copy open until it ends."""
+    try:
+        mode = os.stat(target).st_mode & 0o777
+    except OSError:
+        mode = 0o755
+    os.chmod(new, (mode | 0o100) & ~0o022)
+    os.replace(new, target)
+
+
+def appimage_restart_command(target, pid=None):
+    """The command that starts the new AppImage once this process (pid) has ended (waiting
+    at most 30 s), so the old one's windows are gone first."""
+    pid = os.getpid() if pid is None else pid
+    wait = 'i=0; while kill -0 "$1" 2>/dev/null && [ "$i" -lt 150 ]; do sleep 0.2; ' \
+           'i=$((i+1)); done; exec "$2"'
+    return ["/bin/sh", "-c", wait, "kzcad-restart", str(pid), target]
+
+
+def restart_env(env=None):
+    """The environment to start the new AppImage with: without what this AppImage's start-up
+    set for itself (its folder, which goes away when it ends, and the library path PyInstaller
+    changed; its earlier value comes back from the LD_LIBRARY_PATH_ORIG copy)."""
+    env = dict(os.environ if env is None else env)
+    mount = env.get("APPDIR") or ""
+    if os.path.basename(mount.rstrip("/")).startswith("appimage_extracted_"):
+        # started with --appimage-extract-and-run (no FUSE on this computer): the new one
+        # must be started the same way, or it can't start at all
+        env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
+    for key in ("APPIMAGE", "APPDIR", "ARGV0", "OWD", "DESKTOP_STARTUP_ID",
+                "XDG_ACTIVATION_TOKEN"):
+        env.pop(key, None)
+    for key in ("LD_LIBRARY_PATH", "LD_PRELOAD"):
+        if key + "_ORIG" in env:            # (PyInstaller keeps the value it replaced)
+            env[key] = env.pop(key + "_ORIG")
+    if mount:
+        mount = mount.rstrip("/")
+        for key, value in list(env.items()):
+            parts = value.split(os.pathsep)
+            kept = [p for p in parts if not (p == mount or p.startswith(mount + "/"))]
+            if kept != parts:
+                if any(kept):
+                    env[key] = os.pathsep.join(kept)
+                else:
+                    del env[key]
+    return env
 
 
 # the setup's AppId (installer/KanzonasCAD.iss): its uninstall entry says who it was installed for
@@ -303,12 +418,16 @@ def unpack(zip_path, app_dir):
     if not os.path.isfile(os.path.join(new, "KanzonasCAD.exe")):
         shutil.rmtree(stage, ignore_errors=True)
         raise ValueError("The download isn't a KanzonasCAD Windows build.")
+    # a data folder in the zip (there is none) must never replace a portable copy's settings,
+    # library and recovery copies
+    shutil.rmtree(os.path.join(new, "data"), ignore_errors=True)
     return new
 
 
 def swap_script(pid, new, app_dir):
-    """Windows batch text: wait for process pid to end, copy new over app_dir, remove the
-    staging folder, start KanzonasCAD again, delete itself."""
+    """Windows batch text: wait for process pid to end, copy new over app_dir (never touching
+    a portable copy's data folder), remove the staging folder, start KanzonasCAD again,
+    delete itself."""
     exe = os.path.join(app_dir, "KanzonasCAD.exe")
     stage = os.path.join(app_dir, STAGING)
     return "\r\n".join([
@@ -319,8 +438,8 @@ def swap_script(pid, new, app_dir):
         'robocopy "%s" "%s" /MIR /R:5 /W:1 /NFL /NDL /NJH /NJS >nul'
         % (os.path.join(new, "_internal"), os.path.join(app_dir, "_internal")),
         "set rc=%errorlevel%",
-        'robocopy "%s" "%s" /E /XD "%s" /R:5 /W:1 /NFL /NDL /NJH /NJS >nul'
-        % (new, app_dir, os.path.join(new, "_internal")),
+        'robocopy "%s" "%s" /E /XD "%s" "%s" /R:5 /W:1 /NFL /NDL /NJH /NJS >nul'
+        % (new, app_dir, os.path.join(new, "_internal"), os.path.join(new, "data")),
         "if errorlevel 8 set rc=8",
         'rmdir /s /q "%s"' % stage,
         'if %%rc%% GEQ 8 (echo Updating KanzonasCAD failed. Download it again from %s & pause)'
@@ -344,7 +463,10 @@ class UpdateChecker(QObject):
         self._reply = None
 
     def enabled(self):
-        return self.settings.value("update_check", "true") not in (False, "false")
+        from . import paths
+        # the PortableApps.com Platform checks for updates itself: off unless switched on
+        default = "false" if paths.platform_updates() else "true"
+        return self.settings.value("update_check", default) not in (False, "false")
 
     def check_if_due(self):
         if not self.enabled():
@@ -443,10 +565,10 @@ class SourceUpdater(QObject):
 
 
 class ZipUpdater(QObject):
-    """Downloads the Windows zip, checks its sha256, unpacks it beside the program; or, with
-    setup=True, downloads the setup into a new folder only this user can write to and checks
-    it. progress(received, total); ready(folder of the new version, or the checked setup's
-    path); failed(text)."""
+    """Downloads the Windows zip (or the portable one), checks its sha256, unpacks it beside
+    the program; or, with setup=True, downloads the setup into a new folder only this user can
+    write to and checks it. progress(received, total); ready(folder of the new version, or the
+    checked setup's path); failed(text)."""
     progress = Signal(int, int)
     ready = Signal(str)
     failed = Signal(str)
@@ -459,17 +581,22 @@ class ZipUpdater(QObject):
         self.file = None
         self.path = None if setup else os.path.join(app_dir, STAGING + ".zip")
         self._keep = False
+        self._write_failed = None       # the error writing the download met (disk full...)
+
+    def _open(self):
+        """The file the download is written to (sets self.path)."""
+        if self.setup:
+            # (a fresh folder of this user's, under a name nobody can guess: nobody else can
+            # put a file there between the check and the run)
+            import tempfile
+            folder = tempfile.mkdtemp(prefix="kzcadsetup")
+            self.path = os.path.join(folder, os.path.basename(urlparse(self.url).path)
+                                     or "KanzonasCAD-setup.exe")
+        return open(self.path, "wb")
 
     def start(self):
         try:
-            if self.setup:
-                # (a fresh folder of this user's, under a name nobody can guess: nobody else
-                # can put a file there between the check and the run)
-                import tempfile
-                folder = tempfile.mkdtemp(prefix="kzcadsetup")
-                self.path = os.path.join(folder, os.path.basename(urlparse(self.url).path)
-                                         or "KanzonasCAD-setup.exe")
-            self.file = open(self.path, "wb")
+            self.file = self._open()
         except OSError as e:
             self.failed.emit("Can't write the download (%s)." % e)
             return
@@ -479,23 +606,58 @@ class ZipUpdater(QObject):
                          QNetworkRequest.NoLessSafeRedirectPolicy)
         req.setTransferTimeout(60000)
         r = self.reply = self.net.get(req)
-        r.readyRead.connect(lambda: self.file.write(bytes(r.readAll())))
-        r.downloadProgress.connect(lambda a, b: self.progress.emit(int(a), int(b)))
+        r.readyRead.connect(lambda: self._write(bytes(r.readAll())))
+        r.downloadProgress.connect(self._progress)
         r.finished.connect(self._done)
         app = QCoreApplication.instance()
         if app is not None:
             app.aboutToQuit.connect(self.cancel)
 
+    def _write(self, data):
+        if self._write_failed is not None:
+            return
+        try:
+            self.file.write(data)
+        except OSError as e:
+            # (the disk filled up, or the folder went away): stop; _done says so and removes
+            # what was written
+            self._write_failed = e
+            self.cancel()
+
+    def _progress(self, received, total):
+        self.progress.emit(int(received), int(total))
+
     def cancel(self):
         if self.reply is not None and self.reply.isRunning():
             self.reply.abort()
+
+    def _finish(self):
+        """What ready carries, once the download is checked against its sha256."""
+        if self.setup:
+            self._keep = True               # checked: kept for running
+            return self.path
+        return unpack(self.path, self.app_dir)
+
+    def _stopped(self):
+        """Why the download was stopped on purpose (a message), or None."""
+        return None
 
     def _done(self):
         r = self.reply
         r.deleteLater()
         try:
-            self.file.write(bytes(r.readAll()))
-            self.file.close()
+            self._write(bytes(r.readAll()))
+            try:
+                self.file.close()
+            except OSError as e:
+                self._write_failed = self._write_failed or e
+            if self._write_failed is not None:
+                self.failed.emit("Can't write the download (%s)." % self._write_failed)
+                return
+            stopped = self._stopped()
+            if stopped:
+                self.failed.emit(stopped)
+                return
             if r.error() != QNetworkReply.NoError:
                 if r.error() != QNetworkReply.OperationCanceledError:
                     self.failed.emit("The download failed (%s)." % r.errorString())
@@ -504,11 +666,7 @@ class ZipUpdater(QObject):
                 self.failed.emit("The download was not used: its sha256 doesn't match the "
                                  "release.")
                 return
-            if self.setup:
-                self._keep = True               # checked: kept for running
-                self.ready.emit(self.path)
-            else:
-                self.ready.emit(unpack(self.path, self.app_dir))
+            self.ready.emit(self._finish())
         except (OSError, ValueError, zipfile.BadZipFile) as e:
             self.failed.emit(str(e))
         finally:
@@ -522,6 +680,47 @@ class ZipUpdater(QObject):
                         os.rmdir(os.path.dirname(self.path))
                     except OSError:
                         pass        # (its own empty folder only)
+
+
+class AppImageUpdater(ZipUpdater):
+    """Downloads the new AppImage next to the running one (same disk: the rename that puts it
+    in place is a single step), and checks its sha256 against the release and that it is an
+    AppImage. ready(path of the checked download); the caller puts it in place
+    (replace_appimage) and closes KanzonasCAD. A wrong or failed download is removed, and so
+    is one that grows past APPIMAGE_MAX_BYTES (it would fill the disk)."""
+
+    def __init__(self, url, sha256, appimage, parent=None):
+        self.appimage = os.path.abspath(appimage)
+        super().__init__(url, sha256, os.path.dirname(self.appimage), parent)
+        self.path = None
+        self._too_big = False
+
+    def _open(self):
+        # a new file only this user can read or change, under a name nobody can guess and
+        # never through a link: the folder may be shared, and whoever else can add files there
+        # could otherwise prepare the name
+        import tempfile
+        fd, self.path = tempfile.mkstemp(
+            prefix=".%s.update-" % os.path.basename(self.appimage), dir=self.app_dir)
+        return os.fdopen(fd, "wb")
+
+    def _progress(self, received, total):
+        if not self._too_big and max(received, total) > APPIMAGE_MAX_BYTES:
+            self._too_big = True
+            self.cancel()
+            return
+        super()._progress(received, total)
+
+    def _stopped(self):
+        if self._too_big:
+            return "The download was stopped: it is far bigger than an AppImage of KanzonasCAD."
+        return None
+
+    def _finish(self):
+        if not is_appimage_file(self.path):
+            raise ValueError("The download isn't a KanzonasCAD AppImage.")
+        self._keep = True                   # checked: kept for putting in place
+        return self.path
 
 
 def start_swap(new, app_dir):

@@ -4,7 +4,7 @@ project, the Sheets panel, the command line and the status bar with the drafting
 import json
 import os
 
-from PySide6.QtCore import Qt, QSettings, QMimeData, QSize, QTimer, QByteArray
+from PySide6.QtCore import Qt, QMimeData, QSize, QTimer, QByteArray
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QGuiApplication
 from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QListWidget,
                                QListWidgetItem, QFileDialog, QMessageBox, QLabel, QToolBar,
@@ -22,6 +22,14 @@ from .render import install_text_measure
 from .view import CadView
 
 APP = "KanzonasCAD"
+
+
+def app_title():
+    """'KanzonasCAD', or 'KanzonasCAD (portable)' when run from a portable folder."""
+    from . import paths
+    return APP + " (portable)" if paths.is_portable() else APP
+
+
 CLIP_MIME = "application/x-kanzonascad-entities"
 CLIP_TEXT = "KanzonasCAD objects:"      # the same data as plain text (see hand_over_clipboard)
 MAX_RECENT = 10
@@ -62,8 +70,10 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         install_text_measure()
-        self.settings = QSettings(APP, APP)
-        self.setWindowTitle(APP)
+        from . import paths
+        # (portable: settings.ini in the data folder beside the program, not the registry)
+        self.settings = paths.settings()
+        self.setWindowTitle(app_title())
         self.resize(1400, 900)
         self._untitled = 0
 
@@ -97,7 +107,9 @@ class MainWindow(QMainWindow):
 
         from .library import Library
         from .library_panel import LibraryPanel
-        self.library = Library(self.settings.value("library_folder", "") or None)
+        from .paths import follow_drive
+        self.library = Library(follow_drive(self.settings.value("library_folder", "") or "")
+                               or None)
         self.library_panel = LibraryPanel(self.library)
         self.library_panel.insertRequested.connect(self.insert_block)
         # a popup, as AutoCAD Electrical's icon menu: the drawing keeps the whole width
@@ -131,8 +143,7 @@ class MainWindow(QMainWindow):
         state = self.settings.value("window_state")
         if isinstance(state, QByteArray):
             self.restoreState(state)
-        self.acts["auto_updates"].setChecked(
-            self.settings.value("update_check", "true") not in (False, "false"))
+        self.acts["auto_updates"].setChecked(self._auto_updates_on())
         self._update_ui()
         self.autosave_timer = QTimer(self, interval=AUTOSAVE_MINUTES * 60 * 1000)
         self.autosave_timer.timeout.connect(self.autosave)
@@ -579,7 +590,8 @@ class MainWindow(QMainWindow):
     def new_project(self):
         """A new project: from the default template (Options, Files), else the built-in
         settings."""
-        path = self.settings.value("template_path", "") or ""
+        from .paths import follow_drive
+        path = follow_drive(self.settings.value("template_path", "") or "")
         p = None
         if path:
             p = self._from_template(path)
@@ -663,8 +675,7 @@ class MainWindow(QMainWindow):
         what belongs to one project)."""
         cur = {"theme": self.settings.value("theme", "light"),
                "black": self.acts["black"].isChecked(),
-               "update_check": self.settings.value("update_check", "true") not in
-               (False, "false"),
+               "update_check": self._auto_updates_on(),
                "library_folder": self.library.folder,
                "template_path": self.settings.value("template_path", "") or "",
                "backups_keep": self.backups_keep(),
@@ -908,7 +919,8 @@ class MainWindow(QMainWindow):
     def _recent(self):
         try:
             r = json.loads(self.settings.value("recent", "[]"))
-            return [p for p in r if isinstance(p, str)]
+            from .paths import follow_drive
+            return [follow_drive(p) for p in r if isinstance(p, str)]
         except (TypeError, ValueError):
             return []
 
@@ -1746,9 +1758,10 @@ class MainWindow(QMainWindow):
         for k in ("make_block", "explode", "wire", "bus"):
             a[k].setEnabled(has)
         d = self.doc()
-        title = APP
+        title = app_title()
         if d is not None:
-            title = "%s%s - %s" % (d.name(), "*" if d.project.is_modified() else "", APP)
+            title = "%s%s - %s" % (d.name(), "*" if d.project.is_modified() else "",
+                                   app_title())
         self.setWindowTitle(title)
 
     # ---- updates ---------------------------------------------------------------------------
@@ -1759,6 +1772,13 @@ class MainWindow(QMainWindow):
             c.found.connect(self._update_found)
             c.result.connect(lambda t: QMessageBox.information(self, "Check for updates", t))
         return self._update_checker
+
+    def _auto_updates_on(self):
+        """Help > Check for updates automatically: on to start, except in the PortableApps.com
+        package (its Platform updates it) until the user turns it on."""
+        from .paths import platform_updates
+        default = "false" if platform_updates() else "true"
+        return self.settings.value("update_check", default) not in (False, "false")
 
     def start_update_check(self):
         """At start-up, and every few hours while it stays open: at most once a day."""
@@ -1805,6 +1825,14 @@ class MainWindow(QMainWindow):
                 "windows": "Update now downloads it, checks it against the release, and "
                            "replaces this copy when KanzonasCAD closes (you'll be asked to save "
                            "first). Your projects and library aren't touched.",
+                "portable": "Update now downloads the new portable version, checks it against "
+                            "the release, and replaces the program files in this folder when "
+                            "KanzonasCAD closes (you'll be asked to save first). The data "
+                            "folder (settings, library, recovery copies) is kept.",
+                "appimage": "Update now downloads the new AppImage, checks it against the "
+                            "release, puts it in place of this one (same name and place), "
+                            "closes KanzonasCAD (you'll be asked to save first) and starts the "
+                            "new version. Your projects, library and settings aren't touched.",
                 "tell": "Update now opens the release page to download it."}[how]
         h = QLabel(hint)
         h.setWordWrap(True)
@@ -1840,6 +1868,16 @@ class MainWindow(QMainWindow):
                 QDesktopServices.openUrl(QUrl(updates.page(release)))
                 return
             self._run_zip_update(got[0], got[1], updates.app_folder())
+        elif how == "portable":
+            got = updates.asset(release, updates.portable_asset_name(v))
+            if got is None:
+                QMessageBox.warning(self, "Update", "This release has no checked portable "
+                                    "download. Opening the release page instead.")
+                QDesktopServices.openUrl(QUrl(updates.page(release)))
+                return
+            self._run_zip_update(got[0], got[1], updates.app_folder())
+        elif how == "appimage":
+            self._run_appimage_update(release)
         elif how == "installer":
             got = updates.asset(release, updates.setup_asset_name(v))
             if got is None:
@@ -1913,6 +1951,79 @@ class MainWindow(QMainWindow):
         up.start()
         dlg.exec()
 
+    def _run_appimage_update(self, release):
+        """Linux AppImage (as KanzonasPDF's): download the new one next to it and check it,
+        put it in place of the running file, close (asking to save) and start it. When this
+        user can't replace the file, the release page opens instead."""
+        import subprocess
+        from . import updates
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        page = updates.page(release)
+        target = updates.running_appimage()
+        got = updates.asset(release, updates.APPIMAGE)
+        if target is None or got is None:
+            QMessageBox.warning(self, "Update", "This release has no checked AppImage. "
+                                "Opening the release page instead.")
+            QDesktopServices.openUrl(QUrl(page))
+            return
+        why = updates.appimage_unwritable(target)
+        if why:
+            QMessageBox.information(self, "Update", "KanzonasCAD can't replace %s: %s\n\nThe "
+                                    "release page opens so you can download the new %s "
+                                    "yourself." % (target, why, updates.APPIMAGE))
+            QDesktopServices.openUrl(QUrl(page))
+            return
+        dlg, out, box = self._progress_dialog("Updating KanzonasCAD")
+        out.append("Downloading...")
+        up = updates.AppImageUpdater(got[0], got[1], target, dlg)
+        up.progress.connect(lambda a, b: self.statusBar().showMessage(
+            "Downloading the update: %d of %d MB" % (a // 1000000, max(b, 0) // 1000000)))
+
+        def ready(new):
+            out.append("Downloaded and checked.")
+            box.setEnabled(True)
+            # in place first (the running program keeps its own copy open until it ends)
+            try:
+                updates.replace_appimage(new, target)
+            except OSError as e:
+                try:
+                    os.remove(new)
+                except OSError as e2:
+                    out.append("The download couldn't be removed either (%s)." % e2)
+                out.append("The new version couldn't be put in place of %s (%s). Download it "
+                           "from the release page instead." % (target, e))
+                QDesktopServices.openUrl(QUrl(page))
+                return
+            out.append("The new version is in place of %s." % target)
+            if QMessageBox.question(dlg, "Update", "Close KanzonasCAD and start the new "
+                                    "version now? (You'll be asked to save any changes first. "
+                                    "Otherwise it starts the next time you open KanzonasCAD.)"
+                                    ) != QMessageBox.Yes:
+                return
+            dlg.accept()
+            if not self.close():
+                return
+            cwd = os.environ.get("OWD") or os.path.expanduser("~")
+            # (started once this process has ended: see updates.appimage_restart_command)
+            subprocess.Popen(updates.appimage_restart_command(target),
+                             env=updates.restart_env(),
+                             cwd=cwd if os.path.isdir(cwd) else None,
+                             close_fds=True, start_new_session=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+            QApplication.instance().quit()
+
+        def failed(text):
+            out.append(text + "\n\nYou can still download %s from the release page and put "
+                       "it in place of this one." % updates.APPIMAGE)
+            box.setEnabled(True)
+        up.ready.connect(ready)
+        up.failed.connect(failed)
+        box.rejected.connect(up.cancel)
+        up.start()
+        dlg.exec()
+
     def _restart(self):
         """Close (asking to save), then start KanzonasCAD again."""
         from .updates import restart_command
@@ -1951,11 +2062,13 @@ class MainWindow(QMainWindow):
         logo.setPixmap(logo_pixmap(110))
         logo.setStyleSheet("background: #f9f9f9; border-radius: 6px; padding: 6px;")
         lay.addWidget(logo)
-        text = QLabel("Version %s. Free electrical CAD for Windows and Linux.<br><br>"
+        from . import paths
+        text = QLabel("Version %s%s. Free electrical CAD for Windows and Linux.<br><br>"
                       "Free software under the MIT License.<br>"
                       "Source code and downloads: "
                       "<a href='https://github.com/keithlyding/KanzonasCAD'>"
-                      "github.com/keithlyding/KanzonasCAD</a>" % __version__)
+                      "github.com/keithlyding/KanzonasCAD</a>"
+                      % (__version__, " (portable)" if paths.is_portable() else ""))
         text.setOpenExternalLinks(True)
         text.setWordWrap(True)
         lay.addWidget(text)

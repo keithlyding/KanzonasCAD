@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata for the AppImage (software centers, AppImageHub), as KanzonasPDF's.
+     make_appimage.py fills in @VERSION@ and @DATE@ and checks it with appstreamcli: the build
+     machine's (Ubuntu 22.04, AppStream 0.15) fails on warnings too, such as a url type it
+     doesn't know (vcs-browser, contribute). -->
+<component type="desktop-application">
+  <id>io.github.keithlyding.kanzonascad</id>
+  <name>KanzonasCAD</name>
+  <summary>Draw electrical schematics and panel layouts</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.keithlyding">
+    <name>KanzonasCAD</name>
+  </developer>
+  <description>
+    <p>
+      A free electrical CAD program with an AutoCAD-like way of working: command line,
+      object snaps, grips and window selection. JIC/NFPA symbols, device tags,
+      cross-references, wire numbers, panel layouts, DXF and DWG import, DXF and PDF export.
+    </p>
+    <p>No account and no telemetry.</p>
+  </description>
+  <launchable type="desktop-id">kanzonascad.desktop</launchable>
+  <icon type="stock">kanzonascad</icon>
+  <url type="homepage">https://github.com/keithlyding/KanzonasCAD</url>
+  <url type="bugtracker">https://github.com/keithlyding/KanzonasCAD/issues</url>
+  <categories>
+    <category>Graphics</category>
+    <category>Science</category>
+    <category>Engineering</category>
+  </categories>
+  <provides>
+    <binary>KanzonasCAD</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

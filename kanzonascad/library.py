@@ -1,6 +1,7 @@
 """Your library: schematic symbols, panel footprints and parts, kept in a folder of their own
-(Documents/KanzonasCAD Library to start), outside the program and outside any project, so
-they last through updates and are there for every project. No Qt here.
+(Documents/KanzonasCAD Library to start; in a portable copy, Library in its data folder),
+outside the program and outside any project, so they last through updates and are there for
+every project. No Qt here.
 
     <library>/symbols/<name>.kzblock      a schematic symbol (JSON: a BlockDef)
     <library>/footprints/<name>.kzblock   a panel footprint
@@ -30,6 +31,10 @@ def default_folder():
     env = os.environ.get("KANZONASCAD_LIBRARY")
     if env:
         return env
+    from . import paths
+    portable = paths.portable_data_dir()
+    if portable:                        # (a portable copy: the library travels with it)
+        return os.path.join(portable, "Library")
     docs = os.path.join(os.path.expanduser("~"), "Documents")
     if not os.path.isdir(docs):
         docs = os.path.expanduser("~")

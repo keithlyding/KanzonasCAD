@@ -9,12 +9,16 @@ list of commands. US practice: JIC/NFPA symbols, US device tags (CR1, M1), grid-
 cross-references (6-D1), wire numbers that start with the page number (6001). Drawings are in
 inches on ANSI sheets. It shares its look (menus, ribbon, theme, icons) with KanzonasPDF.
 
-`.github/workflows/build.yml` builds a Windows folder (job `build`, the check the rule protecting `main` requires) and a Linux folder (job
-`linux`), each running the unit tests and its own `--selftest`. On `main`, job `publish` then
-makes a GitHub release `v<version>` with both downloads and that version's RELEASE_NOTES.md
-section, once per version and only when both builds are green (full releases, not pre-releases:
-the owner's choice). A merge that doesn't change `__version__` publishes nothing. The app's
-update box (`updates.py`) shows those notes and installs the release.
+`.github/workflows/build.yml` builds, as KanzonasPDF's does: on Windows (job `build`, the
+check the rule protecting `main` requires) the app folder, its zip, the setup, the portable zip
+and the PortableApps.com layout; on Linux (job `linux`, packaging/linux/) the app folder as a
+tar.gz and an AppImage made from it; each runs the unit tests and its own `--selftest` (the
+Windows build also inside the installed, portable and PortableApps.com copies, the Linux build
+inside the AppImage). On `main`, job `publish` then makes a GitHub release `v<version>` with
+the downloads and that version's RELEASE_NOTES.md section, once per version and only when both
+builds are green (full releases, not pre-releases: the owner's choice). A merge that doesn't
+change `__version__` publishes nothing. The app's update box (`updates.py`) shows those notes
+and installs the release.
 
 ## Branches and merging (several agents work here at once)
 - Start every task from the latest `main`, on a new branch of your own named
@@ -72,9 +76,30 @@ update box (`updates.py`) shows those notes and installs the release.
   makes some CAD programs untrustworthy.
 - Windows and Linux: anything platform-specific goes behind `sys.platform` and keeps the other
   platform's behavior identical.
+- **Where things are kept goes through `paths.py`.** Settings come from `paths.settings()`
+  (never `QSettings(...)` directly), and a folder of the program's own from
+  `paths.portable_data_dir()` / `paths.data_dir()`: a `portable.txt` beside KanzonasCAD.exe puts
+  them all in a data folder beside it (the portable zip; `data=` and `updates=off` in it for
+  the PortableApps.com package, tools/make_portableapps.py and docs/portableapps.md). The
+  Windows build checks that the portable copies keep their settings there and leave the
+  registry alone.
 - American spelling in all user-visible text. Units are inches.
 - Start-up must not import heavy libraries (ezdxf, openpyxl...): import them inside the
   function that needs them. The self-test fails if start-up imports ezdxf.
+
+## Packaging (as KanzonasPDF's; keep the two alike)
+- The Linux AppImage builds on Ubuntu 22.04 (glibc 2.35): `packaging/linux/make_appimage.py`
+  fails the build if a bundled file needs a newer glibc, libstdc++ (C++ ABI) or libgcc_s, or
+  if a library in `packaging/linux/excludelist` (the computer's own) is still bundled; it checks
+  the desktop file and the AppStream metadata
+  (`io.github.keithlyding.kanzonascad.metainfo.xml`). appimagetool is pinned by SHA-256 in the
+  workflow, and the AppImage runtime is cut from it (pinned too): update both together, and
+  with KanzonasPDF's.
+- The AppImage's release name never changes (`KanzonasCAD-x86_64.AppImage`): Update now puts
+  the new one at the old one's place (`updates.AppImageUpdater`, `replace_appimage`). The
+  other downloads carry the version in their names.
+- The PortableApps.com icon `assets/portableapps-appicon.ico` is made by
+  `tools/make_paf_icon.py` from `assets/kanzonascad.png`: run it again when the icon changes.
 
 ## Performance budget (checked by the self-test "speed budget")
 On a 60,000-line sheet: opened and drawn < 5 s, ten zoomed repaints < 2 s, 1,000 lines added

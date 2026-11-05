@@ -181,6 +181,54 @@ jobs:
           if (Test-Path "$dir\KanzonasCAD.exe") { throw "Uninstall left the all-users app behind" }
           Write-Host "All users: installed 0.0, updated to $v in place, restarted, uninstalled"
 
+      - name: Portable version (settings, library and recovery in a data folder beside the exe)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory portable | Out-Null
+          Copy-Item -Recurse dist\KanzonasCAD portable\KanzonasCAD
+          @"
+          KanzonasCAD portable
+
+          Because this file is here, KanzonasCAD keeps its settings, your library (symbols,
+          footprints, parts, templates) and its recovery copies in the "data" folder next to
+          KanzonasCAD.exe instead of the computer's registry and user folders. Copy the whole
+          KanzonasCAD folder anywhere (a USB stick, a network drive) and run KanzonasCAD.exe.
+          No installation or Python needed. Delete this file to make it behave like the
+          installed version.
+          "@ | Set-Content portable\KanzonasCAD\portable.txt
+          Compress-Archive -Path portable\KanzonasCAD -DestinationPath KanzonasCAD-portable.zip
+          # test a copy: it must run, keep its settings in data\ and leave the registry alone
+          Remove-Item -Recurse -Force "HKCU:\Software\KanzonasCAD" -ErrorAction SilentlyContinue
+          Copy-Item -Recurse portable\KanzonasCAD "$env:RUNNER_TEMP\kzcadportable"
+          $p = Start-Process "$env:RUNNER_TEMP\kzcadportable\KanzonasCAD.exe" -ArgumentList "--selftest","portable-selftest.log" -PassThru -Wait
+          Get-Content portable-selftest.log
+          if ($p.ExitCode -ne 0) { throw "Portable app failed its self test" }
+          if (-not (Select-String -Path portable-selftest.log -Pattern "PASS  storage location.*portable" -Quiet)) { throw "The self test didn't run as portable" }
+          if (-not (Test-Path "$env:RUNNER_TEMP\kzcadportable\data\settings.ini")) { throw "Portable settings not in the data folder" }
+          if (Test-Path "HKCU:\Software\KanzonasCAD") { throw "Portable app wrote to the registry" }
+
+      - name: PortableApps.com package layout (finished by hand with their tools; docs/portableapps.md)
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python tools/make_portableapps.py "${{ steps.ver.outputs.version }}" dist\KanzonasCAD KanzonasCADPortable
+          if ($LASTEXITCODE -ne 0) { throw "Making the PortableApps.com layout failed" }
+          # the program in the package keeps its data in the package's Data folder, leaves the
+          # registry alone and doesn't offer to update itself
+          Remove-Item -Recurse -Force "HKCU:\Software\KanzonasCAD" -ErrorAction SilentlyContinue
+          $p = Start-Process "KanzonasCADPortable\App\KanzonasCAD\KanzonasCAD.exe" -ArgumentList "--selftest","paf-selftest.log" -PassThru -Wait
+          Get-Content paf-selftest.log
+          if ($p.ExitCode -ne 0) { throw "PortableApps.com package failed its self test" }
+          if (-not (Select-String -Path paf-selftest.log -Pattern "PASS  storage location.*updated by its platform" -Quiet)) { throw "The package's program doesn't leave updates to the platform" }
+          if (-not (Test-Path "KanzonasCADPortable\Data\settings.ini")) { throw "Settings not in the package's Data folder" }
+          if (Test-Path "HKCU:\Software\KanzonasCAD") { throw "PortableApps.com package wrote to the registry" }
+          Remove-Item -Recurse -Force "KanzonasCADPortable\Data"
+          # uploaded as a folder (GitHub zips each artifact once); the paf folder keeps
+          # KanzonasCADPortable as the top folder in the download
+          New-Item -ItemType Directory paf | Out-Null
+          Move-Item KanzonasCADPortable paf\KanzonasCADPortable
+
       - uses: actions/upload-artifact@v4
         with:
           name: KanzonasCAD-windows
@@ -189,12 +237,49 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          name: KanzonasCAD-portable
+          path: KanzonasCAD-portable.zip
+          retention-days: 14
+
+      # (a build artifact only, not a release download, as KanzonasPDF's)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KanzonasCAD-v${{ steps.ver.outputs.version }}-portableapps-layout
+          path: paf/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
           name: KanzonasCAD-setup
           path: dist-installer/KanzonasCAD-v${{ steps.ver.outputs.version }}-setup.exe
           retention-days: 14
 
+  # Linux: the app folder (tar.gz) and an AppImage (x86_64) made from it, as KanzonasPDF's.
+  # Built on the oldest Ubuntu it supports, so it runs on glibc 2.35 and newer (Ubuntu 22.04,
+  # Debian 12, Fedora 36 and later); PySide6 6.12's wheels need glibc 2.34.
+  # packaging/linux/make_appimage.py makes the AppDir and checks it.
   linux:
     runs-on: ubuntu-22.04
+    env:
+      # appimagetool pinned to an exact release file and checked against its SHA-256. The
+      # AppImage runtime (the small program at the start of every AppImage) is the one at the
+      # start of appimagetool itself (an AppImage too): its first APPIMAGE_RUNTIME_BYTES
+      # bytes, checked against their own SHA-256, so it is pinned with appimagetool instead
+      # of appimagetool fetching the unpinned "continuous" runtime. (The same pins as
+      # KanzonasPDF's build: update both together.)
+      APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
+      APPIMAGETOOL_SHA256: 46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1
+      APPIMAGE_RUNTIME_BYTES: "692512"
+      APPIMAGE_RUNTIME_SHA256: 33a0fb9c4e2477d0cf1994a179e983633f3b3e77876b190bacff32f335551091
+      # the oldest system supported (Ubuntu 22.04's glibc, and GCC 12's libstdc++ with its
+      # C++ ABI and libgcc_s): the build fails if a bundled file needs newer ones (the build
+      # machine's own libstdc++ may be newer, so its self test alone wouldn't show it)
+      MAX_GLIBC: "2.35"
+      MAX_GLIBCXX: "3.4.30"
+      MAX_CXXABI: "1.3.13"
+      MAX_LIBGCC: "12.0.0"
+      # an AppImage much bigger than this means something unexpected got bundled
+      MAX_APPIMAGE_MB: "400"
     steps:
       - uses: actions/checkout@v5
 
@@ -203,13 +288,17 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: System libraries Qt needs
+      - name: System libraries (bundled into the AppImage) and test tools
         run: |
+          # Qt's X11 platform needs the xcb libraries (not on every desktop: they go into the
+          # AppImage); Xvfb and xdotool run the tests; appstream and desktop-file-utils check
+          # the metadata
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends \
             libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
             libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
-            libegl1 libgl1 libopengl0 libdbus-1-3 libfontconfig1
+            libegl1 libgl1 libopengl0 libdbus-1-3 libfontconfig1 libgtk-3-0 libcups2 \
+            xvfb xauth xdotool appstream desktop-file-utils
 
       - name: Install dependencies
         run: python -m pip install -r requirements.txt -c constraints.txt pyinstaller
@@ -223,7 +312,7 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py" -t .
 
       - name: Build the app folder
-        run: python -m PyInstaller ${{ env.PYINSTALLER_OPTIONS }} run.py
+        run: python -m PyInstaller ${{ env.PYINSTALLER_OPTIONS }} --runtime-hook packaging/linux/pyi_rth_linux_env.py run.py
 
       - name: Self test inside the built app
         env:
@@ -235,16 +324,111 @@ jobs:
           cat selftest.log
           exit $code
 
+      - name: License files
+        run: cp LICENSE dist/KanzonasCAD/LICENSE.txt && cp NOTICE.md dist/KanzonasCAD/NOTICE.md
+
       - name: Archive
+        run: tar -C dist -czf KanzonasCAD-linux.tar.gz KanzonasCAD
+
+      - name: Version
+        id: ver
+        run: echo "version=$(python -c 'import kanzonascad; print(kanzonascad.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch appimagetool and the AppImage runtime (pinned, checked)
         run: |
-          cp LICENSE NOTICE.md dist/KanzonasCAD/
-          tar -C dist -czf KanzonasCAD-linux.tar.gz KanzonasCAD
+          mkdir -p "$RUNNER_TEMP/tools"
+          fetch() {   # url, expected sha256, file
+            if ! [[ "$2" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::No SHA-256 pinned for $1 (set it in the linux job's env)"
+              curl -fsSL --retry 3 -o "$3" "$1" && echo "That file's SHA-256 is $(sha256sum "$3" | cut -d' ' -f1): check it on the release page before pinning it."
+              exit 1
+            fi
+            curl -fsSL --retry 3 -o "$3" "$1"
+            got=$(sha256sum "$3" | cut -d' ' -f1)
+            if [ "$got" != "$2" ]; then
+              echo "::error::$1 has SHA-256 $got, not the pinned $2"
+              exit 1
+            fi
+          }
+          fetch "$APPIMAGETOOL_URL" "$APPIMAGETOOL_SHA256" "$RUNNER_TEMP/tools/appimagetool-x86_64.AppImage"
+          chmod +x "$RUNNER_TEMP/tools/appimagetool-x86_64.AppImage"
+          # the runtime: the start of appimagetool (a type 2 AppImage: "AI\x02" at byte 8)
+          head -c "$APPIMAGE_RUNTIME_BYTES" "$RUNNER_TEMP/tools/appimagetool-x86_64.AppImage" > "$RUNNER_TEMP/tools/runtime-x86_64"
+          got=$(sha256sum "$RUNNER_TEMP/tools/runtime-x86_64" | cut -d' ' -f1)
+          if [ "$got" != "$APPIMAGE_RUNTIME_SHA256" ]; then
+            echo "::error::the runtime cut from appimagetool has SHA-256 $got, not the pinned $APPIMAGE_RUNTIME_SHA256"
+            exit 1
+          fi
+          python - "$RUNNER_TEMP/tools/runtime-x86_64" <<'PY'
+          import sys
+          d = open(sys.argv[1], "rb").read(16)
+          assert d[:4] == b"\x7fELF" and d[8:11] == b"AI\x02", "not a type 2 AppImage runtime"
+          PY
+
+      - name: Make the AppImage (AppDir, excluded libraries, compatibility checks)
+        run: |
+          python packaging/linux/make_appimage.py dist/KanzonasCAD AppDir \
+            --version "${{ steps.ver.outputs.version }}" \
+            --max-glibc "$MAX_GLIBC" --max-glibcxx "$MAX_GLIBCXX" \
+            --max-cxxabi "$MAX_CXXABI" --max-libgcc "$MAX_LIBGCC" \
+            --appimagetool "$RUNNER_TEMP/tools/appimagetool-x86_64.AppImage" \
+            --runtime-file "$RUNNER_TEMP/tools/runtime-x86_64" \
+            --output KanzonasCAD-x86_64.AppImage
+
+      - name: Check the AppImage (size, contents)
+        run: |
+          size=$(stat -c %s KanzonasCAD-x86_64.AppImage)
+          echo "KanzonasCAD-x86_64.AppImage: $((size / 1000000)) MB"
+          if [ "$size" -gt $((MAX_APPIMAGE_MB * 1000000)) ]; then
+            echo "::error::The AppImage is bigger than $MAX_APPIMAGE_MB MB"; exit 1
+          fi
+          # what's really inside (not just the AppDir it was made from)
+          rm -rf squashfs-root
+          ./KanzonasCAD-x86_64.AppImage --appimage-extract > /dev/null
+          test -x squashfs-root/AppRun
+          test -f squashfs-root/kanzonascad.desktop
+          test -f squashfs-root/usr/share/metainfo/io.github.keithlyding.kanzonascad.metainfo.xml
+          test -f squashfs-root/usr/lib/KanzonasCAD/LICENSE.txt
+          test -f squashfs-root/usr/lib/KanzonasCAD/NOTICE.md
+          bad=$(grep -v '^\s*\(#\|$\)' packaging/linux/excludelist | while read -r lib; do
+                  find squashfs-root -name "$lib" -type f; done)
+          if [ -n "$bad" ]; then echo "::error::Libraries the computer provides are bundled: $bad"; exit 1; fi
+          rm -rf squashfs-root
+
+      - name: Self test (inside the AppImage, on an X display)
+        run: |
+          # no FUSE on the build machines: the AppImage unpacks itself and runs
+          code=0
+          xvfb-run -a -s "-screen 0 1920x1080x24" \
+            ./KanzonasCAD-x86_64.AppImage --appimage-extract-and-run --selftest selftest-linux.log || code=$?
+          cat selftest-linux.log
+          if [ $code -ne 0 ]; then echo "::error::Self test failed with code $code"; exit 1; fi
+          if grep -q '^FAIL' selftest-linux.log; then echo "::error::Self test has failures"; exit 1; fi
+          grep -q '^PASS  speed budget' selftest-linux.log
+
+      - name: Smoke test (the AppImage starts and opens a project)
+        run: packaging/linux/smoke_test.sh ./KanzonasCAD-x86_64.AppImage --appimage-extract-and-run
 
       - uses: actions/upload-artifact@v4
         with:
           name: KanzonasCAD-linux
           path: KanzonasCAD-linux.tar.gz
           retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KanzonasCAD-appimage
+          path: KanzonasCAD-x86_64.AppImage
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: linux-selftest-log
+          path: selftest*.log
+          if-no-files-found: ignore
 
   # A release for each new version that reaches main: only after both builds are green, and
   # only once per version (a merge that didn't change __version__ publishes nothing).
@@ -288,7 +472,7 @@ jobs:
           if [ ! -s section.md ]; then echo "RELEASE_NOTES.md has no '## $v' section"; exit 1; fi
           # (between these marks, the app's update box shows the notes: updates.release_notes)
           { echo "<!-- kanzonascad-notes -->"; cat section.md; echo "<!-- /kanzonascad-notes -->"; } > notes.md
-          printf '\n---\n**Windows:** download `KanzonasCAD-v%s-setup.exe` and run it (no administrator rights needed; Windows may warn about an unknown publisher: More info > Run anyway). Or, without installing, `KanzonasCAD-v%s-windows.zip`: unzip it and run `KanzonasCAD\\KanzonasCAD.exe`.\n**Linux:** `KanzonasCAD-v%s-linux.tar.gz`, unpack it and run `KanzonasCAD/KanzonasCAD`.\nOr run it from source: see the README.\n' "$v" "$v" "$v" >> notes.md
+          printf '\n---\n**Windows:** download `KanzonasCAD-v%s-setup.exe` and run it (no administrator rights needed; Windows may warn about an unknown publisher: More info > Run anyway). Or, without installing, `KanzonasCAD-v%s-windows.zip`: unzip it and run `KanzonasCAD\\KanzonasCAD.exe`.\n**Portable (no install; settings and library stay with the app):** `KanzonasCAD-v%s-portable.zip`: unzip it anywhere (a USB stick) and run `KanzonasCAD\\KanzonasCAD.exe`; your settings, library and recovery copies stay in its `data` folder. To update, use Update now, or unzip the new one over the same folder (the `data` folder is kept).\n**Linux (64-bit PC; Ubuntu 22.04, Debian 12, Fedora 36 or newer):** download `KanzonasCAD-x86_64.AppImage`, make it executable (`chmod +x KanzonasCAD-x86_64.AppImage`, or Properties > Allow executing) and run it; it updates itself (Update now). Or `KanzonasCAD-v%s-linux.tar.gz`: unpack it and run `KanzonasCAD/KanzonasCAD`.\nOr run it from source: see the README.\n' "$v" "$v" "$v" "$v" >> notes.md
           cat notes.md
 
       - name: Publish
@@ -300,5 +484,10 @@ jobs:
           mv artifacts/KanzonasCAD-windows/KanzonasCAD-windows.zip "KanzonasCAD-v$v-windows.zip"
           mv artifacts/KanzonasCAD-linux/KanzonasCAD-linux.tar.gz "KanzonasCAD-v$v-linux.tar.gz"
           mv "artifacts/KanzonasCAD-setup/KanzonasCAD-v$v-setup.exe" .
-          gh release create "v$v" "KanzonasCAD-v$v-setup.exe" "KanzonasCAD-v$v-windows.zip" "KanzonasCAD-v$v-linux.tar.gz" \
+          mv artifacts/KanzonasCAD-portable/KanzonasCAD-portable.zip "KanzonasCAD-v$v-portable.zip"
+          # (the same name for every version, as KanzonasPDF's: it updates itself in place)
+          mv artifacts/KanzonasCAD-appimage/KanzonasCAD-x86_64.AppImage KanzonasCAD-x86_64.AppImage
+          chmod +x KanzonasCAD-x86_64.AppImage
+          gh release create "v$v" "KanzonasCAD-v$v-setup.exe" "KanzonasCAD-v$v-windows.zip" \
+            "KanzonasCAD-v$v-portable.zip" "KanzonasCAD-x86_64.AppImage" "KanzonasCAD-v$v-linux.tar.gz" \
             --target "$GITHUB_SHA" --title "KanzonasCAD $v" --notes-file notes.md --latest

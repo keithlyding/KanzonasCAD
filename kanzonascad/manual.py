@@ -124,7 +124,8 @@ with a scale the strip stays its size on paper.</p>
 
 <h2>Symbols, footprints and parts (the library)</h2>
 <p>Your <b>library</b> is a folder of its own (<code>Documents\\KanzonasCAD Library</code> to
-start; <b>Library folder...</b> picks another, a OneDrive folder say). It is kept apart from
+start, or <code>data\\Library</code> beside the program in the portable version; <b>Library
+folder...</b> picks another, a OneDrive folder say). It is kept apart from
 the program and from projects, so it lasts through updates and serves every project. Each
 project also keeps its own copy of the blocks it uses, so it opens the same anywhere, whatever
 happens to the library later.</p>
@@ -580,7 +581,8 @@ in inches, one file per sheet, border and title block on layer BORDER.</li>
 Edit &gt; Options..., Files, says; none turns backups off). <b>Open backups
 folder</b> opens it; to go back to one, open it like any project and Save as.</li>
 <li><b>Autosave</b>: every 5 minutes (Options, Files, changes it or turns it off), projects with unsaved changes are copied to a recovery
-folder (never over your own file). If KanzonasCAD doesn't close normally (a crash, a power
+folder (never over your own file; in the portable version, <code>data\\recovery</code> beside
+the program). If KanzonasCAD doesn't close normally (a crash, a power
 cut), it offers to recover them the next time it starts.</li>
 <li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
 black on white (layer colors are for the screen).</li>
@@ -649,8 +651,38 @@ KanzonasCAD for you (no administrator rights needed) or, if you pick it on the f
 for everyone on the PC (Windows asks for administrator rights), with a Start menu entry, an optional
 desktop shortcut, and <b>.kzcad</b> projects opening in KanzonasCAD with a double-click (DXF
 drawings get KanzonasCAD under <i>Open with</i>). It uninstalls from Windows Settings &gt;
-Apps; your projects and library are kept. The zip of the same version runs without
-installing.</p>
+Apps; your projects and library are kept.</p>
+<ul>
+<li><b>Without installing</b> (<b>KanzonasCAD-v&lt;version&gt;-windows.zip</b>): unzip it anywhere
+and run KanzonasCAD\\KanzonasCAD.exe. It keeps its settings on the computer, like the installed
+version.</li>
+<li><b>Portable version</b> (<b>KanzonasCAD-v&lt;version&gt;-portable.zip</b>): unzip the
+KanzonasCAD folder anywhere (a USB stick, a network drive) and run KanzonasCAD.exe. Because of
+the <b>portable.txt</b> file inside, your settings (<code>settings.ini</code>), your library
+(<code>Library</code>) and the autosave recovery copies (<code>recovery</code>) are kept in a
+<b>data</b> folder next to the program instead of the computer's registry and user folders, so
+they travel with the folder and nothing is left on the computer. The window title and Help
+&gt; About say <b>(portable)</b>. Keep the whole folder together; delete portable.txt to make it
+behave like the installed version. A library folder, template or recent project on the stick
+is found again when the stick gets another drive letter on another PC (E: here, F: there).</li>
+<li><b>PortableApps.com version</b> (KanzonasCAD Portable, for the PortableApps.com Platform):
+the same, with your files in the package's <b>Data</b> folder. The PortableApps.com Platform
+updates it, so KanzonasCAD doesn't check for updates by itself unless you tick Help &gt;
+<b>Check for updates automatically</b>, and then it only opens the release page.</li>
+<li><b>Linux</b>: <b>KanzonasCAD-x86_64.AppImage</b> (64-bit PC; Ubuntu 22.04, Debian 12, Fedora
+36 or newer). Make it executable (right-click &gt; Properties &gt; Permissions &gt; Allow
+executing file as program, or <code>chmod +x KanzonasCAD-x86_64.AppImage</code>) and
+double-click it; no installation or administrator rights are needed. If it doesn't start and
+mentions FUSE or libfuse.so.2, install FUSE 2 (Ubuntu 22.04 and Debian 12: <code>sudo apt
+install libfuse2</code>; Ubuntu 24.04 and later: <code>sudo apt install libfuse2t64</code>;
+Fedora: <code>sudo dnf install fuse-libs</code>) or start it with
+<code>--appimage-extract-and-run</code>. Settings are kept in
+~/.config/KanzonasCAD/KanzonasCAD.conf, recovery copies in
+~/.local/share/KanzonasCAD/KanzonasCAD/recovery, the library in ~/Documents/KanzonasCAD
+Library. The
+same program is also a folder, <b>KanzonasCAD-v&lt;version&gt;-linux.tar.gz</b>: unpack it and
+run KanzonasCAD/KanzonasCAD (it doesn't update itself).</li>
+</ul>
 
 <h2>Updates</h2>
 <p>KanzonasCAD asks GitHub for new versions by itself, at most once a day (also while it stays
@@ -667,6 +699,18 @@ administrator rights are needed for a copy installed for you; a copy installed f
 updates for all users too, and Windows asks for administrator rights first.</li>
 <li>The Windows zip (unzipped by hand): Update now downloads the new zip, checks it the same
 way, and replaces this copy when KanzonasCAD closes, then starts it again.</li>
+<li>The portable version: Update now downloads the new portable zip, checks it the same way,
+and replaces the program files in the same folder when KanzonasCAD closes, then starts it
+again; the data folder (settings, library, recovery copies) is kept. Or close KanzonasCAD and
+unzip the new download over the same folder, replacing the files.</li>
+<li>The PortableApps.com version: the PortableApps.com Platform updates it; Update now opens the
+release page.</li>
+<li>The Linux AppImage: Update now downloads the new KanzonasCAD-x86_64.AppImage, checks it the
+same way, puts it in place of the old file (same name and place), closes KanzonasCAD and starts
+the new version. If you keep it open, the new version starts the next time you open
+KanzonasCAD. If the AppImage is in a folder you can't change, the release page opens instead:
+download the new file and replace the old one yourself. The Linux folder (tar.gz) only opens
+the release page.</li>
 <li>Either way you're asked to save any changes first, and your projects and library are never
 touched.</li>
 </ul>

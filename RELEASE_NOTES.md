@@ -6,6 +6,16 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.4
+
+**New**
+- A portable version for Windows (the portable zip on the Releases page): unzip it anywhere, a USB
+  stick say, and run it. Your settings, library and recovery copies stay in a data folder
+  beside it, and nothing is left on the computer. Update now keeps that folder.
+- Linux: KanzonasCAD-x86_64.AppImage, one file that runs on Ubuntu 22.04, Debian 12, Fedora 36
+  and newer. Make it executable and run it; Update now replaces it with the new version.
+- A KanzonasCAD Portable package for the PortableApps.com Platform is on its way.
+
 ## 0.11.3
 
 **New**
