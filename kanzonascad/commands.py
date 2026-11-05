@@ -2106,7 +2106,7 @@ COMMANDS = {
     "DIMLINEAR": (DimLinearCmd, ["DLI", "DIM"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
-    "DUCT": (DuctCmd, ["WIREWAY", "WD"]),
+    "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)
     "SCOOT": (ScootCmd, ["AESCOOT"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
     "ALIGNOBJ": (AlignObjectsCmd, ["ALO"]),

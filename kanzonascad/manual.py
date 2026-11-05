@@ -17,9 +17,11 @@ and reports come next.</i></p>
 <h2>The window</h2>
 <ul>
 <li><b>Menus and ribbon</b> along the top, as in KanzonasPDF. The ribbon's tabs are
-<b>Home</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>. Double-click a tab name (or
-<b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
-<b>Ribbon group names</b> shows the group names under the buttons.</li>
+<b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>; each
+group of buttons has its name under it (Rail and duct, Dimensions, Blocks...). Double-click a
+tab name (or <b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
+<b>Ribbon group names</b> (View) turns the names off, for a more compact ribbon, and on
+again.</li>
 <li><b>Project tabs</b>: each open project has its own tab.</li>
 <li><b>Sheets panel</b> on the left: the project's sheets with their page numbers. Click one to
 show it, double-click to open its properties, right-click for more.</li>
@@ -473,7 +475,7 @@ between the two points (slanted too).</td></tr>
 <tr><td>DIN rail</td><td>DINRAIL, RAIL, DR</td><td>Real-size DIN rail from its start to its end
 (or type the length toward the cursor). Before the first click: <b>7.5</b> (TS35 x 7.5 mm, to
 start), <b>15</b> (TS35 x 15 mm) or <b>MINI</b> (TS15).</td></tr>
-<tr><td>Wire duct</td><td>DUCT, WIREWAY, WD</td><td>Real-size wire duct, the same way. Before
+<tr><td>Wire duct</td><td>DUCT, WIREWAY, WD, PANDUIT</td><td>Real-size wire duct, the same way. Before
 the first click, type its size, width x depth: <code>2x3</code> (inches) or
 <code>50x75mm</code>.</td></tr>
 </table>
