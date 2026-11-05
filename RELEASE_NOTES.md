@@ -6,6 +6,17 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.4
+
+**New**
+- Delete several layers at once: in Layers..., select them (Ctrl+click or Shift+click, or
+  Select unused for the empty ones) and click Delete. Empty layers go right away; for layers
+  that still hold objects, it asks whether to delete them too or keep them. One Undo brings
+  everything back.
+
+**Fixed**
+- A layer used only by the title block could be deleted as if it were empty.
+
 ## 0.12.3
 
 **New**

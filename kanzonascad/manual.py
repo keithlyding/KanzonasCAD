@@ -63,8 +63,12 @@ uses unless it has its own (8 rows, A to H, and 10 columns to start), the device
 <li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors.</li>
 </ul></li>
 <li><b>Edit title block</b>: see below.</li>
-<li><b>Layers...</b>: add, rename, recolor, switch off and lock layers, and choose the current
-layer. The Layer box on the Home tab picks the current layer; with objects selected, picking
+<li><b>Layers...</b>: add, rename, recolor, switch off, lock and delete layers, and choose the
+current layer. To clean up (after importing a DXF, say), select several layers (Ctrl+click,
+Shift+click) or click <b>Select unused</b> (the empty ones), then <b>Delete</b>: empty layers
+go at once; if some hold objects (on any sheet or in the title block), it lists them and asks
+whether to delete them too, with everything on them, or keep them. Layer 0 always stays, and
+one Undo brings it all back. The Layer box on the Home tab picks the current layer; with objects selected, picking
 a layer moves them to it.</li>
 </ul>
 

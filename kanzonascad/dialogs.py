@@ -454,6 +454,8 @@ class LayersDialog(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.verticalHeader().hide()
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        # (several at once, Ctrl+click or Shift+click: Delete takes them all)
+        self.table.setSelectionMode(QTableWidget.ExtendedSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.cellDoubleClicked.connect(self._double)
         self.table.cellClicked.connect(self._clicked)
@@ -461,13 +463,16 @@ class LayersDialog(QDialog):
         row = QHBoxLayout()
         for label, slot in (("New", self._new), ("Rename", self._rename),
                             ("Color...", self._color), ("Delete", self._delete),
+                            ("Select unused", self._select_unused),
                             ("Set current", self._set_current)):
             b = QPushButton(label)
+            b.setObjectName("layers_" + label.lower().replace(" ", "_").strip("."))
             b.clicked.connect(slot)
             row.addWidget(b)
         v.addLayout(row)
         note = QLabel("Click On or Locked to switch it. Double-click a name to make it the "
-                      "current layer (new objects go on it).")
+                      "current layer (new objects go on it). Select several (Ctrl or Shift) "
+                      "to delete them together; Select unused picks the empty ones.")
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
         v.addWidget(note)
@@ -578,21 +583,81 @@ class LayersDialog(QDialog):
         if c.isValid():
             self._change(n, color=c.name())
 
+    def _selected(self):
+        """The names of the selected rows, in the list's order."""
+        rows = sorted({i.row() for i in self.table.selectedIndexes()})
+        if not rows and self.table.currentRow() >= 0:
+            rows = [self.table.currentRow()]
+        return [self.table.item(r, 0).data(Qt.UserRole) for r in rows]
+
+    def _usage(self):
+        """{layer: how many objects are on it}, on every sheet and in the title block."""
+        out = {}
+        for s in self.project.sheets + [self.project.title_block]:
+            for e in s.entities.values():
+                out[e.layer] = out.get(e.layer, 0) + 1
+        return out
+
+    def _select_unused(self):
+        used = self._usage()
+        t = self.table
+        t.clearSelection()
+        t.setSelectionMode(QTableWidget.MultiSelection)     # (select adds, row by row)
+        for r in range(t.rowCount()):
+            name = t.item(r, 0).data(Qt.UserRole)
+            if name != "0" and not used.get(name):
+                t.selectRow(r)
+        t.setSelectionMode(QTableWidget.ExtendedSelection)
+
+    def _ask_in_use(self, in_use, used):
+        """What to do with selected layers that hold objects: "delete" (with their objects),
+        "keep" (only the empty ones go) or None (cancel)."""
+        lines = "\n".join("  %s: %d object(s)" % (n, used[n]) for n in in_use[:12])
+        if len(in_use) > 12:
+            lines += "\n  ... and %d more" % (len(in_use) - 12)
+        box = QMessageBox(QMessageBox.Question, "Delete layers",
+                          "These layers hold objects:\n%s\n\nDelete them too, with "
+                          "everything on them? (Undo brings them back.)" % lines, parent=self)
+        delete = box.addButton("Delete them too", QMessageBox.DestructiveRole)
+        keep = box.addButton("Keep them", QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(keep)
+        box.exec()
+        got = box.clickedButton()
+        return "delete" if got is delete else "keep" if got is keep else None
+
     def _delete(self):
-        n = self._name()
-        if not n:
+        """Delete the selected layers: the empty ones; those holding objects (on any sheet
+        or in the title block) only when you say so, and their objects with them. Layer 0
+        stays. One undoable step."""
+        names = [n for n in self._selected() if n and n in self.project.layers]
+        if not names:
             return
-        if n == "0":
-            QMessageBox.information(self, "Layers", "Layer 0 can't be deleted.")
-            return
-        used = sum(1 for s in self.project.sheets for e in s.entities.values() if e.layer == n)
-        if used:
-            QMessageBox.information(self, "Layers", "Layer %s holds %d object(s): move or "
-                                    "erase them first." % (n, used))
-            return
-        with self.project.edit("Delete layer") as ed:
-            ed.layer(n, self.project.layers[n].to_dict(), None)
-        if self.current == n:
+        if "0" in names:
+            names.remove("0")
+            if not names:
+                QMessageBox.information(self, "Layers", "Layer 0 can't be deleted.")
+                return
+        used = self._usage()
+        in_use = [n for n in names if used.get(n)]
+        if in_use:
+            what = self._ask_in_use(in_use, used)
+            if what is None:
+                return
+            if what == "keep":
+                names = [n for n in names if not used.get(n)]
+                in_use = []
+                if not names:
+                    return
+        gone = set(names)
+        with self.project.edit("Delete layer" if len(names) == 1 else "Delete layers") as ed:
+            for s in self.project.sheets + [self.project.title_block]:
+                for e in list(s.entities.values()):
+                    if e.layer in gone:
+                        ed.remove(s, e.id)
+            for n in names:
+                ed.layer(n, self.project.layers[n].to_dict(), None)
+        if self.current in gone:
             self.current = "0"
         self._fill()
 
