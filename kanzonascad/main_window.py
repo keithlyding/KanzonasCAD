@@ -420,6 +420,15 @@ class MainWindow(BlockEditing, QMainWindow):
           label="Save block as",
           tip="Save the block open in this tab to your library under a new name (the one it "
               "was opened from stays as it was)")
+        for key, text, tip in (
+                ("tag", "Show &tag", "its device tag (M1, CR3)"),
+                ("cat", "Show &part number", "its part (catalog) number"),
+                ("desc", "Show &description", "its description"),
+                ("name", "Show &block name", "its library footprint's name"),
+                ("", "&No label", "no label")):
+            A("fp_label_" + (key or "none"), text, lambda _c=False, k=key: self.footprint_label(k),
+              icon="text", label=text.replace("&", ""),
+              tip="The selected footprints show %s" % tip)
         A("manual", "&User manual", lambda: self.show_manual(), "F1", label="Manual")
         A("check_updates", "Check for &updates...", lambda: self.check_updates(True),
           icon="updates", label="Updates")
@@ -477,9 +486,15 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
                   "scoot", "align_dev", "align_obj", None, "trim_wire", "del_wire", "clean_wires", "del_comp", None,
-                  "object_color", None, "lay_off", "lay_iso",
+                  "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
-            m.addSeparator() if k is None else m.addAction(a[k])
+            if k == "FPLABEL":
+                lm = m.addMenu("&Footprint label")
+                for lk in self.LABEL_KEYS:
+                    lm.addAction(a[lk])
+                lm.menuAction().setIcon(theme.icon("text"))
+            else:
+                m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_cw", "sheet_ccw",
                   None, "renumber",
@@ -545,7 +560,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Settings", "large", [a["schematic_settings"]]),
         ])
         r.add_tab("Panel", [
-            ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"]]),
+            ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"],
+                                     split_button([a[k] for k in self.LABEL_KEYS])]),
             ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"],
                                  a["dup_block"], a["save_block_as"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
@@ -1255,6 +1271,10 @@ class MainWindow(BlockEditing, QMainWindow):
             m.addSeparator()
             for k in ("erase", "move", "copy", "rotate", "scale", "mirror"):
                 m.addAction(a[k])
+            if self._selected_footprints():
+                lm = m.addMenu("Footprint label")
+                for k in self.LABEL_KEYS:
+                    lm.addAction(a[k])
             m.addAction("Deselect all", lambda: v.set_selection(set()))
         m.addSeparator()
         m.addAction(a["select_all"])
@@ -1633,6 +1653,39 @@ class MainWindow(BlockEditing, QMainWindow):
         v = self.view()
         if v is not None:
             dialogs.project_properties(self, v.project, tab if isinstance(tab, int) else 0)
+
+    LABEL_KEYS = ("fp_label_tag", "fp_label_cat", "fp_label_desc", "fp_label_name",
+                  "fp_label_none")
+
+    def _selected_footprints(self):
+        v = self.view()
+        if v is None:
+            return []
+        ents = v.sheet().entities
+        return [e for e in (ents.get(i) for i in v.sel)
+                if isinstance(e, M.Insert) and e.defn is not None
+                and e.defn.kind == "footprint" and not v.layer_locked(e.layer)]
+
+    def footprint_label(self, which):
+        """Footprint label: the selected footprints show their tag, part number, description
+        or block name, or nothing (which: a key of model.LABELS, or ""); one undoable edit.
+        The label is paper-sized, as the tags."""
+        v = self.view()
+        fps = self._selected_footprints()
+        if v is None or not fps:
+            self._say("Footprint label: select the footprints first (on a layer that isn't "
+                      "locked)")
+            return 0
+        sheet = v.sheet()
+        h = v.project.settings.get("tag_height") * sheet.k()
+        with v.project.edit("Footprint label") as ed:
+            for e in fps:
+                if e.label != which:
+                    ed.change(sheet, e.copy(label=which, tag_h=e.tag_h or h))
+        self._say("%d footprint(s) %s" % (
+            len(fps), "show their %s" % M.LABEL_NAMES[which].lower() if which
+            else "show no label"))
+        return len(fps)
 
     def object_color(self):
         v = self.view()

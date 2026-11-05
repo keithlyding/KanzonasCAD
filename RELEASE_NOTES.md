@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.7
+
+**New**
+- Footprint label: select footprints and choose what they show written on them: their tag,
+  part number, description or block name, or nothing (Modify > Footprint label, the Panel
+  tab, or right-click). Each footprint keeps its own choice, and one Undo takes it back.
+
 ## 0.12.6
 
 **New**
