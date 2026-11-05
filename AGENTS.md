@@ -65,6 +65,13 @@ long one by hand before a release with a few seeds:
 `QT_QPA_PLATFORM=offscreen python tests/battery.py OUT_DIR --ops 3000 --seed N`. A failure it
 finds becomes a fix and a unit test of its own.
 
+## Security updates
+- `.github/workflows/security-check.yml` runs every Monday (and by hand): pip-audit on
+  `constraints.txt`, and `tools/check_dependencies.py` for newer ezdxf, ezdwg and PySide6
+  releases (they read untrusted DXF, DWG and picture files; their fixes don't always get a PyPI
+  advisory). It reports in one open issue labeled `security`. Act on it promptly: bump the pin in
+  `constraints.txt` on a branch, read the release notes, and release when both builds are green.
+
 ## Design rules
 - **The model has no Qt** (`model.py`, `geometry.py`, `trim.py`, `sheetframe.py`): it can be
   loaded, edited, checked and exported without a window.
