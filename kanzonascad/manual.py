@@ -618,7 +618,9 @@ selects what is wholly inside; <b>right to left</b> (green, dashed) also selects
 crosses.</li>
 <li><b>Lasso</b>: press in an empty spot, hold the button and draw around the objects, then let
 go. Dragged first to the <b>right</b> it is a window lasso (blue: what is wholly inside); to
-the <b>left</b>, a crossing lasso (green: what it touches too).</li>
+the <b>left</b>, a crossing lasso (green: what it touches too). A quick drag that draws no
+loop (from one corner toward the other) is a window from where you pressed to where you let
+go, left to right or right to left as above.</li>
 <li>While a window or lasso is open, the objects it would select light up.</li>
 <li><b>Select all</b> (Ctrl+A); Esc clears the selection.</li>
 <li>Selected objects show blue <b>grips</b>. Click a grip, then click where it goes, to stretch

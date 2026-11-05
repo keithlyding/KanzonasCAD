@@ -458,6 +458,17 @@ class SelectionFeelTest(unittest.TestCase):
         drag(self.v, self.loop(False))
         self.assertEqual(self.v.sel, {self.a.id, self.b.id})
 
+    def test_quick_drag_is_a_window(self):
+        # (the owner: "if I ... move my mouse too quickly, the select doesn't take": a fast
+        # drag gives a few points nearly on a line, a lasso with nothing inside it)
+        right = [(1.5 + 0.38 * i, 1.0 + 0.32 * i + (0.02 if i % 2 else 0)) for i in range(6)]
+        drag(self.v, right)                                     # left to right: window
+        self.assertEqual(self.v.sel, {self.a.id})
+        self.v.set_selection(set())
+        left = [(3.4 - 0.3 * i, 2.6 - 0.24 * i + (0.02 if i % 2 else 0)) for i in range(6)]
+        drag(self.v, left)                                      # right to left: crossing
+        self.assertEqual(self.v.sel, {self.a.id, self.b.id})
+
     def test_hover_and_window_preview_light_up(self):
         from PySide6.QtCore import QPointF
         v = self.v

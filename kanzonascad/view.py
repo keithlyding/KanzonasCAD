@@ -32,6 +32,21 @@ def _step_text(dx, dy):
     return "%g in %s" % (abs(dy), "up" if dy > 0 else "down")
 
 
+def _lasso_has_room(poly):
+    """True when a lasso encloses room enough to be one (a quarter of its box at least);
+    a quick drag's few points along a line are a window instead."""
+    x0, y0, x1, y1 = G.bbox_of(poly)
+    box = (x1 - x0) * (y1 - y0)
+    if box <= 0:
+        return False
+    area = 0.0
+    for i in range(len(poly)):
+        ax, ay = poly[i]
+        bx, by = poly[(i + 1) % len(poly)]
+        area += ax * by - bx * ay
+    return abs(area) / 2 >= 0.25 * box
+
+
 GLOW_LIMIT = 6000           # path elements past which the hover glow is drawn plainly
 
 
@@ -608,11 +623,13 @@ class CadView(QWidget):
         limit objects would have to be checked (the preview then waits for the click)."""
         w = self._window
         lasso = w["lasso"]
-        if lasso is not None and len(lasso) >= 3:
+        if lasso is not None and len(lasso) >= 3 and _lasso_has_room(lasso + [end]):
             poly = lasso + [end]
             rect = G.bbox_of(poly)
             crossing = w["crossing"]
         else:
+            # (a quick drag gives a few points nearly on a line: a lasso with nothing inside
+            # it selected nothing; it is the window from where it started to where it ends)
             poly = None
             start = w["start"]
             rect = (min(start[0], end[0]), min(start[1], end[1]),
@@ -1149,10 +1166,11 @@ class CadView(QWidget):
         w = self._window
         if w is None or self.cursor is None:
             return
-        if w["lasso"] is not None:
-            poly = QPolygonF([self.to_screen(q) for q in w["lasso"] + [self.cursor]])
+        lasso = w["lasso"]
+        if lasso is not None and len(lasso) >= 3 and _lasso_has_room(lasso + [self.cursor]):
+            poly = QPolygonF([self.to_screen(q) for q in lasso + [self.cursor]])
             crossing = w["crossing"]
-        else:
+        else:                           # (a window, or a drag too quick to be a lasso)
             a = self.to_screen(w["start"])
             b = self.to_screen(self.cursor)
             r = QRectF(a, b).normalized()
