@@ -14,6 +14,9 @@ build fails without them.
   it is. The built-in title blocks show DRAWN, REV DATE and PRINTED (a project made before
   this keeps its title block: Project properties can swap in the new one).
 
+**Fixed**
+- KanzonasCAD could crash some time after the Sheet scale window had been opened and closed.
+
 ## 0.12.8
 
 **New**
