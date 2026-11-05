@@ -15,7 +15,7 @@ and the PortableApps.com layout; on Linux (job `linux`, packaging/linux/) the ap
 tar.gz and an AppImage made from it; each runs the unit tests and its own `--selftest` (the
 Windows build also inside the installed, portable and PortableApps.com copies, the Linux build
 inside the AppImage). On `main`, job `publish` then makes a GitHub release `v<version>` with
-the downloads and that version's RELEASE_NOTES.md section, once per version and only when both
+the downloads, their `SHA256SUMS.txt` and that version's RELEASE_NOTES.md section, once per version and only when both
 builds are green (full releases, not pre-releases: the owner's choice). A merge that doesn't
 change `__version__` publishes nothing. The app's update box (`updates.py`) shows those notes
 and installs the release.

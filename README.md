@@ -71,6 +71,11 @@ and place) and starts it again. The same program is also a plain folder,
 `KanzonasCAD-v<version>-linux.tar.gz` (unpack it and run `KanzonasCAD/KanzonasCAD`; it
 doesn't update itself).
 
+**Checking a download:** every release is built from this repository's source code by
+GitHub's own build servers, and lists the SHA-256 checksum of each download (`SHA256SUMS.txt`,
+also at the end of the release notes). Compare it with `Get-FileHash <file>` in PowerShell on
+Windows, or `sha256sum <file>` on Linux.
+
 The rest of this page runs KanzonasCAD from its source code instead: for trying changes before
 they're released, or on a PC where you can't run a setup.
 

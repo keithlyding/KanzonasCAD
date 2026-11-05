@@ -488,6 +488,14 @@ jobs:
           # (the same name for every version, as KanzonasPDF's: it updates itself in place)
           mv artifacts/KanzonasCAD-appimage/KanzonasCAD-x86_64.AppImage KanzonasCAD-x86_64.AppImage
           chmod +x KanzonasCAD-x86_64.AppImage
+          # the SHA-256 of every download (as KanzonasPDF's): in SHA256SUMS.txt and in the notes,
+          # so anyone can check that what they downloaded is what was built here
+          sha256sum "KanzonasCAD-v$v-setup.exe" "KanzonasCAD-v$v-windows.zip" \
+            "KanzonasCAD-v$v-portable.zip" "KanzonasCAD-x86_64.AppImage" \
+            "KanzonasCAD-v$v-linux.tar.gz" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          { printf '\n**SHA-256 checksums** (also in `SHA256SUMS.txt`):\n```\n'; cat SHA256SUMS.txt; printf '```\n'; } >> notes.md
           gh release create "v$v" "KanzonasCAD-v$v-setup.exe" "KanzonasCAD-v$v-windows.zip" \
             "KanzonasCAD-v$v-portable.zip" "KanzonasCAD-x86_64.AppImage" "KanzonasCAD-v$v-linux.tar.gz" \
+            SHA256SUMS.txt \
             --target "$GITHUB_SHA" --title "KanzonasCAD $v" --notes-file notes.md --latest
