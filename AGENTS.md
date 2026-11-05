@@ -59,6 +59,23 @@ and installs the release.
   to `constraints.txt`. Keep the license of every dependency compatible with MIT (no GPL or
   AGPL libraries: KanzonasCAD does not use PyMuPDF).
 
+## The battery
+`tests/battery.py` is the exhaustive battery: random editing (thousands of steps with the model
+checked after each, the wire groups, dots and crossings kept up to date checked against a
+fresh count, save/open round trips, undo all the way back and redo all the way forward), every
+menu command in three states, file round trips, speed at scale and pictures. A short run of it
+is part of the unit tests (`tests/test_battery_quick.py`) and so runs on every build; run the
+long one by hand before a release with a few seeds:
+`QT_QPA_PLATFORM=offscreen python tests/battery.py OUT_DIR --ops 3000 --seed N`. A failure it
+finds becomes a fix and a unit test of its own.
+
+## Security updates
+- `.github/workflows/security-check.yml` runs every Monday (and by hand): pip-audit on
+  `constraints.txt`, and `tools/check_dependencies.py` for newer ezdxf, ezdwg and PySide6
+  releases (they read untrusted DXF, DWG and picture files; their fixes don't always get a PyPI
+  advisory). It reports in one open issue labeled `security`. Act on it promptly: bump the pin in
+  `constraints.txt` on a branch, read the release notes, and release when both builds are green.
+
 ## Design rules
 - **The model has no Qt** (`model.py`, `geometry.py`, `trim.py`, `sheetframe.py`): it can be
   loaded, edited, checked and exported without a window.

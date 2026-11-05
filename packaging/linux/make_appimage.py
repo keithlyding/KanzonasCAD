@@ -1,7 +1,7 @@
 """Makes the Linux AppImage from the PyInstaller folder (the Linux job of
 .github/workflows/build.yml runs it; it runs the same way on any Linux machine).
 
-    python packaging/linux/make_appimage.py dist/KanzonasCAD AppDir --version 0.11.4 \
+    python packaging/linux/make_appimage.py dist/KanzonasCAD AppDir --version 0.11.5 \
         [--max-glibc 2.35 --max-glibcxx 3.4.30] \
         [--appimagetool appimagetool-x86_64.AppImage --runtime-file runtime-x86_64 \
          --output KanzonasCAD-x86_64.AppImage]

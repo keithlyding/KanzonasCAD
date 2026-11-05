@@ -1,0 +1,55 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Don't attach a client's real drawing**: if a file is needed, make a
+        sample that shows the problem. For anything that could let a file run code or expose data,
+        use the Security tab's **Report a vulnerability** instead (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: KanzonasCAD version
+      description: Help > About shows it.
+      placeholder: "0.11.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: edition
+    attributes:
+      label: How do you run it?
+      options:
+        - Installed (setup.exe)
+        - Windows zip
+        - Linux
+        - Running from source
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Windows or Linux version
+      placeholder: Windows 11 23H2
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a project / import a DXF that ...
+        2. Type ... at the command line, or click ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or anything else
+      description: Drag images here. Hide anything private.

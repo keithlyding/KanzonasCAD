@@ -6,7 +6,7 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
-## 0.11.4
+## 0.11.5
 
 **New**
 - A portable version for Windows (the portable zip on the Releases page): unzip it anywhere, a USB
@@ -15,6 +15,12 @@ build fails without them.
 - Linux: KanzonasCAD-x86_64.AppImage, one file that runs on Ubuntu 22.04, Debian 12, Fedora 36
   and newer. Make it executable and run it; Update now replaces it with the new version.
 - A KanzonasCAD Portable package for the PortableApps.com Platform is on its way.
+
+## 0.11.4
+
+**Fixed**
+- Opening a damaged DXF file could garble long multi-line text; DXF files saved in the Korean
+  Johab code page couldn't be read. (The DXF library, ezdxf, updated to 1.4.5.)
 
 ## 0.11.3
 
