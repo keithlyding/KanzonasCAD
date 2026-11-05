@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.11.6
+
+**New**
+- Setting a panel sheet's scale is easier. Sheet scale... shows the sheet with your drawing on
+  it at the scale you pick, says what the scale means ("1 inch on paper = 4 inches of panel"),
+  and turns red when the drawing is too big, naming a scale that fits.
+- Fit picks the biggest scale at which everything fits, clear of the title block. Before
+  anything is drawn, give the cabinet's width, height and depth: Fit leaves room for its front
+  and its side.
+- Click Scale in the status bar for Fit and the common scales in one click. It warns
+  ("doesn't fit") when the drawing runs past the border, and Export to PDF asks first.
+
 ## 0.11.5
 
 **New**

@@ -473,10 +473,25 @@ crosshair</b> runs its lines across the whole view.</li>
 
 <h2>Panel sheets and dimensions</h2>
 <p>A panel layout is drawn at <b>real size</b>: a 3 inch contactor is 3 inches in the drawing,
-on every sheet, forever. Each sheet has <b>one scale</b> that only sets how big it prints:
-<b>Sheet scale...</b> (Panel tab), Sheet properties, or click <b>Scale 1:4</b> in the status
-bar. Pick 1:2, 1:4, 1:5... or an architectural one (3" = 1'-0"...), or type one (1:6).</p>
+on every sheet, forever. Each sheet has <b>one scale</b> that only sets how big it prints.</p>
 <ul>
+<li><b>Sheet scale...</b> (Panel tab) shows the sheet at its paper size with your drawing
+inside at the scale you pick, says what the scale means in plain words ("1 inch on paper = 4
+inches of panel") and how much of the room the drawing takes, in green when it fits, amber
+when it fits but not where it is (tick <b>Move the drawing to the middle of the free
+space</b>), red when it is too big (it names a scale that fits). Pick 1:2, 1:4, 1:5... or an
+architectural one (3" = 1'-0"...), or type one (1:6).</li>
+<li><b>Fit</b> picks the biggest scale at which the drawing fits inside the border and clear
+of the title block. With nothing drawn yet, give the <b>Cabinet size</b> (width, height and,
+optionally, depth, in inches): Fit then makes room for the cabinet's front and, with a depth,
+its side beside it, so you can draw the outside of the cabinet as well as the backplate. The
+size is kept with the sheet, and the next panel sheet offers the one you used last.</li>
+<li>Click <b>Scale 1:4</b> in the status bar for a short list: <b>Fit</b> (with the scale it
+would pick), the common scales, and <b>More...</b> (the Sheet scale window). A sheet's scale
+is also in Sheet properties.</li>
+<li>When the drawing runs past the border or over the title block at the sheet's scale, the
+status bar says <b>doesn't fit</b> (in amber), and Export to PDF asks before printing it cut
+off.</li>
 <li>The border, zones and title block are drawn around the real-size drawing, enlarged by the
 scale, so the sheet prints at its paper size (PDF) with the drawing at that scale. DXF
 exports hold the real-size drawing with the border enlarged around it, as AutoCAD drawings

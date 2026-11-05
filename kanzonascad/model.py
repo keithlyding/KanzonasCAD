@@ -1443,6 +1443,16 @@ SCALE_PRESETS = [
     ('3/4" = 1\'-0"', 1 / 16), ('1/2" = 1\'-0"', 1 / 24), ('1/4" = 1\'-0"', 1 / 48),
 ]
 
+def _cabinet(v):
+    """A stored cabinet size as [width, height, depth] (real inches), or None."""
+    try:
+        w, h = float(v[0]), float(v[1])
+        d = float(v[2]) if len(v) > 2 and v[2] else 0.0
+    except (TypeError, ValueError, IndexError):
+        return None
+    return [w, h, max(d, 0.0)] if w > 0 and h > 0 else None
+
+
 SHEET_KINDS = {"schematic": "Schematic", "panel": "Panel", "report": "Report", "other": "Other"}
 TITLE_BLOCK_ID = 0          # the project's title block is kept as a sheet with this id
 
@@ -1463,6 +1473,9 @@ class Sheet:
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
         self.scale_name = ""                # its preset's name (1/4" = 1'-0"...), "" for 1:N
+        self.cabinet = None                 # a panel sheet's cabinet [width, height, depth]
+                                            # (real inches, depth 0 when not given), or None:
+                                            # what Sheet scale fits while nothing is drawn
         self.reserve = None                 # ("right" | "bottom", paper inches): the title
                                             # block's strip, the zones stop at it (set by the
                                             # project: Project.sync_reserve)
@@ -1614,6 +1627,7 @@ class Sheet:
                 "number_order": self.number_order,
                 "number": self.number, "fields": dict(self.fields),
                 "scale": self.scale, "scale_name": self.scale_name,
+                "cabinet": list(self.cabinet) if self.cabinet else None,
                 "xref_frozen": self.xref_frozen,
                 "xref_shown": [list(t) for t in self.xref_shown]
                 if self.xref_shown is not None else None}
@@ -1643,6 +1657,7 @@ class Sheet:
             self.scale = 1.0
         self.scale = self.scale if self.scale > 0 else 1.0
         self.scale_name = str(d.get("scale_name", "") or "")
+        self.cabinet = _cabinet(d.get("cabinet"))
         self.xref_frozen = bool(d.get("xref_frozen", False))
         shown = d.get("xref_shown")
         self.xref_shown = [tuple(t) for t in shown] if shown is not None else None
