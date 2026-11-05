@@ -15,10 +15,20 @@ AutoCAD but want fewer commands, fewer settings and fewer surprises.
 - Three-phase power symbols, terminal strips that number their terminals, PLC I/O points.
 - Wire numbers (`6001`) that number themselves, with distribution blocks (`6001A`) and
   off-sheet connectors.
+- Wire tools: Trim wire, Delete wire, Clean up wires, double landing on a terminal, Delete
+  component that joins the wire back up, Scoot and Align devices on their wires, wire crossings
+  drawn plain, with a gap or a loop.
+- Panel sheets at a scale (1:4, 3" = 1'-0"...) with dimensions, DIN rail and wire duct at real
+  size, and a materials list of the rail and duct to cut.
+- Project templates, title block position (corner, right-hand or bottom strip), and Options.
 - DXF in and out, DWG in (AutoCAD R13-2018), PDF out.
 
-Coming next: panel layouts with
-DIN rail and wire duct, and reports. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
+![A schematic sheet](docs/screenshot-schematic.png)
+
+![A panel sheet at 1:4](docs/screenshot-panel.png)
+
+Coming next: assigning parts to devices, shared libraries, and reports (bills of materials,
+wire lists). The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Press **F1** in the app for the user manual.
 
