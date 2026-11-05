@@ -53,7 +53,8 @@ def app_icon():
 
 def logo_pixmap(height):
     """KanzonasCAD's logo (the cactus and sunflower, the name, the tagline) at the given
-    height, shipped inside the package (made by tools/make_logos.py)."""
+    height, shipped inside the package (made in Kanzonas-Site's brand/, the single source
+    of truth for the logos)."""
     import os
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QPixmap

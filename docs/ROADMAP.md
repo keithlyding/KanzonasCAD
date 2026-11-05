@@ -153,6 +153,9 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   belongs to one project.
 - Delete component (not the Delete key) joins the wire back up through a deleted symbol;
   Erase leaves the gap, as in AutoCAD Electrical.
+- Logos (owner, Nov 2026): every Kanzonas logo comes from the Kanzonas-Site repository's
+  `brand/` folder (its make_logos.py, artwork, fonts and SPEC.md), the single source of truth.
+  A logo is changed there, never here, and its files copied in (brand/README.md says where).
 - Full GitHub releases for each new version on main; the app updates itself.
 - Builds as in KanzonasPDF (owner, Nov 2026): every push builds; a finished piece of work is
   pushed, its pull request opened and merged once the `build` and `linux` checks are green
