@@ -164,6 +164,7 @@ class LibraryPanel(QWidget):
     changed = Signal()
     propertiesRequested = Signal(str, str)          # kind, block name (Properties...)
     editRequested = Signal(str, str)                # kind, block name (Edit block...)
+    duplicateRequested = Signal(str, str)           # kind, block name (Duplicate...)
 
     def __init__(self, library, parent=None):
         super().__init__(parent)
@@ -215,11 +216,16 @@ class LibraryPanel(QWidget):
         self.b_edit.setToolTip("Change the selected block's drawing, pins and tag in a tab "
                                "of its own (Save block puts it back in the library)")
         self.b_edit.clicked.connect(lambda: self._ask(self.editRequested))
+        self.b_dup = QPushButton("Duplicate...")
+        self.b_dup.setToolTip("Copy the selected block under a new name (catalog number left "
+                              "blank) and open the copy in Edit block to change it")
+        self.b_dup.clicked.connect(lambda: self._ask(self.duplicateRequested))
         self.b_part = QPushButton("New part...")
         self.b_part.clicked.connect(lambda: self.edit_part(new=True))
         self.b_delete = QPushButton("Delete")
         self.b_delete.clicked.connect(self.delete_current)
-        for b in (self.b_insert, self.b_props, self.b_edit, self.b_part, self.b_delete):
+        for b in (self.b_insert, self.b_props, self.b_edit, self.b_dup, self.b_part,
+                  self.b_delete):
             row.addWidget(b)
         v.addLayout(row)
         self.info = _hint("")
@@ -344,6 +350,7 @@ class LibraryPanel(QWidget):
         m.addAction("Insert", self.insert_current)
         m.addAction("Properties...", lambda: self._ask(self.propertiesRequested))
         m.addAction("Edit block...", lambda: self._ask(self.editRequested))
+        m.addAction("Duplicate...", lambda: self._ask(self.duplicateRequested))
         m.addSeparator()
         m.addAction("New part...", lambda: self.edit_part(new=True))
         m.addAction("Delete", self.delete_current)

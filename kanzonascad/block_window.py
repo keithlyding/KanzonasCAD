@@ -1,11 +1,12 @@
-"""Changing library blocks from the main window: a block's Properties..., Edit block... (the
-block's drawing in a tab of its own, block_editor.py) and Save block, and then the copies
+"""Changing library blocks from the main window: a block's Properties..., Duplicate..., Edit
+block... (the block's drawing in a tab of its own, block_editor.py), Save block and Save block
+as..., and then the copies
 placed in the project open in the drawing tab, updated when you say so. A mixin of
 MainWindow (main_window.py), kept apart so the window's own file stays about the window."""
 
 from PySide6.QtCore import Qt, QPointF, QTimer
 from PySide6.QtGui import QColor, QPen
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QInputDialog, QLineEdit, QMessageBox
 
 from . import block_editor as BE
 from . import model as M
@@ -230,6 +231,88 @@ class BlockEditing:
         self._say(msg)
         src = d.block_source if self._is_open(d.block_source) else None
         self._offer_update(src, defn, defn.name, res.pin_map)
+        return True
+
+    # ---- Duplicate... and Save block as... ------------------------------------------------
+    def _new_block_name(self, kind, base, title):
+        """Ask for the name of a new library block (offered: "<base> copy", "<base> copy 2"
+        ...); a name already in the library is asked again. None when cancelled."""
+        n, name = 1, "%s copy" % base
+        while self.library.get(kind, name) is not None:
+            n += 1
+            name = "%s copy %d" % (base, n)
+        while True:
+            name, ok = QInputDialog.getText(self, title, "Name of the new %s:" % kind,
+                                            QLineEdit.Normal, name)
+            name = (name or "").strip()
+            if not ok or not name:
+                return None
+            if self.library.get(kind, name) is None:
+                return name
+            QMessageBox.information(self, title, "Your library already has a %s named %s: "
+                                    "pick another name." % (kind, name))
+
+    @staticmethod
+    def _variant(defn, name):
+        """A copy of a block under a new name: everything kept but the catalog number (a
+        different block is a different part), never marked built-in."""
+        d = defn.to_dict()
+        d["name"] = name
+        d["catalog"] = ""
+        return M.BlockDef.from_dict(d)
+
+    def duplicate_block(self, kind=None, name=None):
+        """Duplicate...: a copy of a block saved to your library under a new name (its
+        catalog number left blank), opened in Edit block right away to be changed. Returns
+        the block editor's tab or None."""
+        t = self._block_target(kind, name)
+        if t is None:
+            self._say("Duplicate: select one symbol or footprint in the drawing, or pick one "
+                      "in the Library")
+            return None
+        kind, lib, own = t
+        defn = lib or own
+        if defn is None:
+            self._say("%s isn't in your library" % name)
+            return None
+        new_name = self._new_block_name(kind, defn.name, "Duplicate %s" % kind)
+        if new_name is None:
+            return None
+        new = self._variant(defn, new_name)
+        try:
+            self.library.save_block(new)
+        except (OSError, ValueError) as ex:
+            QMessageBox.warning(self, TITLE, "Couldn't save %s to the library (%s):\n%s"
+                                % (new_name, self.library.folder, ex))
+            return None
+        self.library_panel.refresh()
+        d = self.edit_block(kind, new_name)
+        self._say("Duplicated %s as %s in your library (catalog number left blank: "
+                  "Block properties... sets it); change it here and Save block"
+                  % (defn.name, new_name), 12000)
+        return d
+
+    def save_block_as(self):
+        """Save block as...: the block editor's drawing saved to your library under a new
+        name (its catalog number left blank); the block it was opened from stays as it was,
+        and this tab goes on editing the new one. True when saved."""
+        d = self.doc()
+        if not is_block_doc(d):
+            self._say("Save block as works in a block's tab (Edit block... opens one)")
+            return False
+        sess = d.block_session
+        new_name = self._new_block_name(sess.kind, sess.name, "Save block as")
+        if new_name is None:
+            return False
+        old = sess.defn
+        sess.defn = self._variant(old, new_name)
+        sheet = d.project.sheet_by_id(sess.sheet_id)
+        if sheet is not None:
+            with d.project.edit("Save block as") as ed:
+                ed.sheet_meta(sheet, title="Block: %s" % new_name)
+        if not self.save_block():
+            sess.defn = old
+            return False
         return True
 
     def _ask_save_block(self, d):
