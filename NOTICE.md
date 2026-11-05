@@ -11,7 +11,8 @@ KanzonasCAD is MIT licensed (see LICENSE). It is built on:
 Artwork and type: the app icon, logo and their cactus and sunflower are the owner's artwork
 (`assets/`). The logo's lettering is set in Roboto Condensed ("Kanzonas"), Saira Condensed
 ("CAD") and Inter (the tagline), all under the SIL Open Font License 1.1 (Google Fonts);
-`tools/make_logos.py` makes both apps' logos.
+The logos are made in the Kanzonas-Site repository's `brand/` folder
+(https://github.com/keithlyding/Kanzonas-Site), the single source of truth for every Kanzonas logo.
 
 The ribbon (`kanzonascad/ribbon.py`) and theme (`kanzonascad/theme.py`) come from KanzonasPDF
 (same owner), so the two apps look alike. So does the packaging (`kanzonascad/paths.py`, the

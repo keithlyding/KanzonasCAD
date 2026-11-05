@@ -118,6 +118,13 @@ finds becomes a fix and a unit test of its own.
 - The PortableApps.com icon `assets/portableapps-appicon.ico` is made by
   `tools/make_paf_icon.py` from `assets/kanzonascad.png`: run it again when the icon changes.
 
+## Logos
+Every Kanzonas logo comes from the Kanzonas-Site repository's `brand/` folder
+(https://github.com/keithlyding/Kanzonas-Site), the single source of truth for logos (the owner's
+decision): its `make_logos.py`, artwork, fonts and `SPEC.md`. Never make or edit a logo here.
+To change one, change it there, then copy its files in as its `brand/README.md` says
+(`assets/kanzonascad-logo.png`, `kanzonascad/resources/logo.png`), as a user-facing change.
+
 ## Performance budget (checked by the self-test "speed budget")
 On a 60,000-line sheet: opened and drawn < 5 s, ten zoomed repaints < 2 s, 1,000 lines added
 one edit each < 2 s, 1,000 lines moved in one edit < 2 s, a mouse move < 30 ms, peak memory
