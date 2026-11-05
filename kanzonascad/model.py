@@ -1835,6 +1835,33 @@ class Sheet:
         return s
 
 
+def today_text():
+    """Today's date as US drawings write it: 11/05/2026."""
+    import datetime
+    return datetime.date.today().strftime("%m/%d/%Y")
+
+
+def next_revision(revisions):
+    """The number the next revision gets: 0 for the first, then one more than the highest
+    number so far (a revision typed as a letter is skipped over)."""
+    nums = []
+    for r in revisions:
+        try:
+            nums.append(int(str(r.get("rev", "")).strip()))
+        except ValueError:
+            pass
+    return str(max(nums) + 1) if nums else ("0" if not revisions else str(len(revisions)))
+
+
+def clean_revision(r):
+    """A revision as stored: rev, date, desc, by, and sheets (None: every sheet, else the
+    ids of the sheets it revised)."""
+    sheets = r.get("sheets")
+    return {"rev": str(r.get("rev", "")), "date": str(r.get("date", "")),
+            "desc": str(r.get("desc", "")), "by": str(r.get("by", "")),
+            "sheets": None if sheets is None else [int(i) for i in sheets]}
+
+
 PROJECT_FIELDS = ["Customer", "Project", "Drawing number", "Drawn by", "Checked by", "Date",
                   "Revision"]
 
@@ -1933,6 +1960,16 @@ class Edit:
             s.version += 1
         self.ops.append(["fields", before, after])
 
+    def project_revisions(self, revisions):
+        """Replace the project's revision history (Revisions...): the title blocks follow."""
+        p = self.project
+        before = [dict(r) for r in p.revisions]
+        after = [clean_revision(r) for r in revisions]
+        p.revisions = [dict(r) for r in after]
+        for s in p.sheets:
+            s.version += 1
+        self.ops.append(["revisions", before, after])
+
     def project_settings(self, settings):
         """Change the project's settings. Sheets that follow the project take its new size
         and zones, and tags take its new tag height (each change undoable with this step)."""
@@ -1987,6 +2024,8 @@ class Project:
         self.fields = {k: "" for k in PROJECT_FIELDS}
         self.zone_format = "{sheet}-{row}{col}"
         self.settings = dict(DEFAULT_SETTINGS)
+        # the revision history (Revisions...), oldest first: [{rev, date, desc, by, sheets}]
+        self.revisions = []
         self.layers = {}
         for name, color in DEFAULT_LAYERS:
             self.layers[name] = Layer(name, color)
@@ -2179,6 +2218,10 @@ class Project:
                     s.version += 1
             elif kind == "settings":
                 self.settings = dict(op[1] if undo else op[2])
+            elif kind == "revisions":
+                self.revisions = [dict(r) for r in (op[1] if undo else op[2])]
+                for s in self.sheets:
+                    s.version += 1
             elif kind == "block":
                 _k, name, before, after = op
                 self._set_block(name, before if undo else after)
@@ -2218,7 +2261,8 @@ class Project:
                 "layers": [lay.to_dict() for lay in self.layers.values()],
                 "title_block": [e.to_dict() for e in self.title_block.entities.values()],
                 "blocks": [b.to_dict() for b in self.blocks.values()],
-                "sheets": [s.to_dict() for s in self.sheets]}
+                "sheets": [s.to_dict() for s in self.sheets]} | (
+                    {"revisions": [dict(r) for r in self.revisions]} if self.revisions else {})
 
     @classmethod
     def from_dict(cls, d):
@@ -2228,6 +2272,7 @@ class Project:
             raise ValueError("this project was saved by a newer KanzonasCAD")
         p = cls()
         p.fields.update(d.get("fields", {}) or {})
+        p.revisions = [clean_revision(r) for r in d.get("revisions", []) or []]
         p.zone_format = d.get("zone_format", p.zone_format)
         p.settings.update(d.get("settings", {}) or {})
         if d.get("layers"):

@@ -6,6 +6,17 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.8
+
+**New**
+- Revisions: New revision... (Sheets menu and Sheets tab) adds the next revision (0, 1, 2...)
+  dated today; Revisions... shows and edits the whole history. The title block's revision and
+  date now follow it on their own, sheet by sheet, and new fields ({Rev 1}, {Rev 1 date}...)
+  fill a revision table.
+
+**Fixed**
+- Clicking OK in Project properties without changing anything marked the project as changed.
+
 ## 0.12.7
 
 **New**

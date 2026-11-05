@@ -113,9 +113,28 @@ to bring in your company's title block and move it into the lower right corner. 
 <code>{{Sheet title}}</code> and <code>{{Scale}}</code> (1:4, 3" = 1'-0"...) - from each
 sheet. <code>{{Sheet}} OF {{Sheets}}</code> gives
 "6 OF 12".</li>
+<li><code>{{Revision date}}</code>, <code>{{Revision description}}</code> and
+<code>{{Revision by}}</code> - the latest revision's (see <b>Revisions</b> below); and for a
+revision table, <code>{{Rev 1}}</code>, <code>{{Rev 1 date}}</code>,
+<code>{{Rev 1 description}}</code> and <code>{{Rev 1 by}}</code> (the latest revision),
+<code>{{Rev 2}}</code>... (the one before), empty past the oldest. Draw the table's rows with
+those texts in Edit title block, newest on top.</li>
 <li>Any other name, like <code>{{Job number}}</code>, becomes a field of your own: it appears
 in Project properties to fill in.</li>
 </ul>
+<h3>Revisions</h3>
+<p><b>New revision...</b> (Sheets menu and Sheets tab) adds the next revision to the drawing's
+history: numbered 0 for the first, then 1, 2..., dated today (11/05/2026), by the project's
+Drawn by, for all sheets; type its description and click OK. <b>Revisions...</b> shows the
+whole history, oldest first, to change any cell (number, date, description, by), delete one,
+or add one. In <b>Sheets</b>, "All" means the revision covers every sheet; type page numbers
+(3, 5) for one that changed only those. Each change is one step that Undo takes back.</p>
+<p>Once there is a history, each sheet's <code>{{Revision}}</code> and <code>{{Date}}</code>
+show the latest revision that covers that sheet (Project properties shows them, greyed:
+they come from the history), so sheet 5 can be at revision 2 while the others are at 1. A
+revision typed in a sheet's own Sheet properties still wins on that sheet. With no history,
+they show what Project properties says, as before. A new project made from a template starts
+with no history.</p>
 <p>A name in braces that isn't a field shows as typed, so a typo is easy to spot. Undo works
 on title block changes like on any other.</p>
 <p><b>Title block position</b> (Project properties, General) says where the title block sits:</p>

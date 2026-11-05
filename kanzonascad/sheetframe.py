@@ -25,6 +25,24 @@ TITLE_H = 0.16
 # fields every title block can use besides the project's own (Project properties)
 SHEET_FIELDS = ["Sheet", "Sheets", "Sheet title"]
 _FIELD = re.compile(r"\{([^{}]+)\}")
+# the revision history's fields: the latest revision's, and "Rev 1" (the latest), "Rev 2"
+# (the one before)... for a revision table in the title block
+REV_FIELDS = ["Revision date", "Revision description", "Revision by"]
+REV_ROWS = 20
+_REV_ROW = re.compile(r"Rev \d+( date| description| by)?$")
+
+
+def is_auto_field(name):
+    """A field KanzonasCAD fills by itself (not one to type in Project properties)."""
+    return name in SHEET_FIELDS or name == "Scale" or name in REV_FIELDS or \
+        bool(_REV_ROW.match(name))
+
+
+def sheet_revisions(project, sheet):
+    """The revisions that apply to a sheet (all of them, or those naming it), oldest
+    first."""
+    return [r for r in project.revisions
+            if r.get("sheets") is None or sheet.id in r["sheets"]]
 
 
 def _box(x0, y0, x1, y1, out, layer="0"):
@@ -108,6 +126,22 @@ def field_values(project, sheet):
     v["Sheets"] = str(len(project.sheets))
     v["Sheet title"] = sheet.title
     v["Scale"] = sheet.scale_text()
+    # the revision history: the latest revision that applies to this sheet gives {Revision}
+    # and {Date}; Rev 1 is the latest, Rev 2 the one before... (empty past the oldest)
+    hist = sheet_revisions(project, sheet) if getattr(project, "revisions", None) else []
+    for k in REV_FIELDS:
+        v[k] = ""
+    if hist:
+        last = hist[-1]
+        v["Revision"], v["Date"] = last["rev"], last["date"]
+        v["Revision date"], v["Revision description"], v["Revision by"] = \
+            last["date"], last["desc"], last["by"]
+    for i in range(1, REV_ROWS + 1):
+        r = hist[-i] if i <= len(hist) else None
+        v["Rev %d" % i] = r["rev"] if r else ""
+        v["Rev %d date" % i] = r["date"] if r else ""
+        v["Rev %d description" % i] = r["desc"] if r else ""
+        v["Rev %d by" % i] = r["by"] if r else ""
     # a sheet's own value of a field (its own revision, say) wins over the project's
     for k, val in sheet.fields.items():
         if str(val).strip():

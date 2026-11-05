@@ -244,7 +244,7 @@ def project_properties(parent, project, tab=0):
     """What belongs to the whole project, in three tabs: General (title block fields,
     revision, grid references, text size), Schematic (sheet size and zones, tags, wires),
     Panel (footprints, dimensions). True when changed."""
-    from .sheetframe import fields_used, SHEET_FIELDS
+    from .sheetframe import fields_used, is_auto_field
     dlg = QDialog(parent)
     dlg.setWindowTitle("Project properties")
     dlg.resize(520, 520)
@@ -261,11 +261,18 @@ def project_properties(parent, project, tab=0):
     # from before (a field the title block no longer shows keeps its value)
     names = list(M.PROJECT_FIELDS)
     for k in fields_used(project) + list(project.fields):
-        if k not in names and k not in SHEET_FIELDS:
+        if k not in names and not is_auto_field(k):
             names.append(k)
     for k in names:
         e = QLineEdit(project.fields.get(k, ""))
         edits[k] = e
+        if k in ("Revision", "Date") and project.revisions:
+            # (the revision history fills them: Sheets > Revisions...)
+            last = project.revisions[-1]
+            e.setText(last["rev"] if k == "Revision" else last["date"])
+            e.setReadOnly(True)
+            e.setToolTip("From the revision history: Sheets > Revisions...")
+            edits.pop(k)
         form.addRow(k, e)
     form.addRow(_gray("These fill the title block's {Field} texts on every sheet. {Sheet}, "
                       "{Sheets} and {Sheet title} come from each sheet, and a sheet can have "
@@ -389,6 +396,9 @@ def project_properties(parent, project, tab=0):
                                 "The grid reference format can only use {sheet}, {row} and "
                                 "{col}.")
     fields = {k: e.text().strip() for k, e in edits.items()}
+    for k in ("Revision", "Date"):
+        if k in project.fields and k not in fields:     # (shown from the revision history)
+            fields[k] = project.fields[k]
     settings = dict(st)
     settings.update(layout.values())
     settings["text_height"] = text_h.value()
@@ -402,7 +412,11 @@ def project_properties(parent, project, tab=0):
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():
-        settings[key] = b.value()
+        # (a length the box can only show rounded, 1 m = 39.3700787 in, stays as it was
+        # unless changed: OK alone changed it and marked the project modified)
+        if abs(b.value() - round(float(st.get(key, 39.37 if key == "rail_stock" else 72.0)),
+                                 b.decimals())) > 1e-9:
+            settings[key] = b.value()
     colors = {"WIRES": wire_color.color, "SYMBOLS": sym_color.color, "PANEL": fp_color.color,
               "DIMENSIONS": dim_color.color}
     changed_colors = {n: c for n, c in colors.items() if c != project.layer_color(n)
