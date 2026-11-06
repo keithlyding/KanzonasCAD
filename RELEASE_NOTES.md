@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.14
+
+**New**
+- Bill of materials (Sheets menu, Output tab): every part the project uses, once, with how
+  many, by manufacturer and catalog number, with its tags and sheets; a device and its panel
+  footprint count once; DIN rail and wire duct as the stock lengths to buy. Save it as CSV for
+  a spreadsheet or a purchase order.
+
 ## 0.13.5
 
 **New**

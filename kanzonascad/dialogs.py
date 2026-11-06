@@ -987,6 +987,67 @@ def run_properties(parent, project, e):
     return None if new.to_dict() == e.to_dict() else new
 
 
+def bom_dialog(parent, project, folder):
+    """The bill of materials (bom.py): one line per part (manufacturer and catalog number)
+    with how many, description, tags and sheets, rail and duct as stock lengths; Save as
+    CSV..."""
+    from . import bom
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Bill of materials")
+    dlg.resize(980, 460)
+    lay = QVBoxLayout(dlg)
+    loose = QCheckBox("Include parts without a catalog number (listed by their block)")
+    loose.setChecked(True)
+    lay.addWidget(loose)
+    t = QTableWidget(0, len(bom.HEAD))
+    t.setObjectName("bom_table")
+    t.setHorizontalHeaderLabels(bom.HEAD)
+    t.verticalHeader().setVisible(False)
+    lay.addWidget(t, 1)
+    empty = QLabel("No parts in this project yet: place symbols and footprints and give them "
+                   "their manufacturer and catalog number (double-click one).")
+    lay.addWidget(empty)
+
+    def fill():
+        _head, body = bom.table(project, loose.isChecked())
+        t.setRowCount(len(body))
+        for i, row in enumerate(body):
+            for j, cell in enumerate(row):
+                it = QTableWidgetItem(cell)
+                it.setFlags(it.flags() & ~Qt.ItemIsEditable)
+                t.setItem(i, j, it)
+        t.resizeColumnsToContents()
+        empty.setVisible(not body)
+        save.setEnabled(bool(body))
+    lay.addWidget(_gray("A device and its panel footprint share a tag: one part. Contacts are "
+                        "their device's. Rail and duct: the stock lengths to buy (Panel "
+                        "materials has their cuts). Item numbers follow this list: a leader's "
+                        "balloon (LE, B) can show them."))
+    box = QDialogButtonBox(QDialogButtonBox.Close)
+    save = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    box.rejected.connect(dlg.reject)
+
+    def do_save():
+        from PySide6.QtWidgets import QFileDialog
+        import os
+        path, _f = QFileDialog.getSaveFileName(dlg, "Save bill of materials",
+                                               os.path.join(folder, "bill of materials.csv"),
+                                               "CSV (*.csv)")
+        if not path:
+            return
+        try:
+            n = bom.write_csv(project, path, loose.isChecked())
+        except OSError as ex:
+            QMessageBox.warning(dlg, "Bill of materials", "Couldn't save %s:\n%s" % (path, ex))
+            return
+        QMessageBox.information(dlg, "Bill of materials", "Saved %d line(s) to %s." % (n, path))
+    save.clicked.connect(do_save)
+    loose.toggled.connect(lambda _on: fill())
+    lay.addWidget(box)
+    fill()
+    dlg.exec()
+
+
 def materials_dialog(parent, project, folder):
     """The project's DIN rail and wire duct: per size and part, pieces, cut lengths, total,
     stock pieces; Save as CSV..."""
