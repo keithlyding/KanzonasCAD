@@ -36,7 +36,9 @@ def export_dxf(project, sheet, path, include_frame=True):
     for name, lay in project.layers.items():
         if name == "0":
             continue
-        dl = doc.layers.add(name)
+        # (a layer the new DXF already has, such as Defpoints from an imported drawing's
+        # dimensions, is reused: layer names don't depend on case in DXF)
+        dl = doc.layers.get(name) if doc.layers.has_entry(name) else doc.layers.add(name)
         _layer_color(dl, lay.color)
         if not lay.visible:
             dl.off()

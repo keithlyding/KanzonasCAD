@@ -69,6 +69,14 @@ long one by hand before a release with a few seeds:
 `QT_QPA_PLATFORM=offscreen python tests/battery.py OUT_DIR --ops 3000 --seed N`. A failure it
 finds becomes a fix and a unit test of its own.
 
+Every build also runs the battery itself (the Linux job, 1,000 steps), with a new seed each
+time (the run number), so each build tries different random editing; its log is kept with the
+build. **A new kind of object or a new command goes into the battery in the same pull request**
+(the owner's rule, Nov 2026): a step in `random_editing` that makes it through the command, as
+a user would (so it is moved, copied, rotated, erased, undone, saved and opened with
+everything else), and the object in `mixed_project` (files: save/open, DXF, PDF, template). The
+run reports the kinds of objects it saw: check yours is there.
+
 ## Security updates
 - `.github/workflows/security-check.yml` runs every Monday (and by hand): pip-audit on
   `constraints.txt`, and `tools/check_dependencies.py` for newer ezdxf, ezdwg and PySide6
@@ -132,7 +140,19 @@ To change one, change it there, then copy its files in as its `brand/README.md` 
 On a 60,000-line sheet: opened and drawn < 5 s, ten zoomed repaints < 2 s, 1,000 lines added
 one edit each < 2 s, 1,000 lines moved in one edit < 2 s, a mouse move < 30 ms, a mouse move in
 a command with the snaps on and the screen drawn < 30 ms (zoomed out and in), peak memory
-< 800 MB. Typical today: 0.6 s, 0.2 s, 0.4 s, 0.06 s, 0.5 ms, a few ms, 180 MB. The view keeps a
+< 800 MB. Typical today: 0.6 s, 0.2 s, 0.4 s, 0.06 s, 0.5 ms, a few ms, 180 MB.
+
+On a sheet of notes ("speed budget (notes, hatches, leaders, imports)": 2,000 hatches with
+their outlines, 2,000 texts, 1,000 leaders, 1,000 multi-line notes): added and drawn < 2 s, ten
+zoomed repaints < 2 s, 1,000 of them moved < 1 s, undone < 1 s; a DXF of 1,000 block
+references with attributes, 200 dimensions and 500 hatches imported < 4 s (its blocks kept as
+blocks); the bill of materials of its parts < 0.5 s. Typical today: 0.7, 0.6, 0.2, 0.2, 0.7 s,
+a few ms. **A new kind of object gets a line in a speed budget in the same pull request**
+(the owner's rule, Nov 2026): measure it at scale (thousands) drawn, zoomed, moved and undone
+before calling it done. Text is drawn on screen with QPainter.drawText (render.draw_texts),
+never as one filled outline path: that took 22 s for ten zoom steps on that sheet.
+
+The view keeps a
 picture of the drawing (`CadView._drawing_picture`), drawn again only when its key changes (the
 view, the project's revision, the sheet, the title block, the layers): a mouse move only draws
 the crosshair, snap marker and rubber band over it. Anything that changes how the drawing looks

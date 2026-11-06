@@ -22,6 +22,15 @@ BUDGET = {
     "snap_move": 0.03,          # one mouse move in a command, snaps on, and the screen drawn
     "peak_mb": 800,
     "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings
+    # a sheet of notes: 2,000 hatches (and their outlines), 1,000 leaders, 1,000 multi-line
+    # notes and 2,000 texts (text drawn as filled outlines took seconds a zoom step here)
+    "notes_open": 2.0,          # added and drawn
+    "notes_zoom": 2.0,          # ten zoomed repaints
+    "notes_move": 1.0,          # 1,000 of them moved in one edit, then drawn
+    "notes_undo": 1.0,          # that undone, then drawn
+    "import_blocks": 4.0,       # a DXF of 1,000 block references (attributes), 200 dimensions
+                                # and 500 hatches imported
+    "bom": 0.5,                 # the bill of materials of 2,000 parts
 }
 
 
@@ -521,7 +530,118 @@ def run(log_path):
         return ("open+draw %.2f s, 10 zooms %.2f s, 1,000 adds %.2f s, 1,000 moved %.2f s, "
                 "hover %.1f ms, snap move drawn %.1f ms, peak %.0f MB"
                 % (dt, dz, da, dm, dh * 1000, ds * 1000, mb))
+
+    def text_font():
+        """The font text is drawn and measured with: the letters as tall as asked, a line as
+        wide as a sans-serif font makes it (a font that measures far narrower or wider would
+        wrap multi-line notes and place texts unlike the drawing shows)."""
+        from PySide6.QtGui import QFontInfo
+        from . import render
+        f = render.text_font()
+        fam = QFontInfo(f).family()
+        w = M.text_width("ALL WIRING 14 AWG UNLESS NOTED", 0.1)
+        cap = render._font_cache["cap"]
+        assert 1.6 < w < 3.6, "a 0.1\" line measured %.2f\" in %s (cap %.1f px)" % (w, fam, cap)
+        return "%s, cap height %.1f px of %d, reference line %.2f\"" % (
+            fam, cap, render.FONT_PX, w)
+    log.check("text font", text_font)
     log.check("speed budget (60,000-line sheet)", big_sheet)
+
+    def notes_sheet():
+        import os
+        import random
+        import tempfile
+        from . import bom, fileio
+        w = state["win"]
+        rnd = random.Random(5)
+        p = M.Project.new()
+        s = p.sheets[0]
+        t = time.perf_counter()
+        with p.edit("Notes") as ed:
+            for i in range(2000):
+                x, y = rnd.uniform(1, 15), rnd.uniform(1, 9)
+                sq = [(x, y), (x + .3, y), (x + .3, y + .3), (x, y + .3)]
+                ed.add(s, M.Polyline(sq, True))
+                ed.add(s, M.Hatch([sq], rnd.choice(["SOLID", "ANSI31", "ANSI37", "LINES"]),
+                                  45.0, 0.02))
+                ed.add(s, M.Text((x, y - .2), "TB%d-%d" % (i // 20, i % 20), 0.1,
+                                 rnd.choice([0.0, 90.0])))
+            for i in range(1000):
+                x, y = rnd.uniform(1, 15), rnd.uniform(1, 9)
+                ed.add(s, M.Leader([(x, y), (x + .5, y + .5), (x + .8, y + .5)],
+                                   "%d" % (i + 1) if i % 3 == 0 else "SEE NOTE %d" % i,
+                                   balloon=i % 3 == 0))
+                ed.add(s, M.MText((x, y), "1. ALL WIRE 14 AWG MTW UNLESS NOTED\n2. GROUND "
+                                  "PER NEC 250", 0.1, 0.0, "TL", 1.5))
+        d = w.add_document(p)
+        v = d.view
+        v.zoom("sheet")
+        v.repaint()
+        app.processEvents()
+        do = time.perf_counter() - t
+        assert do < BUDGET["notes_open"], "added and drawn in %.2f s" % do
+        t = time.perf_counter()
+        for k in range(10):
+            v.zoom_at(1.25, None)
+            v.repaint()
+        dz = time.perf_counter() - t
+        assert dz < BUDGET["notes_zoom"], "ten zoomed repaints took %.2f s" % dz
+        v.zoom("sheet")
+        ids = [e.id for e in s.entities.values()
+               if isinstance(e, (M.Leader, M.Hatch, M.MText))][:1000]
+        t = time.perf_counter()
+        with p.edit("Move") as ed:
+            for i in ids:
+                ed.change(s, s.entities[i].moved(0.5, 0.5))
+        v.repaint()
+        dm = time.perf_counter() - t
+        assert dm < BUDGET["notes_move"], "1,000 moved in %.2f s" % dm
+        t = time.perf_counter()
+        p.undo()
+        v.repaint()
+        du = time.perf_counter() - t
+        assert du < BUDGET["notes_undo"], "the move undone in %.2f s" % du
+        p.saved_at = len(p.undo_stack)
+        w.close_tab(w.tabs.indexOf(d))
+        # a DXF as another program writes it, imported
+        import ezdxf
+        doc = ezdxf.new("R2013")
+        doc.header["$INSUNITS"] = 1
+        b = doc.blocks.new("TB")
+        b.add_lwpolyline([(0, 0), (.2, 0), (.2, .5), (0, .5)], close=True)
+        b.add_circle((.1, .25), .05)
+        for k, tag in enumerate(("TAG1", "MFG", "CAT")):
+            b.add_attdef(tag, (0, -.1 * (k + 1)), dxfattribs={"height": .05})
+        msp = doc.modelspace()
+        for i in range(1000):
+            r = msp.add_blockref("TB", (i % 50 * .3, i // 50 * .7))
+            r.add_auto_attribs({"TAG1": "T%d" % i, "MFG": "PHOENIX", "CAT": "3044076"})
+        for i in range(200):
+            msp.add_linear_dim(base=(i * .1, 20), p1=(i * .1, 19),
+                               p2=(i * .1 + .5, 19)).render()
+        for i in range(500):
+            h = msp.add_hatch()
+            h.paths.add_polyline_path([(i * .1, 25), (i * .1 + .05, 25), (i * .1 + .05, 25.05)],
+                                      is_closed=True)
+        path = os.path.join(tempfile.mkdtemp(), "blocks.dxf")
+        doc.saveas(path)
+        q = M.Project.new()
+        t = time.perf_counter()
+        got = fileio.import_dxf(q, q.sheets[0], path)
+        di = time.perf_counter() - t
+        assert di < BUDGET["import_blocks"], "the DXF imported in %.2f s" % di
+        kept = [e for e in q.sheets[0].entities.values() if isinstance(e, M.Insert)]
+        assert len(kept) == 1000, "%d of 1,000 blocks kept as blocks" % len(kept)
+        t = time.perf_counter()
+        head, body = bom.table(q)
+        db = time.perf_counter() - t
+        assert db < BUDGET["bom"], "the bill of materials took %.2f s" % db
+        assert any("3044076" in " ".join(str(c) for c in r) for r in body), \
+            "the imported parts' catalog number is not in the bill of materials"
+        return ("drawn %.2f s, 10 zooms %.2f s, 1,000 moved %.2f s, undone %.2f s, "
+                "DXF of 1,000 blocks imported %.2f s (%d objects), BOM %.3f s"
+                % (do, dz, dm, du, di, got["count"], db))
+    log.check("speed budget (notes, hatches, leaders, imports)", notes_sheet)
 
     w = state.get("win")
     if w is not None:

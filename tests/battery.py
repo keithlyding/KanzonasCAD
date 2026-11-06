@@ -121,6 +121,36 @@ def norm(d):
     return d
 
 
+def sample_dxf(out):
+    """A small DXF as another program writes it, with what imports must keep: a block with
+    AutoCAD Electrical attributes (TAG1, MFG, CAT, DESC1), a linear dimension, multi-line
+    text, a leader and a solid hatch. Made once per folder."""
+    path = os.path.join(out, "sample.dxf")
+    if os.path.exists(path):
+        return path
+    import ezdxf
+    doc = ezdxf.new("R2013", setup=True)
+    doc.header["$INSUNITS"] = 1
+    blk = doc.blocks.new("RELAY_K")
+    blk.add_lwpolyline([(0, 0), (1, 0), (1, 0.6), (0, 0.6)], close=True)
+    blk.add_circle((0.5, 0.3), 0.15)
+    for i, tag in enumerate(("TAG1", "MFG", "CAT", "DESC1")):
+        blk.add_attdef(tag, (0, -0.15 * (i + 1)), dxfattribs={"height": 0.1})
+    msp = doc.modelspace()
+    ref = msp.add_blockref("RELAY_K", (1, 1))
+    ref.add_auto_attribs({"TAG1": "CR9", "MFG": "AB", "CAT": "700-HA32A1", "DESC1": "RELAY"})
+    ref = msp.add_blockref("RELAY_K", (3, 1), dxfattribs={"rotation": 90})
+    ref.add_auto_attribs({"TAG1": "CR8", "MFG": "AB", "CAT": "700-HA32A1"})
+    msp.add_linear_dim(base=(1, 2.5), p1=(1, 2), p2=(4, 2)).render()
+    msp.add_mtext("FIRST LINE\\PSECOND LINE", dxfattribs={"insert": (5, 3),
+                                                           "char_height": 0.12})
+    msp.add_leader([(5, 1), (6, 2), (6.5, 2)])
+    h = msp.add_hatch(color=1)
+    h.paths.add_polyline_path([(7, 0), (8, 0), (8, 1), (7, 1)], is_closed=True)
+    doc.saveas(path)
+    return path
+
+
 # ---- 1. random editing -------------------------------------------------------------------------
 def random_editing(log, out, ops, seed):
     rnd = random.Random(seed)
@@ -135,6 +165,8 @@ def random_editing(log, out, ops, seed):
     start = norm(p.to_dict())
     counts = {}
     errors = []
+    sample = sample_dxf(out)
+    kinds = set()
 
     def pt():
         # on a 1/4" grid, mostly on a few rungs so things meet
@@ -328,6 +360,75 @@ def random_editing(log, out, ops, seed):
                 v.input_text(fmt(q))
         finish()
 
+    texts = ["NOTE", "SEE DETAIL A", "LINE ONE\nLINE TWO", "A LONGER NOTE THAT WRAPS"]
+    win.ask_mtext = lambda text="": rnd.choice(texts + [""])
+    from kanzonascad import bom, sheetframe
+
+    def op_leader():
+        v.run(C.LeaderCmd)
+        a = pt()
+        pts = [a, (a[0] + rnd.choice([-1, 1]) * 0.75, a[1] + 0.5)]
+        if rnd.random() < 0.4:
+            pts.append((pts[1][0] + rnd.choice([-0.5, 0.5]), pts[1][1]))
+        type_in(v, *[fmt(q) for q in pts])
+        if v.cmd is not None:
+            v.cmd.enter()
+        if v.cmd is not None:
+            if rnd.random() < 0.4:
+                v.input_text("B")
+                if v.cmd is not None:
+                    v.input_text(rnd.choice(["", str(rnd.randint(1, 30))]))
+            else:
+                v.input_text(rnd.choice(texts))
+        finish()
+
+    def op_mtext():
+        v.run(C.MTextCmd)
+        a = pt()
+        type_in(v, fmt(a))
+        if v.cmd is not None:
+            if rnd.random() < 0.7:
+                v.input_text(fmt((a[0] + rnd.choice([1, 2, 3]), a[1] - 1)))
+            else:
+                v.cmd.enter()
+        finish()
+
+    def op_hatch():
+        a = pt()
+        b = (a[0] + rnd.choice([0.5, 1, 2]), a[1] + rnd.choice([0.5, 1]))
+        if rnd.random() < 0.7:
+            v.run(C.RectangleCmd)
+            type_in(v, fmt(a), fmt(b))
+            finish()
+        v.run(C.HatchCmd)
+        if v.cmd is not None and rnd.random() < 0.6:
+            v.input_text(rnd.choice(["SOLID", "ANSI31", "ANSI37", "LINES"]))
+        if v.cmd is not None and rnd.random() < 0.2:
+            v.input_text("AN")
+            if v.cmd is not None:
+                v.input_text(rnd.choice(["0", "30", "45", "135"]))
+        if v.cmd is not None:
+            v.input_text(fmt(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)))
+        finish()
+
+    def op_import():
+        fileio.import_dxf(p, s, sample, at=pt())
+
+    def op_explode():
+        ins = [e for e in s.entities.values() if isinstance(e, M.Insert)]
+        if ins:
+            v.set_selection({rnd.choice(ins).id})
+            v.run(C.ExplodeCmd)
+        finish()
+
+    def op_usetb():
+        imp = [e for e in s.entities.values() if isinstance(e, M.Insert)
+               and e.defn is not None and e.defn.category == "Imported"]
+        if not imp:
+            return
+        with p.edit("Use as title block") as ed:
+            sheetframe.use_as_title_block(ed, p, s, [rnd.choice(imp)])
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -340,7 +441,8 @@ def random_editing(log, out, ops, seed):
              (op_move, 6), (op_copy, 4), (op_rotate, 3), (op_erase, 4), (op_trim, 6),
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
-             (op_undo, 6), (op_redo, 4)]
+             (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
+             (op_usetb, 1), (op_undo, 6), (op_redo, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -355,6 +457,10 @@ def random_editing(log, out, ops, seed):
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()
+            if i % 25 == 24:
+                kinds.update(type(e).__name__ for e in s.entities.values())
+                bom.table(p)
+                bom.write_csv(p, os.path.join(out, "bom.csv"))
             if i % 200 == 199:
                 p.save(path, backups=0)
                 q = M.Project.load(path)
@@ -377,9 +483,9 @@ def random_editing(log, out, ops, seed):
     again = norm(p.to_dict())
     p.saved_at = len(p.undo_stack)
     stats = "%d steps (%s); %d entities, %d wires, %d symbols at the end; %d save/open " \
-            "round trips; %d undone" % (ops, ", ".join("%s %d" % kv for kv in sorted(
+            "round trips; %d undone; kinds seen: %s" % (ops, ", ".join("%s %d" % kv for kv in sorted(
                 counts.items())), len(s.entities), len(s.wires()), len(s.inserts()),
-                roundtrips, n_undo)
+                roundtrips, n_undo, ", ".join(sorted(kinds)))
     win.close()
     if errors:
         raise AssertionError("%d step(s) failed (seed %d):\n%s" % (len(errors), seed,
@@ -556,6 +662,14 @@ def mixed_project(win):
         ed.add(panel, M.Rail((4, 4), (34, 4), "TS35x7.5", *M.RAIL_PROFILES["TS35x7.5"][1:]))
         ed.add(panel, M.Duct((4, 10), (34, 10), "", 2, 3))
         ed.add(panel, M.Dimension((4, 4), (34, 4), (19, 1), height=0.125 * panel.k()))
+    with p.edit("notes") as ed:
+        s = p.sheets[0]
+        ed.add(s, M.Leader([(14, 9), (15, 10), (16, 10)], "SEE NOTE 1"))
+        ed.add(s, M.Leader([(12, 9), (13, 10.5)], "1", balloon=True))
+        ed.add(s, M.MText((1, 11), "NOTES:\nLINE TWO OF THE NOTE", 0.125, 0.0, "TL", 3.0))
+        ed.add(s, M.Polyline([(17, 1), (19, 1), (19, 2), (17, 2)], True))
+        ed.add(s, M.Hatch([[(17, 1), (19, 1), (19, 2), (17, 2)]], "ANSI31", 45.0, 0.125))
+        ed.add(s, M.Hatch([[(17, 3), (18, 3), (18, 4), (17, 4)]], "SOLID", 0.0, 0.125))
     v.show_sheet(p.sheets[0].id)
     return p
 
@@ -563,6 +677,7 @@ def mixed_project(win):
 def files(log, out):
     win, v = window()
     p = mixed_project(win)
+    fileio.import_dxf(p, p.sheets[0], sample_dxf(out), at=(20, 6))
     notes = []
     path = os.path.join(out, "mixed.kzcad")
     p.save(path, backups=0)
@@ -637,7 +752,10 @@ def speed(log, out):
 
 # ---- 5. pictures -------------------------------------------------------------------------------
 def pictures(log, out):
-    import fitz
+    try:
+        import fitz                     # (PyMuPDF: on a developer's computer; not a dependency)
+    except ImportError:
+        return "skipped: PyMuPDF not installed (the PDF itself was checked in files)"
     pdf = os.path.join(out, "mixed.pdf")
     d = fitz.open(pdf)
     names = []
