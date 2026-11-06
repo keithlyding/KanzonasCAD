@@ -16,12 +16,15 @@ from kanzonascad import model as M
 
 class MTextModelTest(unittest.TestCase):
     def test_lines_wrap_and_place(self):
-        m = M.MText((0, 10), "ALL WIRING 14 AWG UNLESS NOTED\nSECOND", 0.1, width=1.5)
+        # (the width from the font's own measure: the test holds with any font; on the
+        # Windows test runner the letters measured narrower than Arial's and 1.5" held the
+        # whole line)
+        width = M.text_width("ALL WIRING 14 AWG", 0.1) * 1.05
+        m = M.MText((0, 10), "ALL WIRING 14 AWG UNLESS NOTED\nSECOND", 0.1, width=width)
         lines = m.lines()
-        self.assertEqual(lines[-1], "SECOND")
-        self.assertGreater(len(lines), 2)                       # (wrapped)
+        self.assertEqual(lines, ["ALL WIRING 14 AWG", "UNLESS NOTED", "SECOND"])
         for ln in lines[:-1]:
-            self.assertLessEqual(M.text_width(ln, 0.1), 1.5 + 1e-9)
+            self.assertLessEqual(M.text_width(ln, 0.1), width + 1e-9)
         parts = m.parts()
         self.assertEqual(tuple(round(c, 9) for c in parts[0].pos), (0.0, 10.0))
         self.assertTrue(all(p.valign == "top" for p in parts))
