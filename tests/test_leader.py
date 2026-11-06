@@ -18,10 +18,11 @@ class LeaderModelTest(unittest.TestCase):
     def test_note_and_balloon_parts(self):
         ld = M.Leader([(0, 0), (1, 1), (2, 1)], "TB1\nSEE NOTE", height=0.1)
         kinds = [e.kind for e in ld.parts()]
-        self.assertEqual(kinds, ["polyline", "polyline", "line", "text", "text"])
+        self.assertEqual(kinds, ["polyline", "hatch", "line", "text", "text"])
         arrow = ld.parts()[1]
-        self.assertTrue(arrow.closed)
-        self.assertEqual(tuple(arrow.points[0]), (0.0, 0.0))     # (its tip at the first point)
+        self.assertIsInstance(arrow, M.Hatch)                    # (filled, 0.13.3)
+        self.assertTrue(arrow.solid())
+        self.assertEqual(tuple(arrow.loops[0][0]), (0.0, 0.0))   # (its tip at the first point)
         texts = [e for e in ld.parts() if isinstance(e, M.Text)]
         self.assertEqual([t.text for t in texts], ["TB1", "SEE NOTE"])
         self.assertEqual(texts[0].align, "left")                 # (the line runs right)

@@ -924,6 +924,140 @@ class Dimension(Composite):
         return self.copy(p1=list(fn(self.p1)), p2=list(fn(self.p2)), loc=list(fn(self.loc)))
 
 
+HATCH_PATTERNS = {
+    # name -> (what it is, [(line angle, spacing as a share of the hatch's spacing)])
+    "SOLID": ("Solid fill", []),
+    "ANSI31": ("Lines at 45 degrees (ANSI31)", [(45.0, 1.0)]),
+    "ANSI37": ("Crosshatch (ANSI37)", [(45.0, 1.0), (135.0, 1.0)]),
+    "LINES": ("Horizontal lines", [(0.0, 1.0)]),
+}
+HATCH_LINE_LIMIT = 4000         # pattern lines worked out at most (a tiny spacing on a big area)
+
+
+def _scan(loops, ang, step, origin=(0.0, 0.0)):
+    """The pieces of the lines at ang degrees, step apart (through origin), inside the loops
+    (even-odd: a loop inside another is a hole). [((x0, y0), (x1, y1))]."""
+    if step <= 0:
+        return []
+    a = math.radians(ang)
+    ux, uy = math.cos(a), math.sin(a)          # along the lines
+    nx, ny = -uy, ux                           # across them
+    pts = [q for lp in loops for q in lp]
+    if not pts:
+        return []
+    ds = [(q[0] - origin[0]) * nx + (q[1] - origin[1]) * ny for q in pts]
+    lo, hi = math.floor(min(ds) / step), math.ceil(max(ds) / step)
+    if hi - lo > HATCH_LINE_LIMIT:
+        step = (max(ds) - min(ds)) / HATCH_LINE_LIMIT
+        lo, hi = math.floor(min(ds) / step), math.ceil(max(ds) / step)
+    edges = []
+    for lp in loops:
+        for i in range(len(lp)):
+            p, q = lp[i], lp[(i + 1) % len(lp)]
+            edges.append((p, q))
+    out = []
+    for k in range(int(lo), int(hi) + 1):
+        d = k * step
+        hits = []
+        for p, q in edges:
+            dp = (p[0] - origin[0]) * nx + (p[1] - origin[1]) * ny - d
+            dq = (q[0] - origin[0]) * nx + (q[1] - origin[1]) * ny - d
+            if (dp > 0) == (dq > 0) or dp == dq:
+                continue
+            t = dp / (dp - dq)
+            x, y = p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t
+            hits.append(((x - origin[0]) * ux + (y - origin[1]) * uy, x, y))
+        hits.sort()
+        for i in range(0, len(hits) - 1, 2):
+            a0, b0 = hits[i], hits[i + 1]
+            if b0[0] - a0[0] > 1e-12:
+                out.append(((a0[1], a0[2]), (b0[1], b0[2])))
+    return out
+
+
+def point_in_loops(p, loops):
+    """Is p inside the loops (even-odd)?"""
+    inside = False
+    x, y = p
+    for lp in loops:
+        n = len(lp)
+        for i in range(n):
+            (x0, y0), (x1, y1) = lp[i], lp[(i + 1) % n]
+            if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+                inside = not inside
+    return inside
+
+
+@_register
+class Hatch(Composite):
+    """A hatch or fill: closed loops (a loop inside another is a hole: even-odd) filled solid
+    or with a pattern of lines (HATCH_PATTERNS) spacing apart, turned by angle. Not tied to
+    the shapes it was made from: it moves, copies and scales on its own."""
+    kind = "hatch"
+    __slots__ = ("loops", "pattern", "angle", "spacing", "_parts")
+
+    def __init__(self, loops, pattern="SOLID", angle=0.0, spacing=0.125, **kw):
+        super().__init__(**kw)
+        self.loops = [[_pt(q) for q in lp] for lp in loops if len(lp) >= 3]
+        self.pattern = pattern if pattern in HATCH_PATTERNS else "ANSI31"
+        self.angle = float(angle)
+        self.spacing = float(spacing) if spacing and spacing > 0 else 0.125
+        self._parts = None
+
+    def _data(self):
+        d = {"loops": [[list(q) for q in lp] for lp in self.loops], "pattern": self.pattern}
+        if self.angle:
+            d["angle"] = self.angle
+        if self.pattern != "SOLID":
+            d["spacing"] = self.spacing
+        return d
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d.get("loops", []), d.get("pattern", "SOLID"), d.get("angle", 0.0),
+                   d.get("spacing", 0.125), layer=d.get("layer", "0"), color=d.get("color"),
+                   id=d.get("id"))
+
+    def solid(self):
+        return self.pattern == "SOLID"
+
+    def parts(self):
+        """Its loops (closed polylines) and its pattern's lines (none for a solid fill: the
+        renderer fills its loops)."""
+        if self._parts is not None:
+            return self._parts
+        out = [Polyline(lp, True) for lp in self.loops]
+        for ang, share in HATCH_PATTERNS[self.pattern][1]:
+            for a, b in _scan(self.loops, ang + self.angle, self.spacing * share):
+                out.append(Line(a, b))
+        for e in out:
+            e.layer, e.color = self.layer, self.color
+        self._parts = out
+        return out
+
+    def distance(self, p):
+        # (anywhere on it picks it, not only its lines)
+        if point_in_loops(p, self.loops):
+            return 0.0
+        return min(e.distance(p) for e in self.parts()[:len(self.loops)])
+
+    def _compute_snaps(self):
+        return [("end", q) for lp in self.loops for q in lp]
+
+    def grips(self):
+        return []
+
+    def exploded(self):
+        c = self.copy()
+        c.id = None
+        return [c]                  # (it goes out as a hatch: DXF export writes a HATCH)
+
+    def _map(self, fn, factor=1.0, rot=0.0, mirror=None, **_kw):
+        ang = G.mirror_angle(self.angle, *mirror) if mirror is not None else self.angle + rot
+        return self.copy(loops=[[list(fn(q)) for q in lp] for lp in self.loops],
+                         spacing=self.spacing * abs(factor), angle=ang % 180.0)
+
+
 @_register
 class Leader(Composite):
     """A leader (AutoCAD's LEADER and MLEADER in one): an arrow at points[0] pointing at
@@ -980,8 +1114,8 @@ class Leader(Composite):
                 s = min(h * 1.2, L * 0.5)
                 bx, by = tip[0] + ux * s, tip[1] + uy * s
                 w = s * 0.3
-                out.append(Polyline([tip, (bx - uy * w, by + ux * w),
-                                     (bx + uy * w, by - ux * w)], True))
+                out.append(Hatch([[tip, (bx - uy * w, by + ux * w),
+                                   (bx + uy * w, by - ux * w)]], "SOLID"))
             end, sd = pts[-1], self.side()
             land = (end[0] + sd * h, end[1])          # (a short level landing)
             out.append(Line(end, land))
@@ -1247,7 +1381,7 @@ class BlockDef:
     def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
                  category="", description="", role="device", contact="", prefix="",
                  builtin=False, wiring="", attr_texts=(), manufacturer="", family="",
-                 series="", catalog="", rail_pos=None):
+                 series="", catalog="", rail_pos=None, own_colors=False):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -1274,6 +1408,9 @@ class BlockDef:
         # a footprint's DIN rail point: the middle of its rail clip, which lines up with the
         # rail's centerline (None: the middle of its drawing; see rail_point)
         self.rail_pos = _pt(rail_pos) if rail_pos is not None else None
+        # its pieces keep their own colors (a block from another program's drawing, as
+        # AutoCAD shows it: a manufacturer's colored parts); else all in the copy's color
+        self.own_colors = bool(own_colors)
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -1287,7 +1424,8 @@ class BlockDef:
                                      "height": a["height"]} for a in self.attr_texts]}
                     if self.attr_texts else {}) | {
                     k: getattr(self, k) for k in MAKER_FIELDS if getattr(self, k)} | (
-                    {"rail_pos": list(self.rail_pos)} if self.rail_pos is not None else {})
+                    {"rail_pos": list(self.rail_pos)} if self.rail_pos is not None else {}) | (
+                    {"own_colors": True} if self.own_colors else {})
 
     @classmethod
     def from_dict(cls, d, builtin=False):
@@ -1297,7 +1435,8 @@ class BlockDef:
                    d.get("description", ""), d.get("role", "device"), d.get("contact", ""),
                    d.get("prefix", ""), builtin, d.get("wiring", ""),
                    d.get("attr_texts", ()), d.get("manufacturer", ""), d.get("family", ""),
-                   d.get("series", ""), d.get("catalog", ""), d.get("rail_pos"))
+                   d.get("series", ""), d.get("catalog", ""), d.get("rail_pos"),
+                   d.get("own_colors", False))
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
@@ -1459,8 +1598,12 @@ class Insert(Entity):
                     if v:
                         out.append(Text(self.to_world(a["pos"]), v, a["height"] * self.scale,
                                         0.0, "center"))
+            own = d is not None and d.own_colors
             for w in out:
-                w.layer, w.color = self.layer, self.color
+                keep = own and w.color is not None
+                w.layer = self.layer
+                if not keep:
+                    w.color = self.color
             self._world = out
         return self._world
 

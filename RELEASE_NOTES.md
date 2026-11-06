@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.13.3
+
+**New**
+- Hatch (H): click inside a closed shape to fill it solid, with 45-degree lines, a crosshatch
+  or level lines; shapes inside it stay open. Hatches in DXF and DWG drawings come in as
+  hatches and are written out as hatches.
+- Parts from other programs' drawings keep their colors, as they showed there.
+- Leader arrowheads are filled.
+
 ## 0.13.2
 
 **New**

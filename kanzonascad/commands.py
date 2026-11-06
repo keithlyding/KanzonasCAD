@@ -1556,6 +1556,130 @@ class DimAlignedCmd(DimLinearCmd):
     mode = "aligned"
 
 
+def closed_loop(e):
+    """A closed shape's outline as points (a closed polyline or rectangle, a circle as 72
+    sides), or None."""
+    if isinstance(e, M.Polyline) and e.closed and len(e.points) >= 3:
+        return [tuple(q) for q in e.points]
+    if isinstance(e, M.Circle):
+        return [G.polar(e.center, e.radius, i * 5.0) for i in range(72)]
+    return None
+
+
+def _loop_area(lp):
+    a = 0.0
+    for i in range(len(lp)):
+        (x0, y0), (x1, y1) = lp[i], lp[(i + 1) % len(lp)]
+        a += x0 * y1 - x1 * y0
+    return abs(a) / 2
+
+
+def boundary_at(sheet, p, visible=lambda e: True):
+    """The loops of the area around p: the smallest closed shape around it, and the closed
+    shapes inside that one (holes: islands), or None."""
+    best = None
+    for e in sheet.query((p[0], p[1], p[0], p[1])):
+        lp = closed_loop(e) if visible(e) else None
+        if lp is not None and M.point_in_loops(p, [lp]):
+            a = _loop_area(lp)
+            if best is None or a < best[0]:
+                best = (a, e, lp)
+    if best is None:
+        return None
+    _a, outer, lp = best
+    loops = [lp]
+    bb = outer.bbox()
+    for e in sheet.query(bb):
+        if e.id == outer.id or not visible(e):
+            continue
+        inner = closed_loop(e)
+        if inner is not None and all(M.point_in_loops(q, [lp]) for q in inner) and \
+                not M.point_in_loops(p, [inner]):
+            loops.append(inner)
+    return loops
+
+
+class HatchCmd(Command):
+    """HATCH: click inside a closed shape (a closed polyline, a rectangle, a circle) to fill
+    it: solid, lines at 45 degrees (ANSI31), crosshatch (ANSI37) or level lines; closed
+    shapes inside it stay open (islands). Click more areas, Enter to finish. The pattern, its
+    spacing and angle are remembered."""
+    name, title = "HATCH", "Hatch"
+    OPTIONS = [("Solid", "SOLID"), ("45 lines", "ANSI31"), ("Crosshatch", "ANSI37"),
+               ("Level lines", "LINES"), ("Spacing", "SP"), ("Angle", "AN")]
+
+    def begin(self):
+        v = self.ctx
+        self.pattern = getattr(v, "hatch_pattern", "ANSI31")
+        self.angle = getattr(v, "hatch_angle", 0.0)
+        self.spacing = getattr(v, "hatch_spacing", None) or 0.125 * v.sheet().k()
+        self.asking = None
+        self.made = 0
+        self._prompt()
+
+    def _prompt(self):
+        what = M.HATCH_PATTERNS[self.pattern][0]
+        extra = "" if self.pattern == "SOLID" else ", %s in apart, at %g degrees" % (
+            _fmt(self.spacing), self.angle)
+        self.ctx.prompt("Click inside a closed shape to hatch it (%s%s); Enter to finish"
+                        % (what, extra), self.OPTIONS)
+
+    def _remember(self):
+        self.ctx.hatch_pattern, self.ctx.hatch_angle = self.pattern, self.angle
+        self.ctx.hatch_spacing = self.spacing
+
+    def text(self, s):
+        k = s.strip().upper()
+        if k in M.HATCH_PATTERNS:
+            self.pattern = k
+            self._remember()
+            self._prompt()
+            return True
+        if k == "SP":
+            self.asking = "spacing"
+            self.ctx.prompt("Space between the lines (inches, real size)", typing=True)
+            return True
+        if k == "AN":
+            self.asking = "angle"
+            self.ctx.prompt("Angle of the pattern (degrees)", typing=True)
+            return True
+        return False
+
+    def number(self, v):
+        if self.asking == "spacing" and v > 0:
+            self.spacing = float(v)
+        elif self.asking == "angle":
+            self.angle = float(v) % 180.0
+        else:
+            return False
+        self.asking = None
+        self._remember()
+        self._prompt()
+        return True
+
+    def point(self, p):
+        sheet = self.ctx.sheet()
+        loops = boundary_at(sheet, p, lambda e: self.ctx.layer_visible(e.layer))
+        if loops is None:
+            self.ctx.message("No closed shape around that point: hatch fills a closed "
+                             "polyline, rectangle or circle")
+            return
+        h = M.Hatch(loops, self.pattern, self.angle, self.spacing, layer=self.ctx.layer())
+        with self.ctx.edit(self.title) as ed:
+            ed.add(sheet, h)
+        self.made += 1
+        self.ctx.message("Hatched (%s)%s" % (M.HATCH_PATTERNS[self.pattern][0],
+                                             ", %d island(s) left open" % (len(loops) - 1)
+                                             if len(loops) > 1 else ""))
+
+    def enter(self):
+        if self.asking:
+            self.asking = None
+            self._prompt()
+            return
+        self.finish()
+
+
 def next_balloon(project):
     """The next item number for a balloon: one more than the highest on any sheet."""
     n = 0
@@ -2221,6 +2345,7 @@ COMMANDS = {
     "BUS": (BusCmd, ["BU"]),
     "EXPLODE": (ExplodeCmd, ["X"]),
     "DIMLINEAR": (DimLinearCmd, ["DLI", "DIM"]),
+    "HATCH": (HatchCmd, ["H", "BHATCH", "BH", "FILL"]),
     "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),

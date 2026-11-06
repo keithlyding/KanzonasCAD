@@ -101,6 +101,27 @@ def _write(msp, e):
         ent = msp.add_circle(e.center, e.radius, dxfattribs=attribs)
     elif isinstance(e, M.Arc):
         ent = msp.add_arc(e.center, e.radius, e.start, e.end, dxfattribs=attribs)
+    elif isinstance(e, M.Hatch):
+        # a HATCH: solid, or AutoCAD's predefined pattern of the same name (KanzonasCAD's
+        # spacing is the pattern's at scale 1 = 0.125 in, its scale spacing / 0.125)
+        ent = msp.add_hatch(dxfattribs=attribs)
+        for lp in e.loops:
+            ent.paths.add_polyline_path([(q[0], q[1]) for q in lp], is_closed=True)
+        if e.solid():
+            ent.set_solid_fill()
+        elif e.pattern in ("ANSI31", "ANSI37"):
+            ent.set_pattern_fill(e.pattern, scale=e.spacing / 0.125, angle=e.angle)
+        else:
+            # (a user-defined pattern: one family of lines; ezdxf leaves it marked solid)
+            ent.dxf.solid_fill = 0
+            ent.dxf.pattern_name = "_USER"
+            ent.dxf.pattern_type = 0
+            # (DXF keeps the step to the next line in the drawing's coordinates: across
+            # the lines, turned with them)
+            a = math.radians(e.angle)
+            ent.set_pattern_definition([[e.angle, (0, 0),
+                                         (-math.sin(a) * e.spacing, math.cos(a) * e.spacing),
+                                         []]])
     elif isinstance(e, M.Text):
         from ezdxf.enums import TextEntityAlignment
         attribs.update(height=e.height, rotation=e.angle)
@@ -140,7 +161,7 @@ def read_doc(doc, include_paperspace=False, units=None, keep_blocks=True):
     for dl in doc.layers:
         layers[dl.dxf.name] = _dxf_layer_color(dl)
     out, skipped = [], {}
-    blocks = {}                 # each block's drawing, read once (_block_parts)
+    blocks = {"__layers__": layers}     # each block's drawing, read once (_block_parts)
     for de in doc.modelspace():
         _read(de, k, out, skipped, 0, blocks, keep_blocks)
     # some makers' drawings are drawn in a layout (paper space), model space all but empty:
@@ -373,8 +394,17 @@ def _block_defn(de, k, skipped, depth, blocks):
         return None
     # a schematic symbol (AutoCAD Electrical's carry TAG1) or anything else: a footprint
     kind = "symbol" if "TAG1" in tags else "footprint"
-    defn = M.BlockDef(str(de.dxf.name), kind, [e.copy(layer="0") for e in parts],
-                      attr_texts=attrs, category="Imported")
+    # (its pieces keep their color, or their layer's: as AutoCAD shows the block; white or
+    # black ones, the drawing's ink, follow the copy)
+    lay = blocks.get("__layers__", {})
+    pieces = []
+    for e in parts:
+        c = e.color if e.color is not None else lay.get(e.layer)
+        if c is not None and str(c).lower() in ("#ffffff", "#000000", M.ADAPTIVE):
+            c = None
+        pieces.append(e.copy(layer="0", color=c))
+    defn = M.BlockDef(str(de.dxf.name), kind, pieces, attr_texts=attrs, category="Imported",
+                      own_colors=True)
     blocks[key] = defn
     return defn
 
@@ -453,16 +483,39 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             if len(pts) >= 2:
                 out.append(M.Polyline(pts, len(pts) > 2, **kw))
         elif t == "HATCH":
-            # its boundaries, seen from above (the fill isn't drawn: it would hide what is
-            # under it)
+            # a hatch of KanzonasCAD's: its boundaries (seen from above) and its fill or
+            # pattern (ANSI31/ANSI37 by name; any other: its first family of lines)
             from ezdxf import path as ezpath
-            n = len(out)
+            loops = []
             for p in ezpath.from_hatch(de):
                 pts = [P(v) for v in p.flattening(0.002 / max(k, 1e-9))]
-                if len(pts) >= 2:
-                    out.append(M.Polyline(pts, False, **kw))
-            if len(out) == n:
+                if len(pts) >= 3:
+                    if G.dist(pts[0], pts[-1]) < 1e-9:
+                        pts = pts[:-1]
+                    loops.append(pts)
+            if not loops:
                 skipped[t] = skipped.get(t, 0) + 1
+                return
+            if de.dxf.get("solid_fill", 0):
+                out.append(M.Hatch(loops, "SOLID", **kw))
+            else:
+                name = str(de.dxf.get("pattern_name", "") or "").upper()
+                scale = float(de.dxf.get("pattern_scale", 1.0) or 1.0)
+                ang = float(de.dxf.get("pattern_angle", 0.0) or 0.0)
+                if name in ("ANSI31", "ANSI37"):
+                    out.append(M.Hatch(loops, name, ang, 0.125 * scale * k, **kw))
+                else:
+                    lines = de.pattern.lines if de.pattern is not None else []
+                    if lines:
+                        ln = lines[0]
+                        # (the space between the lines: the offset across them)
+                        a = math.radians(ln.angle)
+                        off = abs(-ln.offset[0] * math.sin(a) + ln.offset[1] * math.cos(a)) \
+                            or 0.125
+                        # (the definition's angle already includes the hatch's)
+                        out.append(M.Hatch(loops, "LINES", ln.angle, off * k, **kw))
+                    else:
+                        out.append(M.Hatch(loops, "ANSI31", ang, 0.125 * scale * k, **kw))
         elif t in ("LWPOLYLINE", "POLYLINE"):
             if t == "POLYLINE" and not de.is_2d_polyline:
                 skipped[t] = skipped.get(t, 0) + 1
