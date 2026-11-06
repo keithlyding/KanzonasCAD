@@ -1556,6 +1556,87 @@ class DimAlignedCmd(DimLinearCmd):
     mode = "aligned"
 
 
+def next_balloon(project):
+    """The next item number for a balloon: one more than the highest on any sheet."""
+    n = 0
+    for sh in project.sheets:
+        for e in sh.entities.values():
+            if isinstance(e, M.Leader) and e.balloon:
+                try:
+                    n = max(n, int(e.text.strip()))
+                except ValueError:
+                    pass
+    return n + 1
+
+
+class LeaderCmd(Command):
+    """LEADER (AutoCAD's LEADER and MLEADER in one): pick the arrow's point, then where the
+    line bends, Enter; then type the note, or B for a balloon with an item number (Enter
+    takes the next one). Its text is paper-sized, as a dimension's."""
+    name, title = "LEADER", "Leader"
+
+    def begin(self):
+        self.pts = []
+        self.step = "points"
+        self.ctx.prompt("Specify the arrow's point")
+
+    def _height(self):
+        return float(self.ctx.project.settings.get("dim_height", 0.1)) * self.ctx.sheet().k()
+
+    def point(self, p):
+        if self.step != "points":
+            return
+        self.pts.append(p)
+        self.base = self.last = p
+        if len(self.pts) == 1:
+            self.ctx.prompt("Specify where the line goes")
+        else:
+            self.ctx.prompt("Next point, or Enter for the text")
+
+    def enter(self):
+        if self.step == "points":
+            if len(self.pts) < 2:
+                self.finish()
+                return
+            self.step = "text"
+            self.ctx.prompt("Type the note (Enter: none), or B for a balloon", [("Balloon", "B")],
+                            typing=True)
+            return
+        if self.step == "text":
+            self._make("", False)
+        elif self.step == "number":
+            self._make(str(next_balloon(self.ctx.project)), True)
+
+    def text(self, s):
+        if self.step == "text":
+            if s.strip().upper() == "B":
+                self.step = "number"
+                self.ctx.prompt("Item number: Enter for %d, or type one"
+                                % next_balloon(self.ctx.project), typing=True)
+                return True
+            self._make(s, False)
+            return True
+        if self.step == "number":
+            self._make(s.strip() or str(next_balloon(self.ctx.project)), True)
+            return True
+        return False
+
+    def _make(self, text, balloon):
+        ld = M.Leader(self.pts, text, balloon, self._height())
+        with self.ctx.edit(self.title) as ed:
+            if ld.layer not in self.ctx.project.layers:
+                ed.layer(ld.layer, None, M.Layer(ld.layer, "#00c8c8").to_dict())
+            ed.add(self.ctx.sheet(), ld)
+        self.ctx.message("Leader with %s" % ("balloon %s" % text if balloon
+                                             else ("note \"%s\"" % text if text else "no text")))
+        self.finish()
+
+    def preview(self, p):
+        if self.step != "points" or not self.pts:
+            return []
+        return [M.Leader(self.pts + [p], "", False, self._height())]
+
+
 def parse_duct_size(text):
     """2x3, 2 x 3, 1.5x3 (inches) or 50x75mm -> (width, depth) in inches, or None."""
     import re
@@ -2140,6 +2221,7 @@ COMMANDS = {
     "BUS": (BusCmd, ["BU"]),
     "EXPLODE": (ExplodeCmd, ["X"]),
     "DIMLINEAR": (DimLinearCmd, ["DLI", "DIM"]),
+    "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
     "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)

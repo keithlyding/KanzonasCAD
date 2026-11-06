@@ -68,7 +68,8 @@ class ImportMoreTest(unittest.TestCase):
         self.assertEqual([tuple(q) for q in solid[0].points], [(25, 0), (26, 0), (26, 1), (25, 1)])
         self.assertTrue(solid[0].closed)
         # the multileader's text
-        self.assertTrue(any(isinstance(e, M.Text) and e.text == "SEE NOTE" for e in ents))
+        # (a leader of KanzonasCAD's since 0.13.1, its note with it)
+        self.assertTrue(any(isinstance(e, M.Leader) and e.text == "SEE NOTE" for e in ents))
         # the MINSERT: all six holes
         holes = sorted(tuple(round(c, 6) for c in e.center) for e in ents
                        if isinstance(e, M.Circle) and abs(e.radius - 0.1) < 1e-9)

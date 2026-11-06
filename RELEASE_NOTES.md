@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.13.1
+
+**New**
+- Leader (LE): an arrow pointing at a part, with a note (one or several lines) or a balloon
+  with an item number that counts up by itself. One tool for AutoCAD's leaders and
+  multileaders; double-click one to change it. Leaders and multileaders in DXF drawings come
+  in as leaders.
+
 ## 0.13
 
 **New**

@@ -327,6 +327,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("lay_unlock", "&Unlock all layers", C.LayerUnlockAllCmd, "Unlock all")
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
+        self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
         self._cmd_act("wire_cross", "Wire cr&ossing", C.WireCrossCmd, "Crossing")
         self._cmd_act("rail", "DIN &rail", C.RailCmd, "DIN rail")
         self._cmd_act("duct", "&Wire duct", C.DuctCmd, "Wire duct")
@@ -482,7 +483,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Draw")
         for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus",
                   "wire_cross", None,
-                  "dim_linear", "dim_aligned", None, "rail", "duct"):
+                  "dim_linear", "dim_aligned", "leader", None, "rail", "duct"):
             if k == "CIRCLE":
                 cm = m.addMenu("&Circle")
                 for ck in self.CIRCLE_KEYS:
@@ -574,7 +575,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"],
                                  a["dup_block"], a["save_block_as"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
-            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"]]),
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
             ("Arrange", "large", [a["align_obj"]]),
             ("Parts", "small", [a["new_part"], a["panel_settings"]]),
@@ -1362,6 +1363,12 @@ class MainWindow(BlockEditing, QMainWindow):
         v = self.view()
         if v is None:
             return
+        if isinstance(ent, M.Leader):
+            new = dialogs.leader_dialog(self, ent)
+            if new is not None:
+                with v.project.edit("Edit leader") as ed:
+                    ed.change(v.sheet(), new)
+            return
         new = dialogs.edit_text_dialog(self, ent)
         if new is not None:
             with v.project.edit("Edit text") as ed:
@@ -2148,7 +2155,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
-                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned",
+                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader",
                   "rail", "duct", "materials", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",

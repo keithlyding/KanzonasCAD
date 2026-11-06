@@ -924,6 +924,105 @@ class Dimension(Composite):
         return self.copy(p1=list(fn(self.p1)), p2=list(fn(self.p2)), loc=list(fn(self.loc)))
 
 
+@_register
+class Leader(Composite):
+    """A leader (AutoCAD's LEADER and MLEADER in one): an arrow at points[0] pointing at
+    something, a line through the other points, and at its end a note (text, several lines
+    split by newlines) or a balloon (a circle with an item number, as a bill of materials
+    uses). height: its text height in drawing units (paper-sized, as a dimension's)."""
+    kind = "leader"
+    __slots__ = ("points", "text", "balloon", "height", "_parts")
+
+    def __init__(self, points, text="", balloon=False, height=0.1, **kw):
+        kw.setdefault("layer", "DIMENSIONS")
+        super().__init__(**kw)
+        self.points = [_pt(q) for q in points]
+        self.text = str(text or "")
+        self.balloon = bool(balloon)
+        self.height = float(height)
+        self._parts = None
+
+    def _data(self):
+        d = {"points": [list(q) for q in self.points], "height": self.height}
+        if self.text:
+            d["text"] = self.text
+        if self.balloon:
+            d["balloon"] = True
+        return d
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["points"], d.get("text", ""), d.get("balloon", False),
+                   d.get("height", 0.1), layer=d.get("layer", "DIMENSIONS"),
+                   color=d.get("color"), id=d.get("id"))
+
+    def side(self):
+        """+1: the note goes to the right of the end; -1: to the left (as the last bend
+        points)."""
+        if len(self.points) < 2:
+            return 1
+        a, b = self.points[-2], self.points[-1]
+        return 1 if b[0] >= a[0] else -1
+
+    def parts(self):
+        """Its arrowhead, line, landing and note or balloon, placed (kept until it changes)."""
+        if self._parts is not None:
+            return self._parts
+        h, pts = self.height, self.points
+        out = []
+        if len(pts) >= 2:
+            out.append(Polyline(pts, False))
+            # a closed arrowhead at the first point, along the first segment
+            tip, nxt = pts[0], pts[1]
+            L = G.dist(tip, nxt)
+            if L > 1e-9:
+                ux, uy = (nxt[0] - tip[0]) / L, (nxt[1] - tip[1]) / L
+                s = min(h * 1.2, L * 0.5)
+                bx, by = tip[0] + ux * s, tip[1] + uy * s
+                w = s * 0.3
+                out.append(Polyline([tip, (bx - uy * w, by + ux * w),
+                                     (bx + uy * w, by - ux * w)], True))
+            end, sd = pts[-1], self.side()
+            land = (end[0] + sd * h, end[1])          # (a short level landing)
+            out.append(Line(end, land))
+            if self.balloon:
+                r = h * 1.1
+                c = (land[0] + sd * r, land[1])
+                out.append(Circle(c, r))
+                if self.text:
+                    out.append(Text(c, self.text.splitlines()[0], h, 0.0, "center", "middle"))
+            elif self.text:
+                lines = self.text.splitlines() or [""]
+                x = land[0] + sd * h * 0.3
+                step = h * 1.6667
+                y0 = land[1] + (len(lines) - 1) * step / 2
+                for i, line in enumerate(lines):
+                    if line.strip():
+                        out.append(Text((x, y0 - i * step), line, h, 0.0,
+                                        "left" if sd > 0 else "right", "middle"))
+        for e in out:
+            e.layer, e.color = self.layer, self.color
+        self._parts = out
+        return out
+
+    def _compute_snaps(self):
+        out = [("end", self.points[0])] if self.points else []
+        out += [("node", q) for q in self.points[1:]]
+        return out
+
+    def grips(self):
+        return list(self.points)
+
+    def with_grip(self, i, p):
+        pts = [list(q) for q in self.points]
+        pts[i] = list(p)
+        return self.copy(points=pts)
+
+    def _map(self, fn, **_kw):
+        # (scaled, its text keeps its height: it is paper-sized)
+        return self.copy(points=[list(fn(q)) for q in self.points])
+
+
 # ---- DIN rail and wire duct: real-size pieces from one end to the other ---------------------
 MM_IN = 1 / 25.4
 # rail profiles: key -> (name, width, depth) in inches
@@ -1926,7 +2025,7 @@ class Edit:
         for e in list(sheet.entities.values()):
             if isinstance(e, Text):
                 self.change(sheet, e.copy(height=e.height * f))
-            elif isinstance(e, Dimension):
+            elif isinstance(e, (Dimension, Leader)):
                 self.change(sheet, e.copy(height=e.height * f))
             elif isinstance(e, Insert) and e.tag_h:
                 self.change(sheet, e.copy(tag_h=e.tag_h * f))
