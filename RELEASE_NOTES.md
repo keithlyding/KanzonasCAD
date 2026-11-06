@@ -6,6 +6,16 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.13
+
+**New**
+- Blocks in DXF and DWG drawings stay blocks: each terminal, module or drive comes in as one
+  object you can click, move, copy and label, with its attributes. AutoCAD Electrical's
+  P_TAG1, DESC1-3, MFG and CAT become the part's tag, description, manufacturer and catalog
+  number. Explode still takes one apart, and Edit block saves one to your library.
+- Opening a drawing made of blocks is lighter: a panel drawing that came in as 100,000 loose
+  lines now comes in as a few hundred parts.
+
 ## 0.12.11
 
 **Fixed**

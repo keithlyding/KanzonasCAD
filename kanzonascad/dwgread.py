@@ -148,7 +148,7 @@ def _add(layout, t, dxf, kw, names, skipped):
         name = names.get(_block_name(name))
         if name is None:
             return False
-        layout.add_blockref(name, ins, dxfattribs=dict(
+        return layout.add_blockref(name, ins, dxfattribs=dict(
             kw, xscale=xs or 1.0, yscale=ys or 1.0, zscale=zs or 1.0, rotation=rot or 0.0))
     elif t == "LEADER":
         pts = [tuple(p) for p in dxf.get("points") or dxf.get("vertices") or []]
@@ -163,7 +163,14 @@ def _add(layout, t, dxf, kw, names, skipped):
             kw, scale_factor=float(dxf.get("scale") or 1.0),
             justification=int(dxf.get("justification") or 0)))
     elif t == "ATTDEF":
-        return True                     # (the empty field of a block, not drawn on its copies)
+        # a block's field: kept for the block (its copies show their own values there)
+        kw = dict(kw, height=dxf.get("height") or 0.125, rotation=dxf.get("rotation") or 0.0,
+                  halign=int(dxf.get("halign") or 0), valign=int(dxf.get("valign") or 0),
+                  flags=int(dxf.get("attribute_flags") or 0))
+        if dxf.get("align_point") is not None:
+            kw["align_point"] = dxf["align_point"]
+        layout.add_attdef(str(dxf.get("tag") or ""), dxf["insert"], str(dxf.get("text") or ""),
+                          dxfattribs=kw)
     else:
         return False
     return True
@@ -244,6 +251,7 @@ def read(path):
             where[e.handle] = None                      # (model or paper space's own record)
     skipped = {}
     attribs = []
+    refs = {}                           # an INSERT's handle -> its ezdxf block reference
     for e in ents:
         t = e.dxftype
         if t == "ATTRIB":
@@ -264,6 +272,8 @@ def read(path):
             continue
         if not ok:
             skipped[t] = skipped.get(t, 0) + 1
+        elif t == "INSERT" and ok is not True:
+            refs[e.handle] = ok
     # a dimension ezdwg doesn't list (its own writer's, for one) still has its drawing, in
     # place, in its anonymous "*D" block: drawn where it stands when nothing refers to it
     # (AutoCAD drops unreferenced ones when it saves, so none is drawn twice)
@@ -279,12 +289,24 @@ def read(path):
             msp.add_blockref(plain, (0.0, 0.0, 0.0))
             used.add(plain)
     # attributes: drawn where their block reference is (their points are already there)
+    # (attached to their block reference, as in the DWG, so the block keeps its values: a
+    # tag, a catalog number; one whose reference isn't known: a text where it stands)
     for e in attribs:
         owner = e.dxf.get("owner_handle")
-        target = where.get(owner) if e.dxf.get("owner_type") == "INSERT" else where.get(e.handle)
-        if target is None:
-            target = msp
+        ref = refs.get(owner) if e.dxf.get("owner_type") == "INSERT" else None
         try:
+            if ref is not None:
+                d = e.dxf
+                kw = dict(_attribs(d, layers), height=d.get("height") or 0.125,
+                          rotation=d.get("rotation") or 0.0, halign=int(d.get("halign") or 0),
+                          valign=int(d.get("valign") or 0),
+                          flags=int(d.get("attribute_flags") or 0))
+                if d.get("align_point") is not None:
+                    kw["align_point"] = d["align_point"]
+                ref.add_attrib(str(d.get("tag") or ""), str(d.get("text") or ""),
+                               d["insert"], dxfattribs=kw)
+                continue
+            target = where.get(owner) or where.get(e.handle) or msp
             _add(target, "ATTRIB", e.dxf, _attribs(e.dxf, layers), names, skipped)
         except (KeyError, TypeError, ValueError, ezdxf.DXFError):
             skipped["ATTRIB (unreadable)"] = skipped.get("ATTRIB (unreadable)", 0) + 1

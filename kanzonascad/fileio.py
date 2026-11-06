@@ -118,7 +118,7 @@ def _write(msp, e):
 # ============================================================================================
 # DXF import
 # ============================================================================================
-def read_dxf(path, include_paperspace=False, units=None):
+def read_dxf(path, include_paperspace=False, units=None, keep_blocks=True):
     """Entities of a DXF's model space, in inches, plus a report:
     (entities, {"layers": {name: hex color}, "skipped": {dxftype: count}, "units": name}).
     units: the drawing's $INSUNITS when the file's own can't be trusted (a converted DWG)."""
@@ -128,10 +128,10 @@ def read_dxf(path, include_paperspace=False, units=None):
         doc = ezdxf.readfile(path)
     except ezdxf.DXFStructureError:
         doc, _auditor = recover.readfile(path)
-    return read_doc(doc, include_paperspace, units)
+    return read_doc(doc, include_paperspace, units, keep_blocks)
 
 
-def read_doc(doc, include_paperspace=False, units=None):
+def read_doc(doc, include_paperspace=False, units=None, keep_blocks=True):
     """read_dxf for an ezdxf document already open (a DWG read by dwgread)."""
     if units is None:
         units = int(doc.header.get("$INSUNITS", 0) or 0)
@@ -142,7 +142,7 @@ def read_doc(doc, include_paperspace=False, units=None):
     out, skipped = [], {}
     blocks = {}                 # each block's drawing, read once (_block_parts)
     for de in doc.modelspace():
-        _read(de, k, out, skipped, 0, blocks)
+        _read(de, k, out, skipped, 0, blocks, keep_blocks)
     # some makers' drawings are drawn in a layout (paper space), model space all but empty:
     # then the layouts' drawing comes in too (their viewports don't: they show model space)
     from_layouts = 0
@@ -153,7 +153,7 @@ def read_doc(doc, include_paperspace=False, units=None):
                 continue
             for de in layout:
                 if de.dxftype() != "VIEWPORT":
-                    _read(de, k, paper, pskip, 0, blocks)
+                    _read(de, k, paper, pskip, 0, blocks, keep_blocks)
         if include_paperspace or len(paper) > len(out):
             out += paper
             from_layouts = len(paper)
@@ -222,6 +222,77 @@ def _block_parts(de, k, skipped, depth, blocks):
     return got[0]
 
 
+# AutoCAD Electrical's attribute names -> KanzonasCAD's (a panel footprint's P_TAG1 is the tag
+# of the schematic device it belongs to; DESC1-3 are its description lines)
+ACE_ATTRS = {"TAG1": "TAG", "P_TAG1": "TAG", "TAG": "TAG", "MFG": "MFR", "MFR": "MFR",
+             "CAT": "CAT", "DESC1": "DESC", "DESC2": "DESC", "DESC3": "DESC", "DESC": "DESC"}
+
+
+def _attr_name(tag):
+    t = str(tag or "").strip().upper()
+    return ACE_ATTRS.get(t, t)
+
+
+def _keepable(de):
+    """A block reference kept as a block (not taken apart): a named block (not an anonymous
+    one: a dimension's, a table's...), placed with the same scale both ways (mirrored or
+    not), lying flat; (scale, angle, mirror) for M.Insert, else None."""
+    d = de.dxf
+    name = str(d.name)
+    from .dwgread import ANON_PREFIX
+    if name.startswith("*") or name.startswith(ANON_PREFIX):
+        return None
+    xs, ys = d.get("xscale", 1.0), d.get("yscale", 1.0)
+    ext = d.get("extrusion", (0.0, 0.0, 1.0))
+    if abs(abs(xs) - abs(ys)) > 1e-9 * max(1.0, abs(xs)) or abs(xs) < 1e-12 or \
+            abs(ext[0]) > 1e-12 or abs(ext[1]) > 1e-12 or ext[2] < 0 or \
+            d.get("column_count", 1) > 1 or d.get("row_count", 1) > 1:
+        return None
+    r = d.get("rotation", 0.0)
+    if xs > 0 and ys > 0:
+        return abs(xs), r, False
+    if xs < 0 and ys < 0:
+        return abs(xs), r + 180.0, False
+    if ys < 0:
+        return abs(xs), r, True                 # (its y flipped: KanzonasCAD's mirror)
+    return abs(xs), r + 180.0, True             # (its x flipped: y flipped, turned 180)
+
+
+def _block_defn(de, k, skipped, depth, blocks):
+    """The BlockDef an imported block reference shows, made once per block: its drawing
+    (inches, around its base point) and the attribute fields it shows (ATTDEFs). None for a
+    block with nothing to draw (AutoCAD Electrical's hidden WD_M...)."""
+    key = ("defn", de.dxf.name)
+    if key in blocks:
+        return blocks[key]
+    parts = [e for e, _on0 in _block_parts(de, k, {}, depth, blocks)]
+    blk = de.block()
+    bx, by = blk.block.dxf.base_point[0] * k, blk.block.dxf.base_point[1] * k
+    attrs, seen = [], set()
+    tags = set()
+    for sub in blk:
+        if sub.dxftype() != "ATTDEF":
+            continue
+        name = _attr_name(sub.dxf.tag)
+        tags.add(str(sub.dxf.tag).upper())
+        if sub.is_invisible or name in seen or not name:
+            continue
+        seen.add(name)
+        p = sub.dxf.get("align_point") if (sub.dxf.get("halign", 0) or sub.dxf.get("valign", 0)) \
+            and sub.dxf.hasattr("align_point") else sub.dxf.insert
+        attrs.append({"attr": name, "pos": (p[0] * k - bx, p[1] * k - by),
+                      "height": sub.dxf.get("height", 0.125) * k})
+    if not parts and not attrs:
+        blocks[key] = None
+        return None
+    # a schematic symbol (AutoCAD Electrical's carry TAG1) or anything else: a footprint
+    kind = "symbol" if "TAG1" in tags else "footprint"
+    defn = M.BlockDef(str(de.dxf.name), kind, [e.copy(layer="0") for e in parts],
+                      attr_texts=attrs, category="Imported")
+    blocks[key] = defn
+    return defn
+
+
 def _fast_insert(de):
     """Can a block reference be placed by turning and scaling its block's drawing alone (the
     same scale both ways, not mirrored, lying flat on the page)? Else ezdxf takes it apart."""
@@ -233,7 +304,7 @@ def _fast_insert(de):
         d.get("column_count", 1) <= 1 and d.get("row_count", 1) <= 1
 
 
-def _read(de, k, out, skipped, depth, blocks=None):
+def _read(de, k, out, skipped, depth, blocks=None, keep=False):
     t = de.dxftype()
     layer = de.dxf.get("layer", "0") or "0"
     kw = dict(layer=layer, color=_entity_color(de))
@@ -377,6 +448,26 @@ def _read(de, k, out, skipped, depth, blocks=None):
             # a MINSERT (rows and columns of one block): each copy
             for one in de.multi_insert():
                 _read(one, k, out, skipped, depth + 1, blocks)
+        elif t == "INSERT" and keep and depth == 0 and blocks is not None and \
+                _keepable(de) and _block_defn(de, k, skipped, depth, blocks) is not None:
+            # kept a block: one object per copy, its attributes as KanzonasCAD's (TAG, DESC,
+            # MFR, CAT; AutoCAD Electrical's P_TAG1, DESC1... mapped)
+            s, r, mirror = _keepable(de)
+            defn = _block_defn(de, k, skipped, depth, blocks)
+            vals = {}
+            for att in de.attribs:
+                name = _attr_name(att.dxf.tag)
+                v = att.dxf.get("text", "")
+                if name and v and v.strip("-"):
+                    vals[name] = (vals[name] + " " + v) if name == "DESC" and \
+                        vals.get(name) else v
+            out.append(M.Insert(defn.name, (de.dxf.insert[0] * k, de.dxf.insert[1] * k), r,
+                                s, mirror, vals, defn, layer=layer, color=kw["color"]))
+            # a value its block has no field for (no ATTDEF) still shows where it stands
+            shown = {a["attr"] for a in defn.attr_texts}
+            for att in de.attribs:
+                if _attr_name(att.dxf.tag) not in shown:
+                    _read(att, k, out, skipped, depth + 1, blocks)
         elif t == "INSERT" and depth < 12 and blocks is not None and _fast_insert(de):
             # the block's drawing read once, then turned, scaled and moved for each copy
             # (taking each copy apart again was most of the time of opening a drawing made
@@ -572,6 +663,38 @@ def import_dxf(project, sheet, path, at=None, anchor="center"):
     return add_drawing(project, sheet, ents, rep, path, at, anchor)
 
 
+def _own_blocks(ed, project, ents):
+    """The imported blocks put in the project (its own copies, as a placed library block's);
+    one of the same name already there and different keeps its place: the imported one is
+    renamed ("name (2)"), and its references with it."""
+    renamed, done = {}, {}
+    out = []
+    for e in ents:
+        if not isinstance(e, M.Insert) or e.defn is None:
+            out.append(e)
+            continue
+        key = id(e.defn)
+        if key not in done:
+            defn, name = e.defn, e.defn.name
+            have = project.blocks.get(name)
+            if have is not None and not have.same_as(defn):
+                n = 2
+                while "%s (%d)" % (name, n) in project.blocks:
+                    if project.blocks["%s (%d)" % (name, n)].same_as(defn):
+                        break
+                    n += 1
+                name = "%s (%d)" % (name, n)
+                defn = M.BlockDef.from_dict(dict(defn.to_dict(), name=name))
+            if name not in project.blocks:
+                ed.block(defn)
+            done[key] = project.blocks[name]
+            renamed[key] = name
+        defn = done[key]
+        out.append(M.Insert(defn.name, e.pos, e.angle, e.scale, e.mirror, e.attrs, defn,
+                            e.tag_h, layer=e.layer, color=e.color))
+    return out
+
+
 def add_drawing(project, sheet, ents, rep, path, at=None, anchor="center"):
     """The part of import_dxf after reading: the entities added to the sheet, one undoable
     step (their layers made when missing)."""
@@ -588,6 +711,7 @@ def add_drawing(project, sheet, ents, rep, path, at=None, anchor="center"):
         for name, color in rep["layers"].items():
             if name not in project.layers:
                 ed.layer(name, None, M.Layer(name, color).to_dict())
+        ents = _own_blocks(ed, project, ents)
         for e in ents:
             if e.layer not in project.layers:
                 ed.layer(e.layer, None, M.Layer(e.layer).to_dict())

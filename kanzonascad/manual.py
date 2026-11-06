@@ -782,6 +782,21 @@ objects) but whose layouts (paper space) hold more is read from its layouts inst
 manufacturers' and older drawings keep their geometry there; the command line says so.
 Opening a DXF or DWG reads it the same way. It opens in the folder you last imported from
 (manufacturers' drawings usually sit together).</li>
+<li><b>Blocks stay blocks.</b> Opening or importing a DXF or DWG keeps each named block as a
+block of the project: every copy (a terminal, an I/O module, a drive, the border) is one
+object you click, move, copy, label (Footprint label) and list, placed where the other program
+put it, at its scale and turned or mirrored as it was. Their attributes come with them, as
+the copy's own: AutoCAD Electrical's <b>P_TAG1</b> or <b>TAG1</b> becomes its tag,
+<b>DESC1</b> to <b>DESC3</b> its description, <b>MFG</b> its manufacturer, <b>CAT</b> its
+catalog number; any other (RATING1, TERM...) keeps its name (double-click the copy to see
+them all). A block's visible fields show their values as they do in AutoCAD. A block with
+AutoCAD Electrical's TAG1 comes in as a schematic symbol, any other as a panel footprint
+(with no pins: wires don't attach to imported symbols). <b>Explode</b> takes a copy apart into
+its lines and texts; <b>Edit block...</b> opens its drawing, and <b>Save block</b> puts it in
+your library to use again. A block of the same name already in the project and different is
+not replaced: the imported one is named "name (2)". Blocks scaled differently across and up
+and down, arrays (MINSERT) and anonymous ones (a dimension's drawing) still come in as their
+lines and texts.</li>
 <li><b>Drag and drop</b>: drag a DXF or DWG from Explorer (or a file manager) and drop it on
 the drawing: it is imported into the sheet shown, at real size, with its middle where you let
 go, and selected (to move it right away); one Undo takes it out. Several dropped at once go
@@ -794,9 +809,7 @@ since 2018 too) open and import directly, with nothing to install. KanzonasCAD r
 object by object (with ezdwg, free and open source, decoding the file): every block keeps its
 base point and each copy its own place, scale and rotation, block attributes show their
 values (invisible ones stay hidden), dimensions come with their lines, arrows and values, and
-layers keep their names and colors. A drawing made of many blocks (a panel of terminals and
-I/O modules) comes in as its blocks' lines, arcs and texts, each block's drawing worked out
-once for all its copies. Tables, multileaders and arc dimensions in a DWG can't be read yet
+layers keep their names and colors. Tables, multileaders and arc dimensions in a DWG can't be read yet
 (ezdwg doesn't decode them; the same drawing saved as DXF brings them in), nor 3D solids and
 regions; the message after opening names what was left out. If this reader fails on a
 file, KanzonasCAD tries the older way (ezdwg's own conversion to DXF, which loses blocks'

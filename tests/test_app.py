@@ -294,8 +294,13 @@ class FileTest(unittest.TestCase):
         self.assertEqual(rep["count"], 2)
         es = list(p.sheets[0].entities.values())
         self.assertAlmostEqual(es[0].p2[0], 1.0)
-        self.assertAlmostEqual(es[1].radius, 0.1)
-        self.assertEqual(es[1].layer, "SYM")       # block content on 0 takes the insert's layer
+        # the block reference stays a block (0.13), its drawing in inches too
+        self.assertIsInstance(es[1], M.Insert)
+        self.assertEqual(es[1].layer, "SYM")
+        circle = es[1].world_entities()[0]
+        self.assertAlmostEqual(circle.radius, 0.1)
+        self.assertAlmostEqual(circle.center[0], 2.0)
+        self.assertEqual(circle.layer, "SYM")      # block content on 0 takes the insert's layer
         self.assertIn("SYM", p.layers)
         p.undo()
         self.assertEqual(len(p.sheets[0].entities), 0)
