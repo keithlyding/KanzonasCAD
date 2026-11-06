@@ -16,12 +16,15 @@ from kanzonascad import model as M
 
 class MTextModelTest(unittest.TestCase):
     def test_lines_wrap_and_place(self):
-        m = M.MText((0, 10), "ALL WIRING 14 AWG UNLESS NOTED\nSECOND", 0.1, width=1.5)
+        # (the width from the font's own measure: the test holds with any font; on the
+        # Windows test runner the letters measured narrower than Arial's and 1.5" held the
+        # whole line)
+        width = M.text_width("ALL WIRING 14 AWG", 0.1) * 1.05
+        m = M.MText((0, 10), "ALL WIRING 14 AWG UNLESS NOTED\nSECOND", 0.1, width=width)
         lines = m.lines()
-        self.assertEqual(lines[-1], "SECOND")
-        self.assertGreater(len(lines), 2)                       # (wrapped)
+        self.assertEqual(lines, ["ALL WIRING 14 AWG", "UNLESS NOTED", "SECOND"])
         for ln in lines[:-1]:
-            self.assertLessEqual(M.text_width(ln, 0.1), 1.5 + 1e-9)
+            self.assertLessEqual(M.text_width(ln, 0.1), width + 1e-9)
         parts = m.parts()
         self.assertEqual(tuple(round(c, 9) for c in parts[0].pos), (0.0, 10.0))
         self.assertTrue(all(p.valign == "top" for p in parts))
@@ -30,6 +33,25 @@ class MTextModelTest(unittest.TestCase):
         br = M.MText((5, 5), "A\nB", 0.1, attach="BR")
         self.assertEqual(br.parts()[0].align, "right")
         self.assertAlmostEqual(br.parts()[-1].pos[1] - 0.1, 5.0)
+
+    def test_wraps_without_a_font(self):
+        """A font that measures every text as nothing (Qt with no fonts: the Windows test
+        runner's offscreen mode) falls back to the estimate: notes still wrap."""
+        from kanzonascad import render
+
+        class NoFont:
+            def horizontalAdvance(self, text):
+                return 0.0
+        render.text_font()
+        saved = render._font_cache["fm"], M.TEXT_MEASURE
+        render._font_cache["fm"] = NoFont()
+        M.TEXT_MEASURE = render.measure
+        try:
+            self.assertGreater(M.text_width("ALL WIRING", 0.1), 0)
+            m = M.MText((0, 10), "ALL WIRING 14 AWG UNLESS NOTED", 0.1, width=1.5)
+            self.assertGreater(len(m.lines()), 1)
+        finally:
+            render._font_cache["fm"], M.TEXT_MEASURE = saved
 
     def test_saved_moved_scaled(self):
         m = M.MText((1, 1), "X\nY", 0.2, 30.0, "MC", 2.0, layer="NOTES")
