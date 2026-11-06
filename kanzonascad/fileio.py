@@ -491,10 +491,22 @@ def read_drawing(path):
     return read_dxf(path)
 
 
-def import_dxf(project, sheet, path):
+def import_dxf(project, sheet, path, at=None, anchor="center"):
     """Add a DXF's or DWG's model space to a sheet (one undoable step). Returns the report of
-    read_dxf plus "count"."""
+    read_dxf plus "count", "ids" (the objects added) and "bbox" (where they are). at: a point
+    to put the middle of the drawing on (a file dropped on the drawing), or with anchor
+    "left" the middle of its left side (the next of several dropped, beside the one before);
+    None keeps the drawing's own coordinates."""
     ents, rep = read_drawing(path)
+    bb = None
+    for e in ents:
+        bb = G.bbox_union(bb, e.bbox())
+    if at is not None and bb is not None:
+        dx = at[0] - (bb[0] if anchor == "left" else (bb[0] + bb[2]) / 2)
+        dy = at[1] - (bb[1] + bb[3]) / 2
+        ents = [e.moved(dx, dy) for e in ents]
+        bb = (bb[0] + dx, bb[1] + dy, bb[2] + dx, bb[3] + dy)
+    ids = []
     with project.edit("Import DWG" if path.lower().endswith(".dwg") else "Import DXF") as ed:
         for name, color in rep["layers"].items():
             if name not in project.layers:
@@ -502,8 +514,10 @@ def import_dxf(project, sheet, path):
         for e in ents:
             if e.layer not in project.layers:
                 ed.layer(e.layer, None, M.Layer(e.layer).to_dict())
-            ed.add(sheet, e)
+            ids.append(ed.add(sheet, e).id)
     rep["count"] = len(ents)
+    rep["ids"] = ids
+    rep["bbox"] = bb
     return rep
 
 

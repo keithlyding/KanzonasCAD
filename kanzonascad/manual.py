@@ -782,6 +782,13 @@ objects) but whose layouts (paper space) hold more is read from its layouts inst
 manufacturers' and older drawings keep their geometry there; the command line says so.
 Opening a DXF or DWG reads it the same way. It opens in the folder you last imported from
 (manufacturers' drawings usually sit together).</li>
+<li><b>Drag and drop</b>: drag a DXF or DWG from Explorer (or a file manager) and drop it on
+the drawing: it is imported into the sheet shown, at real size, with its middle where you let
+go, and selected (to move it right away); one Undo takes it out. Several dropped at once go
+side by side. Drop it anywhere else in the window (the tab bar, the ribbon, the command line,
+or a window with no project open) and it opens as a project of its own, as Open... does. A
+dropped <b>.kzcad</b> project opens. (Import DXF or DWG into this sheet... keeps the drawing's
+own coordinates instead.)</li>
 <li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version
 since 2018 too) open and import directly, with nothing to install: KanzonasCAD reads them with
 its own DWG reader (ezdwg, free and open source). If it can't read one and the free
