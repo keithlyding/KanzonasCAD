@@ -34,6 +34,25 @@ class MTextModelTest(unittest.TestCase):
         self.assertEqual(br.parts()[0].align, "right")
         self.assertAlmostEqual(br.parts()[-1].pos[1] - 0.1, 5.0)
 
+    def test_wraps_without_a_font(self):
+        """A font that measures every text as nothing (Qt with no fonts: the Windows test
+        runner's offscreen mode) falls back to the estimate: notes still wrap."""
+        from kanzonascad import render
+
+        class NoFont:
+            def horizontalAdvance(self, text):
+                return 0.0
+        render.text_font()
+        saved = render._font_cache["fm"], M.TEXT_MEASURE
+        render._font_cache["fm"] = NoFont()
+        M.TEXT_MEASURE = render.measure
+        try:
+            self.assertGreater(M.text_width("ALL WIRING", 0.1), 0)
+            m = M.MText((0, 10), "ALL WIRING 14 AWG UNLESS NOTED", 0.1, width=1.5)
+            self.assertGreater(len(m.lines()), 1)
+        finally:
+            render._font_cache["fm"], M.TEXT_MEASURE = saved
+
     def test_saved_moved_scaled(self):
         m = M.MText((1, 1), "X\nY", 0.2, 30.0, "MC", 2.0, layer="NOTES")
         self.assertEqual(M.Entity.from_dict(m.to_dict()).to_dict(), m.to_dict())
