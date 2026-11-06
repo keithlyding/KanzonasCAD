@@ -45,7 +45,11 @@ class DwgDirectTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.path = make_dwg()
-        cls.ents, cls.rep = fileio.read_dwg(cls.path)
+        cls.kept, cls.rep = fileio.read_dwg(cls.path)
+        # (the drawing piece by piece: blocks are kept as blocks, see test_blocks_kept)
+        cls.ents = []
+        for e in cls.kept:
+            cls.ents += e.world_entities() if isinstance(e, M.Insert) else [e]
 
     def test_read_object_by_object(self):
         self.assertEqual(self.rep["reader"], "KanzonasCAD")
@@ -71,6 +75,19 @@ class DwgDirectTest(unittest.TestCase):
     def test_attributes_come_in(self):
         texts = {e.text for e in self.ents if isinstance(e, M.Text)}
         self.assertTrue({"TB1", "TB2", "TB3"} <= texts, texts)
+        # and on their block, AutoCAD Electrical's P_TAG1 as the tag
+        tags = sorted(e.attrs.get("TAG", "") for e in self.kept if isinstance(e, M.Insert)
+                      and e.block == "TB 2202")
+        self.assertEqual(tags, ["", "TB1", "TB2", "TB3"])
+
+    def test_blocks_kept(self):
+        ins = [e for e in self.kept if isinstance(e, M.Insert)]
+        self.assertEqual(sorted(e.block for e in ins), ["BORDER A0"] + ["TB 2202"] * 4)
+        border = [e for e in ins if e.block == "BORDER A0"][0]
+        self.assertAlmostEqual(border.scale, 0.1)
+        self.assertEqual(border.defn.kind, "footprint")
+        turned = [e for e in ins if e.block == "TB 2202" and abs(e.angle - 90) < 1e-9]
+        self.assertEqual(len(turned), 1)
 
     def test_dimensions_come_in_with_their_values(self):
         # (ezdwg doesn't list its own writer's dimensions: their "*D" blocks are drawn where

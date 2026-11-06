@@ -84,8 +84,30 @@ class ImportMoreTest(unittest.TestCase):
         blk.add_text("TB1", dxfattribs={"insert": (4, 0), "height": 0.2})
         ms = doc.modelspace()
         ms.add_blockref("PART", (10, 10), dxfattribs={"xscale": -1})
-        ents, rep = fileio.read_dxf(_save(doc))
+        path = _save(doc)
+        # taken apart (keep_blocks False: its pieces each turned from their own plane)...
+        ents, rep = fileio.read_dxf(path, keep_blocks=False)
         self.assertEqual(rep["skipped"], {})
+        # ... and kept a block (mirrored): its drawing lands at the very same places
+        kept, _rep = fileio.read_dxf(path)
+        self.assertEqual([e.kind for e in kept], ["insert"])
+        self.assertTrue(kept[0].mirror)
+        drawn = kept[0].world_entities()
+
+        def spots(es):
+            out = []
+            for e in es:
+                if isinstance(e, M.Arc):
+                    out.append(("arc", tuple(sorted(_ends(e)))))
+                elif isinstance(e, M.Circle):
+                    out.append(("circle", tuple(round(c, 6) for c in e.center)))
+                elif isinstance(e, M.Polyline):
+                    out.append(("pl", tuple(sorted(tuple(round(c, 6) for c in q)
+                                                   for q in e.points))))
+                elif isinstance(e, M.Text):
+                    out.append(("text", e.text))
+            return sorted(out)
+        self.assertEqual(spots(drawn), spots(ents))
         arc = next(e for e in ents if isinstance(e, M.Arc))
         self.assertEqual(sorted(_ends(arc)), [(8.0, 10.0), (9.0, 11.0)])
         self.assertEqual(tuple(round(c, 6) for c in arc.center), (9.0, 10.0))
