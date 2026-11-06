@@ -63,6 +63,29 @@ def text_path(t):
     return tr.map(p)
 
 
+def hatch_path(e):
+    """A solid hatch's filled area (its loops even-odd: holes stay open), as a path that any
+    fill rule fills the same (simplified)."""
+    hp = QPainterPath()
+    hp.setFillRule(Qt.OddEvenFill)
+    for lp in e.loops:
+        hp.moveTo(lp[0][0], lp[0][1])
+        for q in lp[1:]:
+            hp.lineTo(q[0], q[1])
+        hp.closeSubpath()
+    return hp.simplified()
+
+
+def solid_fills(e):
+    """The solid hatches an entity fills: itself, or the parts of a leader (its arrowhead)."""
+    if isinstance(e, M.Hatch):
+        return [e] if e.solid() else []
+    if isinstance(e, (M.Insert, M.Composite)):
+        return [w for w in (e.world_entities() if isinstance(e, M.Insert) else e.parts())
+                if isinstance(w, M.Hatch) and w.solid()]
+    return []
+
+
 def add_entity(path, e):
     """Add an entity's outline to a stroke path (texts go to fill paths: see _Chunk)."""
     if isinstance(e, (M.Insert, M.Composite)):
@@ -102,6 +125,11 @@ class Palette:
         self.select = QColor("#3399ff")
         self.grid = QColor(255, 255, 255, 38) if dark else QColor(0, 0, 0, 30)
 
+    def area(self, rgba):
+        """A filled area's color: its own, or light gray when printing black on white (a
+        solid black fill would hide the parts' outlines and texts)."""
+        return QColor("#c8c8c8").rgba() if self.mono else rgba
+
     def color(self, project, e):
         if self.mono:
             return self.ink
@@ -119,11 +147,12 @@ class Palette:
 
 
 class _Chunk:
-    __slots__ = ("strokes", "fills")
+    __slots__ = ("strokes", "fills", "areas")
 
     def __init__(self):
         self.strokes = {}       # rgba -> QPainterPath
-        self.fills = {}
+        self.fills = {}         # (texts)
+        self.areas = {}         # (solid hatches: drawn first, under the lines, as AutoCAD's)
 
 
 class SheetRenderer:
@@ -171,7 +200,7 @@ class SheetRenderer:
         for k, ents in by_chunk.items():
             ch = _Chunk()
             self._fill_chunk(ch, ents)
-            if ch.strokes or ch.fills:
+            if ch.strokes or ch.fills or ch.areas:
                 self.chunks[k] = ch
             else:
                 self.chunks.pop(k, None)
@@ -207,10 +236,15 @@ class SheetRenderer:
             lay = layers.get(e.layer)
             if lay is not None and not lay.visible:
                 continue
+            if isinstance(e, M.Insert) and e.defn is not None and e.defn.own_colors:
+                # (an imported block: each piece in its own color, as AutoCAD shows it)
+                self._fill_chunk(ch, e.world_entities())
+                continue
             key = self.pal.color(self.project, e).rgba()
             if isinstance(e, (M.Insert, M.Composite)):
                 texts = [w for w in (e.world_entities() if isinstance(e, M.Insert)
                                      else e.parts()) if isinstance(w, M.Text)]
+                solids = solid_fills(e)
                 if texts:
                     p = ch.fills.get(key)
                     if p is None:
@@ -218,6 +252,17 @@ class SheetRenderer:
                         p.setFillRule(Qt.WindingFill)
                     for t in texts:
                         p.addPath(text_path(t))
+                if solids:
+                    # a hatch's fill under the lines; a leader's arrowhead with its text
+                    hatch = isinstance(e, M.Hatch)
+                    box = ch.areas if hatch else ch.fills
+                    k2 = self.pal.area(key) if hatch else key
+                    p = box.get(k2)
+                    if p is None:
+                        p = box[k2] = QPainterPath()
+                        p.setFillRule(Qt.WindingFill)
+                    for h in solids:
+                        p.addPath(hatch_path(h))
             if isinstance(e, M.Text):
                 p = ch.fills.get(key)
                 if p is None:
@@ -288,6 +333,11 @@ class SheetRenderer:
         self._paint_dots(painter)
         self._paint_xrefs(painter)
         smooth = painter.testRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        for ch in [tb] + list(self.chunks.values()):
+            for rgba, path in ch.areas.items():         # (fills under every line)
+                painter.setBrush(QBrush(QColor.fromRgba(rgba)))
+                painter.drawPath(path)
         for ch in [tb] + list(self.chunks.values()):
             # on screen, one-pixel lines are drawn without smoothing, as AutoCAD does: a
             # smoothed line falling between two pixel rows would show at half strength
@@ -370,6 +420,8 @@ def entities_path(entities):
                 for w in (e.world_entities() if isinstance(e, M.Insert) else e.parts()):
                     if isinstance(w, M.Text):
                         fills.addPath(text_path(w))
+                for h in solid_fills(e):
+                    fills.addPath(hatch_path(h))
     return strokes, fills
 
 

@@ -328,6 +328,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
         self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
+        self._cmd_act("hatch", "&Hatch", C.HatchCmd, "Hatch")
         self._cmd_act("wire_cross", "Wire cr&ossing", C.WireCrossCmd, "Crossing")
         self._cmd_act("rail", "DIN &rail", C.RailCmd, "DIN rail")
         self._cmd_act("duct", "&Wire duct", C.DuctCmd, "Wire duct")
@@ -481,7 +482,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for mode in ("light", "dark", "system"):
             tm.addAction(a["theme_" + mode])
         m = mb.addMenu("&Draw")
-        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", None, "wire", "bus",
+        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", "hatch", None, "wire", "bus",
                   "wire_cross", None,
                   "dim_linear", "dim_aligned", "leader", None, "rail", "duct"):
             if k == "CIRCLE":
@@ -546,7 +547,7 @@ class MainWindow(BlockEditing, QMainWindow):
         r = self.ribbon = Ribbon()
         r.add_tab("Home", [
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
-                               a["arc"], a["text"]]),
+                               a["arc"], a["text"], a["hatch"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
                                  a["erase"], a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
@@ -2155,7 +2156,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
-                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader",
+                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch",
                   "rail", "duct", "materials", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",

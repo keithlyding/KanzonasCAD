@@ -60,9 +60,10 @@ class ImportMoreTest(unittest.TestCase):
         # the 3D polyline, flat: its three points
         self.assertTrue(any([tuple(q) for q in e.points] == [(0, 8), (2, 8), (2, 9)]
                             for e in polys))
-        # the hatch's boundary
+        # the hatch: a hatch of KanzonasCAD's since 0.13.3, its boundary with it
+        hatches = [e for e in ents if isinstance(e, M.Hatch)]
         self.assertTrue(any({(20, 0), (22, 0), (22, 2), (20, 2)} <=
-                            {tuple(map(round, q)) for q in e.points} for e in polys))
+                            {tuple(map(round, q)) for q in e.loops[0]} for e in hatches))
         # the solid: its outline in order (corners 0, 1, 3, 2), closed
         solid = [e for e in polys if e.points and tuple(e.points[0]) == (25, 0)]
         self.assertEqual([tuple(q) for q in solid[0].points], [(25, 0), (26, 0), (26, 1), (25, 1)])

@@ -537,6 +537,9 @@ AutoCAD's quick mode). An object nothing crosses is erased. U undoes the last tr
 then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>
 <tr><td>Aligned dimension</td><td>DIMALIGNED, DAL</td><td>The same, measured along the line
 between the two points (slanted too).</td></tr>
+<tr><td>Hatch</td><td>HATCH, H, BHATCH, BH, FILL</td><td>Click inside a closed shape to fill it
+(SOLID, ANSI31, ANSI37, LINES pick the pattern; SP the spacing, AN the angle); Enter
+ends.</td></tr>
 <tr><td>Leader</td><td>LEADER, LE, LEAD, MLEADER, MLD, QLEADER, BALLOON</td><td>Pick the
 arrow's point, then where the line bends, Enter; type the note, or B for a balloon (Enter takes
 the next item number).</td></tr>
@@ -699,6 +702,18 @@ decimals (12.50"). The two points they measure go where you pick them (the snap)
 Polar don't bend them, only the dimension line's place. Their grips move the measured points
 and the line; they go on layer DIMENSIONS (its color: Project properties, Panel). Dimension
 text height: Project properties.</li>
+<li><b>Hatch</b> (H; Draw menu, Home tab) fills an area: click inside a closed shape (a closed
+polyline, a rectangle, a circle) and it is filled, the smallest shape around the click; closed
+shapes inside it stay open (islands: a cutout's holes, a label). The buttons, or typing their
+names, choose the pattern: <b>Solid</b>, <b>45 lines</b> (ANSI31), <b>Crosshatch</b>
+(ANSI37) or <b>Level lines</b>; <b>Spacing</b> (SP) the space between the lines, in real
+inches, and <b>Angle</b> (AN) their angle. Click more areas, Enter to finish; the pattern is
+remembered. A hatch is its own object, not tied to the shapes it was made in: it moves,
+copies, rotates and scales with them when selected with them. Click anywhere on it to select
+it. On screen a fill is under the lines; printed black and white (PDF), fills print light gray
+so the lines and texts on them stay readable. DXF and DWG hatches come in as hatches (their
+pattern: ANSI31 and ANSI37 by name, any other as its lines), and go out as HATCH
+entities.</li>
 <li><b>Leader</b> (LE; Draw menu and the Panel tab, Dimensions) points at a part with an arrow
 and says something about it: AutoCAD's leader and multileader in one. Pick the arrow's point
 (on the part), then one or more points where the line goes, and press Enter. Then type the
@@ -806,7 +821,9 @@ the copy's own: AutoCAD Electrical's <b>P_TAG1</b> or <b>TAG1</b> becomes its ta
 catalog number; any other (RATING1, TERM...) keeps its name (double-click the copy to see
 them all). A block's visible fields show their values as they do in AutoCAD. A block with
 AutoCAD Electrical's TAG1 comes in as a schematic symbol, any other as a panel footprint
-(with no pins: wires don't attach to imported symbols). <b>Explode</b> takes a copy apart into
+(with no pins: wires don't attach to imported symbols). Their pieces keep their own colors
+(or their layer's), as the other program shows them: a manufacturer's colored parts look as
+they did (white or black pieces follow the copy's color). <b>Explode</b> takes a copy apart into
 its lines and texts; <b>Edit block...</b> opens its drawing, and <b>Save block</b> puts it in
 your library to use again. A block of the same name already in the project and different is
 not replaced: the imported one is named "name (2)". Blocks scaled differently across and up

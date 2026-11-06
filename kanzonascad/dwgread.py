@@ -138,6 +138,19 @@ def _add(layout, t, dxf, kw, names, skipped):
         if not n:
             layout.delete_entity(h)
             return False
+        name = str(dxf.get("pattern_name") or "").upper()
+        if dxf.get("solid_fill"):
+            h.set_solid_fill()
+        elif name in ("ANSI31", "ANSI37"):
+            h.set_pattern_fill(name, scale=float(dxf.get("pattern_scale") or 1.0),
+                               angle=float(dxf.get("pattern_angle") or 0.0))
+        elif dxf.get("pattern_lines"):
+            h.dxf.solid_fill = 0
+            h.dxf.pattern_name = name or "_USER"
+            h.set_pattern_definition([[float(ln.get("angle", 0.0)), tuple(ln.get("base", (0, 0))),
+                                       tuple(ln.get("offset", (0, 0.125))),
+                                       list(ln.get("dashes") or [])]
+                                      for ln in dxf["pattern_lines"]])
     elif t in ("INSERT", "DIMENSION"):
         if t == "INSERT":
             name, ins = dxf.get("name"), dxf.get("insert", (0, 0, 0))
