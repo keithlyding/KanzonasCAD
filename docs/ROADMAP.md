@@ -163,6 +163,10 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   back restores devices instead of plain lines, and data a program left stale (a symbol moved
   or erased in AutoCAD) is checked against the geometry and dropped, never trusted blindly.
   Documented openly (docs/DXF_DATA.md) so any program can read it.
+- No AutoCAD Electrical project export for now (owner, Nov 2026: "let's leave acade project
+  export off the table for awhile"). It would mean blocks with TAG1/MFG/CAT/DESC1-3 and
+  X?TERMnn wire-connection attributes, a .wdp listing the sheets, and DWG files (ezdxf writes
+  only DXF). The owner has AutoCAD Electrical to test it with if it comes back.
 - US practice: JIC/NFPA symbols, horizontal rungs, grid-style references (`6-D1`), zones A-H
   down the left and 1-10 along the top to start (both editable).
 - Drawing area black by default; PDF always black on white.
