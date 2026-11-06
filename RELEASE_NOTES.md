@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.13.5
+
+**New**
+- Use as title block (Sheets menu): select a title block that came with a DXF or DWG drawing and
+  make it the project's title block, on every sheet. Its attribute fields become fields
+  (AutoCAD Electrical's drawing number, sheet, revisions...), with their values.
+
 ## 0.13.4
 
 **New**

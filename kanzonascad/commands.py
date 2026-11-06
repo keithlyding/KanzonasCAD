@@ -1556,6 +1556,38 @@ class DimAlignedCmd(DimLinearCmd):
     mode = "aligned"
 
 
+class UseTitleBlockCmd(Command):
+    """Use as title block: the selected objects (a title block from another program's
+    drawing: a block with attributes, or its lines and texts) become the project's title
+    block, where they are; their attributes become fields. One step: Undo puts the old one
+    back."""
+    name, title = "USETITLEBLOCK", "Use as title block"
+    selects = True
+
+    def begin(self):
+        from .sheetframe import use_as_title_block
+        ents = _selected(self.ctx)
+        sheet = self.ctx.sheet()
+        if not ents or sheet is self.ctx.project.title_block:
+            self.ctx.message("Use as title block: select the title block's objects on a sheet "
+                             "first")
+            self.finish()
+            return
+        try:
+            with self.ctx.edit(self.title) as ed:
+                made = use_as_title_block(ed, self.ctx.project, sheet, ents)
+        except ValueError as ex:
+            self.ctx.message("Use as title block: %s" % ex)
+            self.finish()
+            return
+        self.ctx.set_selection(set())
+        fields = sorted({f for _t, f in made})
+        self.ctx.message("The project's title block now: %d object(s)%s. Undo puts the old one "
+                         "back; Project properties fills its fields."
+                         % (len(ents), ", fields " + ", ".join(fields) if fields else ""))
+        self.finish()
+
+
 class MTextCmd(Command):
     """MTEXT: click a corner of the text's box, then the opposite corner (its width: lines
     wrap there), or Enter after the first for no wrapping; then type the text, several lines,
@@ -2419,6 +2451,7 @@ COMMANDS = {
     "DIMLINEAR": (DimLinearCmd, ["DLI", "DIM"]),
     "HATCH": (HatchCmd, ["H", "BHATCH", "BH", "FILL"]),
     "MTEXT": (MTextCmd, ["MT", "T2", "NOTE"]),
+    "USETITLEBLOCK": (UseTitleBlockCmd, ["USETB", "TBUSE"]),
     "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),

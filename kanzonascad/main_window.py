@@ -330,6 +330,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
         self._cmd_act("hatch", "&Hatch", C.HatchCmd, "Hatch")
         self._cmd_act("mtext", "&Multiline text", C.MTextCmd, "Multiline text")
+        self._cmd_act("use_tb", "&Use as title block", C.UseTitleBlockCmd, "Use as title block")
         self._cmd_act("wire_cross", "Wire cr&ossing", C.WireCrossCmd, "Crossing")
         self._cmd_act("rail", "DIN &rail", C.RailCmd, "DIN rail")
         self._cmd_act("duct", "&Wire duct", C.DuctCmd, "Wire duct")
@@ -512,7 +513,8 @@ class MainWindow(BlockEditing, QMainWindow):
                   None, "renumber",
                   "xref_update", "xref_freeze", "xref_auto", None, "materials", None,
                   "sheet_props",
-                  "project_props", "schematic_settings", "panel_settings", "edit_tb", "layers",
+                  "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
+                  "layers",
                   None, "new_revision", "revisions"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
@@ -590,7 +592,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
             ("Rotate", "small", [a["sheet_cw"], a["sheet_ccw"]]),
             ("Properties", "large", [a["sheet_props"], a["project_props"], a["layers"]]),
-            ("Title block", "large", [a["edit_tb"]]),
+            ("Title block", "large", [a["edit_tb"], a["use_tb"]]),
             ("Revisions", "large", [a["new_revision"], a["revisions"]]),
         ])
         r.add_tab("Output", [
@@ -2168,7 +2170,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
-                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext",
+                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext", "use_tb",
                   "rail", "duct", "materials", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",

@@ -228,6 +228,111 @@ def _title_block_place(project, sheet):
     return (tx1, ty0), (x1 - tx1, y0 - ty0), k
 
 
+# title block attribute names (AutoCAD Electrical's WD_TB fields and common tags) ->
+# KanzonasCAD's fields; any other keeps its own name (a field of the project's own)
+TB_FIELDS = {
+    "DWGNAM": "Drawing number", "DWGNO": "Drawing number", "DWG_NO": "Drawing number",
+    "DRAWING_NO": "Drawing number", "DRAWINGNO": "Drawing number", "DWG": "Drawing number",
+    "SHEET": "Sheet", "SHT": "Sheet", "SHEETMAX": "Sheets", "SHEETS": "Sheets",
+    "TOTAL_SHEETS": "Sheets", "DWGDESC": "Sheet title", "TITLE": "Sheet title",
+    "TITLE1": "Sheet title", "SHEET_TITLE": "Sheet title", "DATE": "Date", "REV": "Revision",
+    "REVISION": "Revision", "SCALE": "Scale", "DRAWN": "Drawn by", "DRAWNBY": "Drawn by",
+    "DRAWN_BY": "Drawn by", "DRN": "Drawn by", "CHECKED": "Checked by",
+    "CHECKEDBY": "Checked by", "CHECKED_BY": "Checked by", "CHK": "Checked by",
+    "CUSTOMER": "Customer", "CLIENT": "Customer", "PROJECT": "Project", "JOB": "Project",
+    "FILENAME": "Project",
+}
+_REV_TAG = re.compile(r"^(REV|RD|BY|DESC)(\d+)(DET|DESC)?$")
+
+
+def tb_field(tag, ace=None):
+    """The field a title block attribute shows: through AutoCAD Electrical's WD_TB map (its
+    tag -> FILENAME, DWGNAM, SHEET, LINE1...) when there is one, then the known names, then
+    revision rows (REV1, REV1DET, BY1, RD1 -> Rev 1, its description, by, date); else the tag
+    itself."""
+    t = str(tag or "").strip()
+    up = t.upper()
+    ace_name = (ace or {}).get(up)
+    for name in (ace_name, up):
+        if name and name.upper() in TB_FIELDS:
+            return TB_FIELDS[name.upper()]
+    m = _REV_TAG.match(up)
+    if m:
+        kind, n, det = m.groups()
+        if kind == "REV" and det:
+            return "Rev %s description" % n
+        return {"REV": "Rev %s", "RD": "Rev %s date", "BY": "Rev %s by",
+                "DESC": "Rev %s description"}[kind] % n
+    return t
+
+
+def ace_map(value):
+    """AutoCAD Electrical's WD_TB attribute: "TAG=FIELD;TAG2=FIELD2;..." -> {TAG: FIELD}."""
+    out = {}
+    for part in str(value or "").split(";"):
+        if "=" in part:
+            a, b = part.split("=", 1)
+            if a.strip():
+                out[a.strip().upper()] = b.strip().upper()
+    return out
+
+
+def use_as_title_block(ed, project, sheet, ents):
+    """The objects (a title block brought in from another program: a block with attributes,
+    or its lines and texts) made the project's title block, in one undoable step: they keep
+    their place on this sheet; a block's attributes become {Field} texts (tb_field), their
+    values the project's fields when it has none; the objects leave the sheet. Returns the
+    fields made ([(tag, field)])."""
+    from .model import Insert, Text
+    if sheet.rotation:
+        raise ValueError("turn the sheet upright first (Sheets > rotate)")
+    corner, (dx, dy), k = _title_block_place(project, sheet)
+    pieces, made, values = [], [], {}
+    for e in ents:
+        if isinstance(e, Insert) and e.defn is not None:
+            ace = ace_map(e.attrs.get("WD_TB", ""))
+            pieces += [w.copy() for w in e.copy(attrs={}).world_entities()]
+            for a in e.defn.attr_texts:
+                field = tb_field(a["attr"], ace)
+                made.append((a["attr"], field))
+                v = e.attrs.get(a["attr"], "")
+                if v and v.strip("-－ ") and field not in values:
+                    values[field] = v
+                pieces.append(Text(e.to_world(a["pos"]), "{%s}" % field,
+                                   a["height"] * e.scale, 0.0, "center"))
+        else:
+            pieces.append(e.copy())
+    tb = project.title_block
+    for eid in list(tb.entities):
+        ed.remove(tb, eid)
+    for w in pieces:
+        c = w.moved(-dx, -dy)
+        if k != 1.0:
+            c = c.scaled(corner, 1.0 / k)
+        c.id = None
+        c.layer = "0" if c.layer not in project.layers else c.layer
+        ed.add(tb, c)
+    for e in ents:
+        if e.id in sheet.entities:
+            ed.remove(sheet, e.id)
+    auto = set(SHEET_FIELDS) | {"Scale"} | set(REV_FIELDS)
+    fields = dict(project.fields)
+    changed = False
+    for f, v in values.items():
+        if f in auto or _REV_ROW.match(f):
+            continue
+        if not str(fields.get(f, "")).strip():
+            fields[f] = v
+            changed = True
+    for _tag, f in made:
+        if f not in fields and not (f in auto or _REV_ROW.match(f)):
+            fields[f] = ""
+            changed = True
+    if changed:
+        ed.project_fields(fields)
+    return made
+
+
 def title_block_entities(project, sheet):
     """The title block's entities placed on `sheet` with their fields filled in."""
     corner, (dx, dy), k = _title_block_place(project, sheet)

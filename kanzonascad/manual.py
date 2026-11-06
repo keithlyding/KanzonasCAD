@@ -152,6 +152,17 @@ Project properties to get the new one (Undo puts the old one back), or add the f
 Edit title block.</p>
 <p>A name in braces that isn't a field shows as typed, so a typo is easy to spot. Undo works
 on title block changes like on any other.</p>
+<p><b>Use as title block</b> (Sheets menu and tab): to use a title block that came with a
+drawing from another program (open or import its DXF or DWG), select it on the sheet (the
+block, or its lines and texts) and click Use as title block. It becomes the project's title
+block, shown on every sheet in the same place, and leaves the sheet; the old title block goes
+(Undo brings it back). A block's attributes become fields: AutoCAD Electrical's (through its
+WD_TB attribute, or by name: DWGNO and DWGNAM the drawing number, SHEET and SHEETMAX the sheet
+and how many, DWGDESC and TITLE the sheet title, DATE, REV, SCALE, DRAWN, CHECKED, CUSTOMER,
+PROJECT), revision rows (REV1, REV1DET, BY1, RD1: <code>{{Rev 1}}</code>, its description, by and
+date; KanzonasCAD's Rev 1 is the latest revision), any other its own name, a field of the
+project to fill in Project properties. Their values come along into Project properties when the
+project's are empty. The sheet must be upright (not turned) to do it.</p>
 <p><b>Title block position</b> (Project properties, General) says where the title block sits:</p>
 <ul>
 <li><b>Lower right corner</b> (to start): the zones run the full width and height of the
