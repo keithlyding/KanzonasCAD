@@ -812,6 +812,15 @@ your library to use again. A block of the same name already in the project and d
 not replaced: the imported one is named "name (2)". Blocks scaled differently across and up
 and down, arrays (MINSERT) and anonymous ones (a dimension's drawing) still come in as their
 lines and texts.</li>
+<li><b>Dimensions stay dimensions.</b> A linear dimension (across or up and down) or an
+aligned one in a DXF or DWG comes in as a KanzonasCAD dimension: it measures the true distance,
+its grips move its points and line, and it follows Sheet scale. A text it was given (34 mm /
+1.34 in) stays, with &lt;&gt; standing for the length. It shows the length in inches with
+two decimals (12.50"), its value centered along its line, as KanzonasCAD's own do: a vertical
+one reads sideways, and a short one has its value over its arrows, where AutoCAD may have put
+it level or beside. Angular, radius, diameter and ordinate dimensions, linear ones turned at
+another angle, and those with a scale factor (DIMLFAC) come in as their lines and texts, as
+drawn.</li>
 <li><b>Drag and drop</b>: drag a DXF or DWG from Explorer (or a file manager) and drop it on
 the drawing: it is imported into the sheet shown, at real size, with its middle where you let
 go, and selected (to move it right away); one Undo takes it out. Several dropped at once go
@@ -823,8 +832,8 @@ own coordinates instead.)</li>
 since 2018 too) open and import directly, with nothing to install. KanzonasCAD reads them
 object by object (with ezdwg, free and open source, decoding the file): every block keeps its
 base point and each copy its own place, scale and rotation, block attributes show their
-values (invisible ones stay hidden), dimensions come with their lines, arrows and values, and
-layers keep their names and colors. Tables, multileaders and arc dimensions in a DWG can't be read yet
+values (invisible ones stay hidden), dimensions come with their values, and layers keep their
+names and colors. Tables, multileaders and arc dimensions in a DWG can't be read yet
 (ezdwg doesn't decode them; the same drawing saved as DXF brings them in), nor 3D solids and
 regions; the message after opening names what was left out. If this reader fails on a
 file, KanzonasCAD tries the older way (ezdwg's own conversion to DXF, which loses blocks'

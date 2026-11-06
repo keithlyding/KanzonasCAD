@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.13.2
+
+**New**
+- Dimensions in DXF and DWG drawings come in as dimensions: linear and aligned ones measure,
+  stretch with their grips and follow the sheet's scale, keeping any text they were given.
+
 ## 0.13.1
 
 **New**

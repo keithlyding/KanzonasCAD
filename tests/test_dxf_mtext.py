@@ -17,7 +17,9 @@ class DxfMtextTest(unittest.TestCase):
         doc.header["$INSUNITS"] = 1
         ms = doc.modelspace()
         d = ms.add_linear_dim(base=(0, 2), p1=(0, 0), p2=(10, 0), dimstyle="EZDXF",
-                              override={"dimlfac": 1.0, "dimdec": 2})
+                              override={"dimlfac": 2.0, "dimdec": 2})
+        # (a scale factor keeps it its lines and text: a plain one becomes KanzonasCAD's own
+        # dimension since 0.13.2, tests/test_import_dims.py; this checks the MTEXT path)
         d.render()
         ms.add_mtext("FIRST LINE\\PSECOND", dxfattribs={
             "char_height": 0.2, "insert": (20, 10), "attachment_point": 1})
