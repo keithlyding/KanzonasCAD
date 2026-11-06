@@ -233,6 +233,57 @@ def _attr_name(tag):
     return ACE_ATTRS.get(t, t)
 
 
+def _dimension(de, P, k, kw):
+    """A DXF linear or aligned DIMENSION as KanzonasCAD's own (it measures, its grips move
+    its points), when it reads the same: the same type and direction, the same measurement
+    (no scale factor: DIMLFAC), its text (an override kept; "<>" stands for the length). None
+    otherwise (then taken apart into its lines, arrows and text as before)."""
+    d = de.dxf
+    kind = int(d.get("dimtype", 0)) & 7
+    if kind not in (0, 1) or not d.hasattr("defpoint2") or not d.hasattr("defpoint3"):
+        return None
+    try:
+        ov = de.override()
+        if abs(float(ov.get("dimlfac", 1.0) or 1.0) - 1.0) > 1e-9:
+            return None
+        h = None
+        blk = de.get_geometry_block()
+        if blk is not None:
+            for x in blk:
+                if x.dxftype() in ("MTEXT", "TEXT"):
+                    h = x.dxf.get("char_height" if x.dxftype() == "MTEXT" else "height")
+                    break
+        if not h:
+            h = float(ov.get("dimtxt", 0.18) or 0.18) * float(ov.get("dimscale", 1.0) or 1.0)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    a, b, loc = P(d.defpoint2), P(d.defpoint3), P(d.defpoint)
+    if kind == 0 and G.dist(a, b) > 1e-12:
+        # a linear one turned along its two points measures as an aligned one does (ezdxf
+        # and some programs save aligned dimensions so)
+        along = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) % 180.0
+        ang = float(d.get("angle", 0.0)) % 180.0
+        if min(abs(along - ang), 180.0 - abs(along - ang)) < 1e-6 and \
+                min(along, 180.0 - along) > 1e-6 and abs(along - 90.0) > 1e-6:
+            kind = 1
+    text = str(d.get("text", "") or "")
+    if text.strip() in ("<>", " "):
+        text = ""
+    dim = M.Dimension(a, b, loc, "aligned" if kind == 1 else "linear", h * k,
+                      text if text != "<>" else "", **dict(kw, layer=kw["layer"]))
+    (ux, uy), value = dim.direction()
+    if kind == 0:
+        ang = float(d.get("angle", 0.0)) % 180.0
+        want = (1.0, 0.0) if abs(ang) < 1e-6 or abs(ang - 180.0) < 1e-6 else \
+            ((0.0, 1.0) if abs(ang - 90.0) < 1e-6 else None)
+        if want is None or (abs(ux - want[0]) > 1e-9 or abs(uy - want[1]) > 1e-9):
+            return None                     # (a rotated one, or the other way: as it was)
+    m = d.get("actual_measurement")
+    if m is not None and abs(m * k - value) > 1e-6 * max(1.0, value):
+        return None
+    return dim
+
+
 def _mleaders(de, P, k, kw, out):
     """A MULTILEADER as KanzonasCAD leaders, one per leader line: its note (the MTEXT's
     text) or its balloon (a block's first attribute: the item number) on the first. False
@@ -527,6 +578,8 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             out.append(M.Leader([P(v) for v in de.vertices], "", False, 0.1, **kw))
         elif t in ("MLEADER", "MULTILEADER") and _mleaders(de, P, k, kw, out):
             pass
+        elif t == "DIMENSION" and depth == 0 and _dimension(de, P, k, kw) is not None:
+            out.append(_dimension(de, P, k, kw))
         elif t in ("INSERT", "DIMENSION", "ARC_DIMENSION", "LARGE_RADIAL_DIMENSION", "LEADER",
                    "MLEADER", "MULTILEADER", "MLINE") and depth < 12:
             # (AutoCAD's multileader is MULTILEADER: it was left out)

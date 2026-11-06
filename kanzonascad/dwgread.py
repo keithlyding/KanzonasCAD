@@ -9,7 +9,10 @@ blocks keep their base points, block references their scale and rotation, attrib
 text, a dimension its own drawing (its anonymous block). No Qt here; ezdwg and ezdxf are
 imported only when a DWG is read."""
 
-ANON_PREFIX = "KZ_ANON_"        # ("*D1" and other anonymous block names, made plain names)
+ANON_PREFIX = "KZ_ANON_"
+# ezdwg's dimension types -> DXF's DIMTYPE numbers
+DIM_TYPES = {"LINEAR": 0, "ROTATED": 0, "ALIGNED": 1, "ANGULAR": 2, "ANG2LN": 2,
+             "DIAMETER": 3, "RADIUS": 4, "ANGULAR3P": 5, "ANG3PT": 5, "ORDINATE": 6}        # ("*D1" and other anonymous block names, made plain names)
 
 
 def _block_name(name):
@@ -148,6 +151,21 @@ def _add(layout, t, dxf, kw, names, skipped):
         name = names.get(_block_name(name))
         if name is None:
             return False
+        if t == "DIMENSION" and str(dxf.get("dimtype", "")).upper() in DIM_TYPES and \
+                not any(abs(v - 1.0) > 1e-12 for v in (xs or 1.0, ys or 1.0)) and \
+                not rot and not any(ins[:2]):
+            # a real DIMENSION (its points, type and text), drawn by its own block: fileio
+            # makes a linear or aligned one KanzonasCAD's own, any other is its block
+            d = dict(kw, geometry=name, dimstyle="Standard",
+                     dimtype=DIM_TYPES[str(dxf["dimtype"]).upper()] | 32,
+                     defpoint=dxf.get("defpoint", (0, 0, 0)),
+                     defpoint2=dxf.get("defpoint2", (0, 0, 0)),
+                     defpoint3=dxf.get("defpoint3", (0, 0, 0)),
+                     text_midpoint=dxf.get("text_midpoint", (0, 0, 0)),
+                     angle=float(dxf.get("angle") or 0.0), text=str(dxf.get("text") or ""))
+            if dxf.get("actual_measurement") is not None:
+                d["actual_measurement"] = float(dxf["actual_measurement"])
+            return layout.new_entity("DIMENSION", dxfattribs=d)
         return layout.add_blockref(name, ins, dxfattribs=dict(
             kw, xscale=xs or 1.0, yscale=ys or 1.0, zscale=zs or 1.0, rotation=rot or 0.0))
     elif t == "LEADER":
@@ -282,6 +300,8 @@ def read(path):
         for x in lay:
             if x.dxftype() == "INSERT":
                 used.add(x.dxf.name)
+            elif x.dxftype() == "DIMENSION" and x.dxf.hasattr("geometry"):
+                used.add(x.dxf.geometry)
     for h, (name, _base) in records.items():
         plain = _block_name(name)
         if name.startswith("*D") and plain in names and plain not in used and \
