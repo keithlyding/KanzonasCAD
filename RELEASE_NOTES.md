@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.14.1
+
+**Fixed**
+- Export to DXF no longer stops with "LAYER 'Defpoints' already exists" after a DXF or DWG
+  drawing with dimensions was imported into the project.
+
 ## 0.14
 
 **New**
