@@ -709,11 +709,23 @@ parts whose clip isn't halfway up (many breakers, contactors, power supplies) ge
 <b>Edit block...</b> (see <b>Changing a library block</b>). The rail's own snaps still work
 for anything else: a mounting slot's center (Center, for an end stop or a screw), the middle
 of a long edge (Midpoint), its centerline (Nearest, Perpendicular), and Align objects.</li>
+<li><b>Bill of materials...</b> (Sheets menu, Output tab: Reports) lists every part the project
+uses, once, with how many: one line per manufacturer and catalog number, with the
+description, the tags (CR1, CR2...) and the sheets they are on. A device and its panel
+footprint share a tag, so they are one part (the manufacturer, catalog number and description
+come from whichever has them); a contact belongs to its device and has no line of its own;
+symbols without a tag (an off-sheet connector) are not parts. Parts without a catalog number
+are listed by their block's name (a drawing brought in from AutoCAD: its terminals, modules
+and drives, counted), or left out with the box unticked. DIN rail and wire duct come last, as
+the stock lengths to buy (Panel materials has their cuts). The lines are numbered: a
+leader's balloon (Leader, B) can show a part's item number on the panel. <b>Save as
+CSV...</b> writes it for a spreadsheet or a purchase order. Give parts their manufacturer and
+catalog number by double-clicking them, or through a part from the library.</li>
 <li><b>Panel materials...</b> (Panel tab) lists the project's rail and duct per size and part:
 the pieces and their cut lengths, the total length, and how many stock lengths that takes
 (the cuts packed into stock lengths, longest first; saw cuts take no width). <b>Save as
-CSV...</b> writes it for a spreadsheet or a purchase order. The bill of materials (later)
-takes it in.</li>
+CSV...</b> writes it for a spreadsheet or a purchase order. The bill of materials takes it
+in.</li>
 <li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Panel
 tab, measure the true distance, so they're right at any scale; they show inches with two
 decimals (12.50"). The two points they measure go where you pick them (the snap): Ortho and

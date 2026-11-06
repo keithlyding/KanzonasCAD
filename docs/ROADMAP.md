@@ -134,7 +134,8 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    - Next: "Update blocks from library": lists a project's blocks that differ from the
      library's and updates only the ones chosen (0.12 updates the open project's copies right
      after a block is changed; other projects keep theirs until then).
-8. **Reports**: bill of materials (DIN rail and wire duct by length and stock pieces), wire list, terminal strip list (Report sheets; CSV and Excel
+8. **Reports**: bill of materials (done in 0.14: parts by manufacturer and catalog number, a
+   device and its footprint once, rail and duct as stock lengths, CSV), wire list, terminal strip list (Report sheets; CSV and Excel
    via openpyxl, MIT, imported only when exporting).
 9. **PDF export opening in KanzonasPDF** when it is installed (export exists).
 10. **Check out / check in** sheets: export chosen sheets (with their blocks, parts and
@@ -144,6 +145,11 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
+- Imports (owner, Nov 2026; 0.12.11-0.13.5): DWG read object by object (dwgread); imported
+  blocks stay blocks with their colors and attributes (AutoCAD Electrical's mapped); linear and
+  aligned dimensions, leaders, multileaders, hatches and multiline text come in as
+  KanzonasCAD's own; Use as title block takes an imported title block. Leaders and
+  multileaders are one tool (Leader, with numbered balloons).
 - Revisions (owner, Nov 2026; 0.12.8): a revision history per project, numbered 0, 1, 2...,
   each covering all sheets or the ones named; the title block's {Revision} and {Date} follow
   the latest revision of each sheet. Footprints show a label of the user's choice per copy
@@ -157,6 +163,10 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   back restores devices instead of plain lines, and data a program left stale (a symbol moved
   or erased in AutoCAD) is checked against the geometry and dropped, never trusted blindly.
   Documented openly (docs/DXF_DATA.md) so any program can read it.
+- No AutoCAD Electrical project export for now (owner, Nov 2026: "let's leave acade project
+  export off the table for awhile"). It would mean blocks with TAG1/MFG/CAT/DESC1-3 and
+  X?TERMnn wire-connection attributes, a .wdp listing the sheets, and DWG files (ezdxf writes
+  only DXF). The owner has AutoCAD Electrical to test it with if it comes back.
 - US practice: JIC/NFPA symbols, horizontal rungs, grid-style references (`6-D1`), zones A-H
   down the left and 1-10 along the top to start (both editable).
 - Drawing area black by default; PDF always black on white.
