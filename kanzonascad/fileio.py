@@ -122,6 +122,12 @@ def _write(msp, e):
             ent.set_pattern_definition([[e.angle, (0, 0),
                                          (-math.sin(a) * e.spacing, math.cos(a) * e.spacing),
                                          []]])
+    elif isinstance(e, M.MText):
+        attribs.update(char_height=e.height, rotation=e.angle,
+                       attachment_point=M.MTEXT_ATTACH.index(e.attach) + 1, insert=e.pos)
+        if e.width:
+            attribs["width"] = e.width
+        ent = msp.add_mtext(e.text.replace("\n", "\\P"), dxfattribs=attribs)
     elif isinstance(e, M.Text):
         from ezdxf.enums import TextEntityAlignment
         attribs.update(height=e.height, rotation=e.angle)
@@ -565,6 +571,13 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             h = de.dxf.get("char_height", 0.125) * k
             d = de.get_text_direction()
             ang = math.degrees(math.atan2(d[1], d[0]))
+            if depth == 0:
+                # one multiline text of KanzonasCAD's (in a block or a dimension: its lines)
+                ap = int(de.dxf.get("attachment_point", 1) or 1)
+                out.append(M.MText(P(de.dxf.insert), de.plain_text(), h, ang,
+                                   M.MTEXT_ATTACH[max(1, min(9, ap)) - 1],
+                                   (de.dxf.get("width", 0.0) or 0.0) * k, **kw))
+                return
             lines = de.plain_text().split("\n")
             x, y = P(de.dxf.insert)
             # placed by its attachment point (1-9: top/middle/bottom, left/center/right; a

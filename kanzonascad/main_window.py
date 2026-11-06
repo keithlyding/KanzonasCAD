@@ -329,6 +329,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
         self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
         self._cmd_act("hatch", "&Hatch", C.HatchCmd, "Hatch")
+        self._cmd_act("mtext", "&Multiline text", C.MTextCmd, "Multiline text")
         self._cmd_act("wire_cross", "Wire cr&ossing", C.WireCrossCmd, "Crossing")
         self._cmd_act("rail", "DIN &rail", C.RailCmd, "DIN rail")
         self._cmd_act("duct", "&Wire duct", C.DuctCmd, "Wire duct")
@@ -482,7 +483,8 @@ class MainWindow(BlockEditing, QMainWindow):
         for mode in ("light", "dark", "system"):
             tm.addAction(a["theme_" + mode])
         m = mb.addMenu("&Draw")
-        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", "hatch", None, "wire", "bus",
+        for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", "mtext", "hatch", None,
+                  "wire", "bus",
                   "wire_cross", None,
                   "dim_linear", "dim_aligned", "leader", None, "rail", "duct"):
             if k == "CIRCLE":
@@ -547,7 +549,7 @@ class MainWindow(BlockEditing, QMainWindow):
         r = self.ribbon = Ribbon()
         r.add_tab("Home", [
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
-                               a["arc"], a["text"], a["hatch"]]),
+                               a["arc"], a["text"], a["mtext"], a["hatch"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
                                  a["erase"], a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
@@ -1360,9 +1362,19 @@ class MainWindow(BlockEditing, QMainWindow):
         if v is not None:
             v.select_all()
 
+    def ask_mtext(self, text=""):
+        """The MTEXT command's text, typed in a box (several lines). None when cancelled."""
+        return dialogs.mtext_text(self, text)
+
     def edit_text(self, ent):
         v = self.view()
         if v is None:
+            return
+        if isinstance(ent, M.MText):
+            new = dialogs.mtext_dialog(self, ent)
+            if new is not None:
+                with v.project.edit("Edit text") as ed:
+                    ed.change(v.sheet(), new)
             return
         if isinstance(ent, M.Leader):
             new = dialogs.leader_dialog(self, ent)
@@ -2156,7 +2168,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
-                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch",
+                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext",
                   "rail", "duct", "materials", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",

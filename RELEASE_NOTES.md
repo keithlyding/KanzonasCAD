@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.13.4
+
+**New**
+- Multiline text (MT): a note of several lines as one object, wrapped to the width of a box
+  you draw, typed in a box; double-click to edit it. Multiline text in DXF and DWG drawings
+  comes in as one, and goes out as one.
+
 ## 0.13.3
 
 **New**
