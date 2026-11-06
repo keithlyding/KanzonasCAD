@@ -1094,7 +1094,12 @@ class MainWindow(BlockEditing, QMainWindow):
         out = []
         for u in mime.urls():
             p = u.toLocalFile()
-            if p and p.lower().endswith(cls.DROP_TYPES) and os.path.isfile(p):
+            if not p:
+                continue
+            # (Qt gives C:/Users/... on Windows: the system's own form, C:\Users\..., for the
+            # messages and for finding a project already open)
+            p = os.path.normpath(p)
+            if p.lower().endswith(cls.DROP_TYPES) and os.path.isfile(p):
                 out.append(p)
         return out
 
