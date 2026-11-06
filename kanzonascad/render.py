@@ -42,7 +42,13 @@ def text_font():
 
 def measure(text, height):
     text_font()
-    return _font_cache["fm"].horizontalAdvance(text) * height / _font_cache["cap"]
+    w = _font_cache["fm"].horizontalAdvance(text)
+    if w <= 0 and text.strip():
+        # no font to measure with (Qt found none: the Windows unit-test runner's offscreen
+        # mode measures every text as nothing): the model's estimate, so notes still wrap and
+        # texts can still be clicked
+        return len(text) * height * M.TEXT_WIDTH_FACTOR
+    return w * height / _font_cache["cap"]
 
 
 def install_text_measure():
