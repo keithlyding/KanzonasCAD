@@ -8,7 +8,14 @@ build fails without them.
 
 ## 0.14.1
 
+**Faster**
+- Sheets with a lot of text draw and zoom much faster: text is now drawn the way Qt draws it
+  fastest (a sheet of 2,000 notes zoomed in 0.6 s instead of 22 s). It looks the same; PDFs
+  and printouts still get exact vector letters.
+
 **Fixed**
+- AutoCAD Electrical schematic components brought in with a DXF or DWG (TAG1: CR1, M1) are
+  now counted in the bill of materials.
 - Export to DXF no longer stops with "LAYER 'Defpoints' already exists" after a DXF or DWG
   drawing with dimensions was imported into the project.
 

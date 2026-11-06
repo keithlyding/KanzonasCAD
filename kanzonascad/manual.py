@@ -714,7 +714,9 @@ uses, once, with how many: one line per manufacturer and catalog number, with th
 description, the tags (CR1, CR2...) and the sheets they are on. A device and its panel
 footprint share a tag, so they are one part (the manufacturer, catalog number and description
 come from whichever has them); a contact belongs to its device and has no line of its own;
-symbols without a tag (an off-sheet connector) are not parts. Parts without a catalog number
+symbols without a tag (an off-sheet connector) are not parts. An AutoCAD Electrical schematic
+component brought in with a DXF or DWG (its TAG1: CR1, M1) is a part; its contacts (TAG2) are
+not. Parts without a catalog number
 are listed by their block's name (a drawing brought in from AutoCAD: its terminals, modules
 and drives, counted), or left out with the box unticked. DIN rail and wire duct come last, as
 the stock lengths to buy (Panel materials has their cuts). The lines are numbered: a

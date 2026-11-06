@@ -5,13 +5,16 @@ drawing units. Entities are drawn as a few QPainterPaths per color, built once a
 chunks of ids: a change rebuilds only the chunks it touched, so editing a big sheet doesn't
 rebuild every path (see Sheet.touched).
 
-Text is drawn as glyph outlines (QPainterPath.addText), sharp at every zoom and the same on
-screen and in the PDF.
+Text is kept as (placement, string) items and drawn on screen with QPainter.drawText, which
+draws from Qt's cache of each letter's picture at that size: filling the outlines of a sheet's
+letters, smoothed, as one path took seconds a zoom step on a sheet of notes (a minute for
+4,000 multi-line notes) where drawText takes a tenth of a second. A PDF and a printout get
+the glyph outlines (QPainterPath.addText), the same letters as vectors.
 """
 
 from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import (QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QFontMetricsF,
-                           QTransform)
+                           QTransform, QPaintEngine)
 
 from . import model as M
 from . import geometry as G
@@ -48,11 +51,10 @@ def install_text_measure():
     M.TEXT_MEASURE = measure
 
 
-def text_path(t):
-    """Outline of a Text entity in drawing units."""
-    f = text_font()
-    p = QPainterPath()
-    p.addText(QPointF(0, 0), f, t.text)
+def text_transform(t):
+    """Where a Text entity's glyphs (made at FONT_PX, y down, baseline at 0) go in drawing
+    units."""
+    text_font()
     k = t.height / _font_cache["cap"]
     dx, dy = t.offset()
     tr = QTransform()
@@ -60,7 +62,44 @@ def text_path(t):
     tr.rotate(t.angle)
     tr.translate(dx, dy)
     tr.scale(k, -k)                 # glyphs are y-down; the drawing is y-up
-    return tr.map(p)
+    return tr
+
+
+def text_path(t):
+    """Outline of a Text entity in drawing units."""
+    p = QPainterPath()
+    p.addText(QPointF(0, 0), text_font(), t.text)
+    return text_transform(t).map(p)
+
+
+def text_item(t):
+    """A Text entity as kept for drawing: (placement, string)."""
+    return (text_transform(t), t.text)
+
+
+def draw_texts(painter, items, color, outlines):
+    """Draw text items in one color: on screen with drawText (Qt's cached letters); with
+    outlines (PDF, print) as filled glyph outlines."""
+    if not items:
+        return
+    f = text_font()
+    if outlines:
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(color))
+        for tr, text in items:
+            p = QPainterPath()
+            p.addText(QPointF(0, 0), f, text)
+            painter.drawPath(tr.map(p))
+        return
+    painter.setPen(QPen(color))
+    painter.setBrush(Qt.NoBrush)
+    painter.setFont(f)
+    base = painter.worldTransform()
+    origin = QPointF(0, 0)
+    for tr, text in items:
+        painter.setWorldTransform(tr * base)
+        painter.drawText(origin, text)
+    painter.setWorldTransform(base)
 
 
 def hatch_path(e):
@@ -147,12 +186,13 @@ class Palette:
 
 
 class _Chunk:
-    __slots__ = ("strokes", "fills", "areas")
+    __slots__ = ("strokes", "fills", "areas", "texts")
 
     def __init__(self):
         self.strokes = {}       # rgba -> QPainterPath
-        self.fills = {}         # (texts)
+        self.fills = {}         # (leaders' arrowheads)
         self.areas = {}         # (solid hatches: drawn first, under the lines, as AutoCAD's)
+        self.texts = {}         # rgba -> [(placement, string)] (draw_texts)
 
 
 class SheetRenderer:
@@ -200,7 +240,7 @@ class SheetRenderer:
         for k, ents in by_chunk.items():
             ch = _Chunk()
             self._fill_chunk(ch, ents)
-            if ch.strokes or ch.fills or ch.areas:
+            if ch.strokes or ch.fills or ch.areas or ch.texts:
                 self.chunks[k] = ch
             else:
                 self.chunks.pop(k, None)
@@ -218,10 +258,10 @@ class SheetRenderer:
                self.pal.dark)
         if sig != self._frame_sig:
             self._frame_sig = sig
-            lines, texts = QPainterPath(), QPainterPath()
+            lines, texts = QPainterPath(), []
             for e in border_entities(s):
                 if isinstance(e, M.Text):
-                    texts.addPath(text_path(e))
+                    texts.append(text_item(e))
                 else:
                     add_entity(lines, e)
             tb = _Chunk()
@@ -246,12 +286,7 @@ class SheetRenderer:
                                      else e.parts()) if isinstance(w, M.Text)]
                 solids = solid_fills(e)
                 if texts:
-                    p = ch.fills.get(key)
-                    if p is None:
-                        p = ch.fills[key] = QPainterPath()
-                        p.setFillRule(Qt.WindingFill)
-                    for t in texts:
-                        p.addPath(text_path(t))
+                    ch.texts.setdefault(key, []).extend(text_item(t) for t in texts)
                 if solids:
                     # a hatch's fill under the lines; a leader's arrowhead with its text
                     hatch = isinstance(e, M.Hatch)
@@ -264,11 +299,7 @@ class SheetRenderer:
                     for h in solids:
                         p.addPath(hatch_path(h))
             if isinstance(e, M.Text):
-                p = ch.fills.get(key)
-                if p is None:
-                    p = ch.fills[key] = QPainterPath()
-                    p.setFillRule(Qt.WindingFill)
-                p.addPath(text_path(e))
+                ch.texts.setdefault(key, []).append(text_item(e))
             else:
                 p = ch.strokes.get(key)
                 if p is None:
@@ -288,7 +319,7 @@ class SheetRenderer:
         painter.setBrush(QBrush(color))
         painter.drawPath(path)
 
-    def _paint_xrefs(self, painter):
+    def _paint_xrefs(self, painter, outlines):
         """Cross-references and wire numbers (worked out again only when what they show
         changed)."""
         from . import xrefs, wirenums
@@ -296,20 +327,11 @@ class SheetRenderer:
         nums = tuple((t.text, t.pos, t.angle, t.height)
                      for t in wirenums.labels(self.project, self.sheet))
         if self._xrefs is None or self._xrefs[0] != (shown, nums):
-            path = QPainterPath()
-            path.setFillRule(Qt.WindingFill)
-            for x, y, t, h in shown:
-                path.addPath(text_path(M.Text((x, y), t, h, 0.0, "center")))
-            for t in wirenums.labels(self.project, self.sheet):
-                path.addPath(text_path(t))
-            self._xrefs = ((shown, nums), path)
-        path = self._xrefs[1]
-        if path.isEmpty():
-            return
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(self.pal.color(self.project, M.Text((0, 0), "", 0.1,
-                                                                    layer="SYMBOLS"))))
-        painter.drawPath(path)
+            items = [text_item(M.Text((x, y), t, h, 0.0, "center")) for x, y, t, h in shown]
+            items += [text_item(t) for t in wirenums.labels(self.project, self.sheet)]
+            self._xrefs = ((shown, nums), items)
+        draw_texts(painter, self._xrefs[1], self.pal.color(self.project, M.Text(
+            (0, 0), "", 0.1, layer="SYMBOLS")), outlines)
 
     def paint(self, painter, pen_width=0.0, paper=True, under=None):
         """pen_width 0: cosmetic one-pixel lines (screen); a number: that width in inches
@@ -327,11 +349,11 @@ class SheetRenderer:
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
         painter.drawPath(lines)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(pal.frame))
-        painter.drawPath(texts)
+        outlines = pen_width != 0 or painter.device().paintEngine().type() not in (
+            QPaintEngine.Raster, QPaintEngine.OpenGL2)
+        draw_texts(painter, texts, pal.frame, outlines)
         self._paint_dots(painter)
-        self._paint_xrefs(painter)
+        self._paint_xrefs(painter, outlines)
         smooth = painter.testRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         for ch in [tb] + list(self.chunks.values()):
@@ -356,6 +378,9 @@ class SheetRenderer:
             for rgba, path in ch.fills.items():
                 painter.setBrush(QBrush(QColor.fromRgba(rgba)))
                 painter.drawPath(path)
+            for rgba, items in ch.texts.items():
+                draw_texts(painter, items, QColor.fromRgba(rgba), outlines)
+            painter.setPen(Qt.NoPen)
         self._paint_jumps(painter, pen_width)
 
     def _paint_jumps(self, painter, pen_width):

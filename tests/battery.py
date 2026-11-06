@@ -752,7 +752,10 @@ def speed(log, out):
 
 # ---- 5. pictures -------------------------------------------------------------------------------
 def pictures(log, out):
-    import fitz
+    try:
+        import fitz                     # (PyMuPDF: on a developer's computer; not a dependency)
+    except ImportError:
+        return "skipped: PyMuPDF not installed (the PDF itself was checked in files)"
     pdf = os.path.join(out, "mixed.pdf")
     d = fitz.open(pdf)
     names = []

@@ -28,8 +28,12 @@ def parts(project, unnumbered=True):
             if not isinstance(e, Insert) or e.defn is None:
                 continue
             d = e.defn
-            if d.kind == "symbol" and not tags.is_device(e):
-                continue                # (a contact, a connector, a ground: not a part)
+            if d.kind == "symbol" and not tags.is_device(e) and not (
+                    d.category == "Imported" and e.attrs.get("TAG", "").strip()):
+                continue                # (a contact, a connector, a ground: not a part; a
+                                        # symbol brought in with a tag, AutoCAD Electrical's
+                                        # TAG1, is its parent device: child contacts carry
+                                        # TAG2)
             a = e.attrs
             rec = {"tag": a.get("TAG", "").strip(), "mfr": a.get("MFR", "").strip() or
                    d.manufacturer, "cat": a.get("CAT", "").strip() or d.catalog,

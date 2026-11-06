@@ -81,6 +81,30 @@ class BomTest(unittest.TestCase):
         self.assertNotIn(("", "TB 2202"), {(g["mfr"], g["cat"] or g["desc"])
                                            for g in bom.rows(p, unnumbered=False)})
 
+    def test_imported_schematic_parts(self):
+        """AutoCAD Electrical's schematic components (TAG1) come in as symbols: they are parts;
+        an imported symbol without a tag is not."""
+        import ezdxf
+        from kanzonascad import fileio
+        doc = ezdxf.new("R2013")
+        doc.header["$INSUNITS"] = 1
+        b = doc.blocks.new("HCR1")
+        b.add_circle((0, 0), 0.1)
+        for k, tag in enumerate(("TAG1", "MFG", "CAT", "DESC1")):
+            b.add_attdef(tag, (0, -0.1 * (k + 1)), dxfattribs={"height": 0.05})
+        msp = doc.modelspace()
+        for i, t in enumerate(("CR1", "CR2", "")):
+            r = msp.add_blockref("HCR1", (i, 0))
+            r.add_auto_attribs({"TAG1": t, "MFG": "AB", "CAT": "700-HA32Z24", "DESC1": "RELAY"})
+        path = os.path.join(tempfile.mkdtemp(), "ace.dxf")
+        doc.saveas(path)
+        p = M.Project.new()
+        fileio.import_dxf(p, p.sheets[0], path)
+        got = [r for r in bom.rows(p) if r["cat"] == "700-HA32Z24"]
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["qty"], 2)
+        self.assertEqual(got[0]["mfr"], "AB")
+
     def test_csv(self):
         path = os.path.join(tempfile.mkdtemp(), "bom.csv")
         n = bom.write_csv(self.project(), path)

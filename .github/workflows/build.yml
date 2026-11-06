@@ -311,6 +311,22 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: python -m unittest discover -s tests -p "test_*.py" -t .
 
+      # The battery, longer than the unit tests' short run, with a new seed every build (the
+      # run number), so each build tries different random editing; a failure names its seed
+      # (run it again with: python tests/battery.py OUT --ops 1000 --seed N)
+      - name: Battery (random editing, every command, files, speed)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python tests/battery.py battery-out --ops 1000 --seed ${{ github.run_number }}
+
+      - name: Battery log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: battery-log
+          path: battery-out/battery.log
+          if-no-files-found: ignore
+
       - name: Build the app folder
         run: python -m PyInstaller ${{ env.PYINSTALLER_OPTIONS }} --runtime-hook packaging/linux/pyi_rth_linux_env.py run.py
 
