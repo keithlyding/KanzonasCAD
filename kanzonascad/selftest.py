@@ -530,6 +530,21 @@ def run(log_path):
         return ("open+draw %.2f s, 10 zooms %.2f s, 1,000 adds %.2f s, 1,000 moved %.2f s, "
                 "hover %.1f ms, snap move drawn %.1f ms, peak %.0f MB"
                 % (dt, dz, da, dm, dh * 1000, ds * 1000, mb))
+
+    def text_font():
+        """The font text is drawn and measured with: the letters as tall as asked, a line as
+        wide as a sans-serif font makes it (a font that measures far narrower or wider would
+        wrap multi-line notes and place texts unlike the drawing shows)."""
+        from PySide6.QtGui import QFontInfo
+        from . import render
+        f = render.text_font()
+        fam = QFontInfo(f).family()
+        w = M.text_width("ALL WIRING 14 AWG UNLESS NOTED", 0.1)
+        cap = render._font_cache["cap"]
+        assert 1.6 < w < 3.6, "a 0.1\" line measured %.2f\" in %s (cap %.1f px)" % (w, fam, cap)
+        return "%s, cap height %.1f px of %d, reference line %.2f\"" % (
+            fam, cap, render.FONT_PX, w)
+    log.check("text font", text_font)
     log.check("speed budget (60,000-line sheet)", big_sheet)
 
     def notes_sheet():
