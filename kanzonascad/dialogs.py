@@ -778,6 +778,42 @@ def drafting_page(view):
     return page, apply
 
 
+def leader_dialog(parent, ent):
+    """A leader's note (several lines) or balloon number, and its text height. Returns the
+    changed Leader, or None."""
+    from PySide6.QtWidgets import QPlainTextEdit, QRadioButton
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Edit leader")
+    form = QFormLayout(dlg)
+    note = QRadioButton("Note")
+    balloon = QRadioButton("Balloon (item number)")
+    (balloon if ent.balloon else note).setChecked(True)
+    row = QHBoxLayout()
+    row.addWidget(note)
+    row.addWidget(balloon)
+    text = QPlainTextEdit(ent.text)
+    text.setTabChangesFocus(True)
+    text.setMinimumHeight(80)
+    height = QDoubleSpinBox()
+    height.setDecimals(4)
+    height.setRange(0.001, 100)
+    height.setSuffix(" in")
+    height.setValue(ent.height)
+    form.addRow("Shows", row)
+    form.addRow("Text", text)
+    form.addRow(_gray("A note can have several lines; a balloon shows its first line (the "
+                      "item number)."))
+    form.addRow("Height", height)
+    form.addRow(_buttons(dlg))
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    t = text.toPlainText().rstrip()
+    if balloon.isChecked():
+        t = t.splitlines()[0].strip() if t.strip() else ""
+    new = ent.copy(text=t, balloon=balloon.isChecked(), height=height.value())
+    return None if new.to_dict() == ent.to_dict() else new
+
+
 def edit_text_dialog(parent, ent):
     """A text's wording, height, angle and justification. Returns the changed Text, or None."""
     dlg = QDialog(parent)

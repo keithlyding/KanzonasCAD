@@ -154,7 +154,7 @@ def _add(layout, t, dxf, kw, names, skipped):
         pts = [tuple(p) for p in dxf.get("points") or dxf.get("vertices") or []]
         if len(pts) < 2:
             return False
-        layout.add_lwpolyline([_xy(p) for p in pts], dxfattribs=kw)
+        layout.add_leader(pts, dxfattribs=kw)
     elif t == "MLINE":
         pts = [tuple(p) for p in dxf.get("points") or []]
         if len(pts) < 2:

@@ -537,6 +537,9 @@ AutoCAD's quick mode). An object nothing crosses is erased. U undoes the last tr
 then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>
 <tr><td>Aligned dimension</td><td>DIMALIGNED, DAL</td><td>The same, measured along the line
 between the two points (slanted too).</td></tr>
+<tr><td>Leader</td><td>LEADER, LE, LEAD, MLEADER, MLD, QLEADER, BALLOON</td><td>Pick the
+arrow's point, then where the line bends, Enter; type the note, or B for a balloon (Enter takes
+the next item number).</td></tr>
 <tr><td>DIN rail</td><td>DINRAIL, RAIL, DR</td><td>Real-size DIN rail from its start to its end
 (or type the length toward the cursor). Before the first click: <b>7.5</b> (TS35 x 7.5 mm, to
 start), <b>15</b> (TS35 x 15 mm) or <b>MINI</b> (TS15).</td></tr>
@@ -696,6 +699,18 @@ decimals (12.50"). The two points they measure go where you pick them (the snap)
 Polar don't bend them, only the dimension line's place. Their grips move the measured points
 and the line; they go on layer DIMENSIONS (its color: Project properties, Panel). Dimension
 text height: Project properties.</li>
+<li><b>Leader</b> (LE; Draw menu and the Panel tab, Dimensions) points at a part with an arrow
+and says something about it: AutoCAD's leader and multileader in one. Pick the arrow's point
+(on the part), then one or more points where the line goes, and press Enter. Then type the
+<b>note</b> and press Enter (or Enter alone for no text), or type <b>B</b> for a
+<b>balloon</b>: a circle with an item number, as a bill of materials numbers parts; Enter takes
+the next number (one more than the highest balloon in the project), or type your own. The note
+or balloon sits at the end of a short level landing, on the side the last line points to.
+Double-click a leader to change its note (several lines), switch between note and balloon, or
+change its text height; its grips move the arrow and each bend. Its text is paper-sized, like a
+dimension's (Project properties, dimension text height), and it goes on layer DIMENSIONS.
+Leaders and multileaders in a DXF or DWG come in as leaders (a multileader's note or balloon
+number with it; a DWG's multileaders aren't readable yet).</li>
 </ul>
 
 <h2>Selecting and grips</h2>

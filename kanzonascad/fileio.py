@@ -233,6 +233,41 @@ def _attr_name(tag):
     return ACE_ATTRS.get(t, t)
 
 
+def _mleaders(de, P, k, kw, out):
+    """A MULTILEADER as KanzonasCAD leaders, one per leader line: its note (the MTEXT's
+    text) or its balloon (a block's first attribute: the item number) on the first. False
+    when it can't be read that way (then taken apart into lines and texts)."""
+    try:
+        c = de.context
+        h = (c.char_height or 0.18) * k
+        text, balloon = "", False
+        if c.mtext is not None and c.mtext.default_content:
+            from ezdxf.tools.text import plain_mtext
+            text = plain_mtext(c.mtext.default_content)
+        elif c.block is not None:
+            vals = [a.text for a in de.block_attribs if getattr(a, "text", "")]
+            text, balloon = (vals[0] if vals else ""), True
+        made = []
+        for leader in c.leaders:
+            for line in leader.lines:
+                pts = [P(v) for v in line.vertices]
+                if leader.last_leader_point is not None:
+                    pts.append(P(leader.last_leader_point))
+                clean = []
+                for q in pts:
+                    if not clean or G.dist(q, clean[-1]) > 1e-9:
+                        clean.append(q)
+                if len(clean) >= 2:
+                    made.append(M.Leader(clean, "" if made else text, balloon and not made, h,
+                                         **kw))
+    except (AttributeError, TypeError, ValueError, IndexError):
+        return False
+    if not made:
+        return False
+    out.extend(made)
+    return True
+
+
 def _keepable(de):
     """A block reference kept as a block (not taken apart): a named block (not an anonymous
     one: a dimension's, a table's...), placed with the same scale both ways (mirrored or
@@ -487,6 +522,11 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
                 out.append(w)
             for att in de.attribs:
                 _read(att, k, out, skipped, depth + 1, blocks)
+        elif t == "LEADER" and len(de.vertices) >= 2:
+            # a leader: KanzonasCAD's own (its text, an MTEXT of its own, comes in by itself)
+            out.append(M.Leader([P(v) for v in de.vertices], "", False, 0.1, **kw))
+        elif t in ("MLEADER", "MULTILEADER") and _mleaders(de, P, k, kw, out):
+            pass
         elif t in ("INSERT", "DIMENSION", "ARC_DIMENSION", "LARGE_RADIAL_DIMENSION", "LEADER",
                    "MLEADER", "MULTILEADER", "MLINE") and depth < 12:
             # (AutoCAD's multileader is MULTILEADER: it was left out)
