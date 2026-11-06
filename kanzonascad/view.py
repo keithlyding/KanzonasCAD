@@ -892,7 +892,7 @@ class CadView(QWidget):
         if e.button() == Qt.LeftButton and self.cmd is None:
             p = self.to_world(e.position())
             ent = self.pick_entity(p)
-            if isinstance(ent, (M.Text, M.Leader)):
+            if isinstance(ent, (M.Text, M.Leader, M.MText)):
                 self._window = None
                 self.editTextRequested.emit(ent)
                 return

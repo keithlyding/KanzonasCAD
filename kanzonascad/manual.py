@@ -518,6 +518,13 @@ C, R (on the baseline). All three are kept for the next texts.
 <b>Double-click a text</b> to change its wording, height, angle and justification afterward
 (with "Keep the text where it is" ticked, a new justification moves only its insertion point,
 which is where it snaps and turns around).</td></tr>
+<tr><td>Multiline text</td><td>MTEXT, MT, NOTE</td><td>One text of several lines (a note): click a
+corner of its box, then the opposite corner (its lines wrap at the box's width), or press
+Enter after the first corner for no wrapping; type the text in the box that opens (Enter starts
+a new line) and click OK. Before the first click, <b>H</b> sets its height (paper inches). It
+is one object: it moves and copies whole. <b>Double-click</b> it to change its text, height,
+wrap width and the point it hangs from (top left ... bottom right). A DXF's or DWG's MTEXT
+comes in as one, and DXF export writes it as MTEXT.</td></tr>
 <tr><td>Move</td><td>MOVE, M</td><td>Select, base point, second point.</td></tr>
 <tr><td>Copy objects</td><td>COPY, CO, CP</td><td>Select, base point, then as many copies as
 you place (Enter ends).</td></tr>

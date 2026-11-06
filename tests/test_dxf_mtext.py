@@ -29,7 +29,11 @@ class DxfMtextTest(unittest.TestCase):
     def test_dimension_value_and_mtext_come_through(self):
         ents, rep = fileio.read_dxf(self.path)
         self.assertFalse([k for k in rep["skipped"] if "MTEXT" in k], rep["skipped"])
-        texts = {e.text: e for e in ents if isinstance(e, M.Text)}
+        # (a free MTEXT is one multiline text of KanzonasCAD's since 0.13.4: its lines)
+        flat = []
+        for e in ents:
+            flat += e.parts() if isinstance(e, M.MText) else [e]
+        texts = {e.text: e for e in flat if isinstance(e, M.Text)}
         value = next(t for s, t in texts.items() if s.replace(".", "").isdigit())
         # the value sits centered on its dimension line, above the measured points
         self.assertEqual(value.align, "center")

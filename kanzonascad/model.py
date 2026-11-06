@@ -924,6 +924,120 @@ class Dimension(Composite):
         return self.copy(p1=list(fn(self.p1)), p2=list(fn(self.p2)), loc=list(fn(self.loc)))
 
 
+MTEXT_ATTACH = ("TL", "TC", "TR", "ML", "MC", "MR", "BL", "BC", "BR")     # (DXF's 1-9)
+LINE_STEP = 1.6667          # a line of text's step, as a share of its height (AutoCAD's)
+
+
+def wrap_lines(text, height, width):
+    """Text cut into lines: at its newlines, and (width over 0) where a word would pass the
+    width."""
+    out = []
+    for para in str(text).split("\n"):
+        if width <= 0:
+            out.append(para)
+            continue
+        line = ""
+        for word in para.split(" "):
+            trial = word if not line else line + " " + word
+            if line and text_width(trial, height) > width:
+                out.append(line)
+                line = word
+            else:
+                line = trial
+        out.append(line)
+    return out
+
+
+@_register
+class MText(Composite):
+    """Multi-line text (AutoCAD's MTEXT): its lines one under the other (at its newlines, and
+    wrapped to width when width is over 0), placed by attach (TL top left ... BR bottom right)
+    at pos, turned by angle."""
+    kind = "mtext"
+    __slots__ = ("pos", "text", "height", "angle", "attach", "width", "_parts")
+
+    def __init__(self, pos, text, height=0.125, angle=0.0, attach="TL", width=0.0, **kw):
+        super().__init__(**kw)
+        self.pos = _pt(pos)
+        self.text = str(text or "")
+        self.height = float(height)
+        self.angle = float(angle) % 360.0
+        self.attach = attach if attach in MTEXT_ATTACH else "TL"
+        self.width = max(0.0, float(width or 0.0))
+        self._parts = None
+
+    def _data(self):
+        d = {"pos": list(self.pos), "text": self.text, "height": self.height,
+             "attach": self.attach}
+        if self.angle:
+            d["angle"] = self.angle
+        if self.width:
+            d["width"] = self.width
+        return d
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["pos"], d.get("text", ""), d.get("height", 0.125), d.get("angle", 0.0),
+                   d.get("attach", "TL"), d.get("width", 0.0), layer=d.get("layer", "0"),
+                   color=d.get("color"), id=d.get("id"))
+
+    def lines(self):
+        return wrap_lines(self.text, self.height, self.width)
+
+    def parts(self):
+        """Its lines as texts, one under the other, the block of them placed by attach."""
+        if self._parts is not None:
+            return self._parts
+        lines = self.lines()
+        h = self.height
+        step = h * LINE_STEP
+        total = h + (len(lines) - 1) * step
+        row, col = self.attach[0], self.attach[1]
+        top = {"T": 0.0, "M": total / 2, "B": total}[row]      # its top above pos
+        align = {"L": "left", "C": "center", "R": "right"}[col]
+        out = []
+        for i, line in enumerate(lines):
+            if line.strip():
+                q = G.polar(self.pos, top - i * step, self.angle + 90)
+                out.append(Text(q, line, h, self.angle, align, "top"))
+        for e in out:
+            e.layer, e.color = self.layer, self.color
+        self._parts = out
+        return out
+
+    def _compute_bbox(self):
+        bb = Composite._compute_bbox(self)
+        return bb or (self.pos[0], self.pos[1], self.pos[0], self.pos[1])
+
+    def distance(self, p):
+        ps = self.parts()
+        return min(e.distance(p) for e in ps) if ps else G.dist(p, self.pos)
+
+    def _compute_snaps(self):
+        return [("node", self.pos)]
+
+    def grips(self):
+        return [self.pos]
+
+    def with_grip(self, i, p):
+        return self.copy(pos=list(p))
+
+    def exploded(self):
+        c = self.copy()
+        c.id = None
+        return [c]                  # (it goes out as one MTEXT: DXF export writes it)
+
+    def _map(self, fn, rot=0.0, factor=1.0, mirror=None, **_kw):
+        pos = fn(self.pos)
+        if mirror is not None:
+            ang = G.mirror_angle(self.angle, *mirror)
+            if 90.0 + 1e-6 < ang <= 270.0 + 1e-6:
+                ang = (ang + 180.0) % 360.0
+            return self.copy(pos=list(pos), angle=ang)
+        return self.copy(pos=list(pos), angle=(self.angle + rot) % 360.0,
+                         height=self.height * abs(factor), width=self.width * abs(factor))
+
+
 HATCH_PATTERNS = {
     # name -> (what it is, [(line angle, spacing as a share of the hatch's spacing)])
     "SOLID": ("Solid fill", []),

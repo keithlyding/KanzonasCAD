@@ -1556,6 +1556,78 @@ class DimAlignedCmd(DimLinearCmd):
     mode = "aligned"
 
 
+class MTextCmd(Command):
+    """MTEXT: click a corner of the text's box, then the opposite corner (its width: lines
+    wrap there), or Enter after the first for no wrapping; then type the text, several lines,
+    in a box. Its height is the text height (H types another first)."""
+    name, title = "MTEXT", "Multiline text"
+
+    def begin(self):
+        self.p1 = None
+        self.height = None
+        self.ctx.prompt("Specify the first corner of the text (H: height)", [("Height", "H")])
+
+    def _height(self):
+        return self.height or self.ctx.text_height()
+
+    def text(self, s):
+        if s.strip().upper() == "H" and self.p1 is None:
+            self.asking = True
+            self.ctx.prompt("Text height (paper inches: it reads that high on paper)",
+                            typing=True)
+            return True
+        return False
+
+    def number(self, v):
+        if getattr(self, "asking", False) and v > 0:
+            self.height = float(v) * self.ctx.sheet().k()
+            self.asking = False
+            self.begin_again()
+            return True
+        return False
+
+    def begin_again(self):
+        self.ctx.prompt("Specify the first corner of the text (H: height)", [("Height", "H")])
+
+    def point(self, p):
+        if self.p1 is None:
+            self.p1 = self.base = self.last = p
+            self.ctx.prompt("Specify the opposite corner (lines wrap at its width), or Enter "
+                            "for no wrapping")
+            return
+        self._ask(p)
+
+    def enter(self):
+        if self.p1 is not None:
+            self._ask(None)
+        else:
+            self.finish()
+
+    def _ask(self, p2):
+        x0, y0 = self.p1
+        if p2 is not None:
+            left, top = min(x0, p2[0]), max(y0, p2[1])
+            width = abs(p2[0] - x0)
+        else:
+            left, top, width = x0, y0, 0.0
+        host = getattr(self.ctx, "host", None)
+        ask = getattr(host, "ask_mtext", None)
+        text = ask("") if ask is not None else None
+        if text:
+            mt = M.MText((left, top), text, self._height(), 0.0, "TL", width,
+                         layer=self.ctx.layer())
+            with self.ctx.edit(self.title) as ed:
+                ed.add(self.ctx.sheet(), mt)
+            self.ctx.message("Multiline text: %d line(s)" % len(mt.lines()))
+        self.finish()
+
+    def preview(self, p):
+        if self.p1 is None:
+            return []
+        x0, y0 = self.p1
+        return [M.Polyline([(x0, y0), (p[0], y0), (p[0], p[1]), (x0, p[1])], True)]
+
+
 def closed_loop(e):
     """A closed shape's outline as points (a closed polyline or rectangle, a circle as 72
     sides), or None."""
@@ -2346,6 +2418,7 @@ COMMANDS = {
     "EXPLODE": (ExplodeCmd, ["X"]),
     "DIMLINEAR": (DimLinearCmd, ["DLI", "DIM"]),
     "HATCH": (HatchCmd, ["H", "BHATCH", "BH", "FILL"]),
+    "MTEXT": (MTextCmd, ["MT", "T2", "NOTE"]),
     "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),

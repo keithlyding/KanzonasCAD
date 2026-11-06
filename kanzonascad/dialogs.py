@@ -778,6 +778,65 @@ def drafting_page(view):
     return page, apply
 
 
+def mtext_text(parent, text=""):
+    """A box to type several lines of text in (MTEXT). The text, or None when cancelled or
+    empty."""
+    from PySide6.QtWidgets import QPlainTextEdit
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Multiline text")
+    v = QVBoxLayout(dlg)
+    box = QPlainTextEdit(text)
+    box.setTabChangesFocus(True)
+    box.setMinimumSize(420, 160)
+    v.addWidget(box)
+    v.addWidget(_buttons(dlg))
+    box.setFocus()
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    t = box.toPlainText().rstrip()
+    return t or None
+
+
+def mtext_dialog(parent, ent):
+    """A multiline text's text, height, wrap width and attachment. The changed MText, or
+    None."""
+    from PySide6.QtWidgets import QPlainTextEdit
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Edit multiline text")
+    form = QFormLayout(dlg)
+    box = QPlainTextEdit(ent.text)
+    box.setTabChangesFocus(True)
+    box.setMinimumHeight(120)
+    height = QDoubleSpinBox()
+    height.setDecimals(4)
+    height.setRange(0.001, 100)
+    height.setSuffix(" in")
+    height.setValue(ent.height)
+    width = QDoubleSpinBox()
+    width.setDecimals(3)
+    width.setRange(0, 1000)
+    width.setSuffix(" in")
+    width.setSpecialValueText("No wrapping")
+    width.setValue(ent.width)
+    attach = QComboBox()
+    names = {"TL": "Top left", "TC": "Top center", "TR": "Top right", "ML": "Middle left",
+             "MC": "Middle center", "MR": "Middle right", "BL": "Bottom left",
+             "BC": "Bottom center", "BR": "Bottom right"}
+    for code in M.MTEXT_ATTACH:
+        attach.addItem(names[code], code)
+    attach.setCurrentIndex(attach.findData(ent.attach))
+    form.addRow("Text", box)
+    form.addRow("Height", height)
+    form.addRow("Wrap width", width)
+    form.addRow("Attached at", attach)
+    form.addRow(_buttons(dlg))
+    if dlg.exec() != QDialog.Accepted or not box.toPlainText().strip():
+        return None
+    new = ent.copy(text=box.toPlainText().rstrip(), height=height.value(), width=width.value(),
+                   attach=attach.currentData())
+    return None if new.to_dict() == ent.to_dict() else new
+
+
 def leader_dialog(parent, ent):
     """A leader's note (several lines) or balloon number, and its text height. Returns the
     changed Leader, or None."""
