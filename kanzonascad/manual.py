@@ -790,11 +790,19 @@ or a window with no project open) and it opens as a project of its own, as Open.
 dropped <b>.kzcad</b> project opens. (Import DXF or DWG into this sheet... keeps the drawing's
 own coordinates instead.)</li>
 <li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version
-since 2018 too) open and import directly, with nothing to install: KanzonasCAD reads them with
-its own DWG reader (ezdwg, free and open source). If it can't read one and the free
-<b>ODA File Converter</b> is installed, KanzonasCAD tries that by itself (the command line says
-so); otherwise it tells you why, and saving the drawing as DXF in the program that made it
-always works.</li>
+since 2018 too) open and import directly, with nothing to install. KanzonasCAD reads them
+object by object (with ezdwg, free and open source, decoding the file): every block keeps its
+base point and each copy its own place, scale and rotation, block attributes show their
+values (invisible ones stay hidden), dimensions come with their lines, arrows and values, and
+layers keep their names and colors. A drawing made of many blocks (a panel of terminals and
+I/O modules) comes in as its blocks' lines, arcs and texts, each block's drawing worked out
+once for all its copies. Tables, multileaders and arc dimensions in a DWG can't be read yet
+(ezdwg doesn't decode them; the same drawing saved as DXF brings them in), nor 3D solids and
+regions; the message after opening names what was left out. If this reader fails on a
+file, KanzonasCAD tries the older way (ezdwg's own conversion to DXF, which loses blocks'
+scale and attributes; the command line says so), then the free <b>ODA File Converter</b> when
+it is installed; otherwise it tells you why, and saving the drawing as DXF in the program that
+made it always works.</li>
 <li><b>Export this sheet to DXF...</b> and <b>Export all sheets to DXF...</b>: AutoCAD 2013 DXF
 in inches, one file per sheet, border and title block on layer BORDER.</li>
 <li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,

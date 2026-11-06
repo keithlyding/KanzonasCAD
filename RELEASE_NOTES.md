@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.12.11
+
+**Fixed**
+- DWG files come in right: blocks keep their size and place (a scaled border no longer swallows
+  the drawing), block attributes and dimensions with their values come through, and layers
+  keep their names and colors. Before, many drawings made of blocks lost most of their
+  content or had it in the wrong place and at the wrong size.
+- Opening big DXF and DWG drawings made of blocks is much faster.
+
 ## 0.12.10
 
 **New**

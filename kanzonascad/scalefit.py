@@ -288,14 +288,10 @@ def rotate(project, sheet, clockwise=True):
     return r
 
 
-def place_on_sheet(project, sheet):
-    """A drawing opened from a DXF or DWG put on the page (its coordinates are the other
-    program's: often far from KanzonasCAD's sheet). Left where it is when it already lies on
-    the paper (a DXF exported from KanzonasCAD, border and all, or one drawn on a sheet of
-    this size); else moved to the middle of the free room at the sheet's scale when it fits;
-    else the sheet gets the biggest scale it fits at (Fit; the drawing stays real size) and
-    it is centered. Returns what was done: None, "moved" or the new scale's text."""
-    box = drawing_box(sheet)
+def placement(project, sheet, box):
+    """Where place_on_sheet puts a drawing whose box is box: None (left where it is), or
+    (rescale, scale name, scale, dx, dy). Also used before a drawing is added (opening a big
+    DWG: its pieces placed once instead of added, then moved)."""
     if box is None:
         return None
     k = sheet.k()
@@ -310,6 +306,20 @@ def place_on_sheet(project, sheet):
     if rescale:
         name, v = best_scale(bw, bh, area, tb, named=bool(sheet.scale_name))
     dx, dy = centering(box, v, area, tb)
+    return rescale, name, v, dx, dy
+
+
+def place_on_sheet(project, sheet):
+    """A drawing opened from a DXF or DWG put on the page (its coordinates are the other
+    program's: often far from KanzonasCAD's sheet). Left where it is when it already lies on
+    the paper (a DXF exported from KanzonasCAD, border and all, or one drawn on a sheet of
+    this size); else moved to the middle of the free room at the sheet's scale when it fits;
+    else the sheet gets the biggest scale it fits at (Fit; the drawing stays real size) and
+    it is centered. Returns what was done: None, "moved" or the new scale's text."""
+    plan = placement(project, sheet, drawing_box(sheet))
+    if plan is None:
+        return None
+    rescale, name, v, dx, dy = plan
     with project.edit("Place the drawing") as ed:
         if rescale:
             # (sheet_meta, not sheet_scale: the DXF's texts are its own real size, not

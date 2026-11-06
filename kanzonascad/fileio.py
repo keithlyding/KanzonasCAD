@@ -128,6 +128,11 @@ def read_dxf(path, include_paperspace=False, units=None):
         doc = ezdxf.readfile(path)
     except ezdxf.DXFStructureError:
         doc, _auditor = recover.readfile(path)
+    return read_doc(doc, include_paperspace, units)
+
+
+def read_doc(doc, include_paperspace=False, units=None):
+    """read_dxf for an ezdxf document already open (a DWG read by dwgread)."""
     if units is None:
         units = int(doc.header.get("$INSUNITS", 0) or 0)
     k = _UNITS.get(units, 1.0)
@@ -135,8 +140,9 @@ def read_dxf(path, include_paperspace=False, units=None):
     for dl in doc.layers:
         layers[dl.dxf.name] = _dxf_layer_color(dl)
     out, skipped = [], {}
+    blocks = {}                 # each block's drawing, read once (_block_parts)
     for de in doc.modelspace():
-        _read(de, k, out, skipped, 0)
+        _read(de, k, out, skipped, 0, blocks)
     # some makers' drawings are drawn in a layout (paper space), model space all but empty:
     # then the layouts' drawing comes in too (their viewports don't: they show model space)
     from_layouts = 0
@@ -147,7 +153,7 @@ def read_dxf(path, include_paperspace=False, units=None):
                 continue
             for de in layout:
                 if de.dxftype() != "VIEWPORT":
-                    _read(de, k, paper, pskip, 0)
+                    _read(de, k, paper, pskip, 0, blocks)
         if include_paperspace or len(paper) > len(out):
             out += paper
             from_layouts = len(paper)
@@ -195,7 +201,39 @@ def _entity_color(de):
     return None
 
 
-def _read(de, k, out, skipped, depth):
+def _block_parts(de, k, skipped, depth, blocks):
+    """A block's drawing in its own coordinates (inches, relative to its base point), read
+    once for all its copies: [(entity, its layer was 0)]."""
+    name = de.dxf.name
+    got = blocks.get(name)
+    if got is None:
+        blk = de.block()
+        if blk is None:
+            raise ValueError("block %s is missing" % name)
+        bx, by = blk.block.dxf.base_point[0] * k, blk.block.dxf.base_point[1] * k
+        parts, left = [], {}
+        for sub in blk:
+            if sub.dxftype() == "ATTDEF":
+                continue                # (the empty field of a block, not drawn on its copies)
+            _read(sub, k, parts, left, depth + 1, blocks)
+        got = blocks[name] = ([(e.moved(-bx, -by), e.layer == "0") for e in parts], left)
+    for t, n in got[1].items():
+        skipped[t] = skipped.get(t, 0) + n
+    return got[0]
+
+
+def _fast_insert(de):
+    """Can a block reference be placed by turning and scaling its block's drawing alone (the
+    same scale both ways, not mirrored, lying flat on the page)? Else ezdxf takes it apart."""
+    d = de.dxf
+    xs, ys = d.get("xscale", 1.0), d.get("yscale", 1.0)
+    ext = d.get("extrusion", (0.0, 0.0, 1.0))
+    return xs > 0 and abs(xs - ys) <= 1e-9 * max(1.0, abs(xs)) and \
+        abs(ext[0]) < 1e-12 and abs(ext[1]) < 1e-12 and ext[2] > 0 and \
+        d.get("column_count", 1) <= 1 and d.get("row_count", 1) <= 1
+
+
+def _read(de, k, out, skipped, depth, blocks=None):
     t = de.dxftype()
     layer = de.dxf.get("layer", "0") or "0"
     kw = dict(layer=layer, color=_entity_color(de))
@@ -235,7 +273,7 @@ def _read(de, k, out, skipped, depth):
         elif t == "POLYLINE" and (de.is_poly_face_mesh or de.is_polygon_mesh):
             # a mesh: its edges, seen from above
             for sub in de.virtual_entities():
-                _read(sub, k, out, skipped, depth + 1)
+                _read(sub, k, out, skipped, depth + 1, blocks)
         elif t == "POLYLINE" and de.is_3d_polyline:
             # a "3D" polyline (often flat on the sheet: AutoCAD and makers' drawings save them
             # so): its points seen from above (it was left out, and with it most of a drawing)
@@ -277,7 +315,7 @@ def _read(de, k, out, skipped, depth):
                              else [v.dxf.get("bulge", 0) for v in de.vertices]))
             if has_bulge:
                 for sub in de.virtual_entities():
-                    _read(sub, k, out, skipped, depth + 1)
+                    _read(sub, k, out, skipped, depth + 1, blocks)
                     out[-1].layer, out[-1].color = layer, kw["color"]
             else:
                 pts = ([P(v) for v in de.get_points("xy")] if t == "LWPOLYLINE"
@@ -338,13 +376,32 @@ def _read(de, k, out, skipped, depth):
         elif t == "INSERT" and depth < 12 and de.mcount > 1:
             # a MINSERT (rows and columns of one block): each copy
             for one in de.multi_insert():
-                _read(one, k, out, skipped, depth + 1)
+                _read(one, k, out, skipped, depth + 1, blocks)
+        elif t == "INSERT" and depth < 12 and blocks is not None and _fast_insert(de):
+            # the block's drawing read once, then turned, scaled and moved for each copy
+            # (taking each copy apart again was most of the time of opening a drawing made
+            # of blocks: a panel of terminals, 100,000 pieces)
+            s = de.dxf.get("xscale", 1.0)
+            r = de.dxf.get("rotation", 0.0)
+            ix, iy = de.dxf.insert[0] * k, de.dxf.insert[1] * k
+            c, sn = math.cos(math.radians(r)), math.sin(math.radians(r))
+
+            def place(q):
+                x, y = q[0] * s, q[1] * s
+                return (ix + x * c - y * sn, iy + x * sn + y * c)
+            for e, on_0 in _block_parts(de, k, skipped, depth, blocks):
+                w = e._map(place, rot=r, factor=s, mirror=None)
+                if on_0:
+                    w.layer = layer         # (layer 0 inside a block: the reference's layer)
+                out.append(w)
+            for att in de.attribs:
+                _read(att, k, out, skipped, depth + 1, blocks)
         elif t in ("INSERT", "DIMENSION", "ARC_DIMENSION", "LARGE_RADIAL_DIMENSION", "LEADER",
                    "MLEADER", "MULTILEADER", "MLINE") and depth < 12:
             # (AutoCAD's multileader is MULTILEADER: it was left out)
             for sub in de.virtual_entities():
                 n = len(out)
-                _read(sub, k, out, skipped, depth + 1)
+                _read(sub, k, out, skipped, depth + 1, blocks)
                 if t == "INSERT":
                     # entities on layer 0 inside a block take the block reference's layer
                     for e in out[n:]:
@@ -352,7 +409,7 @@ def _read(de, k, out, skipped, depth):
                             e.layer = layer
             if t == "INSERT":
                 for att in de.attribs:
-                    _read(att, k, out, skipped, depth + 1)
+                    _read(att, k, out, skipped, depth + 1, blocks)
         elif t == "ATTRIB":
             if not de.is_invisible:
                 out.append(M.Text(P(de.dxf.insert), de.plain_text(),
@@ -459,16 +516,30 @@ def read_dwg(path):
     folder = tempfile.mkdtemp(prefix="kzcad-dwg")
     try:
         try:
+            # object by object, blocks kept (dwgread): ezdwg's own conversion to DXF
+            # explodes blocks and loses their scale, attributes and parts
+            from . import dwgread
+            doc, units, left = dwgread.read(path)
+            ents, rep = read_doc(doc, units=units)
+            for k, n in left.items():
+                rep["skipped"][k] = rep["skipped"].get(k, 0) + n
+            rep["reader"] = "KanzonasCAD"
+            return ents, rep
+        except ImportError:
+            first = "KanzonasCAD's DWG reader (ezdwg) isn't installed"
+        except Exception as ex:         # (told on the command line; the older way next)
+            first = "KanzonasCAD's DWG reader couldn't read it (%s)" % ex
+        try:
             dxf, units, left = _dwg_with_ezdwg(path, folder)
             ents, rep = read_dxf(dxf, units=units)
             for k, n in left.items():
                 rep["skipped"][k] = rep["skipped"].get(k, 0) + n
-            rep["reader"] = "ezdwg"
+            rep["reader"] = "ezdwg (converted to DXF: %s)" % first
             return ents, rep
         except ImportError:
-            first = "KanzonasCAD's DWG reader (ezdwg) isn't installed"
+            pass
         except Exception as ex:         # (any failure of the reader: told, then the fallback)
-            first = "KanzonasCAD's DWG reader couldn't read it (%s)" % ex
+            first = "%s; converted to DXF, it failed too (%s)" % (first, ex)
         program = oda_converter()
         if program is None:
             raise DwgError("%s. If the ODA File Converter is installed, KanzonasCAD tries it "
@@ -498,6 +569,12 @@ def import_dxf(project, sheet, path, at=None, anchor="center"):
     "left" the middle of its left side (the next of several dropped, beside the one before);
     None keeps the drawing's own coordinates."""
     ents, rep = read_drawing(path)
+    return add_drawing(project, sheet, ents, rep, path, at, anchor)
+
+
+def add_drawing(project, sheet, ents, rep, path, at=None, anchor="center"):
+    """The part of import_dxf after reading: the entities added to the sheet, one undoable
+    step (their layers made when missing)."""
     bb = None
     for e in ents:
         bb = G.bbox_union(bb, e.bbox())

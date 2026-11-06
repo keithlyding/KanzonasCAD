@@ -883,11 +883,28 @@ class MainWindow(BlockEditing, QMainWindow):
         try:
             if path.lower().endswith((".dxf", ".dwg")):
                 p = M.Project.new()
-                p.sheets[0].title = os.path.splitext(os.path.basename(path))[0]
-                rep = fileio.import_dxf(p, p.sheets[0], path)
-                # (its coordinates are the other program's: put it on the page)
+                s = p.sheets[0]
+                s.title = os.path.splitext(os.path.basename(path))[0]
+                ents, rep = fileio.read_drawing(path)
+                # (its coordinates are the other program's: put it on the page, worked out
+                # before it is added, so a big drawing's pieces are placed once)
                 from . import scalefit
-                placed = scalefit.place_on_sheet(p, p.sheets[0])
+                from . import geometry as G
+                box = None
+                for e in ents:
+                    box = G.bbox_union(box, e.bbox())
+                plan = scalefit.placement(p, s, box)
+                placed = None
+                if plan is not None:
+                    rescale, name, v, dx, dy = plan
+                    if rescale:
+                        # (a new project nobody has seen: set as it is made, as the title)
+                        s.set_meta(dict(s.meta_dict(), scale=float(v), scale_name=name))
+                        placed = s.scale_text()
+                    else:
+                        placed = "moved"
+                    ents = [e.moved(dx, dy) for e in ents]
+                rep = fileio.add_drawing(p, s, ents, rep, path)
                 p.undo_stack.clear()
                 p.saved_at = -1
                 d = self.add_document(p)
@@ -1169,6 +1186,8 @@ class MainWindow(BlockEditing, QMainWindow):
         msg = "Imported %d object(s); drawing units: %s." % (rep["count"], rep["units"])
         if rep.get("reader") == "ODA File Converter":
             msg += " (Read with the ODA File Converter.)"
+        elif str(rep.get("reader", "")).startswith("ezdwg"):
+            msg += " (Read the older way: %s.)" % rep["reader"][len("ezdwg ("):-1]
         if rep.get("from_layouts"):
             msg += (" Its model space was all but empty: %d object(s) came from its layout "
                     "(paper space)." % rep["from_layouts"])
