@@ -29,7 +29,7 @@ class DwgTest(unittest.TestCase):
 
     def test_read_dwg_keeps_its_units(self):
         ents, rep = fileio.read_dwg(make_dwg(self.folder))
-        self.assertEqual(rep["reader"], "ezdwg")
+        self.assertEqual(rep["reader"], "KanzonasCAD")      # (object by object: dwgread)
         self.assertEqual(sorted(e.kind for e in ents),
                          ["arc", "circle", "line", "polyline", "text"])
         line = [e for e in ents if e.kind == "line"][0]
