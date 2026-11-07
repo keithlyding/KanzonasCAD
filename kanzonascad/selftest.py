@@ -31,6 +31,8 @@ BUDGET = {
     "import_blocks": 4.0,       # a DXF of 1,000 block references (attributes), 200 dimensions
                                 # and 500 hatches imported
     "bom": 0.5,                 # the bill of materials of 2,000 parts
+    "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
+                                # 2,000 devices, half of them in the field
 }
 
 
@@ -642,6 +644,35 @@ def run(log_path):
                 "DXF of 1,000 blocks imported %.2f s (%d objects), BOM %.3f s"
                 % (do, dz, dm, du, di, got["count"], db))
     log.check("speed budget (notes, hatches, leaders, imports)", notes_sheet)
+
+    def pull_list():
+        from . import pull
+        w = state["win"]
+        lib = w.library
+        term, strip, lt = (lib.get("symbol", n) for n in ("Terminal", "Terminal strip",
+                                                            "Pilot light"))
+        p = M.Project.new()
+        s = p.sheets[0]
+        s.location = "MCP"
+        s._put(M.Insert(strip.name, (1, 10.5), defn=strip, attrs={"TAG": "TB1"}))
+        for i in range(2000):
+            x, y = 1 + (i % 40) * 0.4, 1 + (i // 40) * 0.18
+            t = M.Insert(term.name, (x, y), defn=term, attrs={"TAG": "TB1", "TERM": str(i + 1)})
+            d = M.Insert(lt.name, (x + 0.2, y), defn=lt,
+                         attrs=dict({"TAG": "LT%d" % i}, **({"LOC": "FIELD"} if i % 2 else {})))
+            s._put(t)
+            s._put(d)
+            s._put(M.Wire([dict(t.pin_points())["2"], d.pin_points()[0][1]]))
+        t0 = time.perf_counter()
+        rs, _u = pull.runs(p)
+        head, rows = pull.table(p)
+        dt = time.perf_counter() - t0
+        assert [(r["name"], len(r["conductors"])) for r in rs] == [
+            ("MCP \u2194 FIELD", 1000)], [(r["name"], len(r["conductors"])) for r in rs]
+        assert rows[0][6].startswith("TB1-"), rows[0]
+        assert dt < BUDGET["pull"], "the pull list took %.2f s" % dt
+        return "1,000 conductors to pull of 2,000 wires: %.3f s" % dt
+    log.check("speed budget (cables between locations)", pull_list)
 
     w = state.get("win")
     if w is not None:
