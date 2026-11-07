@@ -10,8 +10,9 @@ every project. No Qt here.
 A part ties a manufacturer's part number to its schematic symbol and its panel footprint:
 placing the part's symbol fills in its manufacturer, catalog number and description.
 
-The program's own JIC/NFPA symbols (symbols_jic.py) are listed too, read-only; a symbol of
-yours with the same name takes their place.
+The program's own JIC/NFPA symbols (symbols_jic.py) and generic footprints
+(footprints_generic.py) are listed too, read-only; a block of yours with the same name takes
+their place.
 """
 
 import json
@@ -94,19 +95,21 @@ class Library:
             os.makedirs(self._dir(kind), exist_ok=True)
 
     # ---- blocks ----------------------------------------------------------------------------
-    def builtins(self):
+    def builtins(self, kind="symbol"):
+        """The program's own blocks of one kind: {name: BlockDef}."""
         if self._builtins is None:
             from .symbols_jic import builtin_symbols
-            self._builtins = {b.name: b for b in builtin_symbols()}
-        return self._builtins
+            from .footprints_generic import builtin_footprints
+            self._builtins = {"symbol": {b.name: b for b in builtin_symbols()},
+                              "footprint": {b.name: b for b in builtin_footprints()}}
+        return self._builtins.get(kind, {})
 
     def blocks(self, kind):
-        """{name: BlockDef} of one kind: the program's own (symbols) with yours over them.
+        """{name: BlockDef} of one kind: the program's own with yours over them.
         Unreadable files are skipped and named in the second item returned."""
         out = {}
         bad = []
-        if kind == "symbol":
-            out.update(self.builtins())
+        out.update(self.builtins(kind))
         d = self._dir(kind)
         if os.path.isdir(d):
             for fn in sorted(os.listdir(d)):
