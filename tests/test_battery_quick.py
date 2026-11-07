@@ -23,6 +23,18 @@ class QuickBatteryTest(unittest.TestCase):
             battery.CLOSER.stop()
         self.assertIn("menu commands triggered", note)
 
+    def test_norm(self):
+        """States compare as drawings: entities in id order on sheets and in the title block
+        (undo puts a restored entity back at the end); anything else that differs, differs."""
+        a = {"sheets": [{"entities": [{"id": 2}, {"id": 1}]}], "title_block": [{"id": 5, "t": "A"},
+                                                                               {"id": 4}]}
+        b = {"sheets": [{"entities": [{"id": 1}, {"id": 2}]}], "title_block": [{"id": 4},
+                                                                               {"id": 5, "t": "A"}]}
+        self.assertEqual(battery.norm(a), battery.norm(b))
+        b["title_block"][1]["t"] = "B"
+        self.assertNotEqual(battery.norm(a), battery.norm(b))
+        self.assertIn("title_block", battery.first_difference(battery.norm(a), battery.norm(b)))
+
     def test_files(self):
         note = battery.files(None, tempfile.mkdtemp())
         self.assertIn("save/open", note)
