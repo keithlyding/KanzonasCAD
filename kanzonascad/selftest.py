@@ -246,8 +246,13 @@ def run(log_path):
         assert ins and ins[0].pin_points()[0][1] == (5.75, 6.0), ins[0].pin_points()
         lib.save_block(M.BlockDef("Self-test footprint", "footprint", [M.Circle((0, 0), 1)]))
         assert Library().get("footprint", "Self-test footprint") is not None
+        fps, bad = lib.blocks("footprint")
+        assert not bad, bad
+        generic = [b for b in fps.values() if b.builtin]
+        assert len(generic) >= 30, "only %d built-in footprints" % len(generic)
         v.repaint()
-        return "%d built-in symbols; insert, pins and library folder" % len(syms)
+        return "%d built-in symbols, %d built-in footprints; insert, pins and library folder" % (
+            len(syms), len(generic))
     log.check("symbol library", library)
 
     def wiring():

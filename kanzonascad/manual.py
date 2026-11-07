@@ -194,7 +194,18 @@ transformer, terminal strip and terminal, ground, distribution block, off-sheet 
 three-phase: 3-pole breaker, disconnect and fuses, contactor power contacts, overload heaters,
 motor, variable frequency drive; power supply; PLC I/O card with input and output points).
 A symbol of yours with the same name replaces a built-in one.</li>
-<li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.</li>
+<li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.
+KanzonasCAD comes with generic ones at typical sizes, in the Generic categories: breakers 1, 2
+and 3 pole, fuse holders, a motor protector, a surge protector and a rotary disconnect
+(Protection); contactors, an overload relay, plug-in relays with their bases, a slim interface
+relay and a timer relay (Control); 24 VDC power supplies of 2.5, 5 and 10 A; terminal blocks
+(2.5, 4 and 10 mm2, ground and fuse terminals), an end plate and an end stop (Terminals); a PLC
+processor and an I/O module (PLC); control transformers of 100, 250 and 500 VA (Transformers,
+for the back panel); 22 mm pushbuttons, pilot lights and selector switches and a 40 mm
+emergency stop (Door devices). DIN-rail devices are 18 mm a pole and about 90 mm tall; each one's
+description gives its size. They are typical, not any maker's: for a part you buy, draw its
+own from its maker's drawing (Make block), or Edit block one of these and save it under your
+own name. A footprint of yours with the same name replaces a built-in one.</li>
 <li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
 footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
 </ul>
@@ -229,7 +240,7 @@ footprint.</p>
 <p>Double-click a placed symbol or footprint to change its tag, description, manufacturer and
 catalog number, or pick one of the library's parts for it. <b>Explode</b> (X) turns placed
 blocks back into plain lines and texts. Delete in the Library panel removes your own symbols,
-footprints and parts (the built-in symbols stay).</p>
+footprints and parts (the built-in symbols and footprints stay).</p>
 
 <a name="manufacturer-family-series"></a>
 <h3>Manufacturer, family and series</h3>
