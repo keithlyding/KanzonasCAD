@@ -134,7 +134,10 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    - Next: "Update blocks from library": lists a project's blocks that differ from the
      library's and updates only the ones chosen (0.12 updates the open project's copies right
      after a block is changed; other projects keep theirs until then).
-8. **Reports**: bill of materials (done in 0.14: parts by manufacturer and catalog number, a
+8. **Reports**: cables between locations (done in 0.15: the owner's "what cables need to be
+   pulled between panels and where all the wires need to be landed on both sides"; locations
+   per sheet or device, runs with landings, cable tag/type/marking and colors editable, CSV and
+   PDF; lengths left to the job), bill of materials (done in 0.14: parts by manufacturer and catalog number, a
    device and its footprint once, rail and duct as stock lengths, CSV), wire list, terminal strip list (Report sheets; CSV and Excel
    via openpyxl, MIT, imported only when exporting).
 9. **PDF export opening in KanzonasPDF** when it is installed (export exists).

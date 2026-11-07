@@ -337,6 +337,11 @@ class MainWindow(BlockEditing, QMainWindow):
         A("bom", "&Bill of materials...", self.show_bom, icon="bom", label="Bill of materials",
           tip="Every part the project uses, once, with how many: by manufacturer and catalog "
               "number, with tags and sheets; rail and duct as stock lengths (save as CSV)")
+        A("cables", "&Cables between locations...", self.show_cables, icon="cables",
+          label="Cables",
+          tip="What has to be pulled between panels (each sheet's location: Sheet properties) "
+              "and where each wire lands on both sides; the cable, its type and the wires' "
+              "colors or numbers (save as CSV or PDF)")
         A("materials", "Panel &materials...", self.show_materials, icon="materials",
           label="Materials",
           tip="The DIN rail and wire duct this project takes: lengths, stock pieces and cuts "
@@ -514,7 +519,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_cw", "sheet_ccw",
                   None, "renumber",
-                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "materials", None,
+                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "materials", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
                   "layers",
@@ -601,7 +606,7 @@ class MainWindow(BlockEditing, QMainWindow):
         r.add_tab("Output", [
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
             ("Import", "large", [a["import_dxf"]]),
-            ("Reports", "large", [a["bom"], a["materials"]]),
+            ("Reports", "large", [a["bom"], a["cables"], a["materials"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
         ])
         r.add_tab("View", [
@@ -1922,6 +1927,13 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         dialogs.bom_dialog(self, v.project, self._last_dir())
 
+    def show_cables(self):
+        v = self.view()
+        if v is None:
+            return
+        if dialogs.cables_dialog(self, v.project, self._last_dir()):
+            self._say("Cables between locations: kept with the project (Undo takes it back)")
+
     def show_materials(self):
         v = self.view()
         if v is None:
@@ -2181,7 +2193,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext", "use_tb",
-                  "rail", "duct", "materials", "bom", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "rail", "duct", "materials", "bom", "cables", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",

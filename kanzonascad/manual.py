@@ -45,8 +45,9 @@ of every wire number (6001, 6002 ...).</p>
 page numbers).</li>
 <li><b>Sheet properties...</b> (or double-click the sheet in the Sheets panel): what belongs to
 one sheet: its title, its <b>type</b> (Schematic, Panel, Report or Other: every tool works on
-every sheet; the type brings up the matching ribbon tab and shows in the Sheets panel), page
-number and, if it differs from the project's, its own revision.
+every sheet; the type brings up the matching ribbon tab and shows in the Sheets panel), its
+<b>location</b> (the panel or box what it shows is in: MCP, JB-1, FIELD; see Cables between
+panels), page number and, if it differs from the project's, its own revision.
 Its size and zones are the project's unless you tick "This sheet has its own size and zones";
 then set how many columns run along the top and the first one's number (11 makes a sheet
 continue 11 to 20), and how many rows run down the left and the first one's letter. Grid
@@ -509,6 +510,34 @@ other end's place shows (<b>7-A2</b>).</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
 numbers and cross-references.</li>
 <li>Wire numbers go into PDF and DXF exports as text.</li>
+</ul>
+
+<h2>Cables between panels</h2>
+<p><b>Cables between locations...</b> (Sheets menu, Output tab: Reports) lists what has to be
+pulled between panels and boxes, and where every wire lands on both sides: the pull list.</p>
+<ul>
+<li>Give each sheet its <b>location</b> in Sheet properties: MCP, JB-1, FIELD (any name). A
+device that isn't where its sheet is (a pushbutton in the field drawn on the panel's sheet)
+gets its own: double-click it, <b>Location</b>. Its own wins; leave it empty for its sheet's.</li>
+<li>A wire number that lands on devices in two or more locations is a conductor to pull.
+Wires joined by off-sheet connectors are one wire (one number), so a wire that goes from the
+MCP's sheet to the junction box's sheet is listed once. A terminal's two sides are two wires:
+the field wire lands on one side, the panel wiring on the other.</li>
+<li>The conductors are grouped by the locations they run between (<b>MCP &#8596; JB-1</b>), in
+wire number order. For each location: the terminal it lands on (<b>TB1-12</b>: the strip's tag
+and the terminal's number); where it lands on no terminal there, the devices' pins
+(<b>CR1:A1</b>). A terminal not on a strip yet shows TB?.</li>
+<li>For each run you can type the <b>cable</b> (W101) and its <b>type</b> (12C #14 TC, or loose
+#14 THHN in 1" conduit), and choose how its conductors are marked: <b>Numbered</b> (black,
+with the wire number on them: shown as BLK, #6001) or <b>Color coded</b>. Type any conductor's
+color or marking in its line (RED, WHT/BLK...); clear it to go back to the default. OK keeps
+it with the project in one step (Edit, Undo takes it back); Cancel keeps nothing.</li>
+<li><b>Save as CSV...</b>: a line per conductor (from, to, cable, type, wire, color or
+marking, where it lands on each side) for a spreadsheet. <b>Save as PDF...</b>: a page per
+run, with empty <b>Pulled</b> and <b>Landed</b> columns to tick off on the job.</li>
+<li>Lengths are not part of it: they are worked out on the job. A wire landing in one
+location and on a sheet or device with no location isn't listed; the window says how many
+there are.</li>
 </ul>
 
 <h2>Drawing</h2>
