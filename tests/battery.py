@@ -429,6 +429,15 @@ def random_editing(log, out, ops, seed):
         with p.edit("Use as title block") as ed:
             sheetframe.use_as_title_block(ed, p, s, [rnd.choice(imp)])
 
+    fps = sorted(n for n, d in lib.blocks("footprint")[0].items() if d.builtin)
+
+    def op_footprint():
+        # a built-in generic footprint, placed as Insert footprint does
+        v.run(C.InsertCmd, lib.get("footprint", rnd.choice(fps)), {})
+        if v.cmd is not None:
+            v.input_text(fmt(pt()))
+        finish()
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -442,7 +451,7 @@ def random_editing(log, out, ops, seed):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_undo, 6), (op_redo, 4)]
+             (op_usetb, 1), (op_footprint, 2), (op_undo, 6), (op_redo, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

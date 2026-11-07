@@ -6,6 +6,17 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.1
+
+**New**
+- Panel footprints come built in: 34 generic devices at typical real sizes, ready to place on
+  DIN rail (Library, Generic categories): breakers 1, 2 and 3 pole, fuse holders, a motor
+  protector, a rotary disconnect, contactors, an overload relay, plug-in and slim relays, a timer
+  relay, 24 VDC power supplies, terminal blocks with end plates and end stops, a PLC processor
+  and I/O module, control transformers, and 22 mm door devices. Each one's description gives
+  its size; for a part you buy, use its maker's drawing (Make block, or Edit block one of these
+  and save it under your own name).
+
 ## 0.14.1
 
 **Faster**
