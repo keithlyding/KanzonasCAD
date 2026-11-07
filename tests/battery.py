@@ -118,6 +118,11 @@ def norm(d):
                                                                    dict) else []):
         if isinstance(s.get("entities"), list):
             s["entities"].sort(key=lambda e: e.get("id", 0))
+    # the title block is kept as a plain list of its entities: the same rule (seed 214 of the
+    # per-build run: Use as title block undone and redone gave the same entities in another
+    # order)
+    if isinstance(d.get("title_block"), list):
+        d["title_block"].sort(key=lambda e: e.get("id", 0) if isinstance(e, dict) else 0)
     return d
 
 
@@ -149,6 +154,30 @@ def sample_dxf(out):
     h.paths.add_polyline_path([(7, 0), (8, 0), (8, 1), (7, 1)], is_closed=True)
     doc.saveas(path)
     return path
+
+
+def first_difference(a, b, path="project"):
+    """Where two JSON-like values first differ, for a failure message."""
+    if type(a) is not type(b):
+        return "%s: %r != %r" % (path, a, b)
+    if isinstance(a, dict):
+        for k in sorted(set(a) | set(b), key=str):
+            if k not in a or k not in b:
+                return "%s.%s: %s" % (path, k, "only after" if k not in a else "only before")
+            if a[k] != b[k]:
+                return first_difference(a[k], b[k], "%s.%s" % (path, k))
+        return "%s: the same" % path
+    if isinstance(a, list):
+        if len(a) != len(b):
+            ids = lambda xs: [x.get("id") for x in xs if isinstance(x, dict)]
+            return "%s: %d items != %d (ids only before: %s, only after: %s)" % (
+                path, len(a), len(b), sorted(set(ids(a)) - set(ids(b)), key=str)[:5],
+                sorted(set(ids(b)) - set(ids(a)), key=str)[:5])
+        for i, (x, y) in enumerate(zip(a, b)):
+            if x != y:
+                return first_difference(x, y, "%s[%d]" % (path, i))
+        return "%s: the same" % path
+    return "%s: %r != %r" % (path, a, b)
 
 
 # ---- 1. random editing -------------------------------------------------------------------------
@@ -530,8 +559,10 @@ def random_editing(log, out, ops, seed):
     if errors:
         raise AssertionError("%d step(s) failed (seed %d):\n%s" % (len(errors), seed,
                                                                  "\n".join(errors)))
-    assert back["sheets"] == start["sheets"], "undo all the way didn't give the empty sheet"
-    assert again == final, "redo all the way didn't give the final project"
+    assert back["sheets"] == start["sheets"], "undo all the way didn't give the empty sheet: " \
+        + first_difference(start["sheets"], back["sheets"])
+    assert again == final, "redo all the way didn't give the final project: " + \
+        first_difference(final, again)
     return stats
 
 
