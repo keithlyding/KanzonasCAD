@@ -106,6 +106,12 @@ def sheet_properties(parent, project, sheet):
     for key, label in M.SHEET_KINDS.items():
         kind.addItem(label, key)
     kind.setCurrentIndex(kind.findData(sheet.kind))
+    loc = QLineEdit(sheet.location)
+    loc.setObjectName("location")
+    loc.setPlaceholderText("MCP, JB-1, FIELD...")
+    loc.setToolTip("Where what's drawn on this sheet is: a panel or box. Wires that land in two "
+                   "locations are listed in Cables between locations (Sheets menu). A device "
+                   "elsewhere gets its own (double-click it: Location).")
     order = QComboBox()
     from .tags import ORDERS
     for key, label in ORDERS.items():
@@ -137,6 +143,7 @@ def sheet_properties(parent, project, sheet):
                       "Ctrl+Shift+Minus turn it a quarter turn")
     form.addRow("Title", title)
     form.addRow("Type", kind)
+    form.addRow("Location", loc)
     form.addRow("Scale", scale)
     form.addRow("Rotation", orient)
     form.addRow("Numbering order", order)
@@ -176,7 +183,7 @@ def sheet_properties(parent, project, sheet):
         fields.pop("Revision", None)
     changes = dict(title=title.text().strip(), number=number.text().strip() or None,
                    own_layout=own.isChecked(), fields=fields, kind=kind.currentData(),
-                   number_order=order.currentData())
+                   number_order=order.currentData(), location=loc.text().strip())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     new_scale = picked != (sheet.scale_name, sheet.scale)
@@ -1216,3 +1223,187 @@ def options_dialog(parent, cur, view, tab=None):
                 "update_check": upd.isChecked(), "library_folder": folder,
                 "template_path": path, "backups_keep": keep.value(),
                 "autosave_minutes": auto.value(), "drafting": apply_drafting is not None}
+
+
+def cables_dialog(parent, project, folder):
+    """Cables between locations (pull.py): the runs between locations, each with its cable's tag
+    and type, how its conductors are marked, and per conductor its color or marking and where
+    it lands in each location; Save as CSV... and Save as PDF... (a page per run). What's typed
+    is kept with the project in one undoable step (OK). True when changed."""
+    from . import pull
+    from PySide6.QtWidgets import QListWidget, QListWidgetItem, QSplitter, QWidget
+    rs, unplaced = pull.runs(project)
+    cables = {r["key"]: pull.cable(project, r["key"]) for r in rs}
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Cables between locations")
+    dlg.resize(1100, 560)
+    lay = QVBoxLayout(dlg)
+    if not rs:
+        lay.addWidget(QLabel(
+            "No wire lands in two locations yet. Give each sheet its location (Sheet properties: "
+            "MCP, JB-1, FIELD...), or a device that is somewhere else its own (double-click it: "
+            "Location). Wires that land on devices in two locations (through off-sheet "
+            "connectors too) are listed here, run by run."))
+    split = QSplitter()
+    lst = QListWidget()
+    lst.setObjectName("runs")
+    for r in rs:
+        it = QListWidgetItem("%s  (%d)" % (r["name"], len(r["conductors"])))
+        it.setData(Qt.UserRole, r["key"])
+        lst.addItem(it)
+    split.addWidget(lst)
+    right = QWidget()
+    rv = QVBoxLayout(right)
+    form = QFormLayout()
+    tag = QLineEdit()
+    tag.setObjectName("cable_tag")
+    tag.setPlaceholderText("W101")
+    ctype = QLineEdit()
+    ctype.setObjectName("cable_type")
+    ctype.setPlaceholderText("12C #14 TC, or loose #14 THHN in 1\" conduit")
+    mark = QComboBox()
+    mark.setObjectName("marking")
+    for k, label in pull.MARKINGS.items():
+        mark.addItem(label, k)
+    form.addRow("Cable", tag)
+    form.addRow("Type", ctype)
+    form.addRow("Conductors", mark)
+    rv.addLayout(form)
+    t = QTableWidget(0, 0)
+    t.setObjectName("conductors")
+    t.verticalHeader().setVisible(False)
+    rv.addWidget(t, 1)
+    split.addWidget(right)
+    split.setSizes([280, 820])
+    lay.addWidget(split, 1)
+    note = ("Each wire number that lands in two or more locations is a conductor to pull. Where "
+            "it lands on a terminal there, the terminal (TB1-12); else the devices' pins "
+            "(CR1:A1). Type a conductor's color, or leave numbered wires as they are.")
+    if unplaced:
+        note += (" %d wire(s) also land on a sheet or device with no location: give them one "
+                 "to see where they go." % unplaced)
+    lay.addWidget(_gray(note))
+    cur = [None]
+    filling = [False]
+
+    def keep():
+        k = cur[0]
+        if k is None:
+            return
+        c = cables[k]
+        c["tag"], c["type"], c["marking"] = tag.text(), ctype.text(), mark.currentData()
+        r = next(r for r in rs if r["key"] == k)
+        for i, cd in enumerate(r["conductors"]):
+            it = t.item(i, 1)
+            text = it.text().strip() if it is not None else ""
+            # (the shown default for numbered wires isn't typed: not kept)
+            default = pull.marking_of(dict(c, colors={}), cd["num"])
+            if text and text != default:
+                c["colors"][cd["num"]] = text
+            else:
+                c["colors"].pop(cd["num"], None)
+
+    def show(row):
+        keep()
+        if row < 0 or row >= len(rs):
+            cur[0] = None
+            return
+        r = rs[row]
+        cur[0] = r["key"]
+        c = cables[r["key"]]
+        filling[0] = True
+        tag.setText(c["tag"])
+        ctype.setText(c["type"])
+        mark.setCurrentIndex(max(mark.findData(c["marking"]), 0))
+        head = ["Wire", "Color / marking"] + ["Lands at %s" % loc for loc in r["locs"]]
+        t.setColumnCount(len(head))
+        t.setHorizontalHeaderLabels(head)
+        t.setRowCount(len(r["conductors"]))
+        for i, cd in enumerate(r["conductors"]):
+            cells = [cd["num"] or "(no number)", pull.marking_of(c, cd["num"])] + \
+                [", ".join(cd["lands"][loc]) for loc in r["locs"]]
+            for j, cell in enumerate(cells):
+                it = QTableWidgetItem(cell)
+                if j != 1:
+                    it.setFlags(it.flags() & ~Qt.ItemIsEditable)
+                t.setItem(i, j, it)
+        t.resizeColumnsToContents()
+        filling[0] = False
+
+    def marking_changed(_i):
+        if filling[0] or cur[0] is None:
+            return
+        keep()
+        show(lst.currentRow())
+    mark.currentIndexChanged.connect(marking_changed)
+    lst.currentRowChanged.connect(show)
+    box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    csv_b = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    pdf_b = box.addButton("Save as PDF...", QDialogButtonBox.ActionRole)
+    csv_b.setEnabled(bool(rs))
+    pdf_b.setEnabled(bool(rs))
+    box.accepted.connect(dlg.accept)
+    box.rejected.connect(dlg.reject)
+
+    def save(kind):
+        keep()
+        from PySide6.QtWidgets import QFileDialog
+        import os
+        ext = {"csv": "CSV (*.csv)", "pdf": "PDF (*.pdf)"}[kind]
+        path, _f = QFileDialog.getSaveFileName(dlg, "Save the pull list",
+                                               os.path.join(folder, "pull list." + kind), ext)
+        if not path:
+            return
+        try:
+            if kind == "csv":
+                n = pull.write_csv(project, path, cables)
+                what = "%d conductor(s)" % n
+            else:
+                write_pull_pdf(project, path, cables)
+                what = "%d run(s)" % len(rs)
+        except OSError as ex:
+            QMessageBox.warning(dlg, "Cables between locations", "Couldn't save %s:\n%s"
+                                % (path, ex))
+            return
+        QMessageBox.information(dlg, "Cables between locations", "Saved %s to %s." % (what, path))
+    csv_b.clicked.connect(lambda: save("csv"))
+    pdf_b.clicked.connect(lambda: save("pdf"))
+    lay.addWidget(box)
+    if rs:
+        lst.setCurrentRow(0)
+    if dlg.exec() != QDialog.Accepted:
+        return False
+    keep()
+    new = dict(project.settings.get("cables") or {})
+    for k, c in cables.items():
+        c = pull.clean_cable(c)
+        if c["tag"] or c["type"] or c["colors"] or c["marking"] != "numbered":
+            new[k] = c
+        else:
+            new.pop(k, None)
+    if new == (project.settings.get("cables") or {}):
+        return False
+    with project.edit("Cables between locations") as ed:
+        ed.project_settings({"cables": new})
+    return True
+
+
+def write_pull_pdf(project, path, cables=None):
+    """The pull list as a PDF, a page per run (Letter, portrait). OSError when it can't be
+    written."""
+    import os
+    from PySide6.QtGui import QPdfWriter, QPageSize, QPageLayout, QTextDocument
+    from PySide6.QtCore import QMarginsF
+    from . import pull
+    title = project.fields.get("Project", "") or (os.path.splitext(os.path.basename(
+        project.path))[0] if project.path else "")
+    doc = QTextDocument()
+    doc.setHtml(pull.html(project, cables, title))
+    w = QPdfWriter(path)
+    w.setPageSize(QPageSize(QPageSize.Letter))
+    w.setPageLayout(QPageLayout(QPageSize(QPageSize.Letter), QPageLayout.Portrait,
+                                QMarginsF(15, 15, 15, 15), QPageLayout.Millimeter))
+    w.setTitle("Pull list")
+    doc.print_(w)
+    if not os.path.exists(path):
+        raise OSError("the PDF wasn't written")

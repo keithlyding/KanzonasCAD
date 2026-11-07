@@ -362,7 +362,7 @@ def random_editing(log, out, ops, seed):
 
     texts = ["NOTE", "SEE DETAIL A", "LINE ONE\nLINE TWO", "A LONGER NOTE THAT WRAPS"]
     win.ask_mtext = lambda text="": rnd.choice(texts + [""])
-    from kanzonascad import bom, sheetframe
+    from kanzonascad import bom, sheetframe, pull
 
     def op_leader():
         v.run(C.LeaderCmd)
@@ -429,6 +429,40 @@ def random_editing(log, out, ops, seed):
         with p.edit("Use as title block") as ed:
             sheetframe.use_as_title_block(ed, p, s, [rnd.choice(imp)])
 
+    def op_location():
+        # as Sheet properties and a device's Location do: the sheet's location, or a device's
+        # own (LOC), set or cleared
+        with p.edit("Location") as ed:
+            if rnd.random() < 0.3 or not s.location:
+                ed.sheet_meta(s, location=rnd.choice(["MCP", "MCP", "MCP", "", "PNL-2"]))
+            else:
+                ins = [e for e in s.entities.values() if isinstance(e, M.Insert)
+                       and e.defn is not None and e.defn.kind == "symbol"]
+                if ins:
+                    e = rnd.choice(ins)
+                    attrs = dict(e.attrs)
+                    loc = rnd.choice(["FIELD", "JB-1", ""])
+                    if loc:
+                        attrs["LOC"] = loc
+                    else:
+                        attrs.pop("LOC", None)
+                    ed.change(s, e.copy(attrs=attrs))
+
+    def op_cable():
+        # as Cables between locations' OK does: a run's cable, type, marking and a color
+        rs = pull.runs(p)[0]
+        if not rs:
+            return
+        r = rnd.choice(rs)
+        c = pull.cable(p, r["key"])
+        c.update(tag="W%d" % rnd.randint(100, 120), type=rnd.choice(["4C #14 TC", ""]),
+                 marking=rnd.choice(list(pull.MARKINGS)))
+        c["colors"][rnd.choice(r["conductors"])["num"]] = rnd.choice(["RED", "WHT/BLK", ""])
+        new = dict(p.settings.get("cables") or {})
+        new[r["key"]] = pull.clean_cable(c)
+        with p.edit("Cables between locations") as ed:
+            ed.project_settings({"cables": new})
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -442,7 +476,7 @@ def random_editing(log, out, ops, seed):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_undo, 6), (op_redo, 4)]
+             (op_usetb, 1), (op_location, 4), (op_cable, 2), (op_undo, 6), (op_redo, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -461,6 +495,12 @@ def random_editing(log, out, ops, seed):
                 kinds.update(type(e).__name__ for e in s.entities.values())
                 bom.table(p)
                 bom.write_csv(p, os.path.join(out, "bom.csv"))
+                runs_now = pull.runs(p)[0]
+                pull.write_csv(p, os.path.join(out, "pull.csv"))
+                for r in runs_now:
+                    assert len(r["locs"]) >= 2 and r["conductors"], r
+                if runs_now:
+                    kinds.add("pull list")
             if i % 200 == 199:
                 p.save(path, backups=0)
                 q = M.Project.load(path)
@@ -670,6 +710,21 @@ def mixed_project(win):
         ed.add(s, M.Polyline([(17, 1), (19, 1), (19, 2), (17, 2)], True))
         ed.add(s, M.Hatch([[(17, 1), (19, 1), (19, 2), (17, 2)]], "ANSI31", 45.0, 0.125))
         ed.add(s, M.Hatch([[(17, 3), (18, 3), (18, 4), (17, 4)]], "SOLID", 0.0, 0.125))
+    # locations: the schematic and the panel in the MCP, the coil in the field (its own LOC),
+    # and the run between them given a cable (Cables between locations)
+    from kanzonascad import pull
+    with p.edit("locations") as ed:
+        s = p.sheets[0]
+        ed.sheet_meta(s, location="MCP")
+        ed.sheet_meta(panel, location="MCP")
+        coil = [e for e in s.inserts() if e.attrs.get("TAG", "").startswith("CR")][0]
+        ed.change(s, coil.copy(attrs=dict(coil.attrs, LOC="FIELD")))
+    rs = pull.runs(p)[0]
+    assert rs and rs[0]["locs"] == ["MCP", "FIELD"], rs
+    with p.edit("Cables between locations") as ed:
+        ed.project_settings({"cables": {rs[0]["key"]: pull.clean_cable(
+            {"tag": "W101", "type": "4C #14 SOOW", "marking": "colors",
+             "colors": {rs[0]["conductors"][0]["num"]: "RED"}})}})
     v.show_sheet(p.sheets[0].id)
     return p
 
@@ -694,6 +749,14 @@ def files(log, out):
     n = fileio.export_pdf(p, pdf)
     assert n == len(p.sheets) and open(pdf, "rb").read(4) == b"%PDF"
     notes.append("PDF (%d pages)" % n)
+    from kanzonascad import pull, dialogs
+    q_runs = pull.runs(q)[0]
+    assert [r["name"] for r in q_runs] == [r["name"] for r in pull.runs(p)[0]]
+    assert pull.cable(q, q_runs[0]["key"])["tag"] == "W101"
+    n = pull.write_csv(p, os.path.join(out, "pull list.csv"))
+    dialogs.write_pull_pdf(p, os.path.join(out, "pull list.pdf"))
+    assert open(os.path.join(out, "pull list.pdf"), "rb").read(4) == b"%PDF"
+    notes.append("pull list (%d run(s), %d conductor(s): CSV, PDF)" % (len(q_runs), n))
     tpl = templates.save(p, os.path.join(out, "Templates", "Mixed.kzcad"))
     t = templates.new_from(tpl)
     assert norm(t.to_dict())["sheets"] == norm(p.to_dict())["sheets"]

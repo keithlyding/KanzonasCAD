@@ -619,6 +619,10 @@ def block_with_details(defn, details):
     return M.BlockDef.from_dict(d), pin_map
 
 
+def kind_of(ins):
+    return ins.defn.kind if ins.defn is not None else "symbol"
+
+
 def attributes_dialog(parent, library, ins, project=None, sheet=None):
     """The attributes of a placed block (TAG, DESC, MFR, CAT) and the part it is; for a
     contact, the device it belongs to; for a device, whether its contacts are listed under it.
@@ -667,6 +671,15 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None):
         edits[k] = e
         form.addRow({"TERM": "Terminal number", "ADDR": "Address (I:0/3, %I0.3...)"}.get(k, k),
                     e)
+    if kind_of(ins) == "symbol":
+        e = QLineEdit(ins.attrs.get("LOC", ""))
+        e.setObjectName("location")
+        e.setPlaceholderText("its sheet's: %s" % ((sheet.location if sheet is not None else "")
+                                                   or "(none)"))
+        e.setToolTip("Where this device is, when it isn't where its sheet is (a pushbutton in "
+                     "the field drawn on a panel's sheet). Cables between locations uses it.")
+        edits["LOC"] = e
+        form.addRow("Location", e)
     lock = QCheckBox("Lock this tag (automatic numbering leaves it alone)")
     lock.setChecked(ins.attrs.get("TAG_LOCK") == "1")
     listed = None
@@ -719,6 +732,8 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None):
     out = dict(ins.attrs)
     for k, e in edits.items():
         out[k] = e.text().strip()
+    if not out.get("LOC"):
+        out.pop("LOC", None)            # (no location of its own: its sheet's)
     if owner is not None:
         dev = owner.currentData() if owner.currentText() == owner.itemText(
             owner.currentIndex()) else None

@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15
+
+**New**
+- Cables between locations (Sheets menu, Output tab): what has to be pulled between panels and
+  boxes, and where every wire lands on both sides. Give each sheet its location in Sheet
+  properties (MCP, JB-1, FIELD), or a single device its own (double-click it: Location); every
+  wire number that lands in two locations is listed, run by run, with the terminal (TB1-12) or
+  device pin (CR1:A1) it lands on at each end.
+- Type each run's cable and type (W101, 12C #14 TC), choose numbered or color-coded
+  conductors, and type any conductor's color. Save the pull list as CSV, or as a PDF with a
+  page per run and columns to tick off what's pulled and landed.
+
 ## 0.14.1
 
 **Faster**
