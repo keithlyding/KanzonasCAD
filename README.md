@@ -19,16 +19,26 @@ AutoCAD but want fewer commands, fewer settings and fewer surprises.
   component that joins the wire back up, Scoot and Align devices on their wires, wire crossings
   drawn plain, with a gap or a loop.
 - Panel sheets at a scale (1:4, 3" = 1'-0"...) with dimensions, DIN rail and wire duct at real
-  size, and a materials list of the rail and duct to cut.
+  size, footprints that snap onto the rail, and a materials list of the rail and duct to cut.
+- Leaders with notes or numbered balloons, hatch and solid fill, multi-line text.
+- Reports: a bill of materials (parts by manufacturer and catalog number), and Cables between
+  locations: what to pull between panels and where every wire lands on both sides (TB1-12),
+  with the cable, its type and the conductors' colors or numbers (CSV and PDF).
 - Project templates, title block position (corner, right-hand or bottom strip), and Options.
-- DXF in and out, DWG in (AutoCAD R13-2018), PDF out.
+- DXF in and out, DWG in (AutoCAD R13-2018), PDF out. Imported blocks stay blocks, AutoCAD
+  Electrical's attributes (P_TAG1, DESC1, MFG, CAT) become tags and parts, dimensions stay
+  dimensions, and an imported title block can become the project's.
 
-![A schematic sheet](docs/screenshot-schematic.png)
+![A control circuit: field devices through terminals, cross-references and wire numbers](docs/screenshot-schematic.png)
 
-![A panel sheet at 1:4](docs/screenshot-panel.png)
+![Its panel at 1:4: footprints on DIN rail between wire duct](docs/screenshot-panel.png)
 
-Coming next: assigning parts to devices, shared libraries, and reports (bills of materials,
-wire lists). The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
+![A panel layout drawn in AutoCAD Electrical, opened as a DWG](docs/screenshot-imported-dwg.png)
+
+![Cables between locations: what to pull and where each wire lands](docs/screenshot-cables.png)
+
+Coming next: wire lists and terminal strip reports, check-out and check-in of sheets, shared
+libraries. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Press **F1** in the app for the user manual.
 

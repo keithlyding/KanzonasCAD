@@ -4,8 +4,11 @@ control circuit with field devices through terminals, cross-references and wire 
 panel layout with footprints on DIN rail, and the Cables between locations window.
 
     QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=2 python tools/make_screenshots.py [OUT_DIR]
+        [--dwg PANEL.dwg]
 
-OUT_DIR defaults to docs/. Settings, library and recovery copies go to scratch folders (as in
+OUT_DIR defaults to docs/. With --dwg, also screenshot-imported-dwg.png: that drawing opened as a
+project and zoomed onto its panel, its title block replaced by a generic one first (the README's
+is the owner's panel drawing; the file itself stays out of the repository). Settings, library and recovery copies go to scratch folders (as in
 the tests), so nothing of yours is read or changed. Run it again when the app's look changes.
 """
 import os
@@ -256,7 +259,81 @@ class Demo:
         print("saved", path)
 
 
+def imported_dwg(out, path):
+    """A DWG opened as a project, its title block (the block reference carrying AutoCAD
+    Electrical's WD_TB map, or named like a title block) replaced by a plain generic one, zoomed
+    onto everything but the border and the title block."""
+    from tests import battery
+    d = Demo()
+    win = d.win
+    win.resize(W, H)
+    win.show()
+    closer = battery.DialogCloser()             # (the import report: closed)
+    try:
+        win.open_path(path)
+    finally:
+        closer.stop()
+    APP.processEvents()
+    v = win.view()
+    p, s = v.project, v.sheet()
+    tbs = [e for e in s.entities.values() if isinstance(e, M.Insert) and (
+        "WD_TB" in e.attrs or "TITLE" in e.block.upper())]
+    ext = s.extents()
+    frames = [e for e in s.entities.values() if e not in tbs and (
+        (e.bbox()[2] - e.bbox()[0]) > 0.8 * (ext[2] - ext[0]) or
+        (e.bbox()[3] - e.bbox()[1]) > 0.8 * (ext[3] - ext[1]))]     # (the border)
+    corner = None
+    before = set(s.entities)
+    with p.edit("Generic title block") as ed:
+        for e in tbs:
+            x0, y0, x1, y1 = e.bbox()
+            corner = (x0, y0, x1, y1)
+            ed.remove(s, e.id)
+            h = y1 - y0
+            ed.add(s, M.Polyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], True))
+            ed.add(s, M.Text((x0 + h * 0.08, y0 + h * 0.6), "SAMPLE PANEL LAYOUT", h * 0.2))
+            ed.add(s, M.Text((x0 + h * 0.08, y0 + h * 0.15), "IMPORTED DWG", h * 0.1))
+        ed.sheet_meta(s, title="Panel layout", kind="panel")
+    added = set(s.entities) - before
+    for i in reversed(range(win.tabs.count())):
+        dd = win.tabs.widget(i)
+        if dd.project is not p:
+            dd.project.saved_at = len(dd.project.undo_stack)
+            win.close_tab(i)
+    win._save_to(win.tabs.currentWidget(), os.path.join(tempfile.mkdtemp(),
+                                                        "Sample panel (from AutoCAD).kzcad"))
+    win._fill_sheets()
+    win.statusBar().clearMessage()
+    from kanzonascad.commandline import CommandLine
+    n = len(s.entities)
+    blocks = sum(1 for e in s.entities.values() if isinstance(e, M.Insert))
+    for c in win.findChildren(CommandLine):
+        c.history.setPlainText("OPEN\nSample panel.dwg: %d objects, %d of them blocks (kept as "
+                               "blocks)" % (n, blocks))
+    bb = None
+    for e in s.entities.values():
+        if e in frames or e.id in added:
+            continue
+        b = e.bbox()
+        if corner and b[0] >= corner[0] - 1e-6 and b[1] >= corner[1] - 1e-6 and \
+                b[2] <= corner[2] + 1e-6 and b[3] <= corner[3] + 1e-6:
+            continue
+        bb = b if bb is None else (min(bb[0], b[0]), min(bb[1], b[1]), max(bb[2], b[2]),
+                                   max(bb[3], b[3]))
+    v.scale = min(v.width() / (bb[2] - bb[0]), v.height() / (bb[3] - bb[1])) * 0.94
+    v.center = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
+    v._fit = None
+    v.update()
+    d.shot(os.path.join(out, "screenshot-imported-dwg.png"))
+    p.saved_at = len(p.undo_stack)
+
+
 def main(argv):
+    dwg = None
+    if "--dwg" in argv:
+        i = argv.index("--dwg")
+        dwg = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
     out = argv[1] if len(argv) > 1 else os.path.join(HERE, "docs")
     os.makedirs(out, exist_ok=True)
     d = Demo()
@@ -307,12 +384,13 @@ def main(argv):
     def run(dlg):
         dlg.resize(1000, 400)
         dlg.show()
-        lst = [c for c in dlg.children() if c.objectName() == "runs"] or None
         d.shot(os.path.join(out, "screenshot-cables.png"), dlg)
         return QDialog.Rejected
     with mock.patch.object(QDialog, "exec", run):
         dialogs.cables_dialog(win, p, out)
     p.saved_at = len(p.undo_stack)
+    if dwg:
+        imported_dwg(out, dwg)
     return 0
 
 
