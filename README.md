@@ -8,7 +8,9 @@ AutoCAD but want fewer commands, fewer settings and fewer surprises.
 - AutoCAD-style drawing: command line, object snaps, ortho, polar tracking, grips,
   window/crossing/lasso selection.
 - Projects of ANSI sheets with a grid of zones (`6-D1` references) and an editable title block.
-- A library of your own: JIC/NFPA schematic symbols, panel footprints and parts.
+- A library of your own: JIC/NFPA schematic symbols, panel footprints and parts, with 41
+  symbols and 34 generic footprints (breakers, contactors, relays, power supplies, terminals...)
+  built in.
 - Wires that stay attached to symbols, and buses.
 - Device tags by page number (`CR601`), contacts linked to their coil, and cross-references
   that update themselves.
