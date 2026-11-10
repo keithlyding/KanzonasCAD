@@ -96,7 +96,7 @@ def _register(cls):
 
 class Entity:
     kind = "entity"
-    __slots__ = ("id", "layer", "color", "_bbox", "_snaps")
+    __slots__ = ("id", "layer", "color", "_bbox", "_snaps", "fixed")
 
     def __init__(self, layer="0", color=BYLAYER, id=None):
         self.id = id
@@ -104,12 +104,18 @@ class Entity:
         self.color = color
         self._bbox = None
         self._snaps = None
+        # drawing-sized: a text, multi-line text, dimension or leader brought in with a DXF or
+        # DWG, sized for the drawing by the program that drew it: a new sheet scale leaves its
+        # height as it is (KanzonasCAD's own are paper-sized and follow the scale)
+        self.fixed = False
 
     # ---- storing -------------------------------------------------------------------------
     def to_dict(self):
         d = {"kind": self.kind, "id": self.id, "layer": self.layer}
         if self.color is not None:
             d["color"] = self.color
+        if self.fixed:
+            d["fixed"] = True
         d.update(self._data())
         return d
 
@@ -122,9 +128,9 @@ class Entity:
         cls = _KINDS.get(d.get("kind"))
         if cls is None:
             raise ValueError("unknown entity kind %r" % d.get("kind"))
-        if cls is Insert:
-            return cls._from(d, blocks or {})
-        return cls._from(d)
+        e = cls._from(d, blocks or {}) if cls is Insert else cls._from(d)
+        e.fixed = bool(d.get("fixed", False))
+        return e
 
     def copy(self, **changes):
         d = self.to_dict()
@@ -2275,19 +2281,24 @@ class Edit:
         sheet.set_meta(after)
         self.ops.append(["meta", sheet.id, before, after])
 
-    def sheet_scale(self, sheet, scale, name=""):
+    def sheet_scale(self, sheet, scale, name="", paper_text=True):
         """Give a sheet another scale. The drawing stays real size; texts, tags and
-        dimensions are paper-sized, so their heights follow (they print the same size)."""
+        dimensions are paper-sized, so their heights follow (they print the same size) -
+        except those drawing-sized (fixed: brought in with a DXF or DWG), and none of them with
+        paper_text False (Sheet scale: "Text and dimensions keep their size on paper" off)."""
         old_k = sheet.k()
         self.sheet_meta(sheet, scale=float(scale), scale_name=name)
         f = sheet.k() / old_k
-        if abs(f - 1.0) < 1e-12:
+        if abs(f - 1.0) < 1e-12 or not paper_text:
             return
         for e in list(sheet.entities.values()):
-            if isinstance(e, Text):
+            if e.fixed:
+                continue
+            if isinstance(e, (Text, Dimension, Leader)):
                 self.change(sheet, e.copy(height=e.height * f))
-            elif isinstance(e, (Dimension, Leader)):
-                self.change(sheet, e.copy(height=e.height * f))
+            elif isinstance(e, MText):
+                # (its width too: it wraps where it did)
+                self.change(sheet, e.copy(height=e.height * f, width=e.width * f))
             elif isinstance(e, Insert) and e.tag_h:
                 self.change(sheet, e.copy(tag_h=e.tag_h * f))
 

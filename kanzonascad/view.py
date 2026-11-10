@@ -4,8 +4,9 @@ wheel zoom at the cursor, middle-button pan) and the commands of commands.py.
 """
 
 import math
+import time
 
-from PySide6.QtCore import Qt, QPointF, QRectF, Signal
+from PySide6.QtCore import Qt, QPointF, QRectF, Signal, QTimer
 from PySide6.QtGui import (QPainter, QPen, QColor, QBrush, QTransform, QPainterPath,
                            QPolygonF, QGuiApplication, QPixmap)
 from PySide6.QtWidgets import QWidget
@@ -33,19 +34,25 @@ def _step_text(dx, dy):
     return "%g in %s" % (abs(dy), "up" if dy > 0 else "down")
 
 
-def _lasso_has_room(poly):
-    """True when a lasso encloses room enough to be one (a quarter of its box at least);
-    a quick drag's few points along a line are a window instead."""
-    x0, y0, x1, y1 = G.bbox_of(poly)
-    box = (x1 - x0) * (y1 - y0)
-    if box <= 0:
-        return False
-    area = 0.0
-    for i in range(len(poly)):
-        ax, ay = poly[i]
-        bx, by = poly[(i + 1) % len(poly)]
-        area += ax * by - bx * ay
-    return abs(area) / 2 >= 0.25 * box
+LASSO_BEND = 12             # screen pixels a drag's path strays from a straight line to be a lasso
+
+
+def _bends(path, a, b, limit=LASSO_BEND):
+    """Does the dragged path (screen points) stray more than limit pixels from the straight line
+    a-b (from where it started to where the cursor is)? A quick drag nearly along a line stays a
+    window; a drag that has bent away is a lasso, and stays one (the owner: "lasso turned into
+    rectangle": a lasso was a window again while it enclosed less than a quarter of its box, as
+    a lasso along a slanting row of devices or a C half drawn does)."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    n = (dx * dx + dy * dy) ** 0.5
+    for q in path:
+        if n < 1e-9:
+            d = ((q[0] - a[0]) ** 2 + (q[1] - a[1]) ** 2) ** 0.5
+        else:
+            d = abs(dx * (q[1] - a[1]) - dy * (q[0] - a[0])) / n
+        if d > limit:
+            return True
+    return False
 
 
 GLOW_LIMIT = 6000           # path elements past which the hover glow is drawn plainly
@@ -652,9 +659,9 @@ class CadView(QWidget):
         limit objects would have to be checked (the preview then waits for the click)."""
         w = self._window
         lasso = w["lasso"]
-        if lasso is not None and len(lasso) >= 3 and _lasso_has_room(lasso + [end]):
-            poly = lasso + [end]
-            rect = G.bbox_of(poly)
+        if lasso is not None and len(lasso) >= 3 and w.get("bent"):
+            poly = G.PolygonIndex(lasso + [end])
+            rect = poly.box
             crossing = w["crossing"]
         else:
             # (a quick drag gives a few points nearly on a line: a lasso with nothing inside
@@ -674,12 +681,51 @@ class CadView(QWidget):
             if poly is None:
                 hit = (e.crosses(rect) or e.inside(rect)) if crossing else e.inside(rect)
             elif crossing:
-                hit = G.outline_touches_polygon(e.outline(), poly)
+                hit = poly.touches(self._drag_outline(e), e.bbox())
             else:
-                hit = G.bbox_inside(e.bbox(), rect) and G.outline_in_polygon(e.outline(), poly)
+                box = e.bbox()
+                hit = G.bbox_inside(box, rect) and poly.holds(self._drag_outline(e), box)
             if hit:
                 found.add(e.id)
         return found
+
+    def _update_preview(self):
+        """What the window or lasso would select, worked out again for the cursor where it is:
+        at once when that is quick; when it took a while (a lasso over a big imported panel),
+        a moment later, so the lasso keeps up with the mouse and the lit preview follows."""
+        w = self._window
+        if w is None or self.cursor is None:
+            return
+        now = time.perf_counter()
+        if now < w.get("quiet_until", 0.0):
+            if not w.get("pending"):
+                w["pending"] = True
+                QTimer.singleShot(max(1, int((w["quiet_until"] - now) * 1000)),
+                                  self._preview_due)
+            return
+        ids = self._window_ids(self.cursor, limit=3000)
+        self._preview = ids if ids is not None else set()
+        took = time.perf_counter() - now
+        if took > 0.02:
+            w["quiet_until"] = time.perf_counter() + min(took * 1.5, 0.25)
+
+    def _preview_due(self):
+        w = self._window
+        if w is None:
+            return
+        w["pending"] = False
+        w["quiet_until"] = 0.0
+        self._update_preview()
+        self.update()
+
+    def _drag_outline(self, e):
+        """An entity's outline, kept while a lasso is dragged (nothing changes meanwhile; a
+        block's outline is all its pieces')."""
+        cache = self._window.setdefault("outlines", {})
+        got = cache.get(e.id)
+        if got is None or got[0] is not e:
+            got = cache[e.id] = (e, e.outline())
+        return got[1]
 
     def _finish_window(self, end, shift=False):
         """The window or lasso done: what it caught is added to the selection, or, with
@@ -777,10 +823,12 @@ class CadView(QWidget):
                         w["crossing"] = pos.x() < start_px.x()
                 else:
                     last = self.to_screen(w["lasso"][-1])
-                    if G.dist(last.toTuple(), pos.toTuple()) > 3:
+                    if G.dist(last.toTuple(), pos.toTuple()) > 4:
                         w["lasso"].append(self.cursor)
-            ids = self._window_ids(self.cursor, limit=3000)
-            self._preview = ids if ids is not None else set()
+                    if not w.get("bent"):
+                        w["bent"] = _bends([self.to_screen(q).toTuple() for q in w["lasso"]],
+                                           start_px.toTuple(), pos.toTuple())
+            self._update_preview()
         if self.cmd is None or self.cmd.selecting() or self.cmd.picking:
             self._hover = self.pick_entity(self.cursor) if self._window is None else None
             self._hot_grip = self.grip_at(pos) if self.cmd is None else None
@@ -1026,6 +1074,19 @@ class CadView(QWidget):
         got = self._lit
         if got is not None and got[0] == key:
             return got[1]
+        if got is not None and hover is None and got[0][3] is None and \
+                got[0][:2] == key[:2] and got[0][2] < key[2]:
+            # a window or lasso growing: only what it has just taken in is lit on the picture
+            # as it was (lighting everything again each move took a third of a second over an
+            # imported panel)
+            pm = QPixmap(got[1])
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.Antialiasing, True)
+            p.setTransform(self.transform())
+            self._paint_glow(p, [s.entities[i] for i in key[2] - got[0][2] if i in s.entities])
+            p.end()
+            self._lit = (key, pm)
+            return pm
         pm = QPixmap(base)
         p = QPainter(pm)
         p.setRenderHint(QPainter.Antialiasing, True)
@@ -1159,18 +1220,30 @@ class CadView(QWidget):
     def _paint_glow(self, p, ents):
         """Light up what a click (or the window/lasso) would select: a soft wide halo under a
         bright, thicker line."""
-        if len(ents) == 1:
-            # (the one under the cursor: kept, so passing back and forth over a big block
-            # doesn't make its drawing again each time)
-            e = ents[0]
+        def one(e):
+            # (each one's drawing kept, so passing back and forth over a big block, or a lasso
+            # growing over a panel, doesn't make the same drawings again on every move)
             got = self._glow_paths.get(id(e))
             if got is None or got[0] is not e:
-                if len(self._glow_paths) > 32:
+                if len(self._glow_paths) > 4000:
                     self._glow_paths.clear()
                 got = self._glow_paths[id(e)] = (e, entities_path([e]))
-            strokes, fills = got[1]
+            return got[1]
+        if len(ents) == 1:
+            strokes, fills = one(ents[0])
         else:
-            strokes, fills = entities_path(ents)
+            key = tuple(sorted(id(e) for e in ents))
+            got = getattr(self, "_glow_many", None)
+            if got is not None and got[0] == key and all(
+                    a is b for a, b in zip(got[1], sorted(ents, key=id))):
+                strokes, fills = got[2]
+            else:
+                strokes, fills = QPainterPath(), QPainterPath()
+                for e in ents:
+                    s_, f_ = one(e)
+                    strokes.addPath(s_)
+                    fills.addPath(f_)
+                self._glow_many = (key, sorted(ents, key=id), (strokes, fills))
         # a big block (a footprint from a maker's drawing) gets the bright line only, not
         # smoothed: its soft halo took seconds to draw, just from the mouse passing over it
         big = strokes.elementCount() + fills.elementCount() > GLOW_LIMIT
@@ -1221,7 +1294,7 @@ class CadView(QWidget):
         if w is None or self.cursor is None:
             return
         lasso = w["lasso"]
-        if lasso is not None and len(lasso) >= 3 and _lasso_has_room(lasso + [self.cursor]):
+        if lasso is not None and len(lasso) >= 3 and w.get("bent"):
             poly = QPolygonF([self.to_screen(q) for q in lasso + [self.cursor]])
             crossing = w["crossing"]
         else:                           # (a window, or a drag too quick to be a lasso)

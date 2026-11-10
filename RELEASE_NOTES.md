@@ -6,6 +6,20 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.2
+
+**Fixed**
+- The lasso no longer turns into a rectangle: once your drag bends away from a straight line it
+  stays a lasso until you let go (a thin loop along a slanting row of devices too). A quick,
+  nearly straight drag still makes a window.
+- The lasso is fast again on big drawings: on an imported AutoCAD panel a mouse move took 3 to
+  7 seconds; it now takes a few milliseconds, and selects exactly the same.
+- Changing a sheet's scale no longer makes imported text huge: text and dimensions that came
+  with a DXF or DWG keep their size in the drawing. Your own notes, tags and dimensions still
+  keep their size on paper, multi-line text too. Sheet scale has a new box, "Text and
+  dimensions keep their size on paper": untick it to change no text at all (for drawings
+  imported before this version).
+
 ## 0.15.1
 
 **New**

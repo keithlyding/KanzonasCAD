@@ -243,7 +243,8 @@ def turned_offset(project, sheet, rotation, scale=None):
     return (dx, dy) if abs(dx) > 1e-9 or abs(dy) > 1e-9 else None
 
 
-def apply(project, sheet, name, scale, cabinet=False, center=False, rotation=None):
+def apply(project, sheet, name, scale, cabinet=False, center=False, rotation=None,
+          paper_text=True):
     """Give a sheet a scale in one undoable edit, with (when cabinet isn't False) its cabinet
     size, (rotation) the sheet turned, and (center) what is drawn moved to the middle of the
     room it fits best at that scale (turned, what is drawn is kept on the page anyway).
@@ -266,7 +267,7 @@ def apply(project, sheet, name, scale, cabinet=False, center=False, rotation=Non
         if turn:
             ed.sheet_meta(sheet, rotation=rotation)
         if changes:
-            ed.sheet_scale(sheet, scale, name)
+            ed.sheet_scale(sheet, scale, name, paper_text)
         if new_cab != sheet.cabinet:
             ed.sheet_meta(sheet, cabinet=new_cab)
         if moved and (abs(moved[0]) > 1e-9 or abs(moved[1]) > 1e-9):

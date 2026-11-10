@@ -703,9 +703,14 @@ off.</li>
 scale, so the sheet prints at its paper size (PDF) with the drawing at that scale. DXF
 exports hold the real-size drawing with the border enlarged around it, as AutoCAD drawings
 in model space do.</li>
-<li>Text, tags, cross-references, wire numbers and dimension text are <b>paper-sized</b>: new
-text at 1/8 inch prints 1/8 inch high whatever the scale. Changing a sheet's scale changes
-their heights with it (in one undoable step).</li>
+<li>Text, multi-line text, tags, cross-references, wire numbers, leaders and dimension text
+you make in KanzonasCAD are <b>paper-sized</b>: new text at 1/8 inch prints 1/8 inch high
+whatever the scale. Changing a sheet's scale changes their heights with it (in one undoable
+step). Text, dimensions and leaders that came with a DXF or DWG are <b>drawing-sized</b>: the
+program that drew them sized them for the drawing, so they keep their size in it when the
+scale changes. In Sheet scale..., untick <b>Text and dimensions keep their size on paper</b>
+to change no text at all (for a drawing imported before version 0.15.2, whose text isn't
+marked as drawing-sized).</li>
 <li>Footprints aren't scaled by hand on a panel sheet (Scale leaves them out and says so):
 bring a manufacturer's drawing to real size with Scale, Reference before it becomes a
 footprint.</li>
@@ -822,9 +827,11 @@ selects what is wholly inside; <b>right to left</b> (green, dashed) also selects
 crosses.</li>
 <li><b>Lasso</b>: press in an empty spot, hold the button and draw around the objects, then let
 go. Dragged first to the <b>right</b> it is a window lasso (blue: what is wholly inside); to
-the <b>left</b>, a crossing lasso (green: what it touches too). A quick drag that draws no
-loop (from one corner toward the other) is a window from where you pressed to where you let
-go, left to right or right to left as above.</li>
+the <b>left</b>, a crossing lasso (green: what it touches too). A quick drag nearly straight
+from one corner toward the other is a window from where you pressed to where you let go, left
+to right or right to left as above; once the drag has bent away from that straight line, it
+is a lasso until you let go, whatever its shape (a thin loop along a slanting row of devices
+too).</li>
 <li>While a window or lasso is open, the objects it would select light up.</li>
 <li><b>Select all</b> (Ctrl+A); Esc clears the selection.</li>
 <li>Selected objects show blue <b>grips</b>. Click a grip, then click where it goes, to stretch

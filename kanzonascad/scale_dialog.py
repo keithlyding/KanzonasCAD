@@ -143,6 +143,14 @@ class SheetScaleDialog(QDialog):
         note.setStyleSheet("color: gray;")
         gl.addRow(note)
 
+        self.paper_text = QCheckBox("Text and dimensions keep their size on paper")
+        self.paper_text.setObjectName("paper_text")
+        self.paper_text.setChecked(True)
+        self.paper_text.setToolTip(
+            "On: KanzonasCAD's own text, tags and dimensions grow or shrink with the scale, so "
+            "they print the same size. Text and dimensions that came with a DXF or DWG keep "
+            "their size in the drawing either way. Off: no text changes size (a drawing "
+            "imported before version 0.15.2, whose text was sized for the drawing).")
         self.center = QCheckBox("Move the drawing to the middle of the free space")
         self.center.setObjectName("center")
         self.center.setToolTip("The drawing doesn't lie inside the border at this scale where "
@@ -175,6 +183,7 @@ class SheetScaleDialog(QDialog):
         side.addLayout(row)
         side.addWidget(self.words)
         side.addWidget(self.usage)
+        side.addWidget(self.paper_text)
         side.addWidget(self.center)
         orow = QHBoxLayout()
         orow.addWidget(QLabel("Sheet"))
@@ -400,7 +409,7 @@ class SheetScaleDialog(QDialog):
             self.settings.setValue("panel/cabinet", ",".join("%g" % v for v in cab))
         F.apply(self.project, self.sheet, name, s, cabinet=cab,
                 center=self.box is not None and self.center.isChecked(),
-                rotation=self.rotation())
+                rotation=self.rotation(), paper_text=self.paper_text.isChecked())
         self.accept()
 
 
