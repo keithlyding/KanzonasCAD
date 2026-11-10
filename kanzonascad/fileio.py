@@ -160,6 +160,17 @@ def read_dxf(path, include_paperspace=False, units=None, keep_blocks=True):
     return read_doc(doc, include_paperspace, units, keep_blocks)
 
 
+def _drawing_sized(ents):
+    """Texts, multi-line texts, dimensions and leaders read from a DXF or DWG are marked
+    drawing-sized (fixed): the program that drew them sized them for the drawing, so a sheet
+    scale changed later leaves them as they are (the owner: "when changing scale ... text is
+    massive": an imported panel's 0.5" dimension text became 8" at 1:16)."""
+    for e in ents:
+        if isinstance(e, (M.Text, M.MText, M.Dimension, M.Leader)):
+            e.fixed = True
+    return ents
+
+
 def read_doc(doc, include_paperspace=False, units=None, keep_blocks=True):
     """read_dxf for an ezdxf document already open (a DWG read by dwgread)."""
     if units is None:
@@ -190,8 +201,8 @@ def read_doc(doc, include_paperspace=False, units=None, keep_blocks=True):
                 skipped[t] = skipped.get(t, 0) + n
     unit_name = {0: "unitless (taken as inches)", 1: "inches", 2: "feet", 4: "millimeters",
                  5: "centimeters", 6: "meters"}.get(units, "units %d (taken as inches)" % units)
-    return out, {"layers": layers, "skipped": skipped, "units": unit_name,
-                 "from_layouts": from_layouts}
+    return _drawing_sized(out), {"layers": layers, "skipped": skipped, "units": unit_name,
+                                 "from_layouts": from_layouts}
 
 
 PAPER_FALLBACK = 20     # model space with fewer pieces than this: the layouts are read too

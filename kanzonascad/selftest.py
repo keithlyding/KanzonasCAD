@@ -31,6 +31,8 @@ BUDGET = {
     "import_blocks": 4.0,       # a DXF of 1,000 block references (attributes), 200 dimensions
                                 # and 500 hatches imported
     "bom": 0.5,                 # the bill of materials of 2,000 parts
+    "lasso_move": 0.03,         # a mouse move dragging a lasso around half that sheet (average)
+    "lasso_pick": 1.0,          # what the lasso caught, worked out when the button is let go
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
                                 # 2,000 devices, half of them in the field
 }
@@ -594,6 +596,36 @@ def run(log_path):
         dz = time.perf_counter() - t
         assert dz < BUDGET["notes_zoom"], "ten zoomed repaints took %.2f s" % dz
         v.zoom("sheet")
+        # a lasso drawn around half the sheet (it took seconds a mouse move over an imported
+        # panel: each lit object's outline tested against every lasso edge)
+        import math
+        from PySide6.QtCore import QPointF, QEvent, Qt
+        from PySide6.QtGui import QMouseEvent
+
+        def mouse(kind, pos, button, buttons):
+            app.sendEvent(v, QMouseEvent(kind, pos, v.mapToGlobal(pos), button, buttons,
+                                         Qt.NoModifier))
+        def at(i, n):
+            # around the middle of the drawing, from the empty margin above it (a press on an
+            # object would grab it instead)
+            a = math.pi / 2 + 2 * math.pi * 0.97 * i / n
+            return v.to_screen((8.5 + 6.0 * math.cos(a), 5.5 + 4.9 * math.sin(a)))
+        n = 120
+        mouse(QEvent.MouseMove, at(0, n), Qt.NoButton, Qt.NoButton)
+        mouse(QEvent.MouseButtonPress, at(0, n), Qt.LeftButton, Qt.LeftButton)
+        t = time.perf_counter()
+        for i in range(1, n + 1):
+            mouse(QEvent.MouseMove, at(i, n), Qt.NoButton, Qt.LeftButton)
+            v.repaint()
+        dl = (time.perf_counter() - t) / n
+        t = time.perf_counter()
+        mouse(QEvent.MouseButtonRelease, at(n, n), Qt.LeftButton, Qt.NoButton)
+        dp = time.perf_counter() - t
+        caught = len(v.sel)
+        v.set_selection(set())
+        assert caught > 100, "the lasso caught %d objects" % caught
+        assert dl < BUDGET["lasso_move"], "a lasso mouse move took %.1f ms" % (dl * 1000)
+        assert dp < BUDGET["lasso_pick"], "the lasso's pick took %.2f s" % dp
         ids = [e.id for e in s.entities.values()
                if isinstance(e, (M.Leader, M.Hatch, M.MText))][:1000]
         t = time.perf_counter()
@@ -645,9 +677,10 @@ def run(log_path):
         assert db < BUDGET["bom"], "the bill of materials took %.2f s" % db
         assert any("3044076" in " ".join(str(c) for c in r) for r in body), \
             "the imported parts' catalog number is not in the bill of materials"
-        return ("drawn %.2f s, 10 zooms %.2f s, 1,000 moved %.2f s, undone %.2f s, "
+        return ("drawn %.2f s, 10 zooms %.2f s, lasso move %.1f ms (picked %d in %.2f s), "
+                "1,000 moved %.2f s, undone %.2f s, "
                 "DXF of 1,000 blocks imported %.2f s (%d objects), BOM %.3f s"
-                % (do, dz, dm, du, di, got["count"], db))
+                % (do, dz, dl * 1000, caught, dp, dm, du, di, got["count"], db))
     log.check("speed budget (notes, hatches, leaders, imports)", notes_sheet)
 
     def pull_list():

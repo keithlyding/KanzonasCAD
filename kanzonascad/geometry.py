@@ -242,6 +242,128 @@ def polyline_crosses_polygon(points, poly):
     return False
 
 
+class PolygonIndex:
+    """A closed polygon (a lasso) made quick to test many outlines against: its edges in a grid
+    of cells, so an outline is checked only against the few edges near it, and an outline whose
+    box no edge reaches is wholly inside or wholly outside (one point tells). The answers are the
+    plain functions' (outline_in_polygon, outline_touches_polygon), exactly; a lasso over an
+    imported panel took seconds a mouse move testing every outline segment against every lasso
+    edge."""
+
+    N = 48
+
+    def __init__(self, poly):
+        self.poly = [tuple(q) for q in poly]
+        n = len(self.poly)
+        self.edges = [(self.poly[i], self.poly[(i + 1) % n]) for i in range(n)]
+        xs = [q[0] for q in self.poly]
+        ys = [q[1] for q in self.poly]
+        self.box = (min(xs), min(ys), max(xs), max(ys))
+        x0, y0, x1, y1 = self.box
+        self.cw = max((x1 - x0) / self.N, 1e-9)
+        self.ch = max((y1 - y0) / self.N, 1e-9)
+        self.cells = {}
+        self.rows = {}                  # row of cells -> edges spanning it (for contains)
+        for k, (c, d) in enumerate(self.edges):
+            for cell in self._cells(min(c[0], d[0]), min(c[1], d[1]),
+                                    max(c[0], d[0]), max(c[1], d[1])):
+                self.cells.setdefault(cell, []).append(k)
+                row = self.rows.setdefault(cell[1], [])
+                if not row or row[-1] != k:
+                    row.append(k)
+
+    def _cells(self, x0, y0, x1, y1):
+        bx0, by0 = self.box[0], self.box[1]
+        top = self.N - 1
+        # (clamped both ways: an edge on the box's far side is in the last cell, not past it)
+        i0 = min(max(int((x0 - bx0) / self.cw), 0), top)
+        i1 = min(max(int((x1 - bx0) / self.cw), 0), top)
+        j0 = min(max(int((y0 - by0) / self.ch), 0), top)
+        j1 = min(max(int((y1 - by0) / self.ch), 0), top)
+        return [(i, j) for i in range(i0, i1 + 1) for j in range(j0, j1 + 1)]
+
+    def _near(self, x0, y0, x1, y1):
+        """Indexes of the edges whose cells the box touches (none when outside the polygon's
+        box)."""
+        bx = self.box
+        if x1 < bx[0] or x0 > bx[2] or y1 < bx[1] or y0 > bx[3]:
+            return set()
+        out = set()
+        for cell in self._cells(x0, y0, x1, y1):
+            out.update(self.cells.get(cell, ()))
+        return out
+
+    def contains(self, p):
+        """Is p inside? (Even-odd, against the edges in p's row of cells only.)"""
+        bx = self.box
+        if p[0] < bx[0] or p[0] > bx[2] or p[1] < bx[1] or p[1] > bx[3]:
+            return False
+        row = self.rows.get(min(max(int((p[1] - bx[1]) / self.ch), 0), self.N - 1), ())
+        x, y = p
+        inside = False
+        for k in row:
+            (xi, yi), (xj, yj) = self.edges[k]
+            if (yi > y) != (yj > y):
+                if x < xi + (y - yi) * (xj - xi) / (yj - yi):
+                    inside = not inside
+        return inside
+
+    def _crosses(self, pts, near):
+        """Does the polyline cross an edge? Each segment against the edges in its own cells
+        (near: the edges anywhere near the outline's box, a quick no)."""
+        edges, cells, bx = self.edges, self.cells, self.box
+        x00, y00, cw, ch, top = bx[0], bx[1], self.cw, self.ch, self.N - 1
+        for k in range(len(pts) - 1):
+            a, b = pts[k], pts[k + 1]
+            sx0, sx1 = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+            sy0, sy1 = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
+            if sx1 < bx[0] or sx0 > bx[2] or sy1 < bx[1] or sy0 > bx[3]:
+                continue
+            i0 = min(max(int((sx0 - x00) / cw), 0), top)
+            i1 = min(max(int((sx1 - x00) / cw), 0), top)
+            j0 = min(max(int((sy0 - y00) / ch), 0), top)
+            j1 = min(max(int((sy1 - y00) / ch), 0), top)
+            seen = set()
+            for i in range(i0, i1 + 1):
+                for j in range(j0, j1 + 1):
+                    for e in cells.get((i, j), ()):
+                        if e in seen:
+                            continue
+                        seen.add(e)
+                        c, d = edges[e]
+                        if (c[0] if c[0] > d[0] else d[0]) < sx0 or \
+                                (c[0] if c[0] < d[0] else d[0]) > sx1 or \
+                                (c[1] if c[1] > d[1] else d[1]) < sy0 or \
+                                (c[1] if c[1] < d[1] else d[1]) > sy1:
+                            continue
+                        if segment_intersections(a, b, c, d):
+                            return True
+        return False
+
+    # (a polyline that crosses no edge is wholly on one side: its first point tells which; the
+    # cheap point tests first, the crossings only when they can't tell)
+    def touches(self, outline, box):
+        """Any part of the outline (whose bounding box is box) inside or crossing the
+        polygon? As outline_touches_polygon."""
+        lines = [line for line in outline if line]
+        if not lines:
+            return False
+        if any(self.contains(line[0]) for line in lines):
+            return True
+        near = self._near(*box)
+        return bool(near) and any(self._crosses(line, near) for line in lines)
+
+    def holds(self, outline, box):
+        """The whole outline inside the polygon? As outline_in_polygon."""
+        lines = [line for line in outline if line]
+        if not lines:
+            return False
+        if not all(self.contains(line[0]) for line in lines):
+            return False
+        near = self._near(*box)
+        return not (near and any(self._crosses(line, near) for line in lines))
+
+
 def outline_in_polygon(outline, poly):
     """Every part of the outline (a list of polylines) wholly inside the polygon?"""
     for pts in outline:
