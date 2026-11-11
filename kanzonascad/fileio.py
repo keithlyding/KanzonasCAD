@@ -273,6 +273,17 @@ def _attr_name(tag):
     return ACE_ATTRS.get(t, t)
 
 
+DESC_LINES = ("DESC1", "DESC2", "DESC3")
+
+
+def _shown_name(tag):
+    """The attribute a block shows at an ATTDEF's spot: as _attr_name, except AutoCAD
+    Electrical's description lines, each shown on its own line as AutoCAD shows them (joined
+    into one DESC they ran into the next column); DESC, joined, is the part's description."""
+    t = str(tag or "").strip().upper()
+    return t if t in DESC_LINES else _attr_name(t)
+
+
 def _dimension(de, P, k, kw):
     """A DXF linear or aligned DIMENSION as KanzonasCAD's own (it measures, its grips move
     its points), when it reads the same: the same type and direction, the same measurement
@@ -384,6 +395,22 @@ def _keepable(de):
     return abs(xs), r + 180.0, True             # (its x flipped: y flipped, turned 180)
 
 
+def _text_place(de):
+    """Where a TEXT, ATTDEF or ATTRIB sits, as AutoCAD places it: (point in its own units,
+    align, valign, rotation). Aligned other than left on the baseline, its alignment point is
+    the one that counts (its insert point is only kept up to date by AutoCAD)."""
+    halign = de.dxf.get("halign", 0)
+    vnum = de.dxf.get("valign", 0)
+    align = "center" if halign in (1, 4) else "right" if halign == 2 else "left"
+    valign = {1: "bottom", 2: "middle", 3: "top"}.get(vnum, "baseline")
+    if halign == 4:                             # AutoCAD's "Middle": centered both ways
+        valign = "middle"
+    pos = de.dxf.insert
+    if (halign in (1, 2, 4) or vnum) and de.dxf.hasattr("align_point"):
+        pos = de.dxf.align_point
+    return pos, align, valign, de.dxf.get("rotation", 0.0)
+
+
 def _block_defn(de, k, skipped, depth, blocks):
     """The BlockDef an imported block reference shows, made once per block: its drawing
     (inches, around its base point) and the attribute fields it shows (ATTDEFs). None for a
@@ -399,15 +426,15 @@ def _block_defn(de, k, skipped, depth, blocks):
     for sub in blk:
         if sub.dxftype() != "ATTDEF":
             continue
-        name = _attr_name(sub.dxf.tag)
+        name = _shown_name(sub.dxf.tag)
         tags.add(str(sub.dxf.tag).upper())
         if sub.is_invisible or name in seen or not name:
             continue
         seen.add(name)
-        p = sub.dxf.get("align_point") if (sub.dxf.get("halign", 0) or sub.dxf.get("valign", 0)) \
-            and sub.dxf.hasattr("align_point") else sub.dxf.insert
+        p, align, valign, rot = _text_place(sub)
         attrs.append({"attr": name, "pos": (p[0] * k - bx, p[1] * k - by),
-                      "height": sub.dxf.get("height", 0.125) * k})
+                      "height": sub.dxf.get("height", 0.125) * k, "align": align,
+                      "valign": valign, "angle": rot})
     if not parts and not attrs:
         blocks[key] = None
         return None
@@ -626,12 +653,38 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
                 if name and v and v.strip("-"):
                     vals[name] = (vals[name] + " " + v) if name == "DESC" and \
                         vals.get(name) else v
-            out.append(M.Insert(defn.name, (de.dxf.insert[0] * k, de.dxf.insert[1] * k), r,
-                                s, mirror, vals, defn, layer=layer, color=kw["color"]))
+                    if _shown_name(att.dxf.tag) in DESC_LINES:
+                        vals[_shown_name(att.dxf.tag)] = v
+            ins = M.Insert(defn.name, (de.dxf.insert[0] * k, de.dxf.insert[1] * k), r, s, mirror,
+                           vals, defn, layer=layer, color=kw["color"])
+            # each copy's attributes as AutoCAD shows them on it (the owner's AutoCAD Electrical
+            # drawing: 411 attributes hidden copy by copy were shown over the others, and moved
+            # ones were drawn back on their block's spot): hidden here, or placed elsewhere
+            spots = {a["attr"]: a for a in defn.attr_texts}
+            hide, seen_on, at = set(), set(), {}
+            for att in de.attribs:
+                name = _shown_name(att.dxf.tag)
+                a = spots.get(name)
+                if a is None:
+                    continue
+                if att.is_invisible:
+                    hide.add(name)
+                    continue
+                seen_on.add(name)
+                p, _al, _va, rot = _text_place(att)
+                lx, ly = ins.to_local((p[0] * k, p[1] * k))
+                rel = (rot - r) % 360.0
+                if math.hypot(lx - a["pos"][0], ly - a["pos"][1]) > 1e-4 or \
+                        abs((rel - a.get("angle", 0.0) + 180.0) % 360.0 - 180.0) > 1e-6:
+                    at[name] = (lx, ly, rel)
+            if hide - seen_on or at:
+                ins = ins.copy(hidden=sorted(hide - seen_on),
+                               attr_at={n: list(v) for n, v in at.items()})
+            out.append(ins)
             # a value its block has no field for (no ATTDEF) still shows where it stands
             shown = {a["attr"] for a in defn.attr_texts}
             for att in de.attribs:
-                if _attr_name(att.dxf.tag) not in shown:
+                if _shown_name(att.dxf.tag) not in shown:
                     _read(att, k, out, skipped, depth + 1, blocks)
         elif t == "INSERT" and depth < 12 and blocks is not None and _fast_insert(de):
             # the block's drawing read once, then turned, scaled and moved for each copy
@@ -675,9 +728,9 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
                     _read(att, k, out, skipped, depth + 1, blocks)
         elif t == "ATTRIB":
             if not de.is_invisible:
-                out.append(M.Text(P(de.dxf.insert), de.plain_text(),
-                                  de.dxf.get("height", 0.125) * k, de.dxf.get("rotation", 0.0),
-                                  **kw))
+                p, align, valign, rot = _text_place(de)
+                out.append(M.Text(P(p), de.plain_text(), de.dxf.get("height", 0.125) * k, rot,
+                                  align, valign, **kw))
         elif t == "POINT":
             skipped[t] = skipped.get(t, 0) + 1
         elif depth < 12 and _proxy_parts(de, k, out, skipped, depth, layer):
@@ -862,8 +915,9 @@ def _own_blocks(ed, project, ents):
             done[key] = project.blocks[name]
             renamed[key] = name
         defn = done[key]
-        out.append(M.Insert(defn.name, e.pos, e.angle, e.scale, e.mirror, e.attrs, defn,
-                            e.tag_h, layer=e.layer, color=e.color))
+        # (a copy pointing at the project's block, keeping all of the reference's own: its
+        # attributes hidden or moved on it were lost when it was made again field by field)
+        out.append(M.Insert._from(dict(e.to_dict(), block=defn.name), {defn.name: defn}))
     return out
 
 

@@ -6,6 +6,24 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.3
+
+**New**
+- Show or hide attributes: double-click a symbol or block and choose which of its attributes
+  show on the drawing (Shown on the drawing), or select many and use Show or hide
+  attributes... (Modify menu, Schematic and Panel tabs) to do it on all of them at once. Hidden
+  ones keep their values, and reports still use them.
+
+**Fixed**
+- AutoCAD Electrical drawings no longer show text piled on top of itself: attributes hidden on
+  a block in AutoCAD stay hidden (an imported drawing showed hundreds of them over the others),
+  attributes moved on a block stay where they were moved to, each keeps its alignment, and a
+  device's description lines show one under the other instead of as one long line.
+
+**Security**
+- The DWG reader (ezdwg) is updated to 0.19.2. Its changes since 0.19.0 are speed
+  improvements, with no security fixes; DWG files open about a fifth faster.
+
 ## 0.15.2
 
 **Fixed**

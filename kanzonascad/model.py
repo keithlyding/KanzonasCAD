@@ -1517,8 +1517,18 @@ class BlockDef:
         self.wiring = wiring if wiring in WIRINGS else ""
         # attributes shown on the symbol besides its tag: [{"attr": "TERM", "pos": (x, y),
         # "height": h}] (a terminal's number, a PLC point's address...)
-        self.attr_texts = [{"attr": str(a["attr"]), "pos": _pt(a["pos"]),
-                            "height": float(a.get("height", 0.08))} for a in attr_texts]
+        # (an imported one keeps AutoCAD's alignment and angle; the program's own are centered)
+        self.attr_texts = []
+        for a in attr_texts:
+            t = {"attr": str(a["attr"]), "pos": _pt(a["pos"]),
+                 "height": float(a.get("height", 0.08))}
+            if a.get("align", "center") in ("left", "right"):
+                t["align"] = a["align"]
+            if a.get("valign", "baseline") in ("bottom", "middle", "top"):
+                t["valign"] = a["valign"]
+            if float(a.get("angle", 0.0) or 0.0) % 360.0:
+                t["angle"] = float(a["angle"]) % 360.0
+            self.attr_texts.append(t)
         # who makes it, for finding and grouping blocks (optional; see the manual's
         # "Manufacturer, family and series"): Allen-Bradley / ControlLogix / B...
         self.manufacturer = str(manufacturer or "")
@@ -1540,8 +1550,7 @@ class BlockDef:
                 "pins": [{"name": p["name"], "pos": list(p["pos"])} for p in self.pins],
                 "entities": [e.to_dict() for e in self.entities]} | (
                     {"wiring": self.wiring} if self.wiring else {}) | (
-                    {"attr_texts": [{"attr": a["attr"], "pos": list(a["pos"]),
-                                     "height": a["height"]} for a in self.attr_texts]}
+                    {"attr_texts": [dict(a, pos=list(a["pos"])) for a in self.attr_texts]}
                     if self.attr_texts else {}) | {
                     k: getattr(self, k) for k in MAKER_FIELDS if getattr(self, k)} | (
                     {"rail_pos": list(self.rail_pos)} if self.rail_pos is not None else {}) | (
@@ -1605,10 +1614,10 @@ class Insert(Entity):
     what a footprint shows on it ("" nothing, or a key of LABELS)."""
     kind = "insert"
     __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "label",
-                 "_world")
+                 "hidden", "attr_at", "_world")
 
     def __init__(self, block, pos, angle=0.0, scale=1.0, mirror=False, attrs=None, defn=None,
-                 tag_h=None, label="", **kw):
+                 tag_h=None, label="", hidden=(), attr_at=None, **kw):
         super().__init__(**kw)
         self.block = str(block)
         self.pos = _pt(pos)
@@ -1619,6 +1628,13 @@ class Insert(Entity):
         self.defn = defn
         self.tag_h = float(tag_h) if tag_h else None    # tag height (None: the block's)
         self.label = label if label in LABELS else ""
+        # this copy's own way of showing its attributes, as AutoCAD keeps it per copy (an
+        # imported drawing: AutoCAD Electrical hides most attributes copy by copy and moves some
+        # off their spot): the ones not shown here, and where some are shown instead of the
+        # block's spot ({name: (x, y, angle)}, in the block's own coordinates)
+        self.hidden = frozenset(str(h) for h in (hidden or ()))
+        self.attr_at = {str(k): (float(v[0]), float(v[1]), float(v[2]) if len(v) > 2 else 0.0)
+                        for k, v in (attr_at or {}).items()}
         self._world = None
 
     def _data(self):
@@ -1630,14 +1646,18 @@ class Insert(Entity):
             d["tag_h"] = self.tag_h
         if self.label:
             d["label"] = self.label
+        if self.hidden:
+            d["hidden"] = sorted(self.hidden)
+        if self.attr_at:
+            d["attr_at"] = {k: list(v) for k, v in self.attr_at.items()}
         return d
 
     @classmethod
     def _from(cls, d, blocks):
         return cls(d["block"], d["pos"], d.get("angle", 0.0), d.get("scale", 1.0),
                    d.get("mirror", False), d.get("attrs", {}), blocks.get(d["block"]),
-                   d.get("tag_h"), d.get("label", ""), layer=d.get("layer", "0"),
-                   color=d.get("color"), id=d.get("id"))
+                   d.get("tag_h"), d.get("label", ""), d.get("hidden", ()), d.get("attr_at"),
+                   layer=d.get("layer", "0"), color=d.get("color"), id=d.get("id"))
 
     def copy(self, **changes):
         d = self.to_dict()
@@ -1653,18 +1673,35 @@ class Insert(Entity):
         x, y = G.rotate_point((x, y), (0.0, 0.0), self.angle)
         return (x + self.pos[0], y + self.pos[1])
 
+    def to_local(self, q):
+        """A world point in the block's own coordinates (to_world's inverse)."""
+        x, y = G.rotate_point((q[0] - self.pos[0], q[1] - self.pos[1]), (0.0, 0.0), -self.angle)
+        if self.mirror:
+            y = -y
+        return (x / self.scale, y / self.scale)
+
     def pin_points(self):
         """[(pin name, world point)]."""
         if self.defn is None:
             return []
         return [(p["name"], self.to_world(p["pos"])) for p in self.defn.pins]
 
+    def shown_names(self):
+        """The attributes this block can show on the drawing, in its order: its tag (a symbol
+        with a tag spot), then its block's attribute spots (Show or hide attributes)."""
+        d = self.defn
+        if d is None:
+            return []
+        out = ["TAG"] if d.kind == "symbol" and d.tag_pos is not None else []
+        return out + [a["attr"] for a in d.attr_texts if a["attr"] not in out]
+
     def tag_text(self):
-        """The tag shown on the sheet (None for a footprint or a symbol without a tag spot)."""
+        """The tag shown on the sheet (None for a footprint or a symbol without a tag spot, or
+        its tag hidden on this copy)."""
         d = self.defn
         if d is not None and d.kind == "footprint":
             return self.label_text()
-        if d is None or d.kind != "symbol" or d.tag_pos is None:
+        if d is None or d.kind != "symbol" or d.tag_pos is None or "TAG" in self.hidden:
             return None
         tag = self.attrs.get("TAG", "")
         return Text(self.to_world(d.tag_pos), tag or (d.prefix + "?" if d.prefix else "?"),
@@ -1714,10 +1751,16 @@ class Insert(Entity):
                 if t is not None:
                     out.append(t)
                 for a in d.attr_texts:
-                    v = self.attrs.get(a["attr"], "")
-                    if v:
-                        out.append(Text(self.to_world(a["pos"]), v, a["height"] * self.scale,
-                                        0.0, "center"))
+                    name = a["attr"]
+                    v = self.attrs.get(name, "")
+                    if not v or name in self.hidden:
+                        continue
+                    at = self.attr_at.get(name)
+                    pos, ang = (at[:2], at[2]) if at else (a["pos"], a.get("angle", 0.0))
+                    if at or "angle" in a:
+                        ang = (ang + self.angle) % 360.0      # (turned with the block)
+                    out.append(Text(self.to_world(pos), v, a["height"] * self.scale, ang,
+                                    a.get("align", "center"), a.get("valign", "baseline")))
             own = d is not None and d.own_colors
             for w in out:
                 keep = own and w.color is not None
