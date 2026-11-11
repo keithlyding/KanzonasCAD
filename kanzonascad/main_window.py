@@ -346,6 +346,11 @@ class MainWindow(BlockEditing, QMainWindow):
           label="Materials",
           tip="The DIN rail and wire duct this project takes: lengths, stock pieces and cuts "
               "(save as CSV)")
+        A("fit_sheet", "&Fit to sheet", self.fit_scale, icon="fit_sheet",
+          label="Fit to sheet",
+          tip="Make the drawing fill the sheet: the biggest standard scale (1:4, 1:8...) at "
+              "which it fits inside the border, clear of the title block, moved to the middle "
+              "if it wouldn't fit where it is. With nothing drawn, from the cabinet's size")
         A("sheet_scale", "Sheet sc&ale...", self.sheet_scale, icon="sheet_scale",
           label="Sheet scale",
           tip="This sheet's scale, with a preview: the drawing stays real size, the scale "
@@ -522,7 +527,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_cw", "sheet_ccw",
-                  None, "renumber",
+                  None, "sheet_scale", "fit_sheet", None, "renumber",
                   "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "materials", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
@@ -592,7 +597,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
             ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"],
                                  a["dup_block"], a["save_block_as"]]),
-            ("Real size", "small", [a["scale"], a["sheet_scale"]]),
+            ("Real size", "small", [a["scale"], a["sheet_scale"], a["fit_sheet"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
             ("Arrange", "large", [a["align_obj"]]),
@@ -604,6 +609,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
             ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
             ("Rotate", "small", [a["sheet_cw"], a["sheet_ccw"]]),
+            ("Scale", "large", [a["fit_sheet"], a["sheet_scale"]]),
             ("Properties", "large", [a["sheet_props"], a["project_props"], a["layers"]]),
             ("Title block", "large", [a["edit_tb"], a["use_tb"]]),
             ("Revisions", "large", [a["new_revision"], a["revisions"]]),
@@ -2249,6 +2255,7 @@ class MainWindow(BlockEditing, QMainWindow):
             a[key].blockSignals(False)
         a["xref_freeze"].setEnabled(bool(has and not on_tb))
         a["sheet_scale"].setEnabled(bool(has and not on_tb))
+        a["fit_sheet"].setEnabled(bool(has and not on_tb))
         a["sheet_cw"].setEnabled(bool(has and not on_tb))
         a["sheet_ccw"].setEnabled(bool(has and not on_tb))
         self.scale_label.setVisible(bool(has and not on_tb))

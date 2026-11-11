@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.7
+
+**New**
+- Fit to sheet: one click makes the drawing fill the sheet at the biggest standard scale it
+  fits at (Sheets menu, and a button on the Sheets and Panel tabs). Sheet scale... is in the
+  Sheets menu too.
+
 ## 0.15.3
 
 **New**

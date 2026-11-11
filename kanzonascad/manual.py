@@ -699,6 +699,11 @@ set it too (<b>Rotation</b>: upright, turned clockwise, upside down, turned coun
 When a quarter turn would print the drawing (or the cabinet) bigger, the Sheet scale window
 says so ("Turned tall it prints bigger: 1:5 instead of 1:8") with a <b>Turn it</b> button; Fit
 never turns a sheet by itself. PDF pages print the sheet as turned.</li>
+<li><b>Fit to sheet</b> (Sheets menu, the Sheets tab's Scale group and the Panel tab's Real
+size group) does what Fit does in one click: the drawing (or, with nothing drawn, the cabinet)
+gets the biggest scale it fits at, inside the border and clear of the title block, and is moved
+to the middle if it wouldn't fit where it is (one undoable step). <b>Sheet scale...</b> is in
+the Sheets menu too.</li>
 <li>Click <b>Scale 1:4</b> in the status bar for a short list: <b>Fit</b> (with the scale it
 would pick), the common scales, and <b>More...</b> (the Sheet scale window). A sheet's scale
 is also in Sheet properties.</li>
