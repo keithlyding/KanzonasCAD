@@ -898,7 +898,12 @@ put it, at its scale and turned or mirrored as it was. Their attributes come wit
 the copy's own: AutoCAD Electrical's <b>P_TAG1</b> or <b>TAG1</b> becomes its tag,
 <b>DESC1</b> to <b>DESC3</b> its description, <b>MFG</b> its manufacturer, <b>CAT</b> its
 catalog number; any other (RATING1, TERM...) keeps its name (double-click the copy to see
-them all). A block's visible fields show their values as they do in AutoCAD. A block with
+them all; an AutoCAD Electrical block's description lines, DESC1 to DESC3, are fields of their
+own there, and its description is them joined). The values show as they do in AutoCAD: each
+copy's attributes hidden on it stay hidden (AutoCAD Electrical hides most of them copy by copy:
+location, installation, ratings...), those moved on it stay where they were moved to (and go
+with the copy when you move or turn it), each keeps its alignment, and the description lines
+show one under the other. A block with
 AutoCAD Electrical's TAG1 comes in as a schematic symbol, any other as a panel footprint
 (with no pins: wires don't attach to imported symbols). Their pieces keep their own colors
 (or their layer's), as the other program shows them: a manufacturer's colored parts look as

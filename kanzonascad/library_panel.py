@@ -638,7 +638,13 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None):
     child = tags.is_child(ins) and project is not None
     cands = []
     owner = None
+    # (an AutoCAD Electrical block shows its description as DESC1, DESC2, DESC3: those are
+    # edited, and the description, DESC, is them joined)
+    desc_lines = [a["attr"] for a in (ins.defn.attr_texts if ins.defn is not None else [])
+                  if a["attr"] in ("DESC1", "DESC2", "DESC3")]
     for k in M.ATTR_NAMES:
+        if k == "DESC" and desc_lines:
+            continue
         if k == "TAG" and child:
             # a contact's tag is its device's: picked from the project's devices, or typed
             # (a tag no device has yet links once one has it)
@@ -734,6 +740,9 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None):
         out[k] = e.text().strip()
     if not out.get("LOC"):
         out.pop("LOC", None)            # (no location of its own: its sheet's)
+    if desc_lines:
+        out["DESC"] = " ".join(out.get(k, "").strip() for k in sorted(desc_lines)
+                               if out.get(k, "").strip())
     if owner is not None:
         dev = owner.currentData() if owner.currentText() == owner.itemText(
             owner.currentIndex()) else None
