@@ -60,22 +60,46 @@ and installs the release.
   AGPL libraries: KanzonasCAD does not use PyMuPDF).
 
 ## The battery
-`tests/battery.py` is the exhaustive battery: random editing (thousands of steps with the model
-checked after each, the wire groups, dots and crossings kept up to date checked against a
-fresh count, save/open round trips, undo all the way back and redo all the way forward), every
-menu command in three states, file round trips, speed at scale and pictures. A short run of it
-is part of the unit tests (`tests/test_battery_quick.py`) and so runs on every build; run the
-long one by hand before a release with a few seeds:
-`QT_QPA_PLATFORM=offscreen python tests/battery.py OUT_DIR --ops 3000 --seed N`. A failure it
-finds becomes a fix and a unit test of its own.
+`tests/battery.py` is the exhaustive battery (with `tests/battery_checks.py`):
+- **Random editing:** thousands of steps with the model checked after each: the wire groups,
+  dots and crossings kept up to date against a fresh count; the spatial index against every
+  entity for boxes of any size; save/open round trips; undo all the way back and redo all the
+  way forward. It draws on sheets of every size, turn and scale, on several sheets, far from
+  the origin and big, and drives the mouse (windows, crossings, lassos, drags, panning, the
+  wheel).
+- **What each command must do,** worked out from every object and not from the code being
+  tested: what a window or lasso selects, where a snap lands, that after Fit the drawing fits
+  and the next bigger scale doesn't, that zooming out shows the whole sheet.
+- **Other sections:** every menu command in three states; file round trips; Fit on 300 random
+  drawings; a drawing as AutoCAD Electrical writes it (made by the battery: the owner's drawings
+  never go in the repository); the recent files list under Windows' path rules; speed at
+  scale; speed on an imported drawing; pictures.
 
-Every build also runs the battery itself (the Linux job, 1,000 steps), with a new seed each
-time (the run number), so each build tries different random editing; its log is kept with the
-build. **A new kind of object or a new command goes into the battery in the same pull request**
-(the owner's rule, Nov 2026): a step in `random_editing` that makes it through the command, as
-a user would (so it is moved, copied, rotated, erased, undone, saved and opened with
-everything else), and the object in `mixed_project` (files: save/open, DXF, PDF, template). The
-run reports the kinds of objects it saw: check yours is there.
+The run reports how many times each check ran to the end: a check that always skips proves
+nothing.
+
+**How much runs (the owner's rule, Nov 2026):**
+- Every build runs the short battery (the Linux job, 1,000 steps, the run number as its seed).
+  A short run is also part of the unit tests (`tests/test_battery_quick.py`).
+- A release that bumps the middle number (0.16, 0.17: a version of two parts) also runs the
+  long battery: job `battery-long`, 3,000 steps on each of three seeds. Publishing waits for it.
+  Merge such a release only when `battery-long` is green too.
+- By hand: `QT_QPA_PLATFORM=offscreen python tests/battery.py OUT_DIR --ops 3000 --seed N`.
+- `--drawing YOUR.dwg` starts from your own drawing, on your computer.
+- `BATTERY_DUMP_AT=N` saves the project as it was before step N, to look into a failure.
+
+A failure the battery finds becomes a fix and a unit test of its own. When a bug is found that
+the battery missed, add the check that would have caught it. Then confirm the check fails with
+the bug put back: a check that agrees with the code it checks catches nothing.
+
+**A new kind of object or a new command goes into the battery in the same pull request** (the
+owner's rule, Nov 2026):
+- a step in `random_editing` that makes it through the command, as a user would (so it is
+  moved, copied, rotated, erased, undone, saved and opened with everything else);
+- the object in `mixed_project` (files: save/open, DXF, PDF, template);
+- where it can be, a check of what the command must do.
+
+The run reports the kinds of objects it saw: check yours is there.
 
 ## Security updates
 - `.github/workflows/security-check.yml` runs every Monday (and by hand): pip-audit on

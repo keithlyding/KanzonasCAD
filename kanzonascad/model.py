@@ -1888,6 +1888,28 @@ def row_letters(n, start=0):
     return out
 
 
+def paper_sized(e):
+    """Does e keep its size on paper (a text, dimension, leader, multi-line text or a symbol's
+    tag: their heights follow the sheet's scale), unlike the drawing, which is real size?
+    Not when drawing-sized (fixed: brought in with a DXF or DWG)."""
+    if e.fixed:
+        return False
+    return isinstance(e, (Text, Dimension, Leader, MText)) or \
+        (isinstance(e, Insert) and bool(e.tag_h))
+
+
+def paper_scaled(e, f):
+    """e as it is when the sheet's drawing units per paper inch grow f times (Edit.sheet_scale,
+    and Fit working out the drawing's size at another scale), or None when e doesn't change."""
+    if not paper_sized(e):
+        return None
+    if isinstance(e, MText):
+        return e.copy(height=e.height * f, width=e.width * f)    # (it wraps where it did)
+    if isinstance(e, Insert):
+        return e.copy(tag_h=e.tag_h * f)
+    return e.copy(height=e.height * f)
+
+
 class SpatialIndex:
     """Entity ids in square buckets, for hit tests, snapping and window selection that don't
     walk every entity on the sheet. An entity too big for the buckets (an imported drawing's
@@ -2371,15 +2393,9 @@ class Edit:
         if abs(f - 1.0) < 1e-12 or not paper_text:
             return
         for e in list(sheet.entities.values()):
-            if e.fixed:
-                continue
-            if isinstance(e, (Text, Dimension, Leader)):
-                self.change(sheet, e.copy(height=e.height * f))
-            elif isinstance(e, MText):
-                # (its width too: it wraps where it did)
-                self.change(sheet, e.copy(height=e.height * f, width=e.width * f))
-            elif isinstance(e, Insert) and e.tag_h:
-                self.change(sheet, e.copy(tag_h=e.tag_h * f))
+            c = paper_scaled(e, f)
+            if c is not None:
+                self.change(sheet, c)
 
     def add_sheet(self, sheet, index=None):
         p = self.project

@@ -42,7 +42,9 @@ def export_dxf(project, sheet, path, include_frame=True):
         _layer_color(dl, lay.color)
         if not lay.visible:
             dl.off()
-    if include_frame and FRAME_LAYER not in project.layers:
+    if include_frame and not doc.layers.has_entry(FRAME_LAYER):
+        # (DXF layer names don't depend on case: a drawing's own "Border" layer is BORDER;
+        # up to 0.15.7 the export stopped with "LAYER 'BORDER' already exists")
         doc.layers.add(FRAME_LAYER, color=7)
     l0 = doc.layers.get("0")
     _layer_color(l0, project.layer_color("0"))

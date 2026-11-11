@@ -6,6 +6,16 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.8
+
+**Fixed**
+- Fit no longer leaves the drawing running past the border or over the title block when it
+  holds notes, dimensions or tags: they keep their size on paper, so they take more room at
+  a smaller scale, and Fit now measures the drawing as it will be at the scale it picks. The
+  Sheet scale window's preview measures it the same way.
+- Export to DXF works on a drawing that has its own layer named Border (it used to stop with
+  "LAYER 'BORDER' already exists").
+
 ## 0.15.7
 
 **Fixed**

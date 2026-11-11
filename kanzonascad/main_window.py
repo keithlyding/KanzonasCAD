@@ -1787,7 +1787,7 @@ class MainWindow(BlockEditing, QMainWindow):
             self.sheet_scale()
             return
         name, val = fit
-        box = scalefit.drawing_box(s)
+        box = scalefit.box_at(s, val)               # (as it will be at that scale)
         area, tb = scalefit.room(p, s)
         move = box is not None and not scalefit.placed_inside(box, val, area, tb)
         scalefit.apply(p, s, name, val, center=move)

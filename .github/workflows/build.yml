@@ -311,9 +311,10 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: python -m unittest discover -s tests -p "test_*.py" -t .
 
-      # The battery, longer than the unit tests' short run, with a new seed every build (the
-      # run number), so each build tries different random editing; a failure names its seed
-      # (run it again with: python tests/battery.py OUT --ops 1000 --seed N)
+      # The battery (the short one: every build; a middle-number release also runs the long
+      # one, job battery-long), longer than the unit tests' short run, with a new seed every
+      # build (the run number), so each build tries different random editing; a failure names
+      # its seed (run it again with: python tests/battery.py OUT --ops 1000 --seed N)
       - name: Battery (random editing, every command, files, speed)
         env:
           QT_QPA_PLATFORM: offscreen
@@ -448,8 +449,66 @@ jobs:
 
   # A release for each new version that reaches main: only after both builds are green, and
   # only once per version (a merge that didn't change __version__ publishes nothing).
+  # The long battery (the owner, Nov 2026: "Let's do the extended battery on every big update
+  # 0.xx.0. And the smaller battery can be done on minor updates"): a version of two parts
+  # (0.16, 0.17: the middle number bumped) runs 3,000 steps on each of three seeds, side by
+  # side, before it can be published; any other version runs only the short battery (the
+  # linux job, 1,000 steps). A failure names its seed: python tests/battery.py OUT --ops 3000
+  # --seed N
+  battery-long:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: A middle-number release?
+        id: ver
+        run: |
+          v=$(python3 -c "import kanzonascad; print(kanzonascad.__version__)")
+          if echo "$v" | grep -Eq '^[0-9]+\.[0-9]+$'; then
+            echo "long=yes" >> "$GITHUB_OUTPUT"
+            echo "$v bumps the middle number: the long battery runs"
+          else
+            echo "long=no" >> "$GITHUB_OUTPUT"
+            echo "$v: the short battery (the linux job) is enough"
+          fi
+
+      - uses: actions/setup-python@v6
+        if: steps.ver.outputs.long == 'yes'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Libraries Qt needs
+        if: steps.ver.outputs.long == 'yes'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            libegl1 libgl1 libopengl0 libdbus-1-3 libfontconfig1 libxkbcommon0
+
+      - name: Install dependencies
+        if: steps.ver.outputs.long == 'yes'
+        run: python -m pip install -r requirements.txt -c constraints.txt
+
+      - name: Long battery (3,000 steps)
+        if: steps.ver.outputs.long == 'yes'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python tests/battery.py battery-long --ops 3000 --seed $(( ${{ github.run_number }} * 10 + ${{ matrix.part }} ))
+
+      - name: Long battery log
+        if: always() && steps.ver.outputs.long == 'yes'
+        uses: actions/upload-artifact@v4
+        with:
+          name: battery-long-log-${{ matrix.part }}
+          path: battery-long/battery.log
+          if-no-files-found: ignore
+
   publish:
-    needs: [build, linux]
+    needs: [build, linux, battery-long]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
