@@ -517,6 +517,16 @@ def random_editing(log, out, ops, seed):
                     (h.add if hide else h.discard)(name)
                     ed.change(s, e.copy(hidden=sorted(h)))
 
+    def op_fit():
+        # Fit (the status bar's Scale list: the biggest standard scale the drawing fits at,
+        # moved to the middle if need be), or a scale picked from that list
+        from kanzonascad import scalefit
+        if rnd.random() < 0.3:
+            name, val = rnd.choice(scalefit.presets_like(s.scale_name))
+            win._set_scale(name, val)
+        elif scalefit.fit_for(p, s) is not None:        # (else it opens the Sheet scale window)
+            win.fit_scale()
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -531,7 +541,7 @@ def random_editing(log, out, ops, seed):
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
              (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2),
-             (op_undo, 6),
+             (op_fit, 1), (op_undo, 6),
              (op_redo, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
