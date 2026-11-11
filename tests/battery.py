@@ -501,6 +501,22 @@ def random_editing(log, out, ops, seed):
         with p.edit("Cables between locations") as ed:
             ed.project_settings({"cables": new})
 
+    def op_attr_vis():
+        # as Show or hide attributes does: on a few blocks, an attribute they show hidden or
+        # shown again, in one step
+        ins = [e for e in s.entities.values() if isinstance(e, M.Insert) and e.shown_names()]
+        if not ins:
+            return
+        pick = rnd.sample(ins, min(len(ins), rnd.randint(1, 4)))
+        name = rnd.choice(pick[0].shown_names())
+        hide = rnd.random() < 0.6
+        with p.edit("Show or hide attributes") as ed:
+            for e in pick:
+                if name in e.shown_names():
+                    h = set(e.hidden)
+                    (h.add if hide else h.discard)(name)
+                    ed.change(s, e.copy(hidden=sorted(h)))
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -514,7 +530,8 @@ def random_editing(log, out, ops, seed):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_undo, 6),
+             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2),
+             (op_undo, 6),
              (op_redo, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0

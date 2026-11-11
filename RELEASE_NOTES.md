@@ -8,6 +8,12 @@ build fails without them.
 
 ## 0.15.3
 
+**New**
+- Show or hide attributes: double-click a symbol or block and choose which of its attributes
+  show on the drawing (Shown on the drawing), or select many and use Show or hide
+  attributes... (Modify menu, Schematic and Panel tabs) to do it on all of them at once. Hidden
+  ones keep their values, and reports still use them.
+
 **Fixed**
 - AutoCAD Electrical drawings no longer show text piled on top of itself: attributes hidden on
   a block in AutoCAD stay hidden (an imported drawing showed hundreds of them over the others),

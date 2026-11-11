@@ -403,6 +403,10 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("make_block", "&Make block", C.MakeBlockCmd, "Make block")
         self.acts["make_block"].setProperty("icon_key", "make_block")
         self._cmd_act("explode", "E&xplode", C.ExplodeCmd, "Explode")
+        A("attr_vis", "Show or hide a&ttributes...", self.attribute_visibility, icon="attr_vis",
+          label="Attributes",
+          tip="Choose which attributes the selected symbols and blocks show on the drawing "
+              "(their values are kept either way)")
         self.acts["explode"].setProperty("icon_key", "explode")
         A("object_color", "C&olor...", self.object_color, icon="color", label="Color",
           tip="Give the selected objects a color of their own, or back to ByLayer (their "
@@ -527,7 +531,7 @@ class MainWindow(BlockEditing, QMainWindow):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
-                  "explode", None, "block_props", "edit_block", "dup_block", "save_block",
+                  "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
                   "save_block_as", None,
                   "new_part", "library_folder"):
             m.addSeparator() if k is None else m.addAction(a[k])
@@ -570,7 +574,7 @@ class MainWindow(BlockEditing, QMainWindow):
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
-            ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"],
+            ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"], a["attr_vis"],
                                   a["del_comp"]]),
             ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"],
                                  a["dup_block"], a["save_block_as"]]),
@@ -584,6 +588,7 @@ class MainWindow(BlockEditing, QMainWindow):
         ])
         r.add_tab("Panel", [
             ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"],
+                                     a["attr_vis"],
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
             ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"],
                                  a["dup_block"], a["save_block_as"]]),
@@ -1927,6 +1932,21 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         dialogs.bom_dialog(self, v.project, self._last_dir())
 
+    def attribute_visibility(self):
+        """Show or hide attributes on the selected blocks (dialogs.attribute_visibility)."""
+        v = self.view()
+        if v is None:
+            return
+        s = v.sheet()
+        ins = [e for e in (s.entities.get(i) for i in v.sel)
+               if isinstance(e, M.Insert) and not v.layer_locked(e.layer)]
+        if not ins:
+            self._say("Show or hide attributes: select the symbols or blocks first")
+            return
+        if dialogs.attribute_visibility(self, v.project, s, ins):
+            self._say("Attributes shown or hidden on %d block(s) (Undo takes it back)"
+                      % len(ins))
+
     def show_cables(self):
         v = self.view()
         if v is None:
@@ -1952,10 +1972,12 @@ class MainWindow(BlockEditing, QMainWindow):
                     ed.change(v.sheet(), new)
             return
         from .library_panel import attributes_dialog
-        attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet())
-        if attrs is not None and attrs != ins.attrs:
+        shown = {}
+        attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet(), shown)
+        hidden = shown.get("hidden", ins.hidden)
+        if attrs is not None and (attrs != ins.attrs or hidden != ins.hidden):
             with v.project.edit("Attributes") as ed:
-                ed.change(v.sheet(), ins.copy(attrs=attrs))
+                ed.change(v.sheet(), ins.copy(attrs=attrs, hidden=sorted(hidden)))
 
     # ---- cross-references -----------------------------------------------------------------
     def update_xrefs(self):
@@ -2193,7 +2215,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext", "use_tb",
-                  "rail", "duct", "materials", "bom", "cables", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "rail", "duct", "materials", "bom", "cables", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",

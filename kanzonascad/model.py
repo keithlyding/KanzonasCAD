@@ -1686,12 +1686,22 @@ class Insert(Entity):
             return []
         return [(p["name"], self.to_world(p["pos"])) for p in self.defn.pins]
 
+    def shown_names(self):
+        """The attributes this block can show on the drawing, in its order: its tag (a symbol
+        with a tag spot), then its block's attribute spots (Show or hide attributes)."""
+        d = self.defn
+        if d is None:
+            return []
+        out = ["TAG"] if d.kind == "symbol" and d.tag_pos is not None else []
+        return out + [a["attr"] for a in d.attr_texts if a["attr"] not in out]
+
     def tag_text(self):
-        """The tag shown on the sheet (None for a footprint or a symbol without a tag spot)."""
+        """The tag shown on the sheet (None for a footprint or a symbol without a tag spot, or
+        its tag hidden on this copy)."""
         d = self.defn
         if d is not None and d.kind == "footprint":
             return self.label_text()
-        if d is None or d.kind != "symbol" or d.tag_pos is None:
+        if d is None or d.kind != "symbol" or d.tag_pos is None or "TAG" in self.hidden:
             return None
         tag = self.attrs.get("TAG", "")
         return Text(self.to_world(d.tag_pos), tag or (d.prefix + "?" if d.prefix else "?"),

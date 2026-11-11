@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QT
                                QTreeWidgetItem, QLineEdit, QPushButton, QLabel, QDialog,
                                QFormLayout, QComboBox, QDialogButtonBox, QCheckBox,
                                QMessageBox, QListWidget, QListWidgetItem, QPlainTextEdit,
-                               QToolButton, QMenu)
+                               QToolButton, QMenu, QGroupBox)
 
 from . import model as M
 from .library import Library, Part
@@ -623,10 +623,11 @@ def kind_of(ins):
     return ins.defn.kind if ins.defn is not None else "symbol"
 
 
-def attributes_dialog(parent, library, ins, project=None, sheet=None):
+def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None):
     """The attributes of a placed block (TAG, DESC, MFR, CAT) and the part it is; for a
     contact, the device it belongs to; for a device, whether its contacts are listed under it.
-    Returns the new attrs dict, or None when cancelled."""
+    Returns the new attrs dict, or None when cancelled. shown: a dict given in gets "hidden",
+    the attributes not to show on this copy (its "Shown on the drawing" boxes)."""
     from . import tags
     dlg = QDialog(parent)
     dlg.setWindowTitle("%s: attributes" % ins.block)
@@ -703,6 +704,21 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None):
         listed.setChecked(ins.attrs.get("XREF") != "0")
         form.addRow("", listed)
     v.addLayout(form)
+    # which of them show on the drawing, on this copy (the owner: "add the ability to hide and
+    # show attributes"); the values are kept either way
+    show_boxes = {}
+    names = ins.shown_names()
+    if names:
+        box = QGroupBox("Shown on the drawing")
+        bl = QVBoxLayout(box)
+        for n in names:
+            val = ins.attrs.get(n, "")
+            c = QCheckBox("%s%s" % (n, ("   (%s)" % val) if val else "   (empty)"))
+            c.setObjectName("show_" + n)
+            c.setChecked(n not in ins.hidden)
+            bl.addWidget(c)
+            show_boxes[n] = c
+        v.addWidget(box)
     kind = ins.defn.kind if ins.defn is not None else "symbol"
     parts = []
     try:
@@ -743,6 +759,9 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None):
     if desc_lines:
         out["DESC"] = " ".join(out.get(k, "").strip() for k in sorted(desc_lines)
                                if out.get(k, "").strip())
+    if shown is not None:
+        shown["hidden"] = frozenset(n for n, c in show_boxes.items() if not c.isChecked()) | \
+            frozenset(h for h in ins.hidden if h not in show_boxes)
     if owner is not None:
         dev = owner.currentData() if owner.currentText() == owner.itemText(
             owner.currentIndex()) else None

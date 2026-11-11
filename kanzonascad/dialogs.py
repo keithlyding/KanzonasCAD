@@ -1407,3 +1407,74 @@ def write_pull_pdf(project, path, cables=None):
     doc.print_(w)
     if not os.path.exists(path):
         raise OSError("the PDF wasn't written")
+
+
+def attribute_visibility(parent, project, sheet, inserts):
+    """Show or hide attributes: for the selected blocks, each attribute any of them can show,
+    ticked when shown on all of them, unticked when hidden on all, partly ticked when it
+    differs (left so, nothing changes there); OK applies it to them all in one undoable step.
+    The values are kept either way. True when something changed."""
+    from PySide6.QtWidgets import QScrollArea, QWidget
+    names, have = [], {}
+    for e in inserts:
+        for n in e.shown_names():
+            if n not in have:
+                names.append(n)
+                have[n] = []
+            have[n].append(e)
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Show or hide attributes")
+    lay = QVBoxLayout(dlg)
+    if not names:
+        lay.addWidget(QLabel("The selected objects show no attributes (select symbols or "
+                             "blocks brought in with a drawing)."))
+        b = QDialogButtonBox(QDialogButtonBox.Close)
+        b.rejected.connect(dlg.reject)
+        lay.addWidget(b)
+        dlg.exec()
+        return False
+    lay.addWidget(QLabel("On the %d selected block(s), show on the drawing:" % len(inserts)))
+    inner = QWidget()
+    il = QVBoxLayout(inner)
+    boxes = {}
+    for n in names:
+        ents = have[n]
+        hid = sum(1 for e in ents if n in e.hidden)
+        c = QCheckBox("%s   (on %d block%s%s)" % (n, len(ents), "" if len(ents) == 1 else "s",
+                                                  ", hidden on %d" % hid if 0 < hid < len(ents)
+                                                  else ""))
+        c.setObjectName("show_" + n)
+        c.setTristate(0 < hid < len(ents))
+        c.setCheckState(Qt.Checked if hid == 0 else Qt.Unchecked if hid == len(ents)
+                        else Qt.PartiallyChecked)
+        il.addWidget(c)
+        boxes[n] = c
+    il.addStretch(1)
+    scroll = QScrollArea()
+    scroll.setWidget(inner)
+    scroll.setWidgetResizable(True)
+    lay.addWidget(scroll, 1)
+    lay.addWidget(_gray("Partly ticked: shown on some, hidden on others (left as it is). The "
+                        "values are kept: hidden ones still count in reports (a location in "
+                        "Cables between locations, a description in the bill of materials)."))
+    lay.addWidget(_buttons(dlg))
+    dlg.resize(460, min(640, 160 + 28 * len(names)))
+    if dlg.exec() != QDialog.Accepted:
+        return False
+    changes = []
+    for e in inserts:
+        hidden = set(e.hidden)
+        for n in e.shown_names():
+            st = boxes[n].checkState()
+            if st == Qt.Checked:
+                hidden.discard(n)
+            elif st == Qt.Unchecked:
+                hidden.add(n)
+        if frozenset(hidden) != e.hidden:
+            changes.append(e.copy(hidden=sorted(hidden)))
+    if not changes:
+        return False
+    with project.edit("Show or hide attributes") as ed:
+        for e in changes:
+            ed.change(sheet, e)
+    return True

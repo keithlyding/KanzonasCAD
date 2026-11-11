@@ -238,7 +238,13 @@ Wire numbers) and the pin names.</li>
 block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
 footprint.</p>
 <p>Double-click a placed symbol or footprint to change its tag, description, manufacturer and
-catalog number, or pick one of the library's parts for it. <b>Explode</b> (X) turns placed
+catalog number, or pick one of the library's parts for it. Its <b>Shown on the drawing</b>
+boxes choose which of its attributes (its tag, a terminal's number, an imported block's
+location, rating...) show on this copy; a hidden one keeps its value, and reports still use
+it. <b>Show or hide attributes...</b> (Modify menu; Schematic tab: Symbols, Panel tab:
+Footprints) does the same for every selected symbol and block at once: each attribute any of
+them shows is ticked when shown on all of them, unticked when hidden on all, partly ticked when
+it differs (left so); one undoable step. <b>Explode</b> (X) turns placed
 blocks back into plain lines and texts. Delete in the Library panel removes your own symbols,
 footprints and parts (the built-in symbols and footprints stay).</p>
 
