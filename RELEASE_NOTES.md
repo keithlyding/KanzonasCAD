@@ -12,6 +12,9 @@ build fails without them.
 - Fit picks the biggest scale the drawing really fits at: it no longer chooses a smaller scale
   (1:5) when the drawing fits at a bigger one (1:4) inside the border and clear of the title
   block. Fit and the status bar's "doesn't fit" now agree.
+- Open recent no longer lists the same file twice (once with \ and once with / in its
+  name, after a Save as), and opening a project that's already open from there goes to its
+  tab instead of opening it again.
 
 ## 0.15.6
 
