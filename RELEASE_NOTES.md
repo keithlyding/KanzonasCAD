@@ -13,6 +13,8 @@ build fails without them.
   holds notes, dimensions or tags: they keep their size on paper, so they take more room at
   a smaller scale, and Fit now measures the drawing as it will be at the scale it picks. The
   Sheet scale window's preview measures it the same way.
+- Export to DXF works on a drawing that has its own layer named Border (it used to stop with
+  "LAYER 'BORDER' already exists").
 
 ## 0.15.7
 
