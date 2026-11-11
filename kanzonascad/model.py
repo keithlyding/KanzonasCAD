@@ -1890,28 +1890,42 @@ def row_letters(n, start=0):
 
 class SpatialIndex:
     """Entity ids in square buckets, for hit tests, snapping and window selection that don't
-    walk every entity on the sheet."""
+    walk every entity on the sheet. An entity too big for the buckets (an imported drawing's
+    frame, a block the size of the sheet) is kept with its box in a short list of its own, and
+    any query, however big, is answered whole: up to 0.15.5 both were cut to 64 x 64 buckets
+    (32") from their lower left corner, so a window around an imported drawing found nothing
+    outside that corner."""
     CELL = 0.5          # inches
+    MAX_CELLS = 4096    # an entity over this many buckets goes in the list of big ones
 
     def __init__(self):
         self.cells = {}
         self.where = {}
+        self.big = {}       # {id: box} of the entities too big for the buckets
+
+    def _span(self, bb):
+        c = self.CELL
+        return (int(math.floor(bb[0] / c)), int(math.floor(bb[1] / c)),
+                int(math.floor(bb[2] / c)), int(math.floor(bb[3] / c)))
 
     def _keys(self, bb):
-        c = self.CELL
-        x0, y0 = int(math.floor(bb[0] / c)), int(math.floor(bb[1] / c))
-        x1, y1 = int(math.floor(bb[2] / c)), int(math.floor(bb[3] / c))
-        if (x1 - x0 + 1) * (y1 - y0 + 1) > 4096:          # a huge entity: clamp
-            x1, y1 = min(x1, x0 + 63), min(y1, y0 + 63)
+        x0, y0, x1, y1 = self._span(bb)
         return [(i, j) for i in range(x0, x1 + 1) for j in range(y0, y1 + 1)]
 
     def add(self, ent):
-        keys = self._keys(ent.bbox())
+        bb = ent.bbox()
+        x0, y0, x1, y1 = self._span(bb)
+        if (x1 - x0 + 1) * (y1 - y0 + 1) > self.MAX_CELLS:
+            self.where[ent.id] = ()
+            self.big[ent.id] = tuple(bb)
+            return
+        keys = [(i, j) for i in range(x0, x1 + 1) for j in range(y0, y1 + 1)]
         self.where[ent.id] = keys
         for k in keys:
             self.cells.setdefault(k, set()).add(ent.id)
 
     def remove(self, eid):
+        self.big.pop(eid, None)
         for k in self.where.pop(eid, ()):
             s = self.cells.get(k)
             if s is not None:
@@ -1919,12 +1933,31 @@ class SpatialIndex:
                 if not s:
                     del self.cells[k]
 
+    def _big_in(self, rect, out):
+        x0, y0, x1, y1 = rect
+        for eid, b in self.big.items():
+            if b[0] <= x1 and b[2] >= x0 and b[1] <= y1 and b[3] >= y0:
+                out.add(eid)
+        return out
+
     def query(self, rect):
+        """Ids whose buckets meet rect (a big entity: whose box does)."""
+        x0, y0, x1, y1 = self._span(rect)
         out = set()
-        for k in self._keys(rect):
-            s = self.cells.get(k)
-            if s:
-                out |= s
+        cells = self.cells
+        if (x1 - x0 + 1) * (y1 - y0 + 1) > len(cells):
+            # (a big window: the filled buckets, fewer than the ones it covers)
+            for (i, j), s in cells.items():
+                if x0 <= i <= x1 and y0 <= j <= y1:
+                    out |= s
+        else:
+            for i in range(x0, x1 + 1):
+                for j in range(y0, y1 + 1):
+                    s = cells.get((i, j))
+                    if s:
+                        out |= s
+        if self.big:
+            self._big_in(rect, out)
         return out
 
     def query_point(self, p, tol):
@@ -1935,7 +1968,10 @@ class SpatialIndex:
         i, j = math.floor(fx), math.floor(fy)
         t = tol / c
         if fx - i > t and i + 1 - fx > t and fy - j > t and j + 1 - fy > t:
-            return self.cells.get((i, j), ())
+            got = self.cells.get((i, j), ())
+            if self.big:
+                return self._big_in((p[0] - tol, p[1] - tol, p[0] + tol, p[1] + tol), set(got))
+            return got
         return self.query((p[0] - tol, p[1] - tol, p[0] + tol, p[1] + tol))
 
 

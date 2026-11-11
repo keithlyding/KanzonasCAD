@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.6
+
+**Fixed**
+- A selection window or lasso around a big drawing (an imported DWG or DXF, a panel at real
+  size) now selects everything in it. It used to catch only what was in its lower left 32
+  inches, so it sometimes selected everything and sometimes only some things. Objects bigger
+  than 32 inches (an imported frame, a large outline) can now be picked and snapped to
+  anywhere along them, not only near one corner.
+
 ## 0.15.3
 
 **New**
