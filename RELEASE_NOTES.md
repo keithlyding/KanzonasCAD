@@ -15,6 +15,9 @@ build fails without them.
 - Open recent no longer lists the same file twice (once with \ and once with / in its
   name, after a Save as), and opening a project that's already open from there goes to its
   tab instead of opening it again.
+- Zooming out on a sheet with a scale (1:24, 1:48...) now goes far enough to see the whole
+  sheet and drawing. It used to stop too close, and right after Zoom extents a step out
+  zoomed in instead.
 
 ## 0.15.6
 

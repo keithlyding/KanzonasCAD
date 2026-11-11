@@ -858,7 +858,9 @@ the modify commands.</li>
 <li>Mouse wheel zooms at the cursor; hold the <b>middle button</b> to pan; double-click the
 middle button for <b>Zoom extents</b>.</li>
 <li><b>Zoom extents</b> (Ctrl+Shift+E), <b>Zoom to sheet</b> (Ctrl+0), <b>Zoom in</b> (Ctrl+=),
-<b>Zoom out</b> (Ctrl+-).</li>
+<b>Zoom out</b> (Ctrl+-). Zooming out goes until the whole sheet and everything drawn take
+about a quarter of the window, on a sheet with a scale too (at 1:24 the sheet is 24 times its
+paper size).</li>
 <li><b>Black drawing background</b> (on to start, as in AutoCAD): the sheet is drawn black with
 white lines. Turn it off for a white sheet. <b>Export to PDF...</b> always prints black on
 white either way.</li>
