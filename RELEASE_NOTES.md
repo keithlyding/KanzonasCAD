@@ -16,6 +16,20 @@ build fails without them.
   anywhere along them, not only near one corner.
 - Junction dots no longer stay behind after moving a long wire on a big drawing.
 
+## 0.15.5
+
+**New**
+- Object snaps now reach the sheet's border and title block: snap to their corners, line ends,
+  middles and intersections to line a drawing up with them. They still can't be selected on a
+  sheet (use Edit title block to change the title block).
+
+## 0.15.4
+
+**New**
+- Update now shows a progress bar while it downloads (how many MB of how many, and the
+  percent), with a Cancel button to stop it. You'll see it from the next update after this
+  one: the version you update from does the downloading.
+
 ## 0.15.3
 
 **New**
@@ -58,6 +72,7 @@ build fails without them.
   and I/O module, control transformers, and 22 mm door devices. Each one's description gives
   its size; for a part you buy, use its maker's drawing (Make block, or Edit block one of these
   and save it under your own name).
+
 ## 0.15
 
 **New**

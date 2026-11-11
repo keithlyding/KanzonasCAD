@@ -2411,7 +2411,11 @@ class MainWindow(BlockEditing, QMainWindow):
         else:
             QDesktopServices.openUrl(QUrl(updates.page(release)))
 
-    def _progress_dialog(self, title):
+    def _progress_dialog(self, title, download=False):
+        """The update window: what is happening, and (download) a progress bar with how much
+        has come (the owner: "can it show a progress bar, like KanzonasPDF does? Right now, it
+        just says downloading": the progress went to the status bar behind this window) and a
+        Cancel button while it downloads (Close once it's done)."""
         dlg = QDialog(self)
         dlg.setWindowTitle(title)
         dlg.resize(620, 360)
@@ -2420,9 +2424,48 @@ class MainWindow(BlockEditing, QMainWindow):
         lay.addWidget(out, 1)
         box = QDialogButtonBox(QDialogButtonBox.Close)
         box.rejected.connect(dlg.reject)
-        box.setEnabled(False)
+        if download:
+            from PySide6.QtWidgets import QProgressBar
+            dlg.resize(560, 260)
+            bar = QProgressBar()
+            bar.setObjectName("download_progress")
+            bar.setRange(0, 0)                  # (moving until the size is known)
+            bar.setFormat("Starting the download...")
+            bar.setTextVisible(True)
+            lay.addWidget(bar)
+            box.button(QDialogButtonBox.Close).setText("Cancel")
+            dlg.bar = bar
+        else:
+            box.setEnabled(False)
         lay.addWidget(box)
         return dlg, out, box
+
+    @staticmethod
+    def _show_download(dlg, got, total):
+        """A download's progress on the update window's bar: how many MB of how many."""
+        bar = dlg.bar
+        if total > 0:
+            bar.setRange(0, 1000)
+            bar.setValue(int(1000 * min(got, total) / total))
+            bar.setFormat("%.1f of %.1f MB (%d%%)" % (got / 1e6, total / 1e6,
+                                                     int(100 * got / total)))
+        else:
+            bar.setFormat("%.1f MB" % (got / 1e6))
+
+    @staticmethod
+    def _download_over(dlg, box, ok):
+        """The download done (ok) or stopped: the bar full or kept as it stopped, Close."""
+        bar = dlg.bar
+        if ok:
+            bar.setRange(0, 1)
+            bar.setValue(1)
+            bar.setFormat("Downloaded and checked")
+        elif bar.maximum() == 0:
+            bar.setRange(0, 1)
+            bar.setValue(0)
+            bar.setFormat("Stopped")
+        box.button(QDialogButtonBox.Close).setText("Close")
+        box.setEnabled(True)
 
     def _run_source_update(self, root):
         from .updates import SourceUpdater
@@ -2444,15 +2487,14 @@ class MainWindow(BlockEditing, QMainWindow):
 
     def _run_zip_update(self, url, sha, app_dir, setup=False):
         from .updates import ZipUpdater, start_setup, start_swap
-        dlg, out, box = self._progress_dialog("Updating KanzonasCAD")
+        dlg, out, box = self._progress_dialog("Updating KanzonasCAD", download=True)
         out.append("Downloading...")
         up = ZipUpdater(url, sha, app_dir, dlg, setup=setup)
-        up.progress.connect(lambda a, b: self.statusBar().showMessage(
-            "Downloading the update: %d of %d MB" % (a // 1000000, max(b, 0) // 1000000)))
+        up.progress.connect(lambda a, b: self._show_download(dlg, a, b))
 
         def ready(new):
             out.append("Downloaded and checked.")
-            box.setEnabled(True)
+            self._download_over(dlg, box, True)
             if QMessageBox.question(dlg, "Update", "Close KanzonasCAD and finish the update "
                                     "now? (You'll be asked to save any changes first.)"
                                     ) == QMessageBox.Yes:
@@ -2466,7 +2508,7 @@ class MainWindow(BlockEditing, QMainWindow):
 
         def failed(text):
             out.append(text)
-            box.setEnabled(True)
+            self._download_over(dlg, box, False)
         up.ready.connect(ready)
         up.failed.connect(failed)
         box.rejected.connect(up.cancel)
@@ -2496,15 +2538,14 @@ class MainWindow(BlockEditing, QMainWindow):
                                     "yourself." % (target, why, updates.APPIMAGE))
             QDesktopServices.openUrl(QUrl(page))
             return
-        dlg, out, box = self._progress_dialog("Updating KanzonasCAD")
+        dlg, out, box = self._progress_dialog("Updating KanzonasCAD", download=True)
         out.append("Downloading...")
         up = updates.AppImageUpdater(got[0], got[1], target, dlg)
-        up.progress.connect(lambda a, b: self.statusBar().showMessage(
-            "Downloading the update: %d of %d MB" % (a // 1000000, max(b, 0) // 1000000)))
+        up.progress.connect(lambda a, b: self._show_download(dlg, a, b))
 
         def ready(new):
             out.append("Downloaded and checked.")
-            box.setEnabled(True)
+            self._download_over(dlg, box, True)
             # in place first (the running program keeps its own copy open until it ends)
             try:
                 updates.replace_appimage(new, target)
@@ -2539,7 +2580,7 @@ class MainWindow(BlockEditing, QMainWindow):
         def failed(text):
             out.append(text + "\n\nYou can still download %s from the release page and put "
                        "it in place of this one." % updates.APPIMAGE)
-            box.setEnabled(True)
+            self._download_over(dlg, box, False)
         up.ready.connect(ready)
         up.failed.connect(failed)
         box.rejected.connect(up.cancel)

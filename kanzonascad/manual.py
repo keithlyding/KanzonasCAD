@@ -646,6 +646,10 @@ over two lines, then near where they would meet if they were longer).</li>
 <li><b>Blocks snap too</b>: the ends, middles, centers and quadrants of a placed symbol's or
 footprint's own drawing (a footprint's corners, for a dimension), as in AutoCAD. A pin, or an
 ordinary object's point of the same kind, comes first, so a wire still lands on a pin.</li>
+<li><b>The border and title block snap too</b>: the border's corners, the zone strips' lines
+and the title block's lines and texts (ends, middles, intersections, nearest...), so a
+drawing lines up with them. They still can't be selected or changed on a sheet (Edit title
+block to change the title block), and hiding a layer of the title block stops its snaps.</li>
 <li><b>Turning snaps on and off</b>: the arrow on the status bar's <b>OSNAP</b> button lists
 every snap with a check mark; click one to turn it on or off. The list stays open, so you
 can tick several in a row (Select all and Clear all too); click outside it or press Esc when
@@ -1063,7 +1067,9 @@ run KanzonasCAD/KanzonasCAD (it doesn't update itself).</li>
 <p>KanzonasCAD asks GitHub for new versions by itself, at most once a day (also while it stays
 open), quietly: nothing shows unless there is one. Then a box tells you what changed in every
 version since yours, with three buttons: <b>Update now</b>, <b>Skip this version</b> (you're
-not told about it again; a newer one still shows) and <b>Later</b>.</p>
+not told about it again; a newer one still shows) and <b>Later</b>. While Update now
+downloads, its window shows a progress bar with how much has come (48.3 of 75.2 MB, 64%), and
+<b>Cancel</b> stops the download; once it's done (or failed) the button is <b>Close</b>.</p>
 <ul>
 <li>Run from source (the README's way): Update now gets the new version (git pull) and what it
 needs, shows what it did, and offers to start the new version.</li>
