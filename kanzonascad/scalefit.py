@@ -70,20 +70,33 @@ def free_boxes(area, tb):
     return boxes
 
 
+def limits(area, tb):
+    """The room without the MARGIN kept clear (area and title block as room() gives them):
+    the zone frame and the title block itself, what the drawing may not cross (as the status
+    bar's "doesn't fit" says). Fit picks a scale by these, and centers the drawing in the room
+    with the margin when it has space for it."""
+    m = MARGIN
+    a = (area[0] - m, area[1] - m, area[2] + m, area[3] + m)
+    t = None if tb is None else (tb[0] + m, tb[1] + m, tb[2] - m, tb[3] - m)
+    return a, t
+
+
 def fits(w, h, scale, area, tb):
     """True when a drawing w x h (real inches) printed at `scale` fits in one of the free
-    boxes."""
+    boxes: inside the frame and clear of the title block (the margin may be used: up to 0.15.6
+    it had to be kept, so Fit picked 1:5 for a drawing the status bar said fits at 1:4)."""
     pw, ph = w * scale, h * scale
     return any(pw <= b[2] - b[0] + 1e-9 and ph <= b[3] - b[1] + 1e-9
-               for b in free_boxes(area, tb))
+               for b in free_boxes(*limits(area, tb)))
 
 
 def use(w, h, scale, area, tb):
     """How much of the room a drawing w x h takes at `scale`: the larger of its share of the
-    best box's width and height (1.0 = it just fits; over 1: it doesn't)."""
+    best box's width and height (1.0 = it just fits; over 1: it doesn't). The room is the
+    frame less the title block (limits)."""
     pw, ph = w * scale, h * scale
     best = None
-    for b in free_boxes(area, tb):
+    for b in free_boxes(*limits(area, tb)):
         u = max(pw / max(b[2] - b[0], 1e-9), ph / max(b[3] - b[1], 1e-9))
         best = u if best is None else min(best, u)
     return best if best is not None else math.inf
@@ -186,22 +199,24 @@ def outside(project, sheet):
 
 def centering(box, scale, area, tb):
     """(dx, dy) in real inches that puts a drawing box (real inches) in the middle of the
-    free box it fits best at `scale`, or None when it fits none."""
+    free box it fits best at `scale` (with the margin kept clear when there is space for it,
+    else in the room up to the frame and the title block), or None when it fits none."""
     w, h = box[2] - box[0], box[3] - box[1]
     pw, ph = w * scale, h * scale
-    for b in free_boxes(area, tb):
-        if pw <= b[2] - b[0] + 1e-9 and ph <= b[3] - b[1] + 1e-9:
-            cx, cy = (b[0] + b[2]) / 2 / scale, (b[1] + b[3]) / 2 / scale
-            return cx - (box[0] + box[2]) / 2, cy - (box[1] + box[3]) / 2
+    for a, t in ((area, tb), limits(area, tb)):
+        for b in free_boxes(a, t):
+            if pw <= b[2] - b[0] + 1e-9 and ph <= b[3] - b[1] + 1e-9:
+                cx, cy = (b[0] + b[2]) / 2 / scale, (b[1] + b[3]) / 2 / scale
+                return cx - (box[0] + box[2]) / 2, cy - (box[1] + box[3]) / 2
     return None
 
 
 def placed_inside(box, scale, area, tb):
     """True when a drawing box (real inches) at `scale`, where it is, lies inside one of the
-    free boxes."""
+    free boxes (up to the frame and the title block: where the status bar says it fits)."""
     b = tuple(c * scale for c in box)
     return any(b[0] >= f[0] - 1e-6 and b[1] >= f[1] - 1e-6 and b[2] <= f[2] + 1e-6 and
-               b[3] <= f[3] + 1e-6 for f in free_boxes(area, tb))
+               b[3] <= f[3] + 1e-6 for f in free_boxes(*limits(area, tb)))
 
 
 def fit_for(project, sheet):

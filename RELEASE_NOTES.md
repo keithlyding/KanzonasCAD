@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.7
+
+**Fixed**
+- Fit picks the biggest scale the drawing really fits at: it no longer chooses a smaller scale
+  (1:5) when the drawing fits at a bigger one (1:4) inside the border and clear of the title
+  block. Fit and the status bar's "doesn't fit" now agree.
+
 ## 0.15.3
 
 **New**

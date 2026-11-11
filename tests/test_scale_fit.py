@@ -184,6 +184,64 @@ class SheetScaleWindowTest(unittest.TestCase):
         APP.processEvents()
 
 
+class FitUpToTheFrameTest(unittest.TestCase):
+    """Fit picks the biggest scale at which the status bar doesn't say "doesn't fit" (the
+    owner, with an AutoCAD Electrical sheet: "Fit made it 1:5, but 1:4 fits as well"): the
+    margin kept clear is used when the drawing needs it."""
+
+    def setUp(self):
+        self.p = M.Project.new()
+        self.s = self.p.sheets[0]               # ANSI B, title block in the lower right
+
+    def test_owner_sheet(self):
+        # the owner's drawing: 55.39" x 33.91", 8.48" tall at 1:4; above the title block the
+        # room is 8.625" up to the frame and the title block, 8.125" with the margin
+        with self.p.edit("draw") as ed:
+            # (placed over the title block at first)
+            ed.add(self.s, M.Polyline([(36.17, -12.64), (91.56, -12.64), (91.56, 21.27),
+                                       (36.17, 21.27)], True))
+        self.assertEqual(F.fit_for(self.p, self.s), ("", 0.25))
+        box = F.drawing_box(self.s)
+        area, tb = F.room(self.p, self.s)
+        self.assertFalse(F.placed_inside(box, 0.25, area, tb))
+        F.apply(self.p, self.s, "", 0.25, center=True)
+        self.assertIsNone(F.outside(self.p, self.s))
+        b = [c * 0.25 for c in F.drawing_box(self.s)]
+        a, t = F.limits(area, tb)
+        # centered in the room above the title block, the margin shared top and bottom
+        self.assertAlmostEqual(b[1] - t[3], a[3] - b[3])
+        self.assertAlmostEqual(b[0] - a[0], a[2] - b[2])
+
+    def test_margin_kept_when_there_is_room(self):
+        with self.p.edit("draw") as ed:
+            ed.add(self.s, M.Polyline([(0, 0), (20, 0), (20, 10), (0, 10)], True))
+        self.assertEqual(F.fit_for(self.p, self.s), ("", 0.5))
+        F.apply(self.p, self.s, "", 0.5, center=True)
+        area, tb = F.room(self.p, self.s)
+        b = [c * 0.5 for c in F.drawing_box(self.s)]
+        # (10" x 5" in the room with the margin, centered there)
+        self.assertTrue(b[0] >= area[0] - 1e-9 and b[2] <= area[2] + 1e-9 and
+                        b[1] >= tb[3] - 1e-9 and b[3] <= area[3] + 1e-9)
+
+    def test_fit_never_says_doesnt_fit(self):
+        import random
+        rnd = random.Random(3)
+        for _i in range(60):
+            p = M.Project.new()
+            s = p.sheets[0]
+            w, h = rnd.uniform(1, 200), rnd.uniform(1, 200)
+            with p.edit("draw") as ed:
+                ed.add(s, M.Polyline([(0, 0), (w, 0), (w, h), (0, h)], True))
+            name, v = F.fit_for(p, s)
+            F.apply(p, s, name, v, center=True)
+            self.assertIsNone(F.outside(p, s), (w, h, v))
+            # and the next bigger preset would not fit
+            bigger = [x for _n, x in F.presets_like("") if x > v + 1e-12]
+            if bigger:
+                area, tb = F.room(p, s)
+                self.assertFalse(F.fits(w, h, min(bigger), area, tb), (w, h, v))
+
+
 class RotateSheetTest(unittest.TestCase):
     def setUp(self):
         self.p = M.Project.new()
@@ -241,15 +299,16 @@ class RotateSheetTest(unittest.TestCase):
     def test_other_way_only_when_it_prints_bigger(self):
         w, h = F.cabinet_box([20, 48, 8])
         rot, (name, v) = F.other_way(self.p, self.s, w, h)
-        # 1:5 instead of 1:8 (turned, the title block stands tall in the lower left corner)
-        self.assertEqual((rot, v), (270, 0.2))
+        # 1:4 instead of 1:5 (turned, the title block stands tall in the lower left corner;
+        # up to the frame and the title block, 0.15.7: with the margin kept, 1:5 instead of 1:8)
+        self.assertEqual((rot, v), (270, 0.25))
         self.assertIsNone(F.other_way(self.p, self.s, *F.cabinet_box([36, 24, 10])))
         with self.p.edit("draw") as ed:
             ed.add(self.s, M.Line((0, 0), (w, h)))
         steps = len(self.p.undo_stack)
         F.apply(self.p, self.s, name, v, center=True, rotation=270)
         self.assertEqual(len(self.p.undo_stack), steps + 1)
-        self.assertEqual((self.s.rotation, self.s.scale), (270, 0.2))
+        self.assertEqual((self.s.rotation, self.s.scale), (270, 0.25))
         self.assertIsNone(F.outside(self.p, self.s))
 
     def test_pdf_page_is_tall(self):
@@ -286,15 +345,15 @@ class RotateSheetTest(unittest.TestCase):
             for b, x in zip(d.cab, (20, 48, 8)):
                 b.setValue(x)
             d.fit()
-            self.assertEqual(d.combo.currentText(), "1:8")
+            self.assertEqual(d.combo.currentText(), "1:5")
             self.assertFalse(d.suggest.isHidden())
-            self.assertIn("1:5 instead of 1:8", d.suggest.text())
+            self.assertIn("1:4 instead of 1:5", d.suggest.text())
             d._turn_suggested()
-            self.assertEqual((d.rotation(), d.combo.currentText()), (270, "1:5"))
+            self.assertEqual((d.rotation(), d.combo.currentText()), (270, "1:4"))
             self.assertTrue(d.suggest.isHidden())
             d.grab()
             d._ok()
-            self.assertEqual((s.rotation, s.scale_text()), (270, "1:5"))
+            self.assertEqual((s.rotation, s.scale_text()), (270, "1:4"))
         finally:
             v.project.saved_at = len(v.project.undo_stack)
             win.close()
