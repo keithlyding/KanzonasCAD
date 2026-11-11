@@ -91,6 +91,25 @@ def follow_drive(path, exists=os.path.exists, splitdrive=os.path.splitdrive):
     return path
 
 
+def path_key(path, pathmod=os.path):
+    """What makes two names of a file the same file: on Windows C:/A/b.kzcad, C:\\A\\b.kzcad
+    and c:\\a\\B.KZCAD are one (a Save window gives forward slashes, Explorer backslashes)."""
+    return pathmod.normcase(pathmod.normpath(pathmod.abspath(path)))
+
+
+def recent_list(recent, path=None, limit=None, pathmod=os.path):
+    """The recent files with `path` (when given) first, each file once (by path_key: the
+    first one wins), written as the system writes them (normpath: backslashes on Windows)."""
+    out, seen = [], set()
+    first = [path] if path else []
+    for p in first + list(recent):
+        k = path_key(p, pathmod)
+        if k not in seen:
+            seen.add(k)
+            out.append(pathmod.normpath(pathmod.abspath(p)))
+    return out[:limit] if limit else out
+
+
 def settings():
     """The program's settings store: settings.ini in the data folder when portable, else
     the system's own (the registry on Windows)."""

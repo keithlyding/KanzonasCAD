@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.8
+
+**Fixed**
+- Open recent no longer lists the same file twice (once with \ and once with / in its
+  name, after a Save as), and opening a project that's already open from there goes to its
+  tab instead of opening it again.
+
 ## 0.15.5
 
 **New**

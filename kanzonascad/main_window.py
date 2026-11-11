@@ -894,10 +894,12 @@ class MainWindow(BlockEditing, QMainWindow):
             self.open_path(path)
 
     def open_path(self, path):
+        from .paths import path_key
         path = os.path.abspath(path)
         for i in range(self.tabs.count()):
             d = self.tabs.widget(i)
-            if isinstance(d, Document) and d.project.path == path:
+            if isinstance(d, Document) and d.project.path and \
+                    path_key(d.project.path) == path_key(path):
                 self.tabs.setCurrentIndex(i)
                 return d
         try:
@@ -973,6 +975,7 @@ class MainWindow(BlockEditing, QMainWindow):
         return self._save_to(d, path)
 
     def _save_to(self, d, path):
+        path = os.path.abspath(path)        # (C:\\a\\b on Windows, as Open gives it)
         try:
             d.project.save(path, backups=self.backups_keep())
         except OSError as ex:
@@ -1079,16 +1082,18 @@ class MainWindow(BlockEditing, QMainWindow):
         return self.settings.value("last_dir", os.path.expanduser("~"))
 
     def _remember(self, path):
+        from .paths import recent_list
         self.settings.setValue("last_dir", os.path.dirname(path))
-        recent = [p for p in self._recent() if p != path]
-        recent.insert(0, path)
-        self.settings.setValue("recent", json.dumps(recent[:MAX_RECENT]))
+        # (each file once, however its name was written: the Save window gives C:/a/b,
+        # Explorer C:\\a\\b; up to 0.15.7 both stayed in the list)
+        self.settings.setValue("recent", json.dumps(recent_list(self._recent(), path,
+                                                                MAX_RECENT)))
 
     def _recent(self):
         try:
             r = json.loads(self.settings.value("recent", "[]"))
-            from .paths import follow_drive
-            return [follow_drive(p) for p in r if isinstance(p, str)]
+            from .paths import follow_drive, recent_list
+            return recent_list([follow_drive(p) for p in r if isinstance(p, str)])
         except (TypeError, ValueError):
             return []
 
