@@ -690,7 +690,8 @@ when it fits but not where it is (tick <b>Move the drawing to the middle of the 
 space</b>), red when it is too big (it names a scale that fits). Pick 1:2, 1:4, 1:5... or an
 architectural one (3" = 1'-0"...), or type one (1:6).</li>
 <li><b>Fit</b> picks the biggest scale at which the drawing fits inside the border and clear
-of the title block. With nothing drawn yet, give the <b>Cabinet size</b> (width, height and,
+of the title block (the same test as the status bar's <b>doesn't fit</b>), and when it has to
+move the drawing, centers it with a little space kept around it if there is room for that. With nothing drawn yet, give the <b>Cabinet size</b> (width, height and,
 optionally, depth, in inches): Fit then makes room for the cabinet's front and, with a depth,
 its side beside it, so you can draw the outside of the cabinet as well as the backplate. The
 size is kept with the sheet, and the next panel sheet offers the one you used last.</li>
@@ -701,7 +702,7 @@ as if you turned the paper; the drawing stays upright and stays on the page (one
 step). Grid references follow the turned zones. Sheet properties and the Sheet scale window
 set it too (<b>Rotation</b>: upright, turned clockwise, upside down, turned counterclockwise).
 When a quarter turn would print the drawing (or the cabinet) bigger, the Sheet scale window
-says so ("Turned tall it prints bigger: 1:5 instead of 1:8") with a <b>Turn it</b> button; Fit
+says so ("Turned tall it prints bigger: 1:4 instead of 1:5") with a <b>Turn it</b> button; Fit
 never turns a sheet by itself. PDF pages print the sheet as turned.</li>
 <li>Click <b>Scale 1:4</b> in the status bar for a short list: <b>Fit</b> (with the scale it
 would pick), the common scales, and <b>More...</b> (the Sheet scale window). A sheet's scale
@@ -857,7 +858,9 @@ the modify commands.</li>
 <li>Mouse wheel zooms at the cursor; hold the <b>middle button</b> to pan; double-click the
 middle button for <b>Zoom extents</b>.</li>
 <li><b>Zoom extents</b> (Ctrl+Shift+E), <b>Zoom to sheet</b> (Ctrl+0), <b>Zoom in</b> (Ctrl+=),
-<b>Zoom out</b> (Ctrl+-).</li>
+<b>Zoom out</b> (Ctrl+-). Zooming out goes until the whole sheet and everything drawn take
+about a quarter of the window, on a sheet with a scale too (at 1:24 the sheet is 24 times its
+paper size).</li>
 <li><b>Black drawing background</b> (on to start, as in AutoCAD): the sheet is drawn black with
 white lines. Turn it off for a white sheet. <b>Export to PDF...</b> always prints black on
 white either way.</li>

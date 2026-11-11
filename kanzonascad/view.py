@@ -395,9 +395,33 @@ class CadView(QWidget):
         if self._fit is not None:
             self.zoom(self._fit)
 
+    ZOOM_OUT_ROOM = 4.0     # how far past the whole sheet and drawing zooming out may go
+
+    def zoom_limits(self):
+        """(least, most) pixels per inch the wheel and Zoom in/out may reach: out until the
+        sheet and everything drawn take a quarter of the view (a scaled sheet is 1/scale
+        times its paper size: an ANSI B sheet at 1:24 is 408" x 264"; up to 0.15.6 the least
+        was 2 pixels an inch, too close to show it), in to 50,000."""
+        from . import scalefit
+        s = self.sheet()
+        w, h = s.paper()
+        bb = (0.0, 0.0, w, h)
+        box = scalefit.drawing_box(s)           # (kept per sheet version)
+        if box is not None:
+            bb = (min(bb[0], box[0]), min(bb[1], box[1]), max(bb[2], box[2]),
+                  max(bb[3], box[3]))
+        bw, bh = max(bb[2] - bb[0], 1e-3), max(bb[3] - bb[1], 1e-3)
+        vw, vh = max(self.width(), 100), max(self.height(), 100)
+        fit = min(vw / bw, vh / bh)
+        return min(2.0, fit / self.ZOOM_OUT_ROOM), 50000.0
+
     def zoom_at(self, factor, pos):
         self._fit = None                # (the user's zoom: a resize keeps it)
-        new = min(max(self.scale * factor, 2.0), 50000.0)
+        lo, hi = self.zoom_limits()
+        new = min(max(self.scale * factor, lo), hi)
+        # (never the other way: zoomed out past the limit by Zoom extents, a step out stays)
+        if (factor < 1 and new > self.scale) or (factor > 1 and new < self.scale):
+            new = self.scale
         if pos is None:
             self.scale = new
         else:
