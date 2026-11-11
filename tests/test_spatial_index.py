@@ -63,6 +63,25 @@ class SpatialIndexTest(unittest.TestCase):
             p.saved_at = len(p.undo_stack)
             win.close()
 
+    def test_junction_dots_kept_on_long_far_wires(self):
+        # (found by the battery: the dots kept edit by edit look for the wires near a changed
+        # one through the index; a wire whose box was over 32" each way missed them, and dots
+        # stayed where wires had left)
+        from tests.battery import check_groups
+        from kanzonascad import wires
+        proj = M.Project.new()
+        s = proj.sheets[0]
+        with proj.edit("wires") as ed:
+            # (an L 100" each way: its box was over the 4,096 buckets that were cut)
+            a = ed.add(s, M.Wire([(1200.0, 1600.0), (1200.0, 1500.0), (1300.0, 1500.0)]))
+            ed.add(s, M.Wire([(1250.0, 1500.0), (1250.0, 1400.0)]))
+        before = set(map(tuple, wires.junctions(s)))
+        self.assertIn((1250.0, 1500.0), before)
+        with proj.edit("move") as ed:
+            ed.change(s, a.moved(0, 20))
+        check_groups(s)
+        self.assertNotIn((1250.0, 1500.0), set(map(tuple, wires.junctions(s))))
+
 
 if __name__ == "__main__":
     unittest.main()

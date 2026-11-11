@@ -14,6 +14,7 @@ build fails without them.
   inches, so it sometimes selected everything and sometimes only some things. Objects bigger
   than 32 inches (an imported frame, a large outline) can now be picked and snapped to
   anywhere along them, not only near one corner.
+- Junction dots no longer stay behind after moving a long wire on a big drawing.
 
 ## 0.15.3
 
