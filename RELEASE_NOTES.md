@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.5
+
+**New**
+- Object snaps now reach the sheet's border and title block: snap to their corners, line ends,
+  middles and intersections to line a drawing up with them. They still can't be selected on a
+  sheet (use Edit title block to change the title block).
+
 ## 0.15.4
 
 **New**

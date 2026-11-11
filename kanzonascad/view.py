@@ -442,13 +442,41 @@ class CadView(QWidget):
             return set() if self.osnap_once == "none" else {self.osnap_once}
         return set(self.osnap_modes) if self.osnap_on else set()
 
+    def _frame_index(self):
+        """(entities by id, SpatialIndex) of the sheet's border, zone strips and filled-in
+        title block, so snaps reach them as they reach the drawing (they are drawn apart from
+        it and are not the sheet's entities: never picked or selected). Kept until the frame
+        changes; ids are negative so they never meet a sheet entity's."""
+        from .sheetframe import frame_entities
+        p, s = self.project, self.sheet()
+        key = (id(s), s.size, s.rotation, s.scale, s.scale_name, s.reserve, s.cols, s.rows,
+               s.col_start, s.row_start, s.title, p.sheet_number(s), len(p.sheets),
+               tuple(sorted(p.fields.items())), p.title_block.version,
+               s is p.title_block)
+        got = getattr(self, "_frame_snap", None)
+        if got is not None and got[0] == key:
+            return got[1], got[2]
+        ents, index = {}, M.SpatialIndex()
+        for i, e in enumerate(frame_entities(p, s), 1):
+            e.id = -i
+            ents[e.id] = e
+            index.add(e)
+        self._frame_snap = (key, ents, index)
+        return ents, index
+
+    def snap_query(self, rect):
+        """What snapping looks at in rect: the sheet's entities, then its frame's."""
+        out = self.sheet().query(rect)
+        ents, index = self._frame_index()
+        return out + [ents[i] for i in index.query(rect)]
+
     def object_snap(self, p, modes=None):
         """(kind, point) of the best snap within the aperture, or None."""
         modes = self.snap_modes() if modes is None else modes
         if not modes:
             return None
         rect, r = self._near(p, APERTURE)
-        cands = [e for e in self.sheet().query(rect) if self.layer_visible(e.layer)]
+        cands = [e for e in self.snap_query(rect) if self.layer_visible(e.layer)]
         best = None
 
         def offer(kind, q, frm=None, inner=0):
@@ -528,14 +556,14 @@ class CadView(QWidget):
         if "ext" in modes and self.snap is not None and self.snap[0] in ("end", "int"):
             q = self.snap[1]
             tol = 1e-6
-            for e in self.sheet().query((q[0] - tol, q[1] - tol, q[0] + tol, q[1] + tol)):
+            for e in self.snap_query((q[0] - tol, q[1] - tol, q[0] + tol, q[1] + tol)):
                 for end, u in OS.ends_at(e, q, 1e-6):
                     if not any(G.dist(end, t[0]) < 1e-9 and abs(u[0] - t[1][0]) < 1e-9 and
                                abs(u[1] - t[1][1]) < 1e-9 for t in self.tracked):
                         self.tracked = (self.tracked + [(end, u)])[-6:]
         if ("par" in modes or "app" in modes) and self.cursor is not None:
             rect, r = self._near(self.cursor, APERTURE)
-            for e in self.sheet().query(rect):
+            for e in self.snap_query(rect):
                 for a, b in OS.segments(e):
                     if G.dist_to_segment(self.cursor, a, b) > r:
                         continue

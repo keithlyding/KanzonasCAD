@@ -646,6 +646,10 @@ over two lines, then near where they would meet if they were longer).</li>
 <li><b>Blocks snap too</b>: the ends, middles, centers and quadrants of a placed symbol's or
 footprint's own drawing (a footprint's corners, for a dimension), as in AutoCAD. A pin, or an
 ordinary object's point of the same kind, comes first, so a wire still lands on a pin.</li>
+<li><b>The border and title block snap too</b>: the border's corners, the zone strips' lines
+and the title block's lines and texts (ends, middles, intersections, nearest...), so a
+drawing lines up with them. They still can't be selected or changed on a sheet (Edit title
+block to change the title block), and hiding a layer of the title block stops its snaps.</li>
 <li><b>Turning snaps on and off</b>: the arrow on the status bar's <b>OSNAP</b> button lists
 every snap with a check mark; click one to turn it on or off. The list stays open, so you
 can tick several in a row (Select all and Clear all too); click outside it or press Esc when
