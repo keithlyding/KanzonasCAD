@@ -168,9 +168,14 @@ def best_scale(w, h, area, tb, named=False):
     return best_scale_by(lambda _v: (w, h), area, tb, named)
 
 
-def best_scale_by(size, area, tb, named=False):
+MOST_N = 100000     # past 1:100000, a drawing that fits at no scale (a note wider than the sheet)
+
+
+def best_scale_by(size, area, tb, named=False, fallback=None):
     """best_scale for a drawing whose size (w, h) at a scale v is size(v) (text that keeps its
-    size on paper makes it bigger at a smaller scale)."""
+    size on paper makes it bigger at a smaller scale). When it fits at no scale up to
+    1:MOST_N (text alone bigger than the room: on paper it never shrinks), the scale at which
+    a drawing fallback (w, h) fits (the status bar then says what doesn't)."""
     def ok(v):
         w, h = size(v)
         return fits(w, h, v, area, tb)
@@ -184,8 +189,13 @@ def best_scale_by(size, area, tb, named=False):
     hi = lo + 1
     while not ok(1.0 / hi):
         lo, hi = hi, hi * 2
-        if hi > 10 ** 7:
-            return "", 1.0 / hi
+        if hi > MOST_N:
+            if ok(1.0 / MOST_N):
+                lo, hi = lo, MOST_N
+                break
+            if fallback is not None:
+                return best_scale(fallback[0], fallback[1], area, tb, named)
+            return "", 1.0 / MOST_N
     while hi - lo > 1:
         mid = (lo + hi) // 2
         if ok(1.0 / mid):
@@ -283,7 +293,9 @@ def fit_for(project, sheet, room_=None, named=None, paper_text=True):
     def size(v):
         b = box_at(sheet, v, paper_text)
         return b[2] - b[0], b[3] - b[1]
-    return best_scale_by(size, area, tb, named=named)
+    box = drawing_box(sheet)
+    return best_scale_by(size, area, tb, named=named,
+                         fallback=(box[2] - box[0], box[3] - box[1]))
 
 
 def turned_offset(project, sheet, rotation, scale=None):
