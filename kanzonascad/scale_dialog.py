@@ -212,6 +212,7 @@ class SheetScaleDialog(QDialog):
         self.resize(840, 540)
         self._center_touched = False
         self.center.toggled.connect(self._center_clicked)
+        self.paper_text.toggled.connect(self._changed)   # (text grows at a smaller scale)
         self.combo.currentIndexChanged.connect(self._changed)
         self.combo.editTextChanged.connect(self._changed)
         self.orient.currentIndexChanged.connect(self._turned)
@@ -264,10 +265,25 @@ class SheetScaleDialog(QDialog):
             return cb[0], cb[1], "cabinet"
         return None
 
+    def box_at(self, s):
+        """The drawing's box as it will be at scale s (text that keeps its size on paper
+        grows at a smaller scale), or None."""
+        if self.box is None:
+            return None
+        return F.box_at(self.sheet, s, self.paper_text.isChecked())
+
+    def size_at(self, s):
+        """(w, h) to fit at scale s: the drawing as it will be, else the cabinet, else None."""
+        b = self.box_at(s)
+        if b is not None:
+            return b[2] - b[0], b[3] - b[1]
+        got = self.size_and_kind()
+        return (got[0], got[1]) if got else None
+
     def shown_boxes(self, s):
         """[(real box, label, dashed)] the preview draws at scale s."""
         if self.box is not None:
-            b = self.box
+            b = self.box_at(s)
             if self.center.isChecked():
                 off = F.centering(b, s, self.area, self.tb)
                 if off:
@@ -289,11 +305,11 @@ class SheetScaleDialog(QDialog):
         got = self.size_and_kind()
         if got is None:
             return "good"
-        w, h, _what = got
+        w, h = self.size_at(s)
         if not F.fits(w, h, s, self.area, self.tb):
             return "bad"
         if self.box is not None and not self.center.isChecked() and \
-                not F.placed_inside(self.box, s, self.area, self.tb):
+                not F.placed_inside(self.box_at(s), s, self.area, self.tb):
             return "warn"
         return "good"
 
@@ -330,6 +346,7 @@ class SheetScaleDialog(QDialog):
             self.usage.setStyleSheet("")
         else:
             w, h, kind = what
+            w, h = self.size_at(s)
             u = F.use(w, h, s, self.area, self.tb)
             cab = self.cabinet()
             if kind == "drawing":
@@ -341,7 +358,7 @@ class SheetScaleDialog(QDialog):
                 label = "The cabinet's front (%s x %s in)" % (_num(cab[0]), _num(cab[1]))
             st = self.state(s)
             if st == "bad":
-                better = F.best_scale(w, h, self.area, self.tb, named=bool(name))
+                better = self.best(named=bool(name))
                 tmp = M.Sheet()
                 tmp.scale, tmp.scale_name = better[1], better[0]
                 text = ("%s is too big at this scale: it needs %d%% of the room. Try %s, or "
@@ -378,14 +395,21 @@ class SheetScaleDialog(QDialog):
                 way, _scale_text(name, v), _scale_text(*here)))
             self.turn_btn.setText("Turn it")
 
+    def best(self, named):
+        """(name, scale) Fit picks here: for the drawing as it will be at each scale tried, or
+        the cabinet."""
+        if self.box is not None:
+            return F.fit_for(self.project, self.sheet, room_=(self.area, self.tb), named=named,
+                             paper_text=self.paper_text.isChecked())
+        w, h, _kind = self.size_and_kind()
+        return F.best_scale(w, h, self.area, self.tb, named=named)
+
     def fit(self):
         got = self.size_and_kind()
         if got is None:
             return
-        w, h, _kind = got
         cur = self.picked()
-        name, s = F.best_scale(w, h, self.area, self.tb,
-                               named=bool(cur[0]) if cur else bool(self.sheet.scale_name))
+        name, s = self.best(bool(cur[0]) if cur else bool(self.sheet.scale_name))
         i = next((j for j in range(self.combo.count()) if self.combo.itemData(j) == (name, s)),
                  -1)
         if i >= 0:
@@ -394,7 +418,7 @@ class SheetScaleDialog(QDialog):
             tmp = M.Sheet()
             tmp.scale, tmp.scale_name = s, name
             self.combo.setEditText(tmp.scale_text())
-        if self.box is not None and not F.placed_inside(self.box, s, self.area, self.tb):
+        if self.box is not None and not F.placed_inside(self.box_at(s), s, self.area, self.tb):
             self.center.setChecked(True)
 
     def _ok(self):

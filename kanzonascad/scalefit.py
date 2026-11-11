@@ -9,6 +9,7 @@ L * s long.
 import math
 
 from . import model as M
+from . import geometry as G
 
 GAP = 6.0           # real inches between a cabinet's front and its side, when Fit leaves room
 MARGIN = 0.25       # paper inches kept clear inside the zone frame and around the title block
@@ -123,6 +124,33 @@ def drawing_box(sheet):
     return got[1]
 
 
+def box_at(sheet, scale, paper_text=True):
+    """The box (real inches) of what is drawn as it will be at `scale` (None when nothing is):
+    text, dimensions, leaders and tags keep their size on paper, so they grow in real inches
+    at a smaller scale (Edit.sheet_scale; paper_text False: they don't). Up to 0.15.7 Fit
+    measured the drawing at the scale it had: going from 1:20 to 1:1683 made a note at its
+    edge 84 times taller, and the drawing ran past the border after Fit."""
+    box = drawing_box(sheet)
+    if box is None or not paper_text:
+        return box
+    f = (1.0 / scale) / sheet.k() if scale > 0 else 1.0
+    if abs(f - 1.0) < 1e-12:
+        return box
+    got = getattr(sheet, "_fit_parts", None)
+    if got is None or got[0] != sheet.version:
+        rigid, paper = None, []
+        for e in sheet.entities.values():
+            if M.paper_sized(e):
+                paper.append(e)
+            else:
+                rigid = G.bbox_union(rigid, e.bbox())
+        got = sheet._fit_parts = (sheet.version, rigid, paper)
+    bb = got[1]
+    for e in got[2]:
+        bb = G.bbox_union(bb, M.paper_scaled(e, f).bbox())
+    return bb
+
+
 def presets_like(sheet_name):
     """The scale presets to choose among: architectural ones (3" = 1'-0"...) for a sheet whose
     scale has such a name, 1:N ones otherwise; biggest print first."""
@@ -137,13 +165,34 @@ def presets_like(sheet_name):
 def best_scale(w, h, area, tb, named=False):
     """(name, scale): the biggest preset (architectural ones when `named`) at which a drawing
     w x h (real inches) fits; past the presets, the next whole 1:N that does."""
+    return best_scale_by(lambda _v: (w, h), area, tb, named)
+
+
+def best_scale_by(size, area, tb, named=False):
+    """best_scale for a drawing whose size (w, h) at a scale v is size(v) (text that keeps its
+    size on paper makes it bigger at a smaller scale)."""
+    def ok(v):
+        w, h = size(v)
+        return fits(w, h, v, area, tb)
     for name, v in presets_like("x" if named else ""):
-        if fits(w, h, v, area, tb):
+        if ok(v):
             return name, v
-    n = max(1, int(math.ceil(use(w, h, 1.0, area, tb) - 1e-9)))
-    while not fits(w, h, 1.0 / n, area, tb) and n < 100000:
-        n += 1
-    return "", 1.0 / n
+    # past the presets, 1:N: on paper the drawing only shrinks as N grows, so the first N that
+    # fits is found by doubling, then halving the gap
+    w, h = size(1.0)
+    lo = max(1, int(math.ceil(use(w, h, 1.0, area, tb) - 1e-9)) - 1)
+    hi = lo + 1
+    while not ok(1.0 / hi):
+        lo, hi = hi, hi * 2
+        if hi > 10 ** 7:
+            return "", 1.0 / hi
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if ok(1.0 / mid):
+            hi = mid
+        else:
+            lo = mid
+    return "", 1.0 / hi
 
 
 def in_words(scale, name=""):
@@ -219,19 +268,22 @@ def placed_inside(box, scale, area, tb):
                b[3] <= f[3] + 1e-6 for f in free_boxes(*limits(area, tb)))
 
 
-def fit_for(project, sheet):
-    """(name, scale) Fit picks for a sheet: from what is drawn, or, with nothing drawn, from
-    its cabinet size (front and side). None when there is neither."""
-    box = drawing_box(sheet)
-    if box is not None:
-        w, h = box[2] - box[0], box[3] - box[1]
-    else:
+def fit_for(project, sheet, room_=None, named=None, paper_text=True):
+    """(name, scale) Fit picks for a sheet: from what is drawn (as it will be at each scale
+    tried: box_at), or, with nothing drawn, from its cabinet size (front and side). None when
+    there is neither. room_: (area, tb) to fit in (the Sheet scale window's, turned)."""
+    area, tb = room(project, sheet) if room_ is None else room_
+    named = bool(sheet.scale_name) if named is None else named
+    if drawing_box(sheet) is None:
         cb = cabinet_box(sheet.cabinet)
         if cb is None:
             return None
-        w, h = cb
-    area, tb = room(project, sheet)
-    return best_scale(w, h, area, tb, named=bool(sheet.scale_name))
+        return best_scale(cb[0], cb[1], area, tb, named=named)
+
+    def size(v):
+        b = box_at(sheet, v, paper_text)
+        return b[2] - b[0], b[3] - b[1]
+    return best_scale_by(size, area, tb, named=named)
 
 
 def turned_offset(project, sheet, rotation, scale=None):
@@ -239,10 +291,10 @@ def turned_offset(project, sheet, rotation, scale=None):
     `rotation` (at `scale`, the sheet's own when None): the same distance from the paper's
     middle, or, when that leaves it outside, the middle of the room it fits best. None when
     nothing is drawn or nothing need move."""
-    box = drawing_box(sheet)
+    scale = sheet.scale if scale is None else scale
+    box = box_at(sheet, scale)
     if box is None:
         return None
-    scale = sheet.scale if scale is None else scale
     tmp = as_rotated(sheet, rotation)
     tmp_scaled = M.Sheet(size=tmp.size)
     tmp_scaled.rotation, tmp_scaled.scale, tmp_scaled.reserve = rotation, scale, tmp.reserve
@@ -268,7 +320,7 @@ def apply(project, sheet, name, scale, cabinet=False, center=False, rotation=Non
     turn = rotation != sheet.rotation
     moved = None
     if center:
-        box = drawing_box(sheet)
+        box = box_at(sheet, scale, paper_text)          # (as it will be at that scale)
         if box is not None:
             area, tb = room(project, as_rotated(sheet, rotation))
             moved = centering(box, scale, area, tb)

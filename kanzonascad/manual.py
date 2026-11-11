@@ -691,7 +691,9 @@ space</b>), red when it is too big (it names a scale that fits). Pick 1:2, 1:4, 
 architectural one (3" = 1'-0"...), or type one (1:6).</li>
 <li><b>Fit</b> picks the biggest scale at which the drawing fits inside the border and clear
 of the title block (the same test as the status bar's <b>doesn't fit</b>), and when it has to
-move the drawing, centers it with a little space kept around it if there is room for that. With nothing drawn yet, give the <b>Cabinet size</b> (width, height and,
+move the drawing, centers it with a little space kept around it if there is room for that.
+It measures the drawing as it will be at each scale it tries: text, dimensions and tags keep
+their size on paper, so they take more of the drawing at a smaller scale. With nothing drawn yet, give the <b>Cabinet size</b> (width, height and,
 optionally, depth, in inches): Fit then makes room for the cabinet's front and, with a depth,
 its side beside it, so you can draw the outside of the cabinet as well as the backplate. The
 size is kept with the sheet, and the next panel sheet offers the one you used last.</li>
