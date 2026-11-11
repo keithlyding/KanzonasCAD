@@ -13,6 +13,30 @@ build fails without them.
   (1:5) when the drawing fits at a bigger one (1:4) inside the border and clear of the title
   block. Fit and the status bar's "doesn't fit" now agree.
 
+## 0.15.6
+
+**Fixed**
+- A selection window or lasso around a big drawing (an imported DWG or DXF, a panel at real
+  size) now selects everything in it. It used to catch only what was in its lower left 32
+  inches, so it sometimes selected everything and sometimes only some things. Objects bigger
+  than 32 inches (an imported frame, a large outline) can now be picked and snapped to
+  anywhere along them, not only near one corner.
+- Junction dots no longer stay behind after moving a long wire on a big drawing.
+
+## 0.15.5
+
+**New**
+- Object snaps now reach the sheet's border and title block: snap to their corners, line ends,
+  middles and intersections to line a drawing up with them. They still can't be selected on a
+  sheet (use Edit title block to change the title block).
+
+## 0.15.4
+
+**New**
+- Update now shows a progress bar while it downloads (how many MB of how many, and the
+  percent), with a Cancel button to stop it. You'll see it from the next update after this
+  one: the version you update from does the downloading.
+
 ## 0.15.3
 
 **New**
@@ -55,6 +79,7 @@ build fails without them.
   and I/O module, control transformers, and 22 mm door devices. Each one's description gives
   its size; for a part you buy, use its maker's drawing (Make block, or Edit block one of these
   and save it under your own name).
+
 ## 0.15
 
 **New**
