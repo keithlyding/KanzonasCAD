@@ -1067,7 +1067,9 @@ run KanzonasCAD/KanzonasCAD (it doesn't update itself).</li>
 <p>KanzonasCAD asks GitHub for new versions by itself, at most once a day (also while it stays
 open), quietly: nothing shows unless there is one. Then a box tells you what changed in every
 version since yours, with three buttons: <b>Update now</b>, <b>Skip this version</b> (you're
-not told about it again; a newer one still shows) and <b>Later</b>.</p>
+not told about it again; a newer one still shows) and <b>Later</b>. While Update now
+downloads, its window shows a progress bar with how much has come (48.3 of 75.2 MB, 64%), and
+<b>Cancel</b> stops the download; once it's done (or failed) the button is <b>Close</b>.</p>
 <ul>
 <li>Run from source (the README's way): Update now gets the new version (git pull) and what it
 needs, shows what it did, and offers to start the new version.</li>

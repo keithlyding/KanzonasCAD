@@ -13,6 +13,13 @@ build fails without them.
   middles and intersections to line a drawing up with them. They still can't be selected on a
   sheet (use Edit title block to change the title block).
 
+## 0.15.4
+
+**New**
+- Update now shows a progress bar while it downloads (how many MB of how many, and the
+  percent), with a Cancel button to stop it. You'll see it from the next update after this
+  one: the version you update from does the downloading.
+
 ## 0.15.3
 
 **New**
