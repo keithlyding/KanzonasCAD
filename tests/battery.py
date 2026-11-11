@@ -1,6 +1,7 @@
 """An exhaustive battery of tests, run by hand before a release (too long for every build):
 
     QT_QPA_PLATFORM=offscreen python tests/battery.py [OUT_FOLDER] [--ops N] [--seed S]
+        [--drawing YOUR.dwg]
 
 1. Random editing: thousands of commands (drawing, wiring, symbols, editing, wire tools,
    panel objects) with undo and redo mixed in, checking after every step that the model holds
@@ -14,6 +15,20 @@
 4. Speed on big sheets, beyond the self-test's budget: the wire tools, cleanup, Delete
    component, crossings and wire numbers at scale.
 5. Pictures: PDF pages of the mixed project rendered to PNG for a person to look at.
+6. A drawing as AutoCAD Electrical writes it (made here; or yours, --drawing PATH): opened,
+   placed, Fit, hidden attributes, every snap and selection checked, saved, DXF out and in.
+7. Windows paths: the recent files list under Windows' path rules.
+8. Speed on an imported drawing: hover, snaps, a lasso and a window within the mouse budget.
+
+Random editing also draws on sheets of every size, turn and scale, on several sheets, far from
+the origin and big; drives the mouse (windows, crossings, lassos, drags, panning, the wheel);
+and checks what each of those must do against every object (not the index): what a window or
+lasso selects, where a snap lands, that Fit fits and the next scale doesn't, that zooming out
+shows the whole sheet (tests/battery_checks.py).
+
+How much runs (the owner, Nov 2026): every build runs it short (the Linux job: 1,000 steps);
+a release that bumps the middle number (0.16, 0.17...) runs it long (3,000 steps, three seeds)
+before it is published.
 
 Writes OUT_FOLDER/battery.log (and the pictures) and exits 1 if anything failed.
 """
@@ -37,7 +52,9 @@ from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QFileDialog  #
 
 from kanzonascad import commands as C  # noqa: E402
 from kanzonascad import model as M  # noqa: E402
+from kanzonascad import geometry as G  # noqa: E402
 from kanzonascad import wires, crossings, wirenums, fileio, templates  # noqa: E402
+from tests import battery_checks as BC  # noqa: E402
 
 
 class Log:
@@ -180,13 +197,231 @@ def first_difference(a, b, path="project"):
     return "%s: %r != %r" % (path, a, b)
 
 
+# ---- the mouse, as a person uses it -------------------------------------------------------------
+def _qt():
+    from PySide6.QtCore import Qt, QPoint, QPointF
+    from PySide6.QtTest import QTest
+    return Qt, QPoint, QPointF, QTest
+
+
+def _empty_spot(v, rnd, tries=40):
+    """A pixel where a press starts a window (no object, no grip under it), or None."""
+    Qt, QPoint, QPointF, QTest = _qt()
+    for _i in range(tries):
+        q = QPoint(rnd.randint(5, v.width() - 5), rnd.randint(5, v.height() - 5))
+        if v.pick_entity(v.to_world(QPointF(q))) is None and v.grip_at(QPointF(q)) is None:
+            return q
+    return None
+
+
+def _send(v, kind, pos, button, buttons):
+    """A mouse event as the system sends one (with the buttons held: QTest's moves don't
+    always say)."""
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QMouseEvent
+    kinds = {"press": QEvent.MouseButtonPress, "move": QEvent.MouseMove,
+             "release": QEvent.MouseButtonRelease}
+    pos = QPointF(pos)
+    APP.sendEvent(v, QMouseEvent(kinds[kind], pos, v.mapToGlobal(pos), button, buttons,
+                                 _qt()[0].NoModifier))
+
+
+def _press(v, q, button=None):
+    Qt = _qt()[0]
+    button = Qt.LeftButton if button is None else button
+    _send(v, "move", q, Qt.NoButton, Qt.NoButton)
+    _send(v, "press", q, button, button)
+
+
+def _move(v, q, held=None):
+    Qt = _qt()[0]
+    _send(v, "move", q, Qt.NoButton, Qt.NoButton if held is None else held)
+    APP.processEvents()
+
+
+def _release(v, q, button=None):
+    Qt = _qt()[0]
+    button = Qt.LeftButton if button is None else button
+    _send(v, "release", q, button, Qt.NoButton)
+    APP.processEvents()
+
+
+def _drag_path(v, a, b, steps=24, button=None):
+    Qt, QPoint, QPointF, QTest = _qt()
+    button = Qt.LeftButton if button is None else button
+    _press(v, a, button)
+    for i in range(1, steps + 1):
+        _move(v, QPoint(round(a.x() + (b.x() - a.x()) * i / steps),
+                        round(a.y() + (b.y() - a.y()) * i / steps)), button)
+    _release(v, b, button)
+
+
+def mouse_window(v, rnd, click_click=False):
+    """A window or crossing dragged (or clicked corner to corner) with the mouse selects what
+    every object, checked one by one, says it must."""
+    Qt, QPoint, QPointF, QTest = _qt()
+    if v.cmd is not None:
+        v.cancel()
+    v.set_selection(set())
+    APP.processEvents()
+    a = _empty_spot(v, rnd)
+    if a is None:
+        return
+    b = QPoint(rnd.randint(5, v.width() - 5), rnd.randint(5, v.height() - 5))
+    if abs(b.x() - a.x()) < 8:
+        return
+    wa, wb = v.to_world(QPointF(a)), v.to_world(QPointF(b))
+    want = BC.expected_window(v, wa, wb)
+    if click_click:
+        _press(v, a)
+        _release(v, a)
+        _move(v, b)
+        assert v._window is not None, "a click on an empty spot didn't start a window"
+        _press(v, b)
+        _release(v, b)
+    else:
+        _drag_path(v, a, b)
+    got = v.selection()
+    assert got == want, "%s %s selected %d, not %d (extra %s, missing %s)" % (
+        "click-click" if click_click else "dragged",
+        "crossing" if wb[0] < wa[0] else "window", len(got), len(want),
+        sorted(got - want)[:5], sorted(want - got)[:5])
+    BC.CHECKED["click-click window" if click_click else "dragged window"] += 1
+    v.set_selection(set())
+
+
+def mouse_lasso(v, rnd):
+    """A lasso dragged round a loop selects what every object says it must (window lasso
+    dragged to the right first, crossing lasso to the left)."""
+    Qt, QPoint, QPointF, QTest = _qt()
+    if v.cmd is not None:
+        v.cancel()
+    v.set_selection(set())
+    a = _empty_spot(v, rnd)
+    if a is None:
+        return
+    cx = rnd.randint(v.width() // 4, 3 * v.width() // 4)
+    cy = rnd.randint(v.height() // 4, 3 * v.height() // 4)
+    rx, ry = rnd.randint(60, v.width() // 3), rnd.randint(60, v.height() // 3)
+    way = rnd.choice([1, -1])
+    path = [a]
+    for i in range(1, 25):
+        t = way * 2 * math.pi * i / 24
+        path.append(QPoint(int(cx + rx * math.cos(t)), int(cy + ry * math.sin(t))))
+    _press(v, a)
+    for q in path[1:]:
+        _move(v, q, Qt.LeftButton)
+    w = v._window
+    if w is None:
+        return
+    lasso, crossing, bent = list(w["lasso"] or []), w["crossing"], w.get("bent")
+    end = path[-1]
+    we = v.to_world(QPointF(end))
+    if lasso and len(lasso) >= 3 and bent:
+        want = BC.expected_lasso(v, lasso + [we], crossing)
+    else:
+        want = BC.expected_window(v, v.to_world(QPointF(a)), we)
+    _release(v, end)
+    got = v.selection()
+    assert got == want, "lasso (%s) selected %d, not %d (extra %s, missing %s)" % (
+        "crossing" if crossing else "window", len(got), len(want), sorted(got - want)[:5],
+        sorted(want - got)[:5])
+    BC.CHECKED["lasso" if lasso and bent else "lasso as window"] += 1
+    v.set_selection(set())
+
+
+def mouse_drag(v, rnd):
+    """Selected objects dragged by one of them move exactly as far as the mouse did."""
+    Qt, QPoint, QPointF, QTest = _qt()
+    if v.cmd is not None:
+        v.cancel()
+    s = v.sheet()
+    ents = [e for e in s.entities.values() if BC.selectable(v, e)
+            and not isinstance(e, (M.WireCross,))]
+    if not ents:
+        return
+    sel = rnd.sample(ents, min(len(ents), rnd.randint(1, 4)))
+    v.set_selection({e.id for e in sel})
+    APP.processEvents()
+    start = None
+    for e in sel:
+        for line in e.outline()[:3]:
+            for p0, p1 in zip(line, line[1:]):
+                q = (p0[0] + (p1[0] - p0[0]) / 3, p0[1] + (p1[1] - p0[1]) / 3)
+                px = v.to_screen(q)
+                if not (5 < px.x() < v.width() - 5 and 5 < px.y() < v.height() - 5):
+                    continue
+                pp = QPoint(round(px.x()), round(px.y()))
+                hit = v.pick_entity(v.to_world(QPointF(pp)))
+                if hit is not None and hit.id in v.sel and v.grip_at(QPointF(pp)) is None:
+                    start = pp
+                    break
+            if start:
+                break
+        if start:
+            break
+    if start is None:
+        v.set_selection(set())
+        return
+    end = QPoint(min(max(5, start.x() + rnd.randint(-120, 120)), v.width() - 5),
+                 min(max(5, start.y() + rnd.randint(-120, 120)), v.height() - 5))
+    if abs(end.x() - start.x()) + abs(end.y() - start.y()) < 12:
+        v.set_selection(set())
+        return
+    before = {i: s.entities[i].bbox() for i in v.sel}
+    w0, w1 = v.to_world(QPointF(start)), v.to_world(QPointF(end))
+    d = (w1[0] - w0[0], w1[1] - w0[1])
+    _drag_path(v, start, end, steps=10)
+    tol = 1e-6 * max(1.0, max(abs(c) for b in before.values() for c in b))
+    for i, b in before.items():
+        e = s.entities.get(i)
+        assert e is not None, "a dragged object is gone"
+        nb = e.bbox()
+        assert all(abs(nb[k] - b[k] - d[k % 2]) <= tol + 1e-9 for k in range(4)), \
+            "dragged %s by %s, it moved %s" % (e.kind, d, (nb[0] - b[0], nb[1] - b[1]))
+    BC.CHECKED["drag"] += 1
+    v.set_selection(set())
+
+
+def mouse_pan(v, rnd):
+    """Dragging with the middle button keeps the point grabbed under the mouse."""
+    Qt, QPoint, QPointF, QTest = _qt()
+    a = QPoint(rnd.randint(5, v.width() - 5), rnd.randint(5, v.height() - 5))
+    b = QPoint(rnd.randint(5, v.width() - 5), rnd.randint(5, v.height() - 5))
+    grabbed = v.to_world(QPointF(a))
+    _drag_path(v, a, b, steps=8, button=Qt.MiddleButton)
+    now = v.to_world(QPointF(b))
+    tol = 1e-6 * max(1.0, abs(grabbed[0]) + abs(grabbed[1]))
+    assert G.dist(grabbed, now) <= tol + 2.0 / v.scale, \
+        "panning lost the point grabbed: %s now under %s" % (grabbed, now)
+    BC.CHECKED["pan"] += 1
+
+
 # ---- 1. random editing -------------------------------------------------------------------------
-def random_editing(log, out, ops, seed):
+def random_editing(log, out, ops, seed, drawing=None):
+    """drawing: a DXF, DWG or project to start from (the owner's own drawings, on their
+    computer: they never go in the repository) instead of an empty project."""
     rnd = random.Random(seed)
+    crnd = random.Random(seed * 7919 + 1)
+    BC.CHECKED.clear()           # (the checks' own: the steps stay the same)
     win, v = window()
+    if drawing:
+        closer = DialogCloser() if CLOSER is None else None
+        try:
+            win.open_path(drawing)
+        finally:
+            if closer is not None:
+                closer.stop()
+        APP.processEvents()
+        v = win.view()
     v.osnap_on = v.snap_on = v.polar_on = v.ortho_on = False
     p = v.project
     s = v.sheet()
+    # where and how big the steps draw: near the origin at first; Far drawing moves it (an
+    # imported drawing is far from the origin and big: up to 0.15.6 a window around one found
+    # only its lower left 32", and the battery, drawing within 15" of the origin, never saw it)
+    world = {"o": (0.0, 0.0), "k": 1.0}
+    dump_at = int(os.environ["BATTERY_DUMP_AT"]) if os.environ.get("BATTERY_DUMP_AT") else None
     lib = win.library
     syms = ["Contact NO", "Contact NC", "Relay coil", "Pushbutton NO", "Pushbutton NC",
             "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC"]
@@ -198,10 +433,13 @@ def random_editing(log, out, ops, seed):
     kinds = set()
 
     def pt():
-        # on a 1/4" grid, mostly on a few rungs so things meet
+        # on a 1/4" grid, mostly on a few rungs so things meet (moved and spread by `world`)
         if rnd.random() < 0.6:
-            return (rnd.randint(4, 60) * 0.25, rnd.choice([2, 3, 4, 5, 6, 7, 8]) * 1.0)
-        return (rnd.randint(4, 60) * 0.25, rnd.randint(4, 40) * 0.25)
+            q = (rnd.randint(4, 60) * 0.25, rnd.choice([2, 3, 4, 5, 6, 7, 8]) * 1.0)
+        else:
+            q = (rnd.randint(4, 60) * 0.25, rnd.randint(4, 40) * 0.25)
+        o, k = world["o"], world["k"]
+        return (o[0] + q[0] * k, o[1] + q[1] * k)
 
     def fmt(q):
         return "%g,%g" % q
@@ -440,8 +678,12 @@ def random_editing(log, out, ops, seed):
             v.input_text(fmt(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)))
         finish()
 
+    ace = BC.ace_like_dxf(os.path.join(out, "ace_like.dxf"), devices=24)
+
     def op_import():
-        fileio.import_dxf(p, s, sample, at=pt())
+        # the small sample, or a drawing as AutoCAD Electrical writes one (hidden and moved
+        # attributes, a frame bigger than the sheet, far from the origin)
+        fileio.import_dxf(p, s, sample if rnd.random() < 0.6 else ace, at=pt())
 
     def op_explode():
         ins = [e for e in s.entities.values() if isinstance(e, M.Insert)]
@@ -455,8 +697,11 @@ def random_editing(log, out, ops, seed):
                and e.defn is not None and e.defn.category == "Imported"]
         if not imp:
             return
-        with p.edit("Use as title block") as ed:
-            sheetframe.use_as_title_block(ed, p, s, [rnd.choice(imp)])
+        # (through the command, as a person does: on a turned sheet it says to turn it
+        # upright first)
+        v.set_selection({rnd.choice(imp).id})
+        v.run(C.UseTitleBlockCmd)
+        finish()
 
     fps = sorted(n for n, d in lib.blocks("footprint")[0].items() if d.builtin)
 
@@ -526,6 +771,61 @@ def random_editing(log, out, ops, seed):
             win._set_scale(name, val)
         elif scalefit.fit_for(p, s) is not None:        # (else it opens the Sheet scale window)
             win.fit_scale()
+            BC.fit_oracle(p, s)
+
+    # ---- sheets of every size, turn and scale, several of them -------------------------------
+    def op_world():
+        world["o"] = rnd.choice([(0.0, 0.0), (0.0, 0.0), (480.0, -250.0),
+                                 (-2400.0, 1700.0), (12000.0, 8000.0)])
+        world["k"] = rnd.choice([1.0, 1.0, 1.0, 4.0, 24.0])
+
+    def op_sheet():
+        from kanzonascad import scalefit
+        what = rnd.random()
+        if what < 0.4:
+            with p.edit("Sheet size") as ed:
+                ed.sheet_meta(s, size=rnd.choice(sorted(M.SHEET_SIZES)))
+        elif what < 0.7:
+            scalefit.rotate(p, s, rnd.random() < 0.5)
+        else:
+            name, val = rnd.choice(scalefit.presets_like(s.scale_name) + [("", 1 / 24),
+                                                                          ("", 1 / 48)])
+            win._set_scale(name, val)
+
+    def op_new_sheet():
+        if len(p.sheets) < 6:
+            win.add_sheet()
+
+    def op_switch_sheet():
+        v.show_sheet(rnd.choice(p.sheets).id)
+
+    def op_big():
+        # a big outline far out (a cabinet at real size, an imported frame)
+        o = world["o"]
+        x, y = o[0] + rnd.uniform(-3000, 3000), o[1] + rnd.uniform(-3000, 3000)
+        w, h = rnd.choice([40, 120, 600, 3000]), rnd.choice([30, 90, 400, 2200])
+        v.run(C.LineCmd)
+        type_in(v, fmt((x, y)), fmt((x + w, y)), fmt((x + w, y + h)))
+        finish()
+
+    # ---- what a command must do, from every object (not the index) --------------------------
+    def op_snap():
+        BC.snap_oracle(v, crnd)
+
+    def op_zoom():
+        BC.zoom_checks(v, crnd)
+
+    def op_mouse_window():
+        mouse_window(v, crnd, click_click=crnd.random() < 0.3)
+
+    def op_lasso():
+        mouse_lasso(v, crnd)
+
+    def op_drag():
+        mouse_drag(v, crnd)
+
+    def op_pan():
+        mouse_pan(v, crnd)
 
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
@@ -541,7 +841,9 @@ def random_editing(log, out, ops, seed):
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
              (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2),
-             (op_fit, 1), (op_undo, 6),
+             (op_fit, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
+             (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
+             (op_mouse_window, 3), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
@@ -551,9 +853,18 @@ def random_editing(log, out, ops, seed):
         name = fn.__name__[3:]
         counts[name] = counts.get(name, 0) + 1
         try:
+            s = v.sheet()               # (an undo can take away the sheet shown: the view moves)
+            if dump_at is not None and i == dump_at:
+                # (BATTERY_DUMP_AT=N: the project as it is before step N, to look into a failure)
+                p.save(os.path.join(out, "before-step-%d.kzcad" % i), backups=0)
             fn()
+            s = v.sheet()
             v.set_selection(set())
             check_sheet(s)
+            BC.check_index(s, crnd)
+            if i % 25 == 24:
+                for other in p.sheets:
+                    check_sheet(other)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()
@@ -589,9 +900,10 @@ def random_editing(log, out, ops, seed):
     again = norm(p.to_dict())
     p.saved_at = len(p.undo_stack)
     stats = "%d steps (%s); %d entities, %d wires, %d symbols at the end; %d save/open " \
-            "round trips; %d undone; kinds seen: %s" % (ops, ", ".join("%s %d" % kv for kv in sorted(
-                counts.items())), len(s.entities), len(s.wires()), len(s.inserts()),
-                roundtrips, n_undo, ", ".join(sorted(kinds)))
+            "round trips; %d undone; kinds seen: %s; checked to the end: %s; sheets %d" % (
+                ops, ", ".join("%s %d" % kv for kv in sorted(counts.items())), len(s.entities),
+                len(s.wires()), len(s.inserts()), roundtrips, n_undo, ", ".join(sorted(kinds)),
+                ", ".join("%s %d" % kv for kv in sorted(BC.CHECKED.items())), len(p.sheets))
     win.close()
     if errors:
         raise AssertionError("%d step(s) failed (seed %d):\n%s" % (len(errors), seed,
@@ -897,11 +1209,142 @@ def pictures(log, out):
     return ", ".join(names)
 
 
+# ---- 6. a drawing as another program writes it -------------------------------------------------
+def real_drawing(log, out, path=None):
+    """A drawing as AutoCAD Electrical writes one (made here: hidden and moved attributes,
+    description lines, a frame bigger than the sheet, far from the origin), or the owner's own
+    (path), opened as a person opens one: it lands on the sheet and fits, its hidden attributes
+    stay hidden, every check holds, Fit keeps "doesn't fit" off, and a save, a DXF out and in
+    and a selection of everything give it back whole."""
+    from kanzonascad import scalefit
+    path = path or BC.ace_like_dxf(os.path.join(out, "ace_like_big.dxf"), devices=120)
+    win, v0 = window()
+    win.open_path(path)
+    APP.processEvents()
+    v = win.view()
+    p, s = v.project, v.sheet()
+    rnd = random.Random(5)
+    check_sheet(s)
+    BC.check_index(s, rnd)
+    n = len(s.entities)
+    hidden = sum(len(e.hidden) for e in s.entities.values() if isinstance(e, M.Insert))
+    if path.endswith("ace_like_big.dxf"):
+        assert hidden > 0, "no attribute stayed hidden"
+        # (MFG, CAT and INST are hidden on the block: none of their values may show)
+        shown = [t.text for e in s.entities.values() if isinstance(e, M.Insert)
+                 for t in e.world_entities() if isinstance(t, M.Text)]
+        assert not any(x in ("AB", "700-HA32A1", "PANEL") for x in shown), \
+            "an attribute hidden on the block shows: %s" % [
+                x for x in shown if x in ("AB", "700-HA32A1", "PANEL")][:3]
+    assert scalefit.outside(p, s) is None, "opened, it runs %s" % scalefit.outside(p, s)
+    if scalefit.fit_for(p, s) is not None:
+        win.fit_scale()
+        BC.fit_oracle(p, s)
+    v.zoom("extents")
+    assert BC.view_shows(v, s.extents())
+    v.select_all()
+    assert len(v.sel) == len([e for e in s.entities.values() if BC.selectable(v, e)])
+    want = BC.expected_window(v, (-1e9, -1e9), (1e9, 1e9))
+    got = {e.id for e in s.query((-1e9, -1e9, 1e9, 1e9))}
+    assert want <= got, "the index misses %d objects of the drawing" % len(want - got)
+    for _i in range(30):
+        BC.snap_oracle(v, rnd)
+    kz = os.path.join(out, "real.kzcad")
+    p.save(kz, backups=0)
+    q = M.Project.load(kz)
+    assert norm(q.to_dict()) == norm(p.to_dict()), "save and open differ"
+    dxf = os.path.join(out, "real-out.dxf")
+    fileio.export_dxf(p, s, dxf)
+    ents, _rep = fileio.read_drawing(dxf)
+    assert len(ents) >= n, "the DXF out and in has %d objects of %d" % (len(ents), n)
+    p.saved_at = len(p.undo_stack)
+    win.close()
+    return "%s: %d objects (%d attributes hidden), %s, fits; save/open, DXF out and in" % (
+        os.path.basename(path), n, hidden, s.scale_text())
+
+
+# ---- 6b. Fit on many drawings ------------------------------------------------------------------
+def fit_many(log, out):
+    n = BC.fit_cases(random.Random(13), 300)
+    return "%d drawings of every size and place, with notes at their edges, on sheets of " \
+        "every size, turn and scale: after Fit each fits, and the next bigger scale doesn't" % n
+
+
+# ---- 7. Windows paths ----------------------------------------------------------------------------
+def windows_paths(log, out):
+    return BC.windows_paths(random.Random(11))
+
+
+# ---- 8. speed on an imported drawing -------------------------------------------------------------
+def speed_imported(log, out):
+    """Hover, snaps, a lasso and a window on a drawing as AutoCAD Electrical writes one (big
+    blocks with attributes, far from the origin), within the mouse budget (30 ms a move)."""
+    from PySide6.QtCore import QPointF, QPoint
+    path = BC.ace_like_dxf(os.path.join(out, "ace_like_speed.dxf"), devices=1200, seed=9)
+    win, v0 = window()
+    t = time.perf_counter()
+    win.open_path(path)
+    APP.processEvents()
+    v = win.view()
+    v.zoom("extents")
+    v.repaint()
+    opened = time.perf_counter() - t
+    s = v.sheet()
+    rnd = random.Random(3)
+    pts = [QPointF(rnd.uniform(0, v.width()), rnd.uniform(0, v.height())) for _i in range(150)]
+    t = time.perf_counter()
+    for q in pts:
+        v.pick_entity(v.to_world(q))
+    hover = (time.perf_counter() - t) / len(pts)
+    modes = {"end", "mid", "center", "quad", "insert", "node", "int", "near"}
+    t = time.perf_counter()
+    for q in pts:
+        v.object_snap(v.to_world(q), modes)
+    snap = (time.perf_counter() - t) / len(pts)
+    cx, cy, n = v.width() / 2, v.height() / 2, 80
+    path_px = [QPoint(int(cx + 0.45 * v.width() * math.cos(2 * math.pi * 0.97 * i / n)),
+                      int(cy + 0.45 * v.height() * math.sin(2 * math.pi * 0.97 * i / n)))
+               for i in range(n + 1)]
+    Qt = _qt()[0]
+    _press(v, path_px[0])
+    t = time.perf_counter()
+    for q in path_px[1:]:
+        _move(v, q, Qt.LeftButton)
+        v.repaint()
+    lasso = (time.perf_counter() - t) / n
+    t = time.perf_counter()
+    _release(v, path_px[-1])
+    pick = time.perf_counter() - t
+    caught = len(v.sel)
+    v.set_selection(set())
+    t = time.perf_counter()
+    a, b = QPoint(3, 3), QPoint(v.width() - 3, v.height() - 3)
+    if v.pick_entity(v.to_world(QPointF(a))) is None:
+        _drag_path(v, a, b, steps=20)
+    window_all = time.perf_counter() - t
+    whole = len(v.sel)
+    res = [("open and draw", opened, 8.0), ("hover", hover, 0.03), ("snap move", snap, 0.03),
+           ("lasso move", lasso, 0.03), ("lasso pick", pick, 1.0),
+           ("window around it", window_all, 2.0)]
+    win.view().project.saved_at = len(win.view().project.undo_stack)
+    win.close()
+    assert caught > 50, "the lasso caught %d objects" % caught
+    slow = [r for r in res if r[1] > r[2]]
+    text = "%d objects: " % len(s.entities) + "; ".join(
+        "%s %.1f ms" % (nm, d * 1000) if d < 1 else "%s %.2f s" % (nm, d) for nm, d, _b in res) \
+        + "; lasso caught %d, window %d" % (caught, whole)
+    assert not slow, "over budget: " + "; ".join("%s %.3f s (budget %.3f)" % r for r in slow)
+    return text
+
+
 def main(argv):
     out = argv[1] if len(argv) > 1 and not argv[1].startswith("--") else \
         tempfile.mkdtemp(prefix="kanzonascad-battery-")
     ops = int(argv[argv.index("--ops") + 1]) if "--ops" in argv else 3000
     seed = int(argv[argv.index("--seed") + 1]) if "--seed" in argv else 1
+    # --drawing PATH: random editing and the drawing checks start from that drawing (your own:
+    # they stay on your computer)
+    drawing = argv[argv.index("--drawing") + 1] if "--drawing" in argv else None
     os.makedirs(out, exist_ok=True)
     log = Log(os.path.join(out, "battery.log"))
     # (any dialog closes by itself for the whole run: one opened late, by an answer to a
@@ -911,10 +1354,18 @@ def main(argv):
     import kanzonascad
     log.say("KanzonasCAD %s battery, Python %s, %s, seed %d" % (
         kanzonascad.__version__, sys.version.split()[0], sys.platform, seed))
-    log.check("random editing", lambda: random_editing(log, out, ops, seed))
+    log.check("random editing", lambda: random_editing(log, out, ops, seed, drawing))
     log.check("every menu command", lambda: every_command(log, out))
     log.check("files", lambda: files(log, out))
     log.check("speed at scale", lambda: speed(log, out))
+    log.check("a drawing as AutoCAD Electrical writes it",
+              lambda: real_drawing(log, out))
+    if drawing:
+        log.check("your drawing (%s)" % os.path.basename(drawing),
+                  lambda: real_drawing(log, out, drawing))
+    log.check("Fit on many drawings", lambda: fit_many(log, out))
+    log.check("Windows paths", lambda: windows_paths(log, out))
+    log.check("speed on an imported drawing", lambda: speed_imported(log, out))
     log.check("pictures", lambda: pictures(log, out))
     CLOSER.stop()
     log.say("%d failure(s); output in %s" % (log.failures, out))

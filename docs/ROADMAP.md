@@ -148,6 +148,13 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
+- Testing (owner, Nov 2026): "Let's do the extended battery on every big update 0.xx.0. And the
+  smaller battery can be done on minor updates." Every build runs the short battery (1,000
+  steps); a middle-number release (0.16...) also runs the long one (3,000 steps x 3 seeds, job
+  battery-long) before it is published. The battery checks what commands must do, not only
+  that the model holds together (owner: "I want all of those added to the battery checks":
+  varied and far drawings, correctness checks, the mouse and the view, real-style files,
+  Windows paths, speed on imported drawings).
 - Imports (owner, Nov 2026; 0.12.11-0.13.5): DWG read object by object (dwgread); imported
   blocks stay blocks with their colors and attributes (AutoCAD Electrical's mapped); linear and
   aligned dimensions, leaders, multileaders, hatches and multiline text come in as
