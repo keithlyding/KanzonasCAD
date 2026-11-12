@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.9
+
+**New**
+- More standard scales: 1:3, 1:6, 1:9 and 1:12, in the Scale list on the status bar, the Sheet
+  scale window and Sheet properties. Fit tries them too, so a drawing that fits at 1:3 gets 1:3
+  instead of 1:4.
+
 ## 0.15.8
 
 **Fixed**

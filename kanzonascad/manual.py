@@ -687,11 +687,13 @@ on every sheet, forever. Each sheet has <b>one scale</b> that only sets how big 
 inside at the scale you pick, says what the scale means in plain words ("1 inch on paper = 4
 inches of panel") and how much of the room the drawing takes, in green when it fits, amber
 when it fits but not where it is (tick <b>Move the drawing to the middle of the free
-space</b>), red when it is too big (it names a scale that fits). Pick 1:2, 1:4, 1:5... or an
-architectural one (3" = 1'-0"...), or type one (1:6).</li>
-<li><b>Fit</b> picks the biggest scale at which the drawing fits inside the border and clear
-of the title block (the same test as the status bar's <b>doesn't fit</b>), and when it has to
-move the drawing, centers it with a little space kept around it if there is room for that.
+space</b>), red when it is too big (it names a scale that fits). Pick 1:1, 1:2, 1:3, 1:4, 1:5,
+1:6, 1:8, 1:9, 1:10, 1:12, 1:16 or 1:20, or an architectural one (3" = 1'-0"...), or type one
+(1:7).</li>
+<li><b>Fit</b> picks the biggest of those scales (the architectural ones on a sheet that has
+one) at which the drawing fits inside the border and clear of the title block; past 1:20, the
+next whole 1:N that fits (1:23). It uses the same test as the status bar's <b>doesn't fit</b>,
+and when it has to move the drawing, centers it with a little space kept around it if there is room for that.
 It measures the drawing as it will be at each scale it tries: text, dimensions and tags keep
 their size on paper, so they take more of the drawing at a smaller scale. With nothing drawn yet, give the <b>Cabinet size</b> (width, height and,
 optionally, depth, in inches): Fit then makes room for the cabinet's front and, with a depth,

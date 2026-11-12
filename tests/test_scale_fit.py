@@ -116,13 +116,15 @@ class SheetScaleWindowTest(unittest.TestCase):
             b.setValue(x)
         self.assertTrue(d.fit_btn.isEnabled())
         d.fit()
-        self.assertEqual(d.combo.currentText(), "1:8")
-        self.assertEqual(d.words.text(), "1 inch on paper = 8 inches of panel")
+        # (48" x 48" with its side: 8" x 8" at 1:6 beside the title block; 9.6" at 1:5 fits
+        # neither beside nor above it; 1:8 until 1:6 was a preset, 0.15.9)
+        self.assertEqual(d.combo.currentText(), "1:6")
+        self.assertEqual(d.words.text(), "1 inch on paper = 6 inches of panel")
         self.assertIn("front and side", d.usage.text())
         self.assertEqual(d.state(d.scale()), "good")
         d.grab()                                            # the preview paints
         d._ok()
-        self.assertEqual(self.s.scale_text(), "1:8")
+        self.assertEqual(self.s.scale_text(), "1:6")
         self.assertEqual(self.s.cabinet, [30.0, 48.0, 12.0])
 
     def test_closed_window_goes_at_once(self):
@@ -240,6 +242,27 @@ class FitUpToTheFrameTest(unittest.TestCase):
             if bigger:
                 area, tb = F.room(p, s)
                 self.assertFalse(F.fits(w, h, min(bigger), area, tb), (w, h, v))
+
+
+class NewPresetsTest(unittest.TestCase):
+    """1:3, 1:6, 1:9 and 1:12 (the owner: "Add 1:3, 1:6, 1:9, and 1:12"): in the lists, and Fit
+    picks each when it is the biggest that fits."""
+
+    def test_in_the_list_in_order(self):
+        names = ["1:%g" % (1 / v) for _n, v in F.presets_like("")]
+        self.assertEqual(names, ["1:1", "1:2", "1:3", "1:4", "1:5", "1:6", "1:8", "1:9",
+                                 "1:10", "1:12", "1:16", "1:20"])
+
+    def test_fit_picks_each(self):
+        # (a drawing a little smaller than the room above the title block at each scale:
+        # 16" x 8.625" on ANSI B up to the frame and the title block)
+        for n in (3, 6, 9, 12):
+            p = M.Project.new()
+            s = p.sheets[0]
+            with p.edit("draw") as ed:
+                ed.add(s, M.Polyline([(0, 0), (15.9 * n, 0), (15.9 * n, 8.6 * n),
+                                      (0, 8.6 * n)], True))
+            self.assertEqual(F.fit_for(p, s), ("", 1.0 / n), n)
 
 
 class RotateSheetTest(unittest.TestCase):
