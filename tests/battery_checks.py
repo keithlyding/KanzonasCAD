@@ -160,6 +160,48 @@ def snap_oracle(view, rnd):
     return kind
 
 
+# ---- pressing where nothing is drawn -------------------------------------------------------------
+def blank_spot(view, rnd, tries=60):
+    """A pixel on the sheet with nothing drawn within the pickbox around it (only the paper's
+    color in the picture of the drawing), or None."""
+    from PySide6.QtCore import QPoint
+    from kanzonascad.render import Palette
+    from kanzonascad.view import PICKBOX
+    grid, view.grid_on = view.grid_on, False         # (the grid's dots aren't objects)
+    try:
+        pm = view._lit_picture(Palette(view.dark))
+    finally:
+        view.grid_on = grid
+    img = pm.toImage()
+    dpr = pm.devicePixelRatio()
+    back = Palette(view.dark).paper.rgb() & 0xFFFFFF       # (the sheet, where nothing is)
+    r = PICKBOX + 1
+    for _i in range(tries):
+        x, y = rnd.randint(r + 2, view.width() - r - 3), rnd.randint(r + 2, view.height() - r - 3)
+        ok = True
+        for dx in range(-r, r + 1, 1):
+            for dy in range(-r, r + 1, 1):
+                if img.pixel(int((x + dx) * dpr), int((y + dy) * dpr)) & 0xFFFFFF != back:
+                    ok = False
+                    break
+            if not ok:
+                break
+        if ok:
+            return QPoint(x, y)
+    return None
+
+
+def text_under(view, e, p, r):
+    """Is p within r of, or inside the box of, a text of e (a text is picked anywhere in its
+    box, as in AutoCAD; the letters leave blank pixels between them)?"""
+    parts = [e]
+    if isinstance(e, M.Insert):
+        parts += list(e.world_entities())
+    elif isinstance(e, (M.Composite,)):
+        parts += list(e.parts())
+    return any(isinstance(w, (M.Text, M.MText)) and w.distance(p) <= r for w in parts)
+
+
 # ---- Fit ---------------------------------------------------------------------------------------
 def fit_oracle(project, sheet):
     """After Fit: the status bar says it fits, and the next bigger scale wouldn't (the drawing
@@ -305,6 +347,14 @@ def zoom_checks(view, rnd):
     assert view_shows(view, box), "zoomed all the way out, the sheet and drawing don't show " \
         "(%.4g px/in, sheet %s at %s)" % (view.scale, s.size, s.scale_text())
     view.zoom("extents")
+    # (steps show the last picture moved and scaled; once they stop it is drawn sharp, at the
+    # view's own zoom and place)
+    view.zoom_at(1.2, None)
+    view.repaint()
+    view._moving_until = 0.0
+    view.repaint()
+    assert view._shown is not None and view._shown[1] == view.scale and \
+        view._shown[2] == view.center, "not drawn sharp at the view's zoom once it stopped"
     CHECKED["zoom"] += 1
 
 

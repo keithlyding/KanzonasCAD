@@ -804,8 +804,9 @@ names, choose the pattern: <b>Solid</b>, <b>45 lines</b> (ANSI31), <b>Crosshatch
 (ANSI37) or <b>Level lines</b>; <b>Spacing</b> (SP) the space between the lines, in real
 inches, and <b>Angle</b> (AN) their angle. Click more areas, Enter to finish; the pattern is
 remembered. A hatch is its own object, not tied to the shapes it was made in: it moves,
-copies, rotates and scales with them when selected with them. Click anywhere on it to select
-it. On screen a fill is under the lines; printed black and white (PDF), fills print light gray
+copies, rotates and scales with them when selected with them. Click a solid fill anywhere on it
+to select it, and a patterned hatch on its lines or its outline: a press in the gaps between its
+lines starts a selection window there, as in AutoCAD. On screen a fill is under the lines; printed black and white (PDF), fills print light gray
 so the lines and texts on them stay readable. DXF and DWG hatches come in as hatches (their
 pattern: ANSI31 and ANSI37 by name, any other as its lines), and go out as HATCH
 entities.</li>
@@ -863,7 +864,9 @@ the modify commands.</li>
 <h2>Viewing</h2>
 <ul>
 <li>Mouse wheel zooms at the cursor; hold the <b>middle button</b> to pan; double-click the
-middle button for <b>Zoom extents</b>.</li>
+middle button for <b>Zoom extents</b>. While you pan or zoom, the picture on screen moves and
+scales with the mouse (instantly, however busy the drawing), and the drawing is drawn again
+sharp a moment after you stop.</li>
 <li><b>Zoom extents</b> (Ctrl+Shift+E), <b>Zoom to sheet</b> (Ctrl+0), <b>Zoom in</b> (Ctrl+=),
 <b>Zoom out</b> (Ctrl+-). Zooming out goes until the whole sheet and everything drawn take
 about a quarter of the window, on a sheet with a scale too (at 1:24 the sheet is 24 times its

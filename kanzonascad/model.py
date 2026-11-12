@@ -1156,10 +1156,14 @@ class Hatch(Composite):
         return out
 
     def distance(self, p):
-        # (anywhere on it picks it, not only its lines)
-        if point_in_loops(p, self.loops):
+        """To its outline or, for a pattern, to its nearest pattern line: a press in the gaps
+        between its lines is on nothing, so it starts a selection window there, as in AutoCAD
+        (the owner: "I was clicking in a hatch. But on the same drawing in Autocad, it let me
+        draw a select rectangle from the same spot"; up to 0.15.9 anywhere inside picked the
+        hatch). A solid fill is on everything it covers."""
+        if self.solid() and point_in_loops(p, self.loops):
             return 0.0
-        return min(e.distance(p) for e in self.parts()[:len(self.loops)])
+        return min(e.distance(p) for e in self.parts())
 
     def _compute_snaps(self):
         return [("end", q) for lp in self.loops for q in lp]

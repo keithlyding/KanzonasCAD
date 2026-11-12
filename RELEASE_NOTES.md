@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.10
+
+**Fixed**
+- You can start a selection window by pressing in the empty space inside a hatch, as in
+  AutoCAD. A patterned hatch is selected by clicking its lines or outline; a solid fill is
+  still selected anywhere on it.
+- Panning and zooming are smooth: the picture moves and scales with the mouse right away,
+  however busy the drawing, and is drawn again sharp a moment after you stop.
+
 ## 0.15.9
 
 **New**

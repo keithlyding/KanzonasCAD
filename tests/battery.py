@@ -290,6 +290,61 @@ def mouse_window(v, rnd, click_click=False):
     v.set_selection(set())
 
 
+def mouse_blank_press(v, rnd):
+    """A press where nothing is drawn (no pixel of any object within the pickbox) starts a
+    window, as in AutoCAD; only a text's box picks the text (the owner: "I was clicking in a
+    hatch... in Autocad, it let me draw a select rectangle from the same spot")."""
+    Qt, QPoint, QPointF, QTest = _qt()
+    if v.cmd is not None:
+        v.cancel()
+    v.set_selection(set())
+    APP.processEvents()
+    grid = v.grid_on
+    v.grid_on = False
+    hatches = [e for e in v.sheet().entities.values() if isinstance(e, M.Hatch)
+               and not e.solid() and BC.selectable(v, e)]
+    if hatches and rnd.random() < 0.5:
+        # (inside a hatch, zoomed in until the gaps between its lines are wider than the pickbox
+        # each side: where the owner pressed)
+        h = rnd.choice(hatches)
+        b = h.bbox()
+        v.scale = max(v.scale, 40.0 / max(h.spacing, 1e-6))
+        v.center = (rnd.uniform(b[0], b[2]), rnd.uniform(b[1], b[3]))
+        v.update()
+    try:
+        q = BC.blank_spot(v, rnd)
+        if q is None:
+            return
+        _blank_press_at(v, q)
+    finally:
+        v.grid_on = grid
+        v.update()
+
+
+def _blank_press_at(v, q):
+    Qt, QPoint, QPointF, QTest = _qt()
+    from kanzonascad.view import PICKBOX
+    wp = v.to_world(QPointF(q))
+    _press(v, q)
+    started = v._window is not None
+    picked = set(v.sel)
+    _release(v, q)
+    if v._window is not None:
+        v._window = None                    # (the click's window: let it go)
+        v._preview = set()
+    if not started:
+        r = PICKBOX / v.scale
+        s = v.sheet()
+        bad = [s.entities[i] for i in picked if i in s.entities
+               and not BC.text_under(v, s.entities[i], wp, r)]
+        assert not bad, "a press where nothing is drawn picked %s instead of starting a " \
+            "window" % [e.kind + (" " + e.pattern if isinstance(e, M.Hatch) else "")
+                        for e in bad[:3]]
+    BC.CHECKED["press on blank"] += 1
+    v.set_selection(set())
+    v.update()
+
+
 def mouse_lasso(v, rnd):
     """A lasso dragged round a loop selects what every object says it must (window lasso
     dragged to the right first, crossing lasso to the left)."""
@@ -851,6 +906,9 @@ def random_editing(log, out, ops, seed, drawing=None):
     def op_mouse_window():
         mouse_window(v, crnd, click_click=crnd.random() < 0.3)
 
+    def op_blank_press():
+        mouse_blank_press(v, crnd)
+
     def op_lasso():
         mouse_lasso(v, crnd)
 
@@ -876,7 +934,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2),
              (op_fit, 2), (op_run_props, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
-             (op_mouse_window, 3), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
+             (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
@@ -1350,6 +1408,22 @@ def speed_imported(log, out):
     pick = time.perf_counter() - t
     caught = len(v.sel)
     v.set_selection(set())
+    # pan and wheel steps (the owner: "the gui doesn't seem to move and zoom in/out as
+    # smoothly as autocad"): each shown at 60 a second
+    v.zoom("extents")
+    v.repaint()
+    t = time.perf_counter()
+    for i in range(40):
+        if i % 2:
+            v.zoom_at(1.2 if i % 4 == 1 else 1 / 1.2, QPointF(v.width() / 2, v.height() / 2))
+        else:
+            v.center = (v.center[0] + 6.0 / v.scale, v.center[1])
+            v._moving()
+        v.repaint()
+    step = (time.perf_counter() - t) / 40
+    v._moving_until = 0.0
+    v.zoom("extents")
+    v.repaint()
     t = time.perf_counter()
     a, b = QPoint(3, 3), QPoint(v.width() - 3, v.height() - 3)
     if v.pick_entity(v.to_world(QPointF(a))) is None:
@@ -1358,7 +1432,7 @@ def speed_imported(log, out):
     whole = len(v.sel)
     res = [("open and draw", opened, 8.0), ("hover", hover, 0.03), ("snap move", snap, 0.03),
            ("lasso move", lasso, 0.03), ("lasso pick", pick, 1.0),
-           ("window around it", window_all, 2.0)]
+           ("window around it", window_all, 2.0), ("pan or zoom step", step, 0.016)]
     win.view().project.saved_at = len(win.view().project.undo_stack)
     win.close()
     assert caught > 50, "the lasso caught %d objects" % caught
