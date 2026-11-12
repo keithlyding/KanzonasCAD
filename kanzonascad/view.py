@@ -124,6 +124,17 @@ class CadView(QWidget):
         self.current_layer = "0"
         self.text_justify = ("left", "baseline")     # TEXT's justification (align, valign)
         self._pan = None
+        # panning and zooming show the last picture moved and scaled (a millisecond), and the
+        # drawing is drawn again sharp once they stop (the owner: "the gui doesn't seem to move
+        # and zoom in/out as smoothly as autocad"; a pan step drew everything again: 35 ms on
+        # the owner's panel): _shown is (what it shows, scale, center, picture) of the last one
+        # drawn in full; _moving_until when the motion counts as stopped
+        self._shown = None
+        self._moving_until = 0.0
+        self._settle = QTimer(self)
+        self._settle.setSingleShot(True)
+        self._settle.setInterval(int(self.SETTLE * 1000))
+        self._settle.timeout.connect(self.update)
         # while selecting with a window or a lasso: {"start", "pressed" (the button is still
         # down from the first click), "lasso" (points, once dragged), "crossing"}
         self._window = None
@@ -430,6 +441,7 @@ class CadView(QWidget):
             after = self.to_world(pos)
             self.center = (self.center[0] + before[0] - after[0],
                            self.center[1] + before[1] - after[1])
+        self._moving()
         self.update()
 
     # ---- picking and snapping --------------------------------------------------------------
@@ -848,6 +860,7 @@ class CadView(QWidget):
             start, c0 = self._pan
             self.center = (c0[0] - (pos.x() - start.x()) / self.scale,
                            c0[1] + (pos.y() - start.y()) / self.scale)
+            self._moving()
             self.update()
             return
         self.cursor = self.to_world(pos)
@@ -1090,6 +1103,44 @@ class CadView(QWidget):
                 p.revision, p.title_block.version,
                 tuple((n, l.color, l.visible) for n, l in p.layers.items()))
 
+    SETTLE = 0.14           # seconds without a pan or zoom step before the sharp redraw
+    FAST_ZOOM = 4.0         # past this much zoom from the last sharp picture, redraw at once
+    FAST_PAN = 0.6          # ...or past this much of the view panned
+
+    def _moving(self):
+        """A pan or zoom step just happened: show the last picture moved until it stops."""
+        self._moving_until = time.perf_counter() + self.SETTLE
+        self._settle.start()
+
+    def _shown_key(self):
+        """What the last sharp picture shows besides the view's zoom and position: the same
+        key means it can be shown moved and scaled."""
+        k = self._drawing_key()
+        return k[:3] + k[5:] + (frozenset(self.sel), frozenset(self._preview))
+
+    def _fast_view(self):
+        """The transform that puts the last sharp picture where it belongs now, while panning
+        or zooming (None: draw it all again)."""
+        got = self._shown
+        if got is None or time.perf_counter() > self._moving_until:
+            return None
+        key, k0, c0, pm = got
+        if key != self._shown_key():
+            return None
+        r = self.scale / k0
+        if not (1 / self.FAST_ZOOM <= r <= self.FAST_ZOOM):
+            return None
+        dx = (c0[0] - self.center[0]) * self.scale
+        dy = -(c0[1] - self.center[1]) * self.scale
+        if abs(dx) > self.width() * self.FAST_PAN or abs(dy) > self.height() * self.FAST_PAN:
+            return None
+        w2, h2 = self.width() / 2, self.height() / 2
+        t = QTransform()
+        t.translate(w2 + dx, h2 + dy)
+        t.scale(r, r)
+        t.translate(-w2, -h2)
+        return t, pm
+
     def _drawing_picture(self, pal):
         """The paper, grid, border, title block and drawing as a picture, drawn again only
         when what it shows changes: a mouse move (the crosshair, a snap marker, a rubber
@@ -1150,9 +1201,21 @@ class CadView(QWidget):
 
     def paintEvent(self, _e):
         pal = Palette(self.dark)
-        pm = self._lit_picture(pal)
+        fast = self._fast_view()
         p = QPainter(self)
-        p.drawPixmap(0, 0, pm)
+        if fast is not None:
+            # (panning or zooming: the last picture, moved and scaled; sharp once it stops)
+            t, old = fast
+            p.fillRect(QRectF(0, 0, self.width(), self.height()), pal.backdrop)
+            p.save()
+            p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+            p.setTransform(t)
+            p.drawPixmap(0, 0, old)
+            p.restore()
+        else:
+            pm = self._lit_picture(pal)
+            p.drawPixmap(0, 0, pm)
+            self._shown = (self._shown_key(), self.scale, self.center, pm)
         p.setRenderHint(QPainter.Antialiasing, True)
         p.save()
         p.setTransform(self.transform())

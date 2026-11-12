@@ -20,6 +20,8 @@ BUDGET = {
     "edit_move": 2.0,           # 1,000 lines moved in one edit, then drawn
     "hover": 0.01,              # one mouse move over the dense sheet (per move)
     "snap_move": 0.03,          # one mouse move in a command, snaps on, and the screen drawn
+    "view_step": 0.016,         # a pan or wheel zoom step shown (60 a second): the last picture
+                                # moved and scaled, no object drawn again until it stops
     "peak_mb": 800,
     "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings
     # a sheet of notes: 2,000 hatches (and their outlines), 1,000 leaders, 1,000 multi-line
@@ -465,6 +467,7 @@ def run(log_path):
         t = time.perf_counter()
         for k in range(10):
             v.zoom_at(1.25, None)
+            v._moving_until = 0.0       # (each drawn sharp: not the moved picture of a step)
             v.repaint()
         dz = time.perf_counter() - t
         assert dz < BUDGET["big_zoom"], "ten zoomed repaints took %.2f s" % dz
@@ -527,18 +530,40 @@ def run(log_path):
                 # (the time depends on the machine; this doesn't: no object is drawn again)
                 assert drawn[0] == 0, "the drawing was drawn again on %d of %d mouse moves" % (
                     drawn[0], n)
+            # panning and wheel zoom steps (the owner: "the gui doesn't seem to move and zoom
+            # in/out as smoothly as autocad"): the last picture moved and scaled, no object
+            # drawn again until they stop, then drawn sharp once
+            v.cancel()
+            v.zoom("sheet")
+            v.repaint()
+            drawn[0] = 0
+            t = time.perf_counter()
+            for i in range(n):
+                if i % 2:
+                    v.zoom_at(1.1 if i % 4 == 1 else 1 / 1.1, QPointF(300, 200))
+                else:
+                    v.center = (v.center[0] + 4.0 / v.scale, v.center[1] + 2.0 / v.scale)
+                    v._moving()
+                v.repaint()
+            dv = (time.perf_counter() - t) / n
+            assert drawn[0] == 0, "the drawing was drawn again on %d of %d pan and zoom steps" \
+                % (drawn[0], n)
+            v._moving_until = 0.0
+            v.repaint()
+            assert drawn[0] >= 1, "not drawn again sharp once panning and zooming stopped"
         finally:
             r.paint = real_paint
         v.cancel()
         assert ds < BUDGET["snap_move"], "a mouse move with snaps, drawn, took %.1f ms" % (
             ds * 1000)
+        assert dv < BUDGET["view_step"], "a pan or zoom step took %.1f ms" % (dv * 1000)
         p.saved_at = len(p.undo_stack)
         w.close_tab(w.tabs.indexOf(d))
         mb = _peak_mb()
         assert mb < BUDGET["peak_mb"], "peak memory %.0f MB" % mb
         return ("open+draw %.2f s, 10 zooms %.2f s, 1,000 adds %.2f s, 1,000 moved %.2f s, "
-                "hover %.1f ms, snap move drawn %.1f ms, peak %.0f MB"
-                % (dt, dz, da, dm, dh * 1000, ds * 1000, mb))
+                "hover %.1f ms, snap move drawn %.1f ms, pan/zoom step %.1f ms, peak %.0f MB"
+                % (dt, dz, da, dm, dh * 1000, ds * 1000, dv * 1000, mb))
 
     def text_font():
         """The font text is drawn and measured with: the letters as tall as asked, a line as
@@ -592,6 +617,7 @@ def run(log_path):
         t = time.perf_counter()
         for k in range(10):
             v.zoom_at(1.25, None)
+            v._moving_until = 0.0       # (each drawn sharp: not the moved picture of a step)
             v.repaint()
         dz = time.perf_counter() - t
         assert dz < BUDGET["notes_zoom"], "ten zoomed repaints took %.2f s" % dz
