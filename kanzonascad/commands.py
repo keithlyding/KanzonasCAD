@@ -1958,8 +1958,10 @@ class DuctCmd(_RunCmd):
         return float(got[0]), float(got[1])
 
     def _prompt_start(self):
-        self.ctx.prompt("Specify start point (%s; type another size: 2x3, 1.5x3, 50x75mm)"
-                        % M.size_text(*self._size()))
+        # (the standard sizes as buttons too: width x depth, inches)
+        self.ctx.prompt("Specify start point (%s; or a size: width x depth, 2x3, 1.5x3, "
+                        "50x75mm)" % M.size_text(*self._size()),
+                        [(M.size_text(w, d), "%gx%g" % (w, d)) for w, d in M.DUCT_SIZES])
 
     def text(self, s):
         got = parse_duct_size(s)

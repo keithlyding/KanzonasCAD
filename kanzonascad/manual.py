@@ -611,8 +611,8 @@ the next item number).</td></tr>
 (or type the length toward the cursor). Before the first click: <b>7.5</b> (TS35 x 7.5 mm, to
 start), <b>15</b> (TS35 x 15 mm) or <b>MINI</b> (TS15).</td></tr>
 <tr><td>Wire duct</td><td>DUCT, WIREWAY, WD, PANDUIT</td><td>Real-size wire duct, the same way. Before
-the first click, type its size, width x depth: <code>2x3</code> (inches) or
-<code>50x75mm</code>.</td></tr>
+the first click, click a standard size on the command line or type one, width x depth:
+<code>2x3</code> (inches) or <code>50x75mm</code>.</td></tr>
 </table>
 <p>Typed <b>Undo</b> (U) and <b>Redo</b> work on the command line too.</p>
 
@@ -741,9 +741,12 @@ one end to the other: the rail's outline, lips and mounting slots, the duct's wa
 slots. They always go straight across or straight up and down (a snap off that line only sets
 the length), and their end grips stretch them along their own line. Stretch one
 with its end grips (or double-click it and type its length), move it with its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its
-size. Double-click a piece for its profile or size, length, manufacturer, catalog number and
-the length it is bought in (the project's to start: Project properties, Panel; 1 m rail and 6
-ft duct).</li>
+size: it goes on the materials list and the bill of materials. Double-click a piece for its
+properties: a rail's profile; a duct's <b>Width</b> and <b>Depth</b> (or a <b>Standard size</b>
+that fills both); its length, manufacturer, catalog number and the length it is bought in
+(the project's to start: Project properties, Panel; 1 m rail and 6 ft duct). With other rails
+(or ducts) selected too, <b>Also the other selected...</b> gives them all the same size and part
+in one step, each keeping its own length.</li>
 <li><b>Footprint label</b> (Modify menu, the Panel tab's Footprints group, or a right-click
 with footprints selected): the selected footprints show, written across them, their
 <b>Show tag</b> (M1, CR3), <b>Show part number</b> (its catalog number; the block's own when

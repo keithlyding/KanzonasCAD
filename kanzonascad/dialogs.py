@@ -932,66 +932,120 @@ def edit_text_dialog(parent, ent):
     return new
 
 
-def run_properties(parent, project, e):
-    """A DIN rail's or wire duct's size, length and part. Returns the changed copy, or None."""
-    dlg = QDialog(parent)
-    dlg.setWindowTitle(e.name())
-    form = QFormLayout(dlg)
-    rail = isinstance(e, M.Rail)
-    size = QComboBox()
-    if rail:
-        for key, (name, _w, _d) in M.RAIL_PROFILES.items():
-            size.addItem(name, key)
-        size.setCurrentIndex(max(size.findData(e.size), 0))
-    else:
-        size.setEditable(True)
-        for w, d in M.DUCT_SIZES:
-            size.addItem(M.size_text(w, d))
-        size.setEditText(M.size_text(e.width, e.depth))
-        size.setToolTip("Width x depth: 2 x 3 (inches) or 50 x 75 mm. The depth isn't drawn; "
-                        "it goes on the materials list.")
-    length = QDoubleSpinBox()
-    length.setDecimals(3)
-    length.setRange(0.01, 10000)
-    length.setSuffix(" in")
-    length.setValue(e.length())
-    edits = {}
-    for k, label in (("MFR", "Manufacturer"), ("CAT", "Catalog number"),
-                     ("DESC", "Description")):
-        edits[k] = QLineEdit(e.attrs.get(k, ""))
-    stock = QDoubleSpinBox()
-    stock.setDecimals(3)
-    stock.setRange(0, 10000)
-    stock.setSuffix(" in")
-    stock.setSpecialValueText("the project's (%s)" % M.fmt_inches(
-        float(project.settings.get("rail_stock" if rail else "duct_stock", 0))))
-    stock.setValue(e.stock)
-    form.addRow("Profile" if rail else "Size", size)
-    form.addRow("Length (from its start)", length)
-    form.addRow("Manufacturer", edits["MFR"])
-    form.addRow("Catalog number", edits["CAT"])
-    form.addRow("Description", edits["DESC"])
-    form.addRow("Bought in lengths of", stock)
-    form.addRow(_buttons(dlg))
-    while True:
-        if dlg.exec() != QDialog.Accepted:
-            return None
-        if rail:
-            key = size.currentData()
+class RunPropertiesDialog(QDialog):
+    """A DIN rail's or wire duct's properties: its profile (rail) or its width and depth (duct:
+    the width is drawn, the depth isn't but goes on the materials list and the bill of
+    materials), its length, its part and the stock length it is bought in. With other pieces
+    of the same kind selected, all of them can take the size and part (each keeps its
+    length). Up to 0.15.8 a duct's size was one box to type "2 x 3" into, easy to miss."""
+
+    def __init__(self, parent, project, e, others=()):
+        super().__init__(parent)
+        self.project, self.e = project, e
+        self.others = [o for o in others if type(o) is type(e) and o.id != e.id]
+        self.rail = isinstance(e, M.Rail)
+        self.setWindowTitle(e.name())
+        form = QFormLayout(self)
+        if self.rail:
+            self.profile = QComboBox()
+            for key, (name, _w, _d) in M.RAIL_PROFILES.items():
+                self.profile.addItem(name, key)
+            self.profile.setCurrentIndex(max(self.profile.findData(e.size), 0))
+            form.addRow("Profile", self.profile)
+        else:
+            self.width = self._inches(e.width, "width")
+            self.depth = self._inches(e.depth, "depth")
+            self.width.setToolTip("Across the duct, as drawn")
+            self.depth.setToolTip("How deep the duct is: not drawn (a plan view), but it goes on "
+                                  "the materials list and the bill of materials")
+            self.standard = QComboBox()
+            self.standard.setObjectName("standard")
+            self.standard.addItem("Pick a standard size...", -1)
+            for i, (w, d) in enumerate(M.DUCT_SIZES):
+                self.standard.addItem(M.size_text(w, d) + " in", i)
+            self.standard.activated.connect(self._pick_standard)
+            form.addRow("Standard size", self.standard)
+            form.addRow("Width", self.width)
+            form.addRow("Depth", self.depth)
+        self.length = QDoubleSpinBox()
+        self.length.setObjectName("length")
+        self.length.setDecimals(3)
+        self.length.setRange(0.01, 10000)
+        self.length.setSuffix(" in")
+        self.length.setValue(e.length())
+        form.addRow("Length (from its start)", self.length)
+        self.edits = {}
+        for k, label in (("MFR", "Manufacturer"), ("CAT", "Catalog number"),
+                         ("DESC", "Description")):
+            self.edits[k] = QLineEdit(e.attrs.get(k, ""))
+            self.edits[k].setObjectName(k)
+            form.addRow(label, self.edits[k])
+        self.stock = QDoubleSpinBox()
+        self.stock.setObjectName("stock")
+        self.stock.setDecimals(3)
+        self.stock.setRange(0, 10000)
+        self.stock.setSuffix(" in")
+        self.stock.setSpecialValueText("the project's (%s)" % M.fmt_inches(
+            float(project.settings.get("rail_stock" if self.rail else "duct_stock", 0))))
+        self.stock.setValue(e.stock)
+        form.addRow("Bought in lengths of", self.stock)
+        self.all = None
+        if self.others:
+            what = "DIN rails" if self.rail else "wire ducts"
+            self.all = QCheckBox("Also the other %d selected %s (each keeps its length)"
+                                 % (len(self.others), what))
+            self.all.setObjectName("all")
+            self.all.setChecked(True)
+            form.addRow(self.all)
+        form.addRow(_buttons(self))
+
+    def _inches(self, value, name):
+        b = QDoubleSpinBox()
+        b.setObjectName(name)
+        b.setDecimals(3)
+        b.setRange(0.1, 48)
+        b.setSingleStep(0.25)
+        b.setSuffix(" in")
+        b.setValue(value)
+        return b
+
+    def _pick_standard(self, i):
+        k = self.standard.itemData(i)
+        if k is not None and k >= 0:
+            w, d = M.DUCT_SIZES[k]
+            self.width.setValue(w)
+            self.depth.setValue(d)
+
+    def changed(self):
+        """The changed copies (this piece, and the other selected ones when ticked)."""
+        if self.rail:
+            key = self.profile.currentData()
             _n, w, d = M.RAIL_PROFILES[key]
-            break
-        from .commands import parse_duct_size
-        got = parse_duct_size(size.currentText().replace(" ", ""))
-        if got is not None:
-            key, (w, d) = "", got
-            break
-        QMessageBox.warning(parent, e.name(), "Type the size as width x depth: 2 x 3 (inches) "
-                                              "or 50 x 75 mm.")
-    attrs = {k: x.text().strip() for k, x in edits.items() if x.text().strip()}
-    new = e.copy(size=key, width=w, depth=d, attrs=attrs, stock=stock.value())
-    if abs(length.value() - e.length()) > 1e-9:
-        new = new.with_length(length.value())
-    return None if new.to_dict() == e.to_dict() else new
+        else:
+            key, w, d = "", self.width.value(), self.depth.value()
+        attrs = {k: x.text().strip() for k, x in self.edits.items() if x.text().strip()}
+        out = []
+        new = self.e.copy(size=key, width=w, depth=d, attrs=attrs, stock=self.stock.value())
+        if abs(self.length.value() - self.e.length()) > 1e-9:
+            new = new.with_length(self.length.value())
+        if new.to_dict() != self.e.to_dict():
+            out.append(new)
+        if self.all is not None and self.all.isChecked():
+            for o in self.others:
+                c = o.copy(size=key, width=w, depth=d, attrs=dict(attrs),
+                           stock=self.stock.value())
+                if c.to_dict() != o.to_dict():
+                    out.append(c)
+        return out
+
+
+def run_properties(parent, project, e, others=()):
+    """A DIN rail's or wire duct's properties (RunPropertiesDialog). Returns the changed
+    copies ([] when nothing changed), or None when cancelled."""
+    dlg = RunPropertiesDialog(parent, project, e, others)
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return dlg.changed()
 
 
 def bom_dialog(parent, project, folder):

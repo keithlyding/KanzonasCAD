@@ -12,6 +12,10 @@ build fails without them.
 - More standard scales: 1:3, 1:6, 1:9 and 1:12, in the Scale list on the status bar, the Sheet
   scale window and Sheet properties. Fit tries them too, so a drawing that fits at 1:3 gets 1:3
   instead of 1:4.
+- A wire duct's width and depth can be changed: double-click a duct for separate Width and
+  Depth fields and a list of standard sizes. With several ducts selected, they can all take
+  the new size at once. The depth goes on the materials list and the bill of materials.
+- The Wire duct command shows the standard sizes as buttons to click before you draw.
 
 ## 0.15.8
 

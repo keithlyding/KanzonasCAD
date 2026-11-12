@@ -1970,11 +1970,16 @@ class MainWindow(BlockEditing, QMainWindow):
         if v is None:
             return
         if isinstance(ins, M.Run):
-            new = dialogs.run_properties(self, v.project, ins)
-            if new is not None:
+            # (with it selected among other pieces of its kind, they can all take its size)
+            ents = v.sheet().entities
+            others = [ents[i] for i in v.selection() if i in ents and i != ins.id
+                      and type(ents[i]) is type(ins)] if ins.id in v.selection() else []
+            new = dialogs.run_properties(self, v.project, ins, others)
+            if new:
                 with v.project.edit("%s properties" % ("DIN rail" if isinstance(ins, M.Rail)
                                                        else "Wire duct")) as ed:
-                    ed.change(v.sheet(), new)
+                    for c in new:
+                        ed.change(v.sheet(), c)
             return
         from .library_panel import attributes_dialog
         shown = {}
