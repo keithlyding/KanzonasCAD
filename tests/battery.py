@@ -762,6 +762,39 @@ def random_editing(log, out, ops, seed, drawing=None):
                     (h.add if hide else h.discard)(name)
                     ed.change(s, e.copy(hidden=sorted(h)))
 
+    def op_run_props():
+        # a DIN rail's or wire duct's Properties window, as a double-click opens it (with other
+        # pieces of its kind selected, all of them can take the size): a random width, depth,
+        # profile, length and part
+        from PySide6.QtWidgets import QDialog
+        from kanzonascad import dialogs
+        runs = [e for e in s.entities.values() if isinstance(e, M.Run)]
+        if not runs:
+            return
+        e = rnd.choice(runs)
+        same = [o for o in runs if type(o) is type(e)]
+        v.set_selection({o.id for o in rnd.sample(same, min(len(same), rnd.randint(1, 3)))}
+                        | {e.id})
+
+        def answer(dlg):
+            if dlg.rail:
+                dlg.profile.setCurrentIndex(rnd.randrange(dlg.profile.count()))
+            else:
+                dlg.width.setValue(rnd.choice([1.0, 1.5, 2.0, 3.0, 4.0, 0.75]))
+                dlg.depth.setValue(rnd.choice([2.0, 3.0, 4.0, 5.0]))
+            if rnd.random() < 0.3:
+                dlg.length.setValue(rnd.choice([1.0, 6.0, 12.0, 30.0]))
+            dlg.edits["CAT"].setText(rnd.choice(["", "F2X3LG6", "PN-%d" % rnd.randint(1, 9)]))
+            if dlg.all is not None:
+                dlg.all.setChecked(rnd.random() < 0.7)
+            return QDialog.Accepted
+        real = dialogs.RunPropertiesDialog.exec
+        dialogs.RunPropertiesDialog.exec = answer
+        try:
+            win.edit_attributes(e)
+        finally:
+            dialogs.RunPropertiesDialog.exec = real
+
     def op_fit():
         # Fit (the status bar's Scale list: the biggest standard scale the drawing fits at,
         # moved to the middle if need be), or a scale picked from that list
@@ -841,7 +874,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
              (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2),
-             (op_fit, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
+             (op_fit, 2), (op_run_props, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4)]
