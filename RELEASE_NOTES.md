@@ -11,6 +11,8 @@ build fails without them.
 **Fixed**
 - The geometric center snap (GCE) lands exactly on the center of small closed shapes far from
   the origin, as in imported drawings (it could be a hair off).
+- Zoom extents shows a drawing of any size (it stopped short of showing one over about
+  600,000 inches).
 
 ## 0.15.11
 
