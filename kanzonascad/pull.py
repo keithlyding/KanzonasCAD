@@ -15,7 +15,6 @@ on them) or color coded, and each conductor's color or marking. Lengths are left
 """
 
 from . import wirenums
-from .model import Insert
 
 MARKINGS = {"numbered": "Numbered (black, wire numbers on them)",
             "colors": "Color coded"}

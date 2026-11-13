@@ -153,21 +153,25 @@ def tangent(e, base, p):
 
 
 def centroid(points):
-    """The geometric center of a closed outline (its area's center), or None."""
+    """The geometric center of a closed outline (its area's center), or None. Worked out
+    from its first point (found by the battery's drawing-slop check: from the origin, the
+    products of coordinates thousands of inches out swamped a small shape's area, and the GCE
+    snap of a half-inch square 5,000" out landed 0.000024" off its center)."""
     n = len(points)
     if n < 3:
         return None
+    ox, oy = points[0]
     a = cx = cy = 0.0
     for i in range(n):
-        x0, y0 = points[i]
-        x1, y1 = points[(i + 1) % n]
+        x0, y0 = points[i][0] - ox, points[i][1] - oy
+        x1, y1 = points[(i + 1) % n][0] - ox, points[(i + 1) % n][1] - oy
         cr = x0 * y1 - x1 * y0
         a += cr
         cx += (x0 + x1) * cr
         cy += (y0 + y1) * cr
     if abs(a) < 1e-12:
         return None
-    return (cx / (3 * a), cy / (3 * a))
+    return (ox + cx / (3 * a), oy + cy / (3 * a))
 
 
 # ---- tracking: Extension and Parallel follow lines acquired by hovering (AutoCAD's tracking)

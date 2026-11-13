@@ -90,13 +90,25 @@ def _peak_mb():
                             ("PeakPagefileUsage", ctypes.c_size_t)]
             pmc = PMC()
             pmc.cb = ctypes.sizeof(PMC)
-            h = ctypes.windll.kernel32.GetCurrentProcess()
-            ctypes.windll.psapi.GetProcessMemoryInfo(h, ctypes.byref(pmc), pmc.cb)
-            return pmc.PeakWorkingSetSize / 2 ** 20
-        import resource
-        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
-    except Exception:
-        return 0.0
+            k32, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
+            k32.GetCurrentProcess.restype = wintypes.HANDLE      # (64-bit handles intact)
+            psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.c_void_p,
+                                                   wintypes.DWORD]
+            psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+            h = k32.GetCurrentProcess()
+            if not psapi.GetProcessMemoryInfo(h, ctypes.byref(pmc), pmc.cb):
+                raise OSError("GetProcessMemoryInfo failed")
+            mb = pmc.PeakWorkingSetSize / 2 ** 20
+        else:
+            import resource
+            mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+    except (OSError, AttributeError, ImportError, ValueError) as ex:
+        # (up to 0.15.11 any failure here gave 0 MB, and the memory budget passed unmeasured:
+        # a check that can't measure must say so)
+        raise AssertionError("peak memory couldn't be measured: %s" % ex)
+    if mb <= 0:
+        raise AssertionError("peak memory measured as %.1f MB" % mb)
+    return mb
 
 
 class _Log:

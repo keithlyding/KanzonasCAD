@@ -100,6 +100,11 @@ def check_sheet(sheet):
                 assert abs(a[0] - b[0]) > 1e-9 or abs(a[1] - b[1]) > 1e-9, e.points
     json.dumps(sheet.to_dict())
     check_groups(sheet)
+    # (drawing slop: wire ends that look joined but aren't)
+    near = BC.near_misses(sheet)
+    assert not near, "%d wire end(s) almost meet something without joining it: %s" % (
+        len(near), ["%s %.2g from a %s" % (tuple(round(c, 4) for c in p), d, k)
+                    for _i, p, k, d in near[:3]])
 
 
 def _partition(groups):
@@ -850,6 +855,37 @@ def random_editing(log, out, ops, seed, drawing=None):
         finally:
             dialogs.RunPropertiesDialog.exec = real
 
+    def op_round_trip():
+        # drawing slop: drawn objects moved away and back, or turned 90 degrees four times
+        # about one point, through the commands, end exactly where they were
+        kinds = (M.Line, M.Polyline, M.Circle, M.Arc, M.Text, M.MText, M.Hatch, M.Dimension,
+                 M.Leader)
+        ents = [e for e in s.entities.values() if isinstance(e, kinds)]
+        if not ents:
+            return
+        pick = rnd.sample(ents, min(len(ents), rnd.randint(1, 4)))
+        before = {e.id: e for e in pick}
+        if rnd.random() < 0.5:
+            d = (rnd.choice([0.1, 1.1, -2.7, 0.3]), rnd.choice([0.7, -0.35, 1.9]))
+            for dx, dy in (d, (-d[0], -d[1])):
+                v.set_selection(set(before))
+                v.run(C.MoveCmd)
+                type_in(v, "0,0", fmt((dx, dy)))
+                finish()
+            what = "moved %s and back" % (d,)
+        else:
+            c = pt()
+            for _k in range(4):
+                v.set_selection(set(before))
+                v.run(C.RotateCmd)
+                type_in(v, fmt(c), "90")
+                finish()
+            what = "turned 4 x 90 degrees about %s" % (c,)
+        for i, e in before.items():
+            assert i in s.entities, "%s gone after being %s" % (e.kind, what)
+            BC.same_place(e, s.entities[i], what)
+        BC.CHECKED["round trip"] += 1
+
     def op_fit():
         # Fit (the status bar's Scale list: the biggest standard scale the drawing fits at,
         # moved to the middle if need be), or a scale picked from that list
@@ -932,7 +968,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
              (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2),
-             (op_fit, 2), (op_run_props, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
+             (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4)]

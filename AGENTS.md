@@ -74,6 +74,9 @@ and installs the release.
   drawings; a drawing as AutoCAD Electrical writes it (made by the battery: the owner's drawings
   never go in the repository); the recent files list under Windows' path rules; speed at
   scale; speed on an imported drawing; pictures.
+- **Drawing slop** (almost right, not exactly): after every step, no wire end within 0.01" of
+  another wire or a pin without joining it; objects moved away and back, or turned 90 degrees
+  four times, end exactly where they were; a snap lands exactly on a real point.
 
 The run reports how many times each check ran to the end: a check that always skips proves
 nothing.
@@ -100,6 +103,22 @@ owner's rule, Nov 2026):
 - where it can be, a check of what the command must do.
 
 The run reports the kinds of objects it saw: check yours is there.
+
+## Slop in the code (the owner's rule, Nov 2026: "please add a search for slop")
+`tools/slop_check.py` runs on every build (`tests/test_slop.py`) and fails on what careless or
+machine-written changes leave behind:
+- an error swallowed by a broad `except` with no reason on its line;
+- a placeholder (TODO, FIXME, XXX, HACK, TBD, lorem ipsum);
+- `print()` in the program;
+- an unused import;
+- a function nothing calls;
+- a comment or docstring naming something that doesn't exist (after a rename or move);
+- filler words in the manual, release notes or README ("seamless", "robust", "leverage"...);
+- a test that checks nothing;
+- commented-out code;
+- a block of 8 lines repeated.
+
+Fix what it finds; a line may opt out only with a `slop-ok: <why>` comment on it.
 
 ## Security updates
 - `.github/workflows/security-check.yml` runs every Monday (and by hand): pip-audit on

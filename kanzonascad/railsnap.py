@@ -36,17 +36,6 @@ def span(ins, rail, dx=0.0, dy=0.0):
     return min(out), max(out)
 
 
-def on_rail(sheet, ins, tol=1e-6):
-    """The DIN rail a placed footprint sits on (its rail point on the centerline), or None."""
-    q = rail_point(ins)
-    for e in sheet.query((q[0] - tol, q[1] - tol, q[0] + tol, q[1] + tol)):
-        if isinstance(e, M.Rail):
-            s, t = _across(e, q)
-            if -tol <= s <= e.length() + tol and abs(t) <= tol:
-                return e
-    return None
-
-
 def magnet(sheet, moving, dx, dy, tol, copy=False):
     """Where moving objects go when shifted by (dx, dy) with the rail magnet: (dx, dy, hit);
     hit is None (no footprint over a rail: dx, dy as given) or {"rail", "point" (the rail

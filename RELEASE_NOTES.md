@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.12
+
+**Fixed**
+- The geometric center snap (GCE) lands exactly on the center of small closed shapes far from
+  the origin, as in imported drawings (it could be a hair off).
+
 ## 0.15.11
 
 **Fixed**

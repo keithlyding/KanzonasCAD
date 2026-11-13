@@ -154,7 +154,8 @@ def snap_oracle(view, rnd):
     assert gk == kind, (gk, kind)
     assert G.dist(gq, p) <= r + 1e-9, "snapped beyond the aperture: %s" % (gq,)
     cands = snap_candidates(view, p, r, kind)
-    assert any(G.dist(gq, c) < 1e-6 for c in cands), \
+    # (exactly on it, but for float rounding: a snap a hair off is slop)
+    assert any(G.dist(gq, c) <= 1e-9 * max(1.0, abs(c[0]), abs(c[1])) for c in cands), \
         "%s snap at %s is no %s point of any object near %s" % (kind, gq, kind, p)
     CHECKED["snap " + kind] += 1
     return kind
@@ -200,6 +201,46 @@ def text_under(view, e, p, r):
     elif isinstance(e, (M.Composite,)):
         parts += list(e.parts())
     return any(isinstance(w, (M.Text, M.MText)) and w.distance(p) <= r for w in parts)
+
+
+# ---- drawing slop: almost right, not exactly ----------------------------------------------------
+def near_misses(sheet, lo=1e-6, hi=0.01):
+    """Wire ends that look joined but aren't: within hi (real inches: the battery draws wires
+    a quarter inch apart or more, so anything closer is rounding, not a design) of another
+    wire or a symbol's pin, yet farther than the program's own tolerance lo (wires.TOL):
+    [(wire id, end, what it nearly meets, distance)]."""
+    out = []
+    for w in sheet.wires():
+        for p in (w.points[0], w.points[-1]):
+            box = (p[0] - hi, p[1] - hi, p[0] + hi, p[1] + hi)
+            for o in sheet.query(box):
+                if o.id == w.id:
+                    continue
+                if isinstance(o, M.Wire):
+                    d = min(G.dist(p, o.points[0]), G.dist(p, o.points[-1]), o.distance(p))
+                elif isinstance(o, M.Insert) and o.defn is not None and o.defn.pins:
+                    d = min((G.dist(p, q) for _n, q in o.pin_points()), default=hi * 2)
+                else:
+                    continue
+                if lo < d < hi:
+                    out.append((w.id, p, o.kind, d))
+    CHECKED["near misses"] += 1
+    return out
+
+
+def same_place(a, b, what):
+    """a and b (entities) are where each other is, exactly but for float rounding: their
+    boxes and snap points."""
+    def close(x, y):
+        return abs(x - y) <= 1e-9 * max(1.0, abs(x), abs(y))
+    ba, bb = a.bbox(), b.bbox()
+    assert all(close(x, y) for x, y in zip(ba, bb)), "%s drifted: %s -> %s (%s)" % (
+        a.kind, [round(c, 9) for c in ba], [round(c, 9) for c in bb], what)
+    sa = sorted((k, q[0], q[1]) for k, q in a.snap_points())
+    sb = sorted((k, q[0], q[1]) for k, q in b.snap_points())
+    assert len(sa) == len(sb) and all(x[0] == y[0] and close(x[1], y[1]) and close(x[2], y[2])
+                                      for x, y in zip(sa, sb)), \
+        "%s's points drifted (%s)" % (a.kind, what)
 
 
 # ---- Fit ---------------------------------------------------------------------------------------

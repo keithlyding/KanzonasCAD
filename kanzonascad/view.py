@@ -7,7 +7,7 @@ import math
 import time
 
 from PySide6.QtCore import Qt, QPointF, QRectF, Signal, QTimer
-from PySide6.QtGui import (QPainter, QPen, QColor, QBrush, QTransform, QPainterPath,
+from PySide6.QtGui import (QPainter, QPen, QColor, QTransform, QPainterPath,
                            QPolygonF, QGuiApplication, QPixmap)
 from PySide6.QtWidgets import QWidget
 

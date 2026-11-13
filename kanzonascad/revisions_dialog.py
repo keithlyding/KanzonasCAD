@@ -3,7 +3,6 @@ Date, Description, By, Sheets). New revision adds the next number (0, 1, 2...) d
 the title block's {Revision} and {Date} show the latest revision that applies to each sheet,
 and {Rev 1}, {Rev 1 date}... (the latest), {Rev 2}... fill a revision table."""
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QAbstractItemView, QDialog, QDialogButtonBox, QHBoxLayout,
                                QHeaderView, QLabel, QMessageBox, QPushButton, QTableWidget,
                                QTableWidgetItem, QVBoxLayout)
