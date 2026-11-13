@@ -135,6 +135,15 @@ class CadView(QWidget):
         self._settle.setSingleShot(True)
         self._settle.setInterval(int(self.SETTLE * 1000))
         self._settle.timeout.connect(self.update)
+        # a picture bigger than the view (MARGIN of it more on every side), drawn while the
+        # view is still: panning and zooming out show the drawing around it instead of an
+        # empty band (the owner: "the black edges is a minor annoyance"): (what it shows,
+        # scale, center, picture, margin x, margin y)
+        self._wide = None
+        self._widen = QTimer(self)
+        self._widen.setSingleShot(True)
+        self._widen.setInterval(int(self.WIDEN * 1000))
+        self._widen.timeout.connect(self._make_wide)
         # while selecting with a window or a lasso: {"start", "pressed" (the button is still
         # down from the first click), "lasso" (points, once dragged), "crossing"}
         self._window = None
@@ -1103,7 +1112,9 @@ class CadView(QWidget):
                 p.revision, p.title_block.version,
                 tuple((n, l.color, l.visible) for n, l in p.layers.items()))
 
-    SETTLE = 0.14           # seconds without a pan or zoom step before the sharp redraw
+    SETTLE = 0.10           # seconds without a pan or zoom step before the sharp redraw
+    MARGIN = 0.5            # the wide picture: this much of the view more on every side
+    WIDEN = 0.4             # seconds the view stays still before the wide picture is drawn
     FAST_ZOOM = 4.0         # past this much zoom from the last sharp picture, redraw at once
     FAST_PAN = 0.6          # ...or past this much of the view panned
 
@@ -1118,28 +1129,71 @@ class CadView(QWidget):
         k = self._drawing_key()
         return k[:3] + k[5:] + (frozenset(self.sel), frozenset(self._preview))
 
-    def _fast_view(self):
-        """The transform that puts the last sharp picture where it belongs now, while panning
-        or zooming (None: draw it all again)."""
-        got = self._shown
-        if got is None or time.perf_counter() > self._moving_until:
-            return None
-        key, k0, c0, pm = got
-        if key != self._shown_key():
-            return None
+    def _moved(self, k0, c0, room_x=0.0, room_y=0.0):
+        """The transform from a picture of the view at zoom k0 and center c0 to the view now,
+        or None when it zoomed or panned too far for it (room: how much of a margin the
+        picture has beyond the view, in pixels)."""
         r = self.scale / k0
         if not (1 / self.FAST_ZOOM <= r <= self.FAST_ZOOM):
             return None
         dx = (c0[0] - self.center[0]) * self.scale
         dy = -(c0[1] - self.center[1]) * self.scale
-        if abs(dx) > self.width() * self.FAST_PAN or abs(dy) > self.height() * self.FAST_PAN:
+        if abs(dx) > self.width() * self.FAST_PAN + room_x * r or \
+                abs(dy) > self.height() * self.FAST_PAN + room_y * r:
             return None
         w2, h2 = self.width() / 2, self.height() / 2
         t = QTransform()
         t.translate(w2 + dx, h2 + dy)
         t.scale(r, r)
         t.translate(-w2, -h2)
-        return t, pm
+        return t
+
+    def _fast_view(self):
+        """The transform that puts the last sharp picture where it belongs now, while panning
+        or zooming, and that picture (None: draw it all again). The wide one (with a margin
+        round the view) when there is one for what is shown, else the view's own."""
+        if time.perf_counter() > self._moving_until:
+            return None
+        key = self._shown_key()
+        w = self._wide
+        if w is not None and w[0] == key:
+            _k, k0, c0, pm, mx, my = w
+            t = self._moved(k0, c0, mx, my)
+            if t is not None:
+                # (the wide picture's pixel (u, v) is the view's (u - mx, v - my) then)
+                return QTransform.fromTranslate(-mx, -my) * t, pm
+        got = self._shown
+        if got is None or got[0] != key:
+            return None
+        t = self._moved(got[1], got[2])
+        return None if t is None else (t, got[3])
+
+    def _make_wide(self):
+        """Draw the wide picture (the view and MARGIN more on every side) while the view is
+        still, for panning and zooming out to show instead of an empty band."""
+        if time.perf_counter() <= self._moving_until or not self.isVisible():
+            return
+        key = self._shown_key()
+        if self._wide is not None and self._wide[0] == key and \
+                self._wide[1] == self.scale and self._wide[2] == self.center:
+            return
+        pal = Palette(self.dark)
+        mx, my = round(self.width() * self.MARGIN), round(self.height() * self.MARGIN)
+        dpr = self.devicePixelRatioF()
+        W, H = self.width() + 2 * mx, self.height() + 2 * my
+        pm = QPixmap(max(1, round(W * dpr)), max(1, round(H * dpr)))
+        pm.setDevicePixelRatio(dpr)
+        p = QPainter(pm)
+        p.fillRect(QRectF(0, 0, W, H), pal.backdrop)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setTransform(self.transform() * QTransform.fromTranslate(mx, my))
+        self.renderer().paint(p, under=(lambda q: self._paint_grid(q, pal, (mx, my)))
+                              if self.grid_on else None)
+        if self.overlay is not None:
+            self.overlay(p, self)
+        self._paint_selection(p, pal)
+        p.end()
+        self._wide = (key, self.scale, self.center, pm, mx, my)
 
     def _drawing_picture(self, pal):
         """The paper, grid, border, title block and drawing as a picture, drawn again only
@@ -1207,6 +1261,13 @@ class CadView(QWidget):
             # (panning or zooming: the last picture, moved and scaled; sharp once it stops)
             t, old = fast
             p.fillRect(QRectF(0, 0, self.width(), self.height()), pal.backdrop)
+            # (past the picture's edge, the sheet's paper where it lies, not an empty band;
+            # the objects there come with the sharp picture)
+            w, h = self.sheet().paper()
+            p.save()
+            p.setTransform(self.transform())
+            p.fillRect(QRectF(0, 0, w, h), pal.paper)
+            p.restore()
             p.save()
             p.setRenderHint(QPainter.SmoothPixmapTransform, True)
             p.setTransform(t)
@@ -1216,6 +1277,8 @@ class CadView(QWidget):
             pm = self._lit_picture(pal)
             p.drawPixmap(0, 0, pm)
             self._shown = (self._shown_key(), self.scale, self.center, pm)
+            if time.perf_counter() > self._moving_until:
+                self._widen.start()         # (the wide picture, once the view stays still)
         p.setRenderHint(QPainter.Antialiasing, True)
         p.save()
         p.setTransform(self.transform())
@@ -1257,14 +1320,17 @@ class CadView(QWidget):
         self._paint_crosshair(p, pal)
         p.end()
 
-    def _paint_grid(self, p, pal):
+    def _paint_grid(self, p, pal, margin=(0, 0)):
+        """The grid's dots over the view (and margin pixels more round it: the wide
+        picture's)."""
         k = self.grid_spacing
         if k * self.scale < 8:
             return
         s = self.sheet()
         x0, y0, x1, y1 = s.frame()
-        w0 = self.to_world(QPointF(0, self.height()))
-        w1 = self.to_world(QPointF(self.width(), 0))
+        mx, my = margin
+        w0 = self.to_world(QPointF(-mx, self.height() + my))
+        w1 = self.to_world(QPointF(self.width() + mx, -my))
         x0, y0 = max(x0, w0[0]), max(y0, w0[1])
         x1, y1 = min(x1, w1[0]), min(y1, w1[1])
         if x0 >= x1 or y0 >= y1:

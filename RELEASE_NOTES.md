@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.11
+
+**Fixed**
+- Fewer empty edges while panning and zooming out: while the view stays still, the drawing
+  around it is made ready, so it shows right away when you pan or zoom out, and the sharp
+  picture comes back sooner after you stop.
+
 ## 0.15.10
 
 **Fixed**
