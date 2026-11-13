@@ -59,7 +59,10 @@ def _read(p):
 
 
 def _rel(p):
-    return os.path.relpath(p, ROOT).replace(os.sep, "/")
+    try:
+        return os.path.relpath(p, ROOT).replace(os.sep, "/")
+    except ValueError:      # (on Windows, a file on another drive: shown whole)
+        return p
 
 
 def _ok(line):
