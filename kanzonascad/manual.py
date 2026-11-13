@@ -866,7 +866,8 @@ the modify commands.</li>
 <li>Mouse wheel zooms at the cursor; hold the <b>middle button</b> to pan; double-click the
 middle button for <b>Zoom extents</b>. While you pan or zoom, the picture on screen moves and
 scales with the mouse (instantly, however busy the drawing), and the drawing is drawn again
-sharp a moment after you stop.</li>
+sharp a moment after you stop. While the view stays still, the drawing around it (half the
+window more on every side) is made ready too, so panning and zooming out show it right away.</li>
 <li><b>Zoom extents</b> (Ctrl+Shift+E), <b>Zoom to sheet</b> (Ctrl+0), <b>Zoom in</b> (Ctrl+=),
 <b>Zoom out</b> (Ctrl+-). Zooming out goes until the whole sheet and everything drawn take
 about a quarter of the window, on a sheet with a scale too (at 1:24 the sheet is 24 times its

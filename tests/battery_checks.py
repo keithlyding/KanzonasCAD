@@ -355,6 +355,29 @@ def zoom_checks(view, rnd):
     view.repaint()
     assert view._shown is not None and view._shown[1] == view.scale and \
         view._shown[2] == view.center, "not drawn sharp at the view's zoom once it stopped"
+    # (the wide picture, drawn while still: a step puts each point of it where the drawing's
+    # point is now)
+    view._make_wide()
+    if view._wide is not None:
+        _k, _k0, _c0, _pm, mx, my = view._wide
+        pts = [view.to_world(QPointF(rnd.uniform(0, view.width()), rnd.uniform(0, view.height())))
+               for _i in range(3)]
+        before = [view.to_screen(q) for q in pts]
+        view.zoom_at(rnd.choice([1.2, 1 / 1.2, 1 / 1.5]), QPointF(view.width() / 3,
+                                                                  view.height() / 2))
+        got = view._fast_view()
+        if got is not None:
+            t, _used = got
+            off = mx if _used is view._wide[3] else 0
+            offy = my if _used is view._wide[3] else 0
+            for q, b in zip(pts, before):
+                m = t.map(QPointF(b.x() + off, b.y() + offy))
+                n = view.to_screen(q)
+                assert abs(m.x() - n.x()) < 1e-4 and abs(m.y() - n.y()) < 1e-4, \
+                    "the moved picture is off by %.3f px" % max(abs(m.x() - n.x()),
+                                                               abs(m.y() - n.y()))
+        view._moving_until = 0.0
+        view.repaint()
     CHECKED["zoom"] += 1
 
 
