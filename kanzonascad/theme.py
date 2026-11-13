@@ -108,7 +108,7 @@ def _load_font():
                 _font["chars"] = json.load(f)
             _font["family"] = fams[0]
             break
-    except Exception:
+    except Exception:       # (the icon font unreadable: icon_named falls back to qtawesome)
         _font["family"] = None
     return _font["family"]
 
@@ -157,7 +157,7 @@ def icon_named(name):
     try:                                # fallback: the font wasn't found on its own
         import qtawesome as qta
         return qta.icon("mdi6." + name, color=color, color_active=color)
-    except Exception:
+    except Exception:       # (no icon font at all: buttons keep their text, without an icon)
         return QIcon()
 
 
@@ -215,7 +215,7 @@ def _ask_scheme(mode):
 def _system_prefers_dark():
     try:
         return QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
-    except Exception:
+    except Exception:       # (a Qt or system without a color scheme: the light theme)
         return False
 
 

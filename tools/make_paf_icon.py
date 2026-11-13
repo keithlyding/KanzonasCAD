@@ -4,7 +4,6 @@ Format asks for (256 colors at 16, 32 and 48 px, plus true color with transparen
 
     python tools/make_paf_icon.py
 """
-import os
 import struct
 import sys
 

@@ -4,7 +4,7 @@ project, the Sheets panel, the command line and the status bar with the drafting
 import json
 import os
 
-from PySide6.QtCore import Qt, QMimeData, QSize, QTimer, QByteArray
+from PySide6.QtCore import Qt, QMimeData, QTimer, QByteArray
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QGuiApplication
 from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QListWidget,
                                QListWidgetItem, QFileDialog, QMessageBox, QLabel, QToolBar,

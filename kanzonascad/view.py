@@ -7,7 +7,7 @@ import math
 import time
 
 from PySide6.QtCore import Qt, QPointF, QRectF, Signal, QTimer
-from PySide6.QtGui import (QPainter, QPen, QColor, QBrush, QTransform, QPainterPath,
+from PySide6.QtGui import (QPainter, QPen, QColor, QTransform, QPainterPath,
                            QPolygonF, QGuiApplication, QPixmap)
 from PySide6.QtWidgets import QWidget
 
@@ -401,7 +401,7 @@ class CadView(QWidget):
                 bb = (0, 0, w, h)
             bw, bh = max(bb[2] - bb[0], 1e-3), max(bb[3] - bb[1], 1e-3)
             vw, vh = max(self.width(), 100), max(self.height(), 100)
-            self.scale = max(1e-3, min(vw / bw, vh / bh) * 0.94)
+            self.scale = max(1e-9, min(vw / bw, vh / bh) * 0.94)   # (any size shown)
             self.center = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
             self._fit = how
         elif how == "in":

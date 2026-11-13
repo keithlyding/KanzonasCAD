@@ -348,14 +348,6 @@ def set_number(ed, project, sheet, wire, num):
             return
 
 
-def group_of(project, sheet, wire):
-    gs, _dist = groups(project)
-    for ws in gs.values():
-        if any(s is sheet and w.id == wire.id for s, w in ws):
-            return ws
-    return []
-
-
 # ---- showing ---------------------------------------------------------------------------------
 def labels(project, sheet):
     """The wire numbers shown on a sheet: one per group part, above (or left of, when

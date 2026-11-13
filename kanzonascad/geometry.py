@@ -51,10 +51,6 @@ def mirror_angle(angle_deg, a, b):
     return (2 * axis - angle_deg) % 360.0
 
 
-def norm_angle(a):
-    return a % 360.0
-
-
 def sweep(start, end):
     """Counterclockwise sweep from start to end, in (0, 360]."""
     s = (end - start) % 360.0

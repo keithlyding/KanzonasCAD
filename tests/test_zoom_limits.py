@@ -47,6 +47,19 @@ class ZoomLimitsTest(unittest.TestCase):
         self.v.zoom_at(1.2, None)
         self.assertGreaterEqual(self.v.scale, self.v.zoom_limits()[0])
 
+    def test_extents_of_a_huge_drawing(self):
+        # (found by the long battery, seed 252: Fit after Fit made paper-sized text huge, and
+        # Zoom extents stopped at 0.001 pixels an inch, short of showing it)
+        with self.p.edit("huge") as ed:
+            ed.add(self.s, M.Line((0, 0), (2000000.0, 2500000.0)))
+        self.v.zoom("extents")
+        w0 = self.v.to_world(self.v.rect().topLeft())
+        w1 = self.v.to_world(self.v.rect().bottomRight())
+        self.assertLessEqual(w0[0], 0)
+        self.assertGreaterEqual(w1[0], 2000000.0)
+        self.assertGreaterEqual(w0[1], 2500000.0)
+        self.assertLessEqual(w1[1], 0)
+
     def test_one_to_one_unchanged(self):
         # (a sheet at 1:1 keeps the old limit: 2 pixels an inch)
         self.assertEqual(self.v.zoom_limits()[0], 2.0)

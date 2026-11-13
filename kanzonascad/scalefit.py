@@ -1,5 +1,5 @@
 """Choosing a panel sheet's scale: the room a sheet has, what fits at which scale, the best
-scale, and a scale in plain words. No Qt (the Sheet scale window, dialogs.SheetScaleDialog,
+scale, and a scale in plain words. No Qt (the Sheet scale window, scale_dialog.SheetScaleDialog,
 shows what this works out).
 
 Everything here is in two kinds of units: paper inches (what prints) and real inches (the

@@ -1934,10 +1934,6 @@ class SpatialIndex:
         return (int(math.floor(bb[0] / c)), int(math.floor(bb[1] / c)),
                 int(math.floor(bb[2] / c)), int(math.floor(bb[3] / c)))
 
-    def _keys(self, bb):
-        x0, y0, x1, y1 = self._span(bb)
-        return [(i, j) for i in range(x0, x1 + 1) for j in range(y0, y1 + 1)]
-
     def add(self, ent):
         bb = ent.bbox()
         x0, y0, x1, y1 = self._span(bb)

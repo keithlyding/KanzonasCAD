@@ -6,7 +6,6 @@ Typed input (see parse_point): "3,4" absolute, "@1,0" relative to the last point
 relative polar, a plain number = that distance toward the cursor (direct distance entry).
 """
 
-import math
 import re
 
 from . import geometry as G
