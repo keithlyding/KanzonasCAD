@@ -614,7 +614,9 @@ def random_editing(log, out, ops, seed, drawing=None):
             for a, b in zip(w.points, w.points[1:]):
                 m = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
                 got = C.tap_lines(s, m)
-                if got is not None:
+                # (a symbol's pin or a bus's end there too is what a click takes first: seed
+                # 2793, a pin on the middle of a wire)
+                if got is not None and C.pin_side(s, m) is None and C.end_side(s, m) is None:
                     taps.append((m, got))
             if len(ends) > 8 and len(taps) > 8:
                 break
