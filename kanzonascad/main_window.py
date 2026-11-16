@@ -406,6 +406,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
         self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
+        self._cmd_act("dash_box", "Dashed bo&x", C.DashBoxCmd, "Dashed box")
         self._cmd_act("hatch", "&Hatch", C.HatchCmd, "Hatch")
         self._cmd_act("mtext", "&Multiline text", C.MTextCmd, "Multiline text")
         self._cmd_act("use_tb", "&Use as title block", C.UseTitleBlockCmd, "Use as title block")
@@ -581,7 +582,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", "mtext", "hatch", None,
                   "wire", "bus",
                   "wire_cross", None,
-                  "dim_linear", "dim_aligned", "leader", None, "rail", "duct"):
+                  "dim_linear", "dim_aligned", "leader", "dash_box", None, "rail", "duct"):
             if k == "CIRCLE":
                 cm = m.addMenu("&Circle")
                 for ck in self.CIRCLE_KEYS:
@@ -658,7 +659,7 @@ class MainWindow(BlockEditing, QMainWindow):
         ])
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
-            ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
+            ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"], a["dash_box"]]),
             # (the owner: "Copy is not included in schematic and needs to be")
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"], a["attr_vis"],
@@ -792,6 +793,7 @@ class MainWindow(BlockEditing, QMainWindow):
         v.selectionChanged.connect(self._update_ui)
         v.selectionChanged.connect(self._fill_layers)
         v.sheetChanged.connect(self._fill_sheets)
+        v.sheetChanged.connect(self._pick_on_sheet_change)
         v.sheetChanged.connect(self._update_ui)
         v.sheetChanged.connect(lambda v=v: self._ribbon_for_sheet(v))
         v.commandChanged.connect(self._update_ui)
@@ -1719,6 +1721,9 @@ class MainWindow(BlockEditing, QMainWindow):
                 with v.project.edit("Edit leader") as ed:
                     ed.change(v.sheet(), new)
             return
+        if isinstance(ent, M.DashBox):
+            self.edit_dash_box(ent)
+            return
         new = dialogs.edit_text_dialog(self, ent)
         if new is not None:
             with v.project.edit("Edit text") as ed:
@@ -2385,6 +2390,74 @@ class MainWindow(BlockEditing, QMainWindow):
         with v.project.edit("Automatic cross-references " + ("on" if on else "off")) as ed:
             xrefs.set_auto(ed, v.project, bool(on))
         self._update_ui()
+
+    # ---- dashed boxes, and devices picked on the drawing ----------------------------------
+    def ask_dash_box(self, box):
+        """A dashed box's window (DashBoxCmd, double-click): its note and the device it
+        belongs to. {"text", "device": an Insert or None, "pick": True to pick it on the
+        drawing}, or None when cancelled."""
+        v = self.view()
+        return dialogs.dash_box_dialog(self, v.project, box)
+
+    def edit_dash_box(self, box):
+        v = self.view()
+        got = self.ask_dash_box(box)
+        if got is None:
+            return
+        sheet = v.sheet()
+        from . import tags
+
+        def apply(dev):
+            cur = sheet.entities.get(box.id)
+            if cur is None:
+                return
+            attrs = {k: x for k, x in cur.attrs.items() if k not in ("PARENT", "TAG")}
+            if dev is not None:
+                attrs = tags.link_attrs(attrs, dev)
+            with v.project.edit("Edit dashed box") as ed:
+                ed.change(sheet, cur.copy(text=got["text"], attrs=attrs))
+        if got.get("pick"):
+            # (Esc while picking leaves the box as it was)
+            self.pick_device_for(lambda dev: dev is not None and apply(dev))
+        else:
+            apply(got.get("device"))
+
+    _picking = None             # (the sheet shown before, what to do with the device picked)
+
+    def pick_device_for(self, done):
+        """Pick a device on the drawing, on any sheet (the owner, 0.16: "be able to navigate
+        to a sheet and select it"): commands.PickDeviceCmd runs on the sheet shown, and again
+        on each sheet gone to; a device clicked, or Esc, goes back to the sheet it started on
+        and calls done(device) (None after Esc)."""
+        v = self.view()
+        if v is None:
+            return
+        self._picking = (v, v.sheet_id, done)
+
+        def got(dev):
+            QTimer.singleShot(0, lambda: self._picked(dev))
+        self._pick_got = got
+        v.run(C.PickDeviceCmd, got)
+
+    def _picked(self, dev):
+        state = self._picking
+        if state is None:
+            return
+        v, sheet_id, done = state
+        if dev is None and isinstance(v.cmd, C.PickDeviceCmd):
+            return                      # (only the sheet changed: it runs again there)
+        self._picking = None
+        v.show_sheet(sheet_id)
+        done(dev)
+
+    def _pick_on_sheet_change(self):
+        """While a device is being picked, it goes on on the sheet gone to."""
+        state = self._picking
+        if state is None or state[0] is not self.view():
+            return
+        v = state[0]
+        if not isinstance(v.cmd, C.PickDeviceCmd):
+            v.run(C.PickDeviceCmd, self._pick_got)
 
     def pick_parent(self, cands):
         """The device a contact belongs to, picked from a list: (sheet, device) or None."""

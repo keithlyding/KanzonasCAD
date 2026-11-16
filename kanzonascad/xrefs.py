@@ -20,7 +20,7 @@ Either way, out_of_date() lists the sheets whose shown references differ from th
 A reference is a plain tuple (x, y, text, height): saved in the sheet as it is while held.
 """
 
-from .model import Text
+from .model import Insert, Text, text_width
 from . import tags
 
 MARK = {"NO": "NO", "NC": "NC", "NOTC": "NO", "NOTO": "NO", "NCTO": "NC", "NCTC": "NC"}
@@ -37,7 +37,8 @@ def _signature(project):
 
 
 def _where(project, sheet, e):
-    return project.zone_text(sheet, e.pos[0], e.pos[1]) or "%s-?" % project.sheet_number(sheet)
+    q = e.pos if isinstance(e, Insert) else e.points[0]     # (a dashed box: its first corner)
+    return project.zone_text(sheet, q[0], q[1]) or "%s-?" % project.sheet_number(sheet)
 
 
 def _order(project):
@@ -45,7 +46,7 @@ def _order(project):
 
     def key(item):
         s, e = item
-        k = tags.order_key(s, "across")(e.pos)
+        k = tags.order_key(s, "across")(e.pos if isinstance(e, Insert) else e.points[0])
         return (pos.get(s.id, 0), k)
     return key
 
@@ -60,10 +61,17 @@ def live_all(project):
     index = tags.devices(project)
     children = {}                                   # parent DEV -> [(sheet, contact)]
     contacts = []
+    boxes = []
     for s in project.sheets:
         for e in s.inserts():
             if tags.is_child(e):
                 contacts.append((s, e))
+                dev = e.attrs.get("PARENT")
+                if dev in index:
+                    children.setdefault(dev, []).append((s, e))
+        for e in s.entities.values():
+            if tags.is_linked_box(e):
+                boxes.append((s, e))
                 dev = e.attrs.get("PARENT")
                 if dev in index:
                     children.setdefault(dev, []).append((s, e))
@@ -82,7 +90,7 @@ def live_all(project):
         x = (bb[0] + bb[2]) / 2.0
         y = bb[1] - GAP - hh
         for cs, c in items:
-            mark = MARK.get(c.defn.contact, "")
+            mark = MARK.get(c.defn.contact, "") if isinstance(c, Insert) else ""
             text = ("%s %s" % (mark, _where(project, cs, c))).strip()
             out[s.id].append((round(x, 6), round(y, 6), text, hh))
             y -= hh * LINE
@@ -103,6 +111,14 @@ def live_all(project):
         text = _where(project, got[0], got[1]) if got is not None else "?"
         bb = c.bbox()
         out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - hh, 6), text, hh))
+    # beside a dashed box's tag: where its device is ("PDB1  1-B2")
+    for s, b in boxes:
+        hh = hk[s.id]
+        got = index.get(b.attrs.get("PARENT")) if b.attrs.get("PARENT") else None
+        text = _where(project, got[0], got[1]) if got is not None else "?"
+        x, y = b.tag_point()
+        x += text_width(b.tag(), b.height) + hh * 0.6 + text_width(text, hh) / 2
+        out[s.id].append((round(x, 6), round(y, 6), text, hh))
     _cache["sig"], _cache["by_sheet"] = sig, out
     return out
 

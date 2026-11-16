@@ -20,7 +20,7 @@ number of its sheet and a two-digit count on that page: CR601, CR602, M601; on p
 import re
 import uuid
 
-from .model import Insert
+from .model import DashBox, Insert
 
 ORDERS = {"across": "Across, then down", "down": "Down, then across"}
 
@@ -304,7 +304,39 @@ def sync_children(ed, project):
                 p = by_tag.get(e.attrs["TAG"].upper())
                 if p is not None:
                     ed.change(s, e.copy(attrs=link_attrs(e.attrs, p)))
+        # dashed boxes that belong to a device show its tag, as contacts do
+        for e in list(s.entities.values()):
+            if not is_linked_box(e):
+                continue
+            dev = e.attrs.get("PARENT")
+            got = index.get(dev) if dev else None
+            if got is not None:
+                if got[1].attrs.get("TAG", "") != e.tag():
+                    ed.change(s, e.copy(attrs=link_attrs(e.attrs, got[1])))
+            elif e.tag() and not dev:
+                p = by_tag.get(e.tag().upper())
+                if p is not None:
+                    ed.change(s, e.copy(attrs=link_attrs(e.attrs, p)))
     number_terminals(ed, project)
+
+
+def is_linked_box(e):
+    """A dashed box that belongs to a device (or names one by its tag)."""
+    return isinstance(e, DashBox) and bool(e.attrs.get("PARENT") or e.attrs.get("TAG"))
+
+
+def device_choices(project):
+    """[(sheet, device)] a dashed box (or a contact) can belong to, in page order and by tag
+    on a page: the Belongs to list."""
+    out = []
+    for i, s in enumerate(project.sheets):
+        for e in s.inserts():
+            if is_device(e) and e.attrs.get("DEV"):
+                tag = e.attrs.get("TAG", "")
+                m = re.match(r"([A-Za-z]*)(\d*)", tag)
+                out.append(((i, m.group(1), int(m.group(2) or 0), tag), s, e))
+    out.sort(key=lambda t: t[0])
+    return [(s, e) for _k, s, e in out]
 
 
 def numbered(e):

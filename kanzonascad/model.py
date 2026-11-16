@@ -1285,6 +1285,211 @@ class Leader(Composite):
         return self.copy(points=[list(fn(q)) for q in self.points])
 
 
+@_register
+class DashBox(Composite):
+    """A dashed box (the owner, 0.16: "I need to be able to add a dashed box and write whatever
+    note I want inside of it and it not be attached to a child or parent"; and boxes that
+    belong to a device, "a dashed box to assign to a parent"): a dashed outline through its
+    four corners (points, in order), a note inside it (text, several lines), and, when it
+    belongs to a device (attrs PARENT, the device's hidden id, and TAG, its tag, as a
+    contact's), that tag above its first corner. height: the text height and the dashes'
+    length come from it, in drawing units (paper-sized, as a leader's). note_at, tag_at: where
+    the note and the tag were dragged to (None: their own places)."""
+    kind = "dashbox"
+    __slots__ = ("points", "text", "height", "attrs", "note_at", "tag_at", "_parts")
+
+    def __init__(self, points, text="", height=0.1, attrs=None, note_at=None, tag_at=None,
+                 **kw):
+        kw.setdefault("layer", "NOTES")
+        super().__init__(**kw)
+        self.points = [_pt(q) for q in points]
+        self.text = str(text or "")
+        self.height = float(height)
+        self.attrs = {k: str(v) for k, v in (attrs or {}).items() if v not in (None, "")}
+        self.note_at = _pt(note_at) if note_at is not None else None
+        self.tag_at = _pt(tag_at) if tag_at is not None else None
+        self._parts = None
+
+    @classmethod
+    def from_corners(cls, a, b, **kw):
+        """A box across and up and down between two opposite corners, its first corner at
+        the top left."""
+        x0, x1 = sorted((a[0], b[0]))
+        y0, y1 = sorted((a[1], b[1]))
+        return cls([(x0, y1), (x1, y1), (x1, y0), (x0, y0)], **kw)
+
+    def _data(self):
+        d = {"points": [list(q) for q in self.points], "height": self.height}
+        if self.text:
+            d["text"] = self.text
+        if self.attrs:
+            d["attrs"] = dict(self.attrs)
+        if self.note_at is not None:
+            d["note_at"] = list(self.note_at)
+        if self.tag_at is not None:
+            d["tag_at"] = list(self.tag_at)
+        return d
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["points"], d.get("text", ""), d.get("height", 0.1), d.get("attrs"),
+                   d.get("note_at"), d.get("tag_at"), layer=d.get("layer", "NOTES"),
+                   color=d.get("color"), id=d.get("id"))
+
+    def tag(self):
+        """What the box shows as its device's: its tag ("" when it belongs to none)."""
+        return self.attrs.get("TAG", "")
+
+    def note_point(self):
+        """Where its note starts (the top left of its first line): dragged there, or inside
+        its first corner, a little in."""
+        if self.note_at is not None:
+            return self.note_at
+        a, b, d = self.points[0], self.points[1], self.points[3]
+        m = self.height * 0.6
+        ux, uy = self._unit(a, b)
+        vx, vy = self._unit(a, d)
+        return (a[0] + (ux + vx) * m, a[1] + (uy + vy) * m)
+
+    def tag_point(self):
+        """Where its tag sits (its lower left): dragged there, or just above its first
+        corner."""
+        if self.tag_at is not None:
+            return self.tag_at
+        a = self.points[0]
+        return (a[0], a[1] + self.height * 0.5)
+
+    @staticmethod
+    def _unit(a, b):
+        L = G.dist(a, b)
+        return ((b[0] - a[0]) / L, (b[1] - a[1]) / L) if L > 1e-12 else (0.0, 0.0)
+
+    def dash_pieces(self):
+        """The dashes of its outline, [(a, b)]: dashes and gaps of a size set by its height,
+        each side starting and ending with a dash (corners drawn)."""
+        dash, gap = self.height * 1.2, self.height * 0.6
+        out = []
+        n = len(self.points)
+        for i in range(n):
+            a, b = self.points[i], self.points[(i + 1) % n]
+            L = G.dist(a, b)
+            if L < 1e-12:
+                continue
+            k = max(1, int(round((L + gap) / (dash + gap))))
+            # (stretched to fit the side exactly: k dashes, k - 1 gaps)
+            d = (L - (k - 1) * gap) / k if k > 1 else L
+            if d < gap * 0.25:
+                k, d = 1, L
+            ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+            t = 0.0
+            for _j in range(k):
+                out.append(((a[0] + ux * t, a[1] + uy * t),
+                            (a[0] + ux * (t + d), a[1] + uy * (t + d))))
+                t += d + gap
+        return out
+
+    def parts(self):
+        if self._parts is not None:
+            return self._parts
+        h = self.height
+        out = [Line(a, b) for a, b in self.dash_pieces()]
+        if self.text:
+            x, y = self.note_point()
+            step = h * LINE_STEP
+            for i, line in enumerate(self.text.splitlines()):
+                if line.strip():
+                    out.append(Text((x, y - i * step), line, h, 0.0, "left", "top"))
+        if self.tag():
+            out.append(Text(self.tag_point(), self.tag(), h, 0.0, "left", "baseline"))
+        for e in out:
+            e.layer, e.color = self.layer, self.color
+        self._parts = out
+        return out
+
+    def _compute_bbox(self):
+        bb = Composite._compute_bbox(self)
+        for q in self.points:
+            bb = G.bbox_union(bb, (q[0], q[1], q[0], q[1]))
+        return bb
+
+    def distance(self, p):
+        n = len(self.points)
+        d = min(G.dist_to_segment(p, self.points[i], self.points[(i + 1) % n])
+                for i in range(n))
+        for e in self.parts():
+            if isinstance(e, Text):
+                d = min(d, e.distance(p))
+        return d
+
+    def crosses(self, rect):
+        n = len(self.points)
+        if any(G.segment_hits_rect(self.points[i], self.points[(i + 1) % n], rect)
+               for i in range(n)):
+            return True
+        return any(e.crosses(rect) for e in self.parts() if isinstance(e, Text))
+
+    def outline(self):
+        return [list(self.points) + [self.points[0]]]
+
+    def pieces(self):
+        n = len(self.points)
+        return [("seg", self.points[i], self.points[(i + 1) % n]) for i in range(n)]
+
+    def _compute_snaps(self):
+        n = len(self.points)
+        out = [("end", q) for q in self.points]
+        out += [("mid", ((self.points[i][0] + self.points[(i + 1) % n][0]) / 2,
+                         (self.points[i][1] + self.points[(i + 1) % n][1]) / 2)) for i in range(n)]
+        return out
+
+    def grips(self):
+        """Its four corners, then its note's start (when it has a note) and its tag (when it
+        belongs to a device)."""
+        out = list(self.points)
+        if self.text:
+            out.append(self.note_point())
+        if self.tag():
+            out.append(self.tag_point())
+        return out
+
+    def with_grip(self, i, p):
+        n = len(self.points)
+        if i < n:
+            # a corner: its two neighbors follow so the sides keep their directions (a
+            # rectangle stays one)
+            pts = [list(q) for q in self.points]
+            a = self.points[i]
+            prev, nxt = self.points[(i - 1) % n], self.points[(i + 1) % n]
+            dx, dy = p[0] - a[0], p[1] - a[1]
+            pts[i] = [p[0], p[1]]
+            for j, o in (((i - 1) % n, prev), ((i + 1) % n, nxt)):
+                ux, uy = self._unit(a, o)
+                # (the neighbor moves across its side: the part of the move square to it)
+                along = dx * ux + dy * uy
+                pts[j] = [o[0] + dx - along * ux, o[1] + dy - along * uy]
+            return self.copy(points=pts)
+        k = i - n
+        if self.text:
+            if k == 0:
+                return self.copy(note_at=list(p))
+            k -= 1
+        return self.copy(tag_at=list(p))
+
+    def _map(self, fn, **_kw):
+        # (scaled, its text and dashes keep their size: they are paper-sized)
+        return self.copy(points=[list(fn(q)) for q in self.points],
+                         note_at=list(fn(self.note_at)) if self.note_at is not None else None,
+                         tag_at=list(fn(self.tag_at)) if self.tag_at is not None else None)
+
+    def exploded(self):
+        out = []
+        for e in self.parts():
+            c = e.copy()
+            c.id = None
+            out.append(c)
+        return out
+
+
 # ---- DIN rail and wire duct: real-size pieces from one end to the other ---------------------
 MM_IN = 1 / 25.4
 # rail profiles: key -> (name, width, depth) in inches
@@ -1958,7 +2163,7 @@ def paper_sized(e):
     Not when drawing-sized (fixed: brought in with a DXF or DWG)."""
     if e.fixed:
         return False
-    return isinstance(e, (Text, Dimension, Leader, MText)) or \
+    return isinstance(e, (Text, Dimension, Leader, MText, DashBox)) or \
         (isinstance(e, Insert) and bool(e.tag_h))
 
 
@@ -2886,8 +3091,9 @@ class _EditContext:
                 if op[0] == "ent":
                     kinds.add((op[3] or {}).get("kind"))
                     kinds.add((op[4] or {}).get("kind"))
-            if sheets or "insert" in kinds:
-                # a device added, removed or retagged: its contacts show its tag
+            if sheets or "insert" in kinds or "dashbox" in kinds:
+                # a device added, removed or retagged: its contacts (and dashed boxes) show
+                # its tag
                 from .tags import sync_children
                 sync_children(self.ed, self.ed.project)
             if sheets or "insert" in kinds or "wire" in kinds or any(

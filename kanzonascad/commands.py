@@ -1966,6 +1966,10 @@ class InsertCmd(Command):
             return True
         if self.pending is not None:
             from . import tags
+            host = getattr(self.ctx, "host", None)
+            if k == "P" and host is not None and hasattr(host, "pick_device_for"):
+                # (picked on the drawing, on any sheet: placed once it is)
+                return self._pick_on_drawing(host)
             if k == "L":
                 pick = getattr(self.ctx.host, "pick_parent", None)
                 got = pick(self.cands) if pick is not None else None
@@ -2000,6 +2004,21 @@ class InsertCmd(Command):
             self._ask()
             return True
         return False
+
+    def _pick_on_drawing(self, host):
+        """The device this contact (or footprint) belongs to, clicked on the drawing: back on
+        this sheet, it is placed as it was going to be, linked to it."""
+        ctx, at, defn, attrs = self.ctx, self.pending, self.defn, dict(self.attrs)
+        angle, mirror, footprint = self.angle, self.placed_mirror, self.footprint_of
+
+        def done(dev):
+            if dev is None:
+                return
+            cmd = ctx.run(InsertCmd, defn, attrs)
+            cmd.angle, cmd.placed_mirror, cmd.footprint_of = angle, mirror, footprint
+            cmd._place(at, cmd._link(dev))
+        host.pick_device_for(done)
+        return True
 
     def enter(self):
         if self.pending is not None and self.link_name is not None:
@@ -2067,7 +2086,7 @@ class InsertCmd(Command):
                 self.ctx.prompt("Belongs to: Enter for %s (%s), or type a tag"
                                 % (e.attrs.get("TAG", "?"),
                                    project.zone_text(s, e.pos[0], e.pos[1]) or "?"),
-                                [("List", "L")])
+                                [("List", "L"), ("Pick on drawing", "P")])
                 return
             self.ctx.message("Nothing to link this %s to yet (a %s device): placed unlinked "
                              "(double-click it to link it later)"
@@ -2119,6 +2138,100 @@ class InsertCmd(Command):
                     self.ctx.message("Wire cut to fit %s" % self.defn.name)
         self.ctx.set_selection(set())
         self.finish()
+
+
+class DashBoxCmd(Command):
+    """DASHBOX: a dashed box (the owner, 0.16): two opposite corners, then its window: a note
+    to write in it (several lines, or none) and the device it belongs to (none; typed or
+    picked from the project's devices; or Pick on drawing..., on any sheet)."""
+    name, title = "DASHBOX", "Dashed box"
+
+    def begin(self):
+        self.first = None
+        self.ctx.prompt("Specify first corner of the dashed box")
+
+    def point(self, p):
+        if self.first is None:
+            self.first = self.base = self.last = p
+            self.ctx.prompt("Specify opposite corner")
+            return
+        if abs(p[0] - self.first[0]) < 1e-9 or abs(p[1] - self.first[1]) < 1e-9:
+            self.ctx.message("A box needs width and height: pick a corner across from the first")
+            return
+        box = M.DashBox.from_corners(self.first, p, height=self._height())
+        host = self.ctx.host
+        got = host.ask_dash_box(box) if host is not None else {"text": "", "device": None}
+        self.finish()
+        if got is None:
+            return
+        if got.get("pick"):
+            # (the device picked on the drawing, on any sheet: the box is made after)
+            sheet_id = self.ctx.sheet().id
+            # (Esc while picking: no box)
+            host.pick_device_for(lambda dev: dev is not None and _add_box(
+                self.ctx, sheet_id, box, got["text"], dev))
+            return
+        _add_box(self.ctx, self.ctx.sheet().id, box, got["text"], got.get("device"))
+
+    def _height(self):
+        return float(self.ctx.project.settings.get("tag_height", 0.1)) * self.ctx.sheet().k()
+
+    def preview(self, p):
+        if self.first is None or abs(p[0] - self.first[0]) < 1e-9 or \
+                abs(p[1] - self.first[1]) < 1e-9:
+            return []
+        return [M.DashBox.from_corners(self.first, p, height=self._height())]
+
+
+def _add_box(ctx, sheet_id, box, text, device):
+    """Add a dashed box (with its note, belonging to device or to none) to its sheet."""
+    from . import tags
+    project = ctx.project
+    sheet = next((s for s in project.sheets if s.id == sheet_id), None)
+    if sheet is None:
+        return None
+    attrs = tags.link_attrs({}, device) if device is not None else {}
+    b = box.copy(text=text or "", attrs=attrs)
+    with ctx.edit("Dashed box") as ed:
+        if b.layer not in project.layers:
+            ed.layer(b.layer, None, M.Layer(b.layer, M.ADAPTIVE).to_dict())
+        b = ed.add(sheet, b)
+    ctx.message("Dashed box%s" % (" belonging to %s" % device.attrs.get("TAG", "?")
+                                  if device is not None else ""))
+    return b
+
+
+class PickDeviceCmd(Command):
+    """Pick a device on the drawing, on any sheet (go to another sheet and click it): then
+    got(device), or got(None) when Esc stops it. Run by MainWindow.pick_device_for, which
+    starts it again on the sheet shown when the sheet changes."""
+    name, title = "PICKDEVICE", "Pick device"
+    repeatable = False
+
+    def __init__(self, ctx, got):
+        super().__init__(ctx)
+        self.got = got
+
+    def begin(self):
+        self.ctx.prompt("Click the device it belongs to (go to any sheet first if it's on "
+                        "another; Esc stops)")
+
+    def point(self, p):
+        from . import tags
+        e = self.ctx.pick_entity(p, M.Insert) if hasattr(self.ctx, "pick_entity") else None
+        if e is None or not tags.is_device(e) or not e.attrs.get("DEV"):
+            self.ctx.message("That isn't a device with a tag: click a coil, a breaker, a "
+                             "distribution block...")
+            return
+        got, self.got = self.got, None
+        self.finish()
+        got(e)
+
+    def cancel(self):
+        got, self.got = self.got, None
+        Command.cancel(self)
+        if got is not None:
+            got(None)
 
 
 class PickWindowCmd(Command):
@@ -3225,6 +3338,7 @@ COMMANDS = {
     "MTEXT": (MTextCmd, ["MT", "T2", "NOTE"]),
     "USETITLEBLOCK": (UseTitleBlockCmd, ["USETB", "TBUSE"]),
     "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
+    "DASHBOX": (DashBoxCmd, ["DB", "DBOX", "BOX"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
     "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)

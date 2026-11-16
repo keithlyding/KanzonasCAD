@@ -6,6 +6,16 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.16.4
+
+**New**
+- **Dashed box** (Draw menu, Schematic tab): drag two corners and write any note inside it.
+  It can belong to nothing, or to a device: pick one from the list, type its tag, or choose
+  Pick on drawing... and click the device on any sheet. A box that belongs to a device shows
+  its tag and where it is, follows it when it is renumbered, and is listed under it. Drag its
+  corners, note and tag by their grips; double-click it to change it.
+- When placing a contact, **P** lets you pick its coil or device on the drawing, on any sheet.
+
 ## 0.16.3
 
 **New**
