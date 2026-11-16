@@ -232,7 +232,15 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
                 if o.id == w.id:
                     continue
                 if isinstance(o, M.Wire):
-                    d = min(G.dist(p, o.points[0]), G.dist(p, o.points[-1]), o.distance(p))
+                    # (its ends, and its runs straight across or up and down: a slanted run, a
+                    # wire stretched far by a device moved on its pin, passes as near to grid
+                    # points as chance has it, 0.0022" in seed 160: not rounding)
+                    d = min(G.dist(p, o.points[0]), G.dist(p, o.points[-1]))
+                    for a, b in zip(o.points, o.points[1:]):
+                        if abs(a[0] - b[0]) < 1e-9 or abs(a[1] - b[1]) < 1e-9:
+                            d = min(d, G.dist_to_segment(p, a, b))
+                        else:
+                            CHECKED["near misses: slanted runs left out"] += 1
                 elif isinstance(o, M.Insert) and o.defn is not None and o.defn.pins:
                     d = min((G.dist(p, q) for _n, q in o.pin_points()), default=hi * 2)
                 else:
