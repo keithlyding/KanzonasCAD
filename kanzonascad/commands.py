@@ -1338,7 +1338,7 @@ class BusCmd(Command):
         self.side_pins = []             # ...and those pins, each wire starting exactly on one
         self.tap_start = None           # started on wires side by side: (across, [lines])
         self.tap_end = None             # ...ended on them
-        self.shift = (0.0, 0.0)         # started on a pin or end not the first: from it to
+        self.offset = (0.0, 0.0)        # started on a pin or end not the first: from it to
                                         # the first (later clicks are where the one clicked goes)
         self.points = []
         self.hfirst = None
@@ -1476,7 +1476,7 @@ class BusCmd(Command):
                 L = G.dist(a, z)
                 self.toward = ((z[0] - a[0]) / L, (z[1] - a[1]) / L)
                 self.side_pins = list(line)
-                self.shift = (a[0] - p[0], a[1] - p[1])
+                self.offset = (a[0] - p[0], a[1] - p[1])
                 p = a                   # (the first wire from the first of its pins)
                 self.ctx.message("%d wires, %s apart, from %s" % (
                     self.count, _fmt(self.spacing), what))
@@ -1495,7 +1495,7 @@ class BusCmd(Command):
         land = self._landing(sheet, p)
         tap = tap_lines(sheet, p) if land is None and (self.tap_start is None or
                                                        len(self.points) > 1) else None
-        p = land if land is not None else (p[0] + self.shift[0], p[1] + self.shift[1])
+        p = land if land is not None else (p[0] + self.offset[0], p[1] + self.offset[1])
         if G.dist(self.points[-1], p) < 1e-9:
             return
         if tap is not None:
@@ -1656,7 +1656,7 @@ class BusCmd(Command):
             return [M.Wire(q) for q in bus_paths([p, (p[0] + 0.25, p[1])], self.count,
                                                  self.spacing, self.flip)]
         land = self._landing(self.ctx.sheet(), p)
-        p = land if land is not None else (p[0] + self.shift[0], p[1] + self.shift[1])
+        p = land if land is not None else (p[0] + self.offset[0], p[1] + self.offset[1])
         pts = self.points + self._route(p)
         return [M.Wire(q) for q in self._paths(pts)]
 
