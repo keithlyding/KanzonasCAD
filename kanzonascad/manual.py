@@ -1175,7 +1175,7 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>Ctrl+9</td><td>Command line on/off</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
 <tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same symbol)</td></tr>
-<tr><td>Esc</td><td>Cancel the command; clear the selection</td></tr>
+<tr><td>Esc</td><td>Cancel the command; clear the selection (anywhere in the window)</td></tr>
 <tr><td>Delete</td><td>Erase the selection</td></tr>
 <tr><td>Ctrl+arrows / Ctrl+Shift+arrows</td><td>Move the selection one snap step / a tenth of one</td></tr>
 <tr><td>Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S</td><td>New / Open / Save / Save as</td></tr>

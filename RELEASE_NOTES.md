@@ -61,6 +61,9 @@ build fails without them.
 - The layer box: picking a layer for selected objects moved them but the box went back to
   the current layer, as if nothing happened; it now shows their layer. And wires drawn with
   a wire layer current (WIRE BROWN, or one with a gauge) go on it instead of always WIRES.
+- Esc deselects (or cancels the command) wherever the keyboard is: after clicking a ribbon
+  button, in the layer box or the Sheets list. Ribbon buttons no longer take the keyboard from
+  the drawing.
 - Block properties: a block made as a panel footprint (Make block makes one on a panel sheet)
   had its tag prefix, part in cross-references and the rest greyed out, with no way to change
   it. Its Kind can now be changed to schematic symbol (and back), and the window says why

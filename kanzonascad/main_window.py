@@ -286,9 +286,25 @@ class MainWindow(BlockEditing, QMainWindow):
         tip = "%s (%s)" % (text.replace("&", ""), ", ".join([name] + aliases))
         return self._act(key, text, lambda: self._run(cls), tip=tip, label=label)
 
+    def _escape(self):
+        """Esc anywhere in the window (the layer box, the Sheets list, a tab...), not only in
+        the drawing: what it does there (the command cancelled, else nothing selected), and
+        the keyboard back to the drawing (the owner, 0.16: after the ribbon, Esc never
+        deselected until the drawing was clicked)."""
+        v = self.view()
+        self.cmdline.edit.clear()
+        if v is not None:
+            v.escape()
+            v.setFocus()
+
     def _build_actions(self):
         self.acts = {}
         A = self._act
+        esc = QAction("Cancel", self)
+        esc.setShortcut(QKeySequence(Qt.Key_Escape))
+        esc.setShortcutContext(Qt.WindowShortcut)
+        esc.triggered.connect(self._escape)
+        self.addAction(esc)
         A("new", "&New project", self.new_project, "Ctrl+N", label="New")
         A("new_template", "New project from &template...", self.new_from_template,
           icon="new", label="From template")
@@ -719,6 +735,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for key in ("grid", "snap", "ortho", "polar", "osnap"):
             b = QToolButton()
             b.setDefaultAction(self.acts[key])
+            b.setFocusPolicy(Qt.NoFocus)
             b.setToolButtonStyle(Qt.ToolButtonTextOnly)
             b.setAutoRaise(True)
             b.setText(self.acts[key].iconText().upper())
@@ -1678,6 +1695,7 @@ class MainWindow(BlockEditing, QMainWindow):
         # every layer with its light bulb (shown/hidden) and lock, a click away (AutoCAD's
         # layer list)
         states = _TB()
+        states.setFocusPolicy(Qt.NoFocus)
         states.setIcon(theme.icon("lay_states"))
         states.setToolTip("Layers: show or hide, lock or unlock, each one")
         states.setPopupMode(_TB.InstantPopup)

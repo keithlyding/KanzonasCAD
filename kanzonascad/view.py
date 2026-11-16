@@ -1062,16 +1062,20 @@ class CadView(QWidget):
             self.update()                   # the copy + goes
         super().keyReleaseEvent(e)
 
+    def escape(self):
+        """Esc: the command (or a window being dragged) cancelled, else nothing selected."""
+        if self.cmd is not None or self._window is not None:
+            self.cancel()
+        else:
+            self.set_selection(set())
+
     def keyPressEvent(self, e):
         k = e.key()
         if k == Qt.Key_Control and self._drag is not None:
             self.update()                   # the copy + shows
             return
         if k == Qt.Key_Escape:
-            if self.cmd is not None or self._window is not None:
-                self.cancel()
-            else:
-                self.set_selection(set())
+            self.escape()
             return
         typing = self._prompt[2]
         text = e.text()
