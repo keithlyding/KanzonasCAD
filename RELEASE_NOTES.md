@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.15.13
+
+**Fixed**
+- Security: the library that reads DWG files is updated (ezdwg 0.20.0). It checks malformed
+  files more strictly and reads some AutoCAD 2004 files it could lose parts of. DWG files
+  also open faster.
+
 ## 0.15.12
 
 **Fixed**
