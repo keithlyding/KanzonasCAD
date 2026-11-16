@@ -1065,6 +1065,32 @@ def random_editing(log, out, ops, seed, drawing=None):
         BC.second_window(win, w2, p, listeners)
         w2.deleteLater()
 
+    def op_update_blocks():
+        # Library > Update blocks from library... on a project whose copy of a symbol is old
+        # (its tag elsewhere, as 0.15's were): the copies take the library's, and keep their
+        # places, tags and wires (the near-miss and index checks after the step see the wires)
+        placed = [e for e in s.inserts() if e.defn is not None and e.defn.kind == "symbol"
+                  and lib.get("symbol", e.block) is not None]
+        if not placed:
+            return
+        name = rnd.choice(placed).block
+        old = p.blocks[name]
+        if old.tag_pos is not None:
+            with p.edit("an old copy") as ed:
+                ed.block(M.BlockDef.from_dict(dict(
+                    old.to_dict(), tag_pos=[old.tag_pos[0], old.tag_pos[1] - 0.08])))
+        keep = {e.id: (e.pos, e.attrs.get("TAG")) for e in s.inserts() if e.block == name}
+        saved = QMessageBox.question
+        QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
+        try:
+            win.update_blocks_from_library()
+        finally:
+            QMessageBox.question = saved
+        assert p.blocks[name].same_as(lib.get("symbol", name)), "%s not updated" % name
+        now = {e.id: (e.pos, e.attrs.get("TAG")) for e in s.inserts() if e.block == name}
+        assert now == keep, "updating %s moved or retagged its copies" % name
+        BC.CHECKED["update blocks"] += 1
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -1082,7 +1108,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
-             (op_redo, 4), (op_print, 2), (op_window, 2)]
+             (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

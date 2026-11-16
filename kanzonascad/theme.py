@@ -13,7 +13,7 @@ ICONS = {
     # file
     "new": "file-plus-outline", "open": "folder-open-outline", "save": "content-save-outline",
     "save_as": "content-save-edit-outline", "print": "printer-outline", "pdf": "file-pdf-box",
-    "new_window": "open-in-new", "move_window": "dock-window", "close_window": "window-close",
+    "update_blocks": "update", "new_window": "open-in-new", "move_window": "dock-window", "close_window": "window-close",
     "dxf_out": "file-export-outline", "dxf_in": "file-import-outline",
     # edit
     "undo": "undo", "redo": "redo", "cut": "content-cut", "copy_clip": "content-copy",

@@ -18,6 +18,10 @@ build fails without them.
 - Inserting a symbol holds it by its first pin (L1, 1, A1...): click the pin or wire it joins
   and it lands there. A 3-pole fuse clicked on a disconnect's T1 now joins all three poles.
   Type B while placing it to hold it by another pin, or by its middle as before.
+- The tags of the built-in symbols line up: every three-pole device's tag sits at the same
+  height, and every one-line symbol's at another, so a disconnect, fuses and contactor in a
+  row have their tags in a row. Library > Update blocks from library... gives a drawing you
+  already have the new heights (it asks first; Undo takes it back).
 - Sheets in their own windows: Window > Open this sheet in a new window (Ctrl+Shift+N) opens
   the sheet you are on in a window you can put on another screen (it fills your second screen
   if you have one). Both windows work on the same project: one Undo, one Save. You can also

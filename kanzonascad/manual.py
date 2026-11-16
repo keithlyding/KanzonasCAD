@@ -223,7 +223,10 @@ a coil): the point you click is where that pin goes, so click the pin or wire it
 3-pole fuse clicked on a disconnect's T1 meets T1, T2 and T3 with its L1, L2 and L3). The
 command line says which pin it is held by; type B to hold it by the next pin, and after the
 last, by its base point (the middle of the library's symbols). Footprints are placed by their
-base point. The popup opens again where you last put it. In the Parts tab, Insert asks whether to place
+base point. The popup opens again where you last put it. The JIC symbols' tags sit at one
+height above the wire (all the three-pole devices at one, all the one-line symbols at
+another), so the tags of symbols side by side line up; a project started before 0.16 takes
+the new heights with <b>Update blocks from library...</b>. In the Parts tab, Insert asks whether to place
 the part's symbol or its footprint.</p>
 <h3>Making your own</h3>
 <ol>
@@ -337,6 +340,12 @@ descriptions, manufacturers and catalog numbers stay. Wires stay on the pins (ma
 name) and stretch to where the pins moved; a wire on a pin that is gone stays where it was,
 and the command line says how many. No keeps the old drawing. Other projects keep their own
 copies of the block as they were.</p>
+<p><b>Update blocks from library...</b> (Library menu) does the same for every block in the
+project in the drawing tab that the library has differently: one of yours changed since it
+was placed, or a JIC symbol a newer KanzonasCAD draws differently. It lists them and asks
+first; Yes updates them all in one step (Undo takes it back), each copy keeping its tag,
+attributes and place, its wires on its pins. A project keeps its own copy of every block it
+uses, so it opens the same anywhere: this is how it takes a newer one.</p>
 
 
 <h2>Device tags</h2>

@@ -11,7 +11,12 @@ import math
 from .model import BlockDef, Line, Circle, Arc, Polyline, Text
 
 PIN = 0.25          # pins at x = -PIN and +PIN
-TAG = (0.0, 0.22)   # tag position (center of its baseline)
+# Tags at one height above the wire for every symbol of a kind, so the tags of symbols side by
+# side on a rung or on the power lines line up (the owner, with a 3-pole disconnect and fuses
+# whose tags didn't: each sat just above its own drawing, 0.64 to 0.72): clear of the tallest
+TAG_Y = 0.34        # one-line symbols (pins at y = 0): the emergency stop's mushroom, 0.28
+TAG = (0.0, TAG_Y)  # tag position (center of its baseline)
+TAG3_Y = 0.75       # three-pole symbols (L1 at y = 1/2): the disconnect's blade, 0.625
 
 
 def _leads(gap, out):
@@ -132,26 +137,26 @@ def builtin_symbols():
     o += [Line((-0.15625, 0.09375), (0.15625, 0.09375)), Line((0, 0.09375), (0, 0.21875)),
           Line((-0.0625, 0.21875), (0.0625, 0.21875))]
     S.append(_sym("Pushbutton NO", "JIC/Pushbuttons and switches", o, "parent", "NO", "PB",
-                  tag=(0.0, 0.3), description="Pushbutton, normally open"))
+                  tag=TAG, description="Pushbutton, normally open"))
     o = []
     _pb_terminals(o)
     o += [Line((-0.15625, -0.0625), (0.15625, -0.0625)), Line((0, -0.0625), (0, 0.21875)),
           Line((-0.0625, 0.21875), (0.0625, 0.21875))]
     S.append(_sym("Pushbutton NC", "JIC/Pushbuttons and switches", o, "parent", "NC", "PB",
-                  tag=(0.0, 0.3), description="Pushbutton, normally closed"))
+                  tag=TAG, description="Pushbutton, normally closed"))
     o = []
     _pb_terminals(o)
     o += [Line((-0.15625, -0.0625), (0.15625, -0.0625)), Line((0, -0.0625), (0, 0.1875)),
           Arc((0, 0.1875), 0.09375, 0, 180), Line((-0.09375, 0.1875), (0.09375, 0.1875))]
     S.append(_sym("Emergency stop NC", "JIC/Pushbuttons and switches", o, "parent", "NC", "PB",
-                  tag=(0.0, 0.34), description="Mushroom-head emergency stop, normally closed"))
+                  tag=TAG, description="Mushroom-head emergency stop, normally closed"))
     o = []
     _pb_terminals(o)
     o += [Line((-0.125, 0.03125), (0.09375, 0.15625)),
           Text((-0.17, 0.2), "OFF", 0.045, align="center"),
           Text((0.17, 0.2), "ON", 0.045, align="center")]
     S.append(_sym("Selector switch 2-position", "JIC/Pushbuttons and switches", o, "parent",
-                  "NO", "SS", tag=(0.0, 0.3), description="Two-position selector switch"))
+                  "NO", "SS", tag=TAG, description="Two-position selector switch"))
 
     def sensor(name, prefix, actuator, nc, desc):
         o = []
@@ -162,7 +167,7 @@ def builtin_symbols():
             o.append(Line((-0.125, 0.03125), (0.15625, 0.0625)))
         o += actuator
         S.append(_sym(name, "JIC/Sensors", o, "parent", "NC" if nc else "NO", prefix,
-                      tag=(0.0, 0.3), description=desc))
+                      tag=TAG, description=desc))
 
     sensor("Limit switch NO", "LS", [Line((0.0, 0.05), (0.0625, 0.15)),
                                      Polyline([(0.03, 0.15), (0.0625, 0.19), (0.095, 0.15)],
@@ -185,24 +190,24 @@ def builtin_symbols():
     o = [Line((-PIN, 0), (-0.125, 0)), Line((0.125, 0), (PIN, 0)),
          Polyline([(-0.125, -0.0625), (0.125, -0.0625), (0.125, 0.0625), (-0.125, 0.0625)], True),
          Line((-0.125, 0), (0.125, 0))]
-    S.append(_sym("Fuse", "JIC/Protection", o, "device", "", "FU", tag=(0.0, 0.14),
+    S.append(_sym("Fuse", "JIC/Protection", o, "device", "", "FU", tag=TAG,
                   description="Fuse"))
     o = []
     _pb_terminals(o)
     o.append(Arc((0, -0.05), 0.16, 30, 150))
     S.append(_sym("Circuit breaker 1-pole", "JIC/Protection", o, "device", "", "CB",
-                  tag=(0.0, 0.2), description="Circuit breaker, one pole"))
+                  tag=TAG, description="Circuit breaker, one pole"))
     o = []
     _pb_terminals(o)
     o += [Line((-0.125, 0.03125), (0.125, 0.125))]
     S.append(_sym("Disconnect 1-pole", "JIC/Protection", o, "device", "", "DS",
-                  tag=(0.0, 0.22), description="Disconnect switch, one pole"))
+                  tag=TAG, description="Disconnect switch, one pole"))
     o = [Line((-PIN, 0), (-0.125, 0)), Line((0.125, 0), (PIN, 0))]
     k = 0.0625
     o.append(Arc((-0.125 + k, 0), k, 0, 180))
     o.append(Arc((0.125 - k, 0), k, 180, 360))
     S.append(_sym("Overload heater", "JIC/Motor control", o, "parent", "", "OL",
-                  tag=(0.0, 0.16), description="Thermal overload heater"))
+                  tag=TAG, description="Thermal overload heater"))
     o = _contact(True)
     S.append(_sym("Overload contact NC", "JIC/Motor control", o, "child", "NC", "OL",
                   description="Overload relay contact, normally closed"))
@@ -215,16 +220,16 @@ def builtin_symbols():
         o.append(Line((0.16 * math.cos(r), 0.16 * math.sin(r)),
                       (0.22 * math.cos(r), 0.22 * math.sin(r))))
     S.append(_sym("Pilot light", "JIC/Indicators and loads", o, "device", "", "LT",
-                  tag=(0.0, 0.27), description="Pilot light"))
+                  tag=TAG, description="Pilot light"))
     o = []
     _leads(0.1875, o)
     o += [Circle((0, 0), 0.1875), Text((0, -0.04), "MTR", 0.08, align="center")]
-    S.append(_sym("Motor", "JIC/Indicators and loads", o, "device", "", "MTR", tag=(0.0, 0.26),
+    S.append(_sym("Motor", "JIC/Indicators and loads", o, "device", "", "MTR", tag=TAG,
                   description="Motor"))
     o = [Line((-PIN, 0), (-0.125, 0)), Line((0.125, 0), (PIN, 0)),
          Polyline([(-0.125, -0.0625), (0.125, -0.0625), (0.125, 0.0625), (-0.125, 0.0625)], True),
          Line((-0.125, -0.0625), (0.125, 0.0625))]
-    S.append(_sym("Solenoid", "JIC/Indicators and loads", o, "device", "", "SOL", tag=(0.0, 0.14),
+    S.append(_sym("Solenoid", "JIC/Indicators and loads", o, "device", "", "SOL", tag=TAG,
                   description="Solenoid"))
     o = []
     for i in range(3):          # primary, then secondary below
@@ -260,20 +265,20 @@ def builtin_symbols():
                 Arc((-0.125 + k, 0), k, 0, 180), Arc((0.125 - k, 0), k, 180, 360)]
 
     S.append(_sym("Circuit breaker 3-pole", "JIC/Power", _three(cb_pole) + _link(0, 0.6, -0.4),
-                  "device", "", "CB", _three_pins(), tag=(0.0, 0.72),
+                  "device", "", "CB", _three_pins(), tag=(0.0, TAG3_Y),
                   description="Circuit breaker, three poles"))
     S.append(_sym("Disconnect 3-pole", "JIC/Power", _three(ds_pole) + _link(0.0, 0.58, -0.42),
-                  "device", "", "DS", _three_pins(), tag=(0.0, 0.72),
+                  "device", "", "DS", _three_pins(), tag=(0.0, TAG3_Y),
                   description="Disconnect switch, three poles"))
     S.append(_sym("Fuses 3-pole", "JIC/Power", _three(fu_pole), "device", "", "FU",
-                  _three_pins(), tag=(0.0, 0.64), description="Fuses, three poles"))
+                  _three_pins(), tag=(0.0, TAG3_Y), description="Fuses, three poles"))
     S.append(_sym("Contactor power contacts 3-pole", "JIC/Motor control",
                   _three(lambda: _contact(False)) + _link(0.0, 0.4, -0.4), "child", "NO", "M",
-                  _three_pins(), tag=(0.0, 0.72),
+                  _three_pins(), tag=(0.0, TAG3_Y),
                   description="Main (power) contacts of a contactor, three poles"))
     S.append(_sym("Overload heaters 3-pole", "JIC/Motor control",
                   _three(heater_pole) + _link(0.0, 0.42, -0.42), "parent", "", "OL",
-                  _three_pins(), tag=(0.0, 0.66),
+                  _three_pins(), tag=(0.0, TAG3_Y),
                   description="Thermal overload heaters, three poles"))
     r, cx = 0.55, 0.625                 # (the circle clear of the pins, every lead reaching it)
     o = [Circle((cx, 0), r), Text((cx, -0.06), "MTR", 0.15, align="center")]
@@ -282,7 +287,7 @@ def builtin_symbols():
         o.append(Line((-PIN, y), (x, y)))
     S.append(_sym("Motor 3-phase", "JIC/Power", o, "device", "", "MTR",
                   [{"name": "T%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(POLES)],
-                  tag=(cx, 0.68), description="Three-phase motor"))
+                  tag=(cx, TAG3_Y), description="Three-phase motor"))
     o = [_box(-0.125, -0.75, 1.125, 0.75), Text((0.5, -0.06), "VFD", 0.15, align="center")]
     o += [Line((-PIN, y), (-0.125, y)) for y in POLES]
     o += [Line((1.125, y), (1.25, y)) for y in POLES]

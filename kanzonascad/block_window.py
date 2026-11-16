@@ -372,3 +372,46 @@ class BlockEditing:
             msg += "; %d wire(s) stay where they were: their pin is gone" % stranded
         self._say(msg)
         return count
+
+    def update_blocks_from_library(self):
+        """Update blocks from library: the project's own copies of blocks that the library
+        has differently (a symbol of the program's whose tag now sits at one height with the
+        others, one of yours changed since it was placed) take the library's, after asking,
+        in one undoable step. Each copy keeps its tag, attributes and place; wires stay on
+        its pins (matched by name). Returns how many blocks were updated."""
+        d = self.doc()
+        if d is None or is_block_doc(d):
+            return 0
+        p = d.project
+        lib = self.library
+        changed = []
+        for name, pdef in sorted(p.blocks.items()):
+            ldef = lib.get(pdef.kind, name)
+            if ldef is not None and not ldef.same_as(pdef) and BE.copies(p, name):
+                changed.append(ldef)
+        if not changed:
+            QMessageBox.information(self, "Update blocks", "The blocks in %s are the same as "
+                                    "the library's." % d.name())
+            return 0
+        names = [b.name for b in changed]
+        r = QMessageBox.question(
+            self, "Update blocks", "%d block(s) in %s differ from the library's:\n\n%s\n\n"
+            "Update them to the library's? Each copy keeps its tag, attributes and place, "
+            "and its wires stay on its pins (Undo takes it back)." % (
+                len(changed), d.name(), "\n".join(names[:20]) + (
+                    "\n..." if len(names) > 20 else "")),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        if r != QMessageBox.Yes:
+            return 0
+        count = stranded = 0
+        with p.edit("Update blocks from library") as ed:
+            for ldef in changed:
+                c, st = BE.update_copies(ed, p, M.BlockDef.from_dict(ldef.to_dict()))
+                count += c
+                stranded += st
+        msg = "Updated %d block(s), %d cop%s" % (len(changed), count,
+                                                 "ies" if count != 1 else "y")
+        if stranded:
+            msg += "; %d wire(s) stay where they were: their pin is gone" % stranded
+        self._say(msg)
+        return len(changed)

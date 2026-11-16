@@ -500,6 +500,8 @@ class MainWindow(BlockEditing, QMainWindow):
           icon="block_props", label="Duplicate block",
           tip="Copy the selected block under a new name in your library (catalog number left "
               "blank) and open the copy in Edit block")
+        A("update_blocks", "&Update blocks from library...", self.update_blocks_from_library,
+          icon="update_blocks", label="Update blocks")
         A("save_block_as", "Save block &as...", self.save_block_as, icon="save_block",
           label="Save block as",
           tip="Save the block open in this tab to your library under a new name (the one it "
@@ -594,7 +596,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
-                  "save_block_as", None,
+                  "save_block_as", "update_blocks", None,
                   "new_part", "library_folder"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Window")
