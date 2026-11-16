@@ -14,6 +14,14 @@ build fails without them.
   contactor's power contacts and the overload heaters in one). The starter belongs to its
   Contactor coil like any contact: it shows the coil's tag and is listed under it. Both line
   up pole for pole and tag for tag with the other three-pole symbols.
+- Move a symbol's tag: select the symbol and drag the grip on its tag (or on its rating)
+  wherever you want it. It stays there on that copy and follows the symbol when you move it.
+
+**Fixed**
+- A symbol turned sideways shows its tag beside it, clear of its poles, instead of on top of
+  the outer pole.
+- A 3-pole symbol turned either way now lands every pole on the bus you click it onto (turned
+  one way, only L1 used to land); it flips itself to fit, and the preview shows it.
 
 ## 0.16.1
 

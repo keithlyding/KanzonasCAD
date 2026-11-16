@@ -1712,8 +1712,40 @@ class Insert(Entity):
         if d is None or d.kind != "symbol" or d.tag_pos is None or "TAG" in self.hidden:
             return None
         tag = self.attrs.get("TAG", "")
-        return Text(self.to_world(d.tag_pos), tag or (d.prefix + "?" if d.prefix else "?"),
-                    (self.tag_h or d.tag_height) * self.scale, 0.0, "center")
+        at = self.attr_at.get("TAG")
+        spot = at[:2] if at else d.tag_pos
+        align, valign = "center", "baseline"
+        a = self.angle % 180.0
+        if 45.0 <= a < 135.0:
+            # turned sideways: the tag (still read across) beside the symbol, starting at its
+            # spot and running away from it, not centered over the outer pole (the owner, 0.16:
+            # "I don't like the location of the tag when rotated sideways")
+            p, axis = self.to_world(spot), self.to_world((spot[0], 0.0))
+            align, valign = ("left" if p[0] >= axis[0] else "right"), "middle"
+        return Text(self.to_world(spot), tag or (d.prefix + "?" if d.prefix else "?"),
+                    (self.tag_h or d.tag_height) * self.scale, 0.0, align, valign)
+
+    def text_grips(self):
+        """[(attribute name, world point)]: the texts of this copy that can be dragged to a
+        place of their own (Insert's grips after its insertion point): its tag, and each
+        attribute shown at one spot (a 3-pole fuse's three ratings move with the block)."""
+        d = self.defn
+        if d is None or d.kind != "symbol":
+            return []
+        out = []
+        t = self.tag_text()
+        if t is not None:
+            out.append(("TAG", t.pos))
+        spots = {}
+        for a in d.attr_texts:
+            spots.setdefault(a["attr"], []).append(a)
+        for name, got in spots.items():
+            if len(got) != 1 or name == "TAG" or not self.attrs.get(name) or \
+                    name in self.hidden:
+                continue
+            at = self.attr_at.get(name)
+            out.append((name, self.to_world(at[:2] if at else got[0]["pos"])))
+        return out
 
     def label_value(self):
         """What a footprint's label says ("?" when that attribute is empty), or None."""
@@ -1811,10 +1843,18 @@ class Insert(Entity):
         return out
 
     def grips(self):
-        return [self.pos]
+        return [self.pos] + [q for _n, q in self.text_grips()]
 
     def with_grip(self, i, p):
-        return self.copy(pos=list(p))
+        if i == 0:
+            return self.copy(pos=list(p))
+        # a text dragged to a place of its own, kept in the block's coordinates (it follows
+        # the block when it is moved or turned)
+        name = self.text_grips()[i - 1][0]
+        old = self.attr_at.get(name)
+        at = dict(self.attr_at)
+        at[name] = self.to_local(p) + ((old[2],) if old else (0.0,))
+        return self.copy(attr_at={k: list(v) for k, v in at.items()})
 
     def moved(self, dx, dy):
         return self.copy(pos=[self.pos[0] + dx, self.pos[1] + dy])

@@ -732,6 +732,61 @@ def random_editing(log, out, ops, seed, drawing=None):
                 assert dict(again[0].pin_points())[first] == at
             BC.CHECKED["insert again with Enter"] += 1
 
+    def op_symbol_on_bus():
+        # (0.16.2: a 3-pole symbol clicked onto three wires lands every pole on its own wire,
+        # however it is turned and flipped: it flips itself when that lands more of its pins)
+        name = rnd.choice([n for n in syms if lib.get("symbol", n).pins and
+                           len(lib.get("symbol", n).pins) == 6])
+        turns = rnd.randint(0, 3)
+        a = pt()
+        up = turns % 2 == 1                     # (turned sideways: the bus runs up and down)
+        L = 3.0
+        with p.edit("bus to land on") as ed:
+            side = rnd.choice([1, -1])
+            for i in range(3):
+                off = side * i * 0.5
+                pts = [(a[0] + off, a[1] + L), (a[0] + off, a[1] - L)] if up else \
+                    [(a[0] - L, a[1] + off), (a[0] + L, a[1] + off)]
+                ed.add(s, M.Wire(pts))
+        before = set(s.entities)
+        v.run(C.InsertCmd, lib.get("symbol", name), {})
+        for _i in range(turns):
+            v.input_text("R")
+        if rnd.random() < 0.5:
+            v.input_text("F")
+        v.input_text(fmt(a))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        assert len(new) == 1, "%s not placed on the bus" % name
+        ends = {(round(q[0], 9), round(q[1], 9)) for w in s.wires()
+                for q in (w.points[0], w.points[-1])}
+        off = [n for n, q in new[0].pin_points() if (round(q[0], 9), round(q[1], 9)) not in ends]
+        assert not off, "%s turned %d times on a bus: pins %s on no wire" % (name, turns, off)
+        BC.CHECKED["3-pole lands on a bus"] += 1
+
+    def op_tag_grip():
+        # (0.16.2: a symbol's tag dragged by its grip goes exactly there, the symbol and its
+        # pins staying; it follows the symbol)
+        got = [e for e in s.inserts() if e.text_grips()]
+        if not got:
+            return
+        e = rnd.choice(got)
+        names = [n for n, _q in e.text_grips()]
+        i = rnd.randrange(len(names))
+        pins = e.pin_points()
+        to = pt()
+        v.set_selection(set())
+        v.run(C.GripCmd, e, i + 1)
+        v.input_text(fmt(to))
+        finish()
+        e2 = s.entities[e.id]
+        q = dict(e2.text_grips())[names[i]]
+        assert G.dist(q, to) < 1e-9, "%s of %s dragged to %s went to %s" % (
+            names[i], e.block, to, q)
+        assert e2.pin_points() == pins and e2.pos == e.pos, "dragging %s moved %s" % (
+            names[i], e.block)
+        BC.CHECKED["text grip"] += 1
+
     def op_line():
         v.run(C.LineCmd)
         type_in(v, fmt(pt()), fmt(pt()))
@@ -1305,7 +1360,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

@@ -238,10 +238,17 @@ a coil): the point you click is where that pin goes, so click the pin or wire it
 3-pole fuse clicked on a disconnect's T1 meets T1, T2 and T3 with its L1, L2 and L3). The
 command line says which pin it is held by; type B to hold it by the next pin, and after the
 last, by its base point (the middle of the library's symbols). Footprints are placed by their
-base point. The popup opens again where you last put it. The JIC symbols' tags sit at one
+base point. Turned (R) and flipped (F) as you like, a symbol with several pins clicked onto
+wires or pins flips itself when that lands more of its pins: a 3-pole symbol turned either way
+onto a bus running up and down lands every pole on its own wire (the preview shows it as it
+will go). The popup opens again where you last put it. The JIC symbols' tags sit at one
 height above the wire (all the three-pole devices at one, all the one-line symbols at
 another), so the tags of symbols side by side line up; a project started before 0.16 takes
-the new heights with <b>Update blocks from library...</b>. In the Parts tab, Insert asks whether to place
+the new heights with <b>Update blocks from library...</b>. A symbol turned sideways shows its
+tag beside it, read across, starting at its spot and running away from the symbol (clear of
+its poles). Select a symbol to see a grip on its tag (and on a Rating or other attribute it
+shows at one spot): drag it anywhere, and it stays there on that copy, following the symbol
+when it is moved or turned (Undo puts it back). In the Parts tab, Insert asks whether to place
 the part's symbol or its footprint.</p>
 <h3>Making your own</h3>
 <ol>
@@ -953,7 +960,8 @@ too).</li>
 <li>While a window or lasso is open, the objects it would select light up.</li>
 <li><b>Select all</b> (Ctrl+A); Esc clears the selection.</li>
 <li>Selected objects show blue <b>grips</b>. Click a grip, then click where it goes, to stretch
-that end, corner, radius or text position.</li>
+that end, corner, radius or text position (a symbol: its insertion point, its tag, an
+attribute shown).</li>
 <li>Select first, then start Move, Copy objects, Rotate... (or start the command and then
 select, pressing Enter when done).</li>
 <li>Right-click: Enter while a command runs; otherwise a menu with Repeat, the clipboard and
