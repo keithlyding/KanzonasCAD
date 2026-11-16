@@ -57,6 +57,12 @@ build fails without them.
   if you have one). Both windows work on the same project: one Undo, one Save. You can also
   drag a project tab out of the tabs to give it its own window.
 
+**Fixed**
+- Block properties: a block made as a panel footprint (Make block makes one on a panel sheet)
+  had its tag prefix, part in cross-references and the rest greyed out, with no way to change
+  it. Its Kind can now be changed to schematic symbol (and back), and the window says why
+  those rows are greyed.
+
 ## 0.15.14
 
 **Fixed**

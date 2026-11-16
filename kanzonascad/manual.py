@@ -315,7 +315,10 @@ manufacturer.</p>
 <b>Block properties...</b> in the Library menu): the details Make block asked for, filled in:
 name, category, description, manufacturer, family, series and, for a symbol, its part in
 cross-references, contact, tag prefix, wire numbers through it and its pin names in order
-(renaming pins; Edit block adds or removes them). Its kind can't change. Renaming it saves it
+(renaming pins; Edit block adds or removes them). Those last are greyed out on a panel
+footprint (Make block makes one when you are on a panel sheet): change its <b>Kind</b> to
+<b>Schematic symbol</b> to give it a tag prefix and the rest (it gets a tag spot above its
+drawing; Edit block... adds its pins); the kind can change either way. Renaming it saves it
 under the new name, removes your file under the old one and points your parts at the new
 name.</li>
 <li><b>Edit block...</b> (a button in the Library popup, its right-click menu, or the Library

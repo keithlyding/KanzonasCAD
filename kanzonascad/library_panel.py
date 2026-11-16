@@ -498,7 +498,8 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
     kind.addItem("Panel footprint (the part's outline, real size)", "footprint")
     k0 = defn.kind if defn is not None else kind_hint
     kind.setCurrentIndex(0 if k0 == "symbol" else 1)
-    kind.setEnabled(defn is None)
+    # (changeable later too: a block made as a footprint on a panel sheet that was meant as a
+    # schematic symbol, its tag prefix and cross-reference part greyed out, the owner, 0.16)
     name = QLineEdit(defn.name if defn is not None else "")
     cat = QComboBox()
     cat.setEditable(True)
@@ -543,6 +544,10 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
                 (pin_label, pins)]
     for label, w in sym_rows:
         form.addRow(label, w)
+    sym_note = _hint("Part in cross-references, Contact, Tag prefix, Wire numbers and Pin names "
+                     "are a schematic symbol's: this is a panel footprint. Change Kind to make "
+                     "it a schematic symbol.")
+    form.addRow(sym_note)
     if defn is None:
         form.addRow("", replace)
         form.addRow(_hint("Footprints: scale the manufacturer's drawing to its real size "
@@ -561,6 +566,7 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
             lab = form.labelForField(w)
             if lab is not None:
                 lab.setEnabled(sym)
+        sym_note.setVisible(not sym)
     kind.currentIndexChanged.connect(kind_changed)
     kind_changed()
 
@@ -576,12 +582,18 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
         k = kind.currentData()
         what = "symbol" if k == "symbol" else "footprint"
         if defn is not None and k == "symbol" and len(pin_list()) != len(defn.pins):
+            if not defn.pins and pin_list():
+                QMessageBox.information(dlg, title, "It has no pins yet: Edit block... adds "
+                                        "them (green texts on layer BLOCK PINS); leave Pin "
+                                        "names empty here.")
+                continue
             QMessageBox.information(dlg, title, "Type one name for each of its %d pin(s), in "
                                     "order (Edit block... adds or removes pins)."
                                     % len(defn.pins))
             continue
-        if defn is None or n != defn.name:
-            if library.has_own(k, n):
+        if defn is None or n != defn.name or k != defn.kind:
+            if library.has_own(k, n) and not (defn is not None and n == defn.name and
+                                              k == defn.kind):
                 if QMessageBox.question(dlg, title, "Your library already has a %s named %s. "
                                         "Replace it?" % (what, n)) != QMessageBox.Yes:
                     continue
@@ -607,12 +619,18 @@ def block_with_details(defn, details):
     d = defn.to_dict()
     for k in ("name", "category", "description") + M.MAKER_FIELDS:
         d[k] = details.get(k, d.get(k, ""))
-    if defn.kind == "symbol":
+    d["kind"] = details.get("kind") or defn.kind     # (its kind can change: footprint <-> symbol)
+    if d["kind"] == "symbol":
         for k in ("role", "contact", "prefix", "wiring"):
             d[k] = details.get(k, d.get(k, ""))
+        if d.get("tag_pos") is None and defn.kind != "symbol" and defn.entities:
+            # (a footprint becoming a symbol: its tag above its drawing, as Make block puts it)
+            boxes = [e.bbox() for e in defn.entities]
+            x0, x1 = min(b[0] for b in boxes), max(b[2] for b in boxes)
+            d["tag_pos"] = [(x0 + x1) / 2, max(b[3] for b in boxes) + 0.1]
     pin_map = {}
     names = details.get("pin_names") or []
-    if defn.kind == "symbol" and len(names) == len(defn.pins):
+    if d["kind"] == "symbol" and len(names) == len(defn.pins):
         for p, new in zip(d["pins"], names):
             pin_map[p["name"]] = new
             p["name"] = new

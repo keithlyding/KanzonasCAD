@@ -137,6 +137,9 @@ class BlockEditing:
         new, pin_map = block_with_details(defn, det)
         try:
             _path, moved = self.library.save_block_as(new, old_name=defn.name)
+            if new.kind != defn.kind and self.library.has_own(defn.kind, defn.name):
+                # (its kind changed: it lives with the other kind now)
+                self.library.delete_block(defn.kind, defn.name)
         except (OSError, ValueError) as ex:
             QMessageBox.warning(self, TITLE, "Couldn't save %s to the library (%s):\n%s"
                                 % (new.name, self.library.folder, ex))
@@ -144,6 +147,9 @@ class BlockEditing:
         self._sync_editors(kind, defn.name, new, pin_map)
         self.library_panel.refresh()
         msg = "Saved %s to your library" % new.name
+        if new.kind != defn.kind:
+            msg += ", now a %s" % ("schematic symbol" if new.kind == "symbol" else
+                                   "panel footprint")
         if new.name != defn.name:
             msg += " (was %s)" % defn.name
             if moved:
