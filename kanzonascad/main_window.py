@@ -376,6 +376,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("scoot", "Sc&oot", C.ScootCmd, "Scoot")
         self._cmd_act("align_dev", "&Align devices", C.AlignDevicesCmd, "Align")
         self._cmd_act("align_obj", "Align ob&jects", C.AlignObjectsCmd, "Align")
+        self._cmd_act("distribute", "Dis&tribute objects", C.DistributeCmd, "Distribute")
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("del_wire", "&Delete wire", C.DeleteWireCmd, "Delete wire")
         self._cmd_act("clean_wires", "Clea&n up wires", C.CleanWiresCmd, "Clean up")
@@ -574,7 +575,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
-                  "scoot", "align_dev", "align_obj", None, "trim_wire", "del_wire", "clean_wires", "del_comp", None,
+                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "del_wire", "clean_wires", "del_comp", None,
                   "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             if k == "FPLABEL":
@@ -662,7 +663,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
-            ("Arrange", "large", [a["align_obj"]]),
+            ("Arrange", "large", [a["align_obj"], a["distribute"]]),
             ("Parts", "small", [a["new_part"], a["panel_settings"]]),
             ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
@@ -2210,6 +2211,11 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         dialogs.materials_dialog(self, v.project, self._last_dir())
 
+    def ask_bus_layers(self, count, current):
+        """The Bus command's Layers (L): a layer for each wire, or None."""
+        v = self.view()
+        return dialogs.bus_layers(self, v.project, count, current) if v is not None else None
+
     def edit_attributes(self, ins):
         v = self.view()
         if v is None:
@@ -2476,7 +2482,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev",
-                  "align_obj", "trim_wire", "del_wire", "clean_wires", "del_comp"):
+                  "align_obj", "distribute", "trim_wire", "del_wire", "clean_wires", "del_comp"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())
         a["save_block"].setEnabled(in_block)

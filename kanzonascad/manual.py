@@ -249,7 +249,13 @@ Wire numbers) and the pin names.</li>
 block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
 footprint.</p>
 <p>Double-click a placed symbol or footprint to change its tag, description, manufacturer and
-catalog number, or pick one of the library's parts for it. Its <b>Shown on the drawing</b>
+catalog number, or pick one of the library's parts for it. Fuses, circuit breakers,
+disconnects, overloads, motors, the control transformer, the VFD and the power supply also
+have a <b>Rating</b> (30A, 5HP, 500VA...): typed there, it shows under the symbol (at one
+height for every one-line symbol and another for every three-pole one, so a row's ratings line
+up), and on the bill of materials it is added to the description (two fuses without a catalog
+number but with different ratings are different lines). A project started before 0.16 gets the
+Rating with <b>Update blocks from library...</b>. Its <b>Shown on the drawing</b>
 boxes choose which of its attributes (its tag, a terminal's number, an imported block's
 location, rating...) show on this copy; a hidden one keeps its value, and reports still use
 it. <b>Show or hide attributes...</b> (Modify menu; Schematic tab: Symbols, Panel tab:
@@ -412,12 +418,23 @@ other way. The wire <b>ends by itself</b> when you click a pin or another wire; 
 anywhere; so does Esc or starting another command (what is drawn is kept). U takes back
 the last click.</p>
 <p><b>Bus</b> (BU; Draw menu and the Schematic tab) draws several wires side by side, three
-phases say. Type how many wires (3 to start) and how far apart (1/2 inch to start; 12mm works
-too), pressing Enter to keep what it offers; then click the path as for a wire. Every click
-turns it 90 degrees, as many times as you need, and all the wires turn together, keeping their
-spacing. The first wire runs where you click, the others to the right of the direction you
-draw (F puts them on the other side). Enter or Esc ends it; each wire of the bus is an ordinary
-wire, connecting wherever its ends land.</p>
+phases say. <b>Start it on a symbol's pin</b> (a disconnect's L1, L2 or L3, a breaker's T1...)
+and it takes that side of the symbol: as many wires as it has pins there, as far apart as they
+are, the first from its first pin and the others from the others, whichever way you head off
+(the first leg leaves the pins square). Click the next symbol's pin (its L1) and every wire
+lands on its own pin. Started anywhere else, it uses the last bus's count and spacing (3 wires,
+1/2 inch to start): type <b>N</b> (or just the number) for how many, then how far apart (1/2
+inch; 12mm works too), or <b>D</b> for the spacing alone. Then click the path as for a wire:
+every click turns it 90 degrees, as many times as you need, and all the wires turn together,
+keeping their spacing. <b>S</b> runs it <b>straight</b> instead: each click goes straight
+across or straight up or down from the last point, with no corner (S again goes back to
+corners; the next bus remembers). The other wires go to the right of the direction you draw (F
+puts them on the other side). <b>L</b> picks each wire's <b>layer</b>, and so its color:
+<b>Brown, orange, yellow (480 V)</b>, <b>Black, red, blue (208/240 V)</b>, <b>All black</b>,
+<b>Wires</b> (the WIRES layer), or a layer for each wire; the layers it needs are added to the
+project (WIRE BROWN, WIRE ORANGE...; black prints black and shows white on the black drawing
+area), and the next bus remembers the choice. Enter or Esc ends it; each wire of the bus is an
+ordinary wire, connecting wherever its ends land, whatever its layer.</p>
 <ul>
 <li><b>Connections</b> are worked out from where wire ends are, never stored: a wire end on a
 pin, on another wire's end, or on the middle of another wire connects there. A wire ending on
@@ -756,6 +773,12 @@ duct or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right<
 them up with, or press Enter to line them up with the selection's own outer edge (or its
 middle). Each moves only straight across (Left, Center, Right) or straight up and down (Top,
 Middle, Bottom), by its outline; one Undo puts them back.</li>
+<li><b>Distribute objects</b> (DISTRIBUTE, DIST; Modify menu, Panel tab) spreads three or more
+selected objects out evenly: <b>Horizontally</b> or <b>Vertically</b> (H, V). The two
+outermost stay where they are and the others move straight across (or straight up and down)
+so the gaps between them are equal. With Snap on, each move is rounded to the snap spacing, so
+symbols' pins stay on the grid and wires still meet them (the gaps can then differ by up to
+one snap step); wires on a moved symbol's pins follow. One Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
 one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
 slots. They always go straight across or straight up and down (a snap off that line only sets

@@ -35,10 +35,15 @@ def parts(project, unnumbered=True):
                                         # TAG1, is its parent device: child contacts carry
                                         # TAG2)
             a = e.attrs
+            desc = a.get("DESC", "").strip() or d.description
+            rating = a.get("RATING", "").strip()
+            if rating and rating.upper() not in desc.upper():
+                # (a 30A fuse and a 10A one are different parts: without a catalog number they
+                # are told apart by it)
+                desc = "%s, %s" % (desc, rating) if desc else rating
             rec = {"tag": a.get("TAG", "").strip(), "mfr": a.get("MFR", "").strip() or
                    d.manufacturer, "cat": a.get("CAT", "").strip() or d.catalog,
-                   "desc": a.get("DESC", "").strip() or d.description, "block": d.name,
-                   "sheets": {num}}
+                   "desc": desc, "block": d.name, "sheets": {num}}
             if rec["tag"] and not rec["tag"].endswith("?"):
                 got = by_tag.get(rec["tag"])
                 if got is None:

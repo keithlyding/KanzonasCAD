@@ -1532,3 +1532,44 @@ def attribute_visibility(parent, project, sheet, inserts):
         for e in changes:
             ed.change(sheet, e)
     return True
+
+
+def bus_layers(parent, project, count, current):
+    """The Bus command's Layers (L): a layer for each of its wires, from a choice (brown,
+    orange, yellow for 480 V; black, red, blue; all black; the WIRES layer) or one by one
+    from the project's layers. Returns the list (one a wire), or None when cancelled."""
+    from .commands import BUS_LAYERS, bus_layer_list
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Bus: layers")
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel("Each wire of the bus goes on its layer (and takes its color):"))
+    preset = QComboBox()
+    preset.addItem("(one by one, below)", None)
+    for text, layers in BUS_LAYERS:
+        preset.addItem(text, layers)
+    lay.addWidget(preset)
+    form = QFormLayout()
+    names = sorted(set(project.layers) | {n for _t, ls in BUS_LAYERS for n in ls})
+    boxes = []
+    for i, name in enumerate(bus_layer_list(current, count)):
+        b = QComboBox()
+        b.setEditable(True)
+        b.addItems(names)
+        b.setCurrentText(name)
+        boxes.append(b)
+        form.addRow("Wire %d%s" % (i + 1, " (L%d)" % (i + 1) if count == 3 else ""), b)
+    lay.addLayout(form)
+
+    def chosen(_i):
+        layers = preset.currentData()
+        if layers:
+            for b, name in zip(boxes, bus_layer_list(layers, count)):
+                b.setCurrentText(name)
+    preset.currentIndexChanged.connect(chosen)
+    bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    bb.accepted.connect(dlg.accept)
+    bb.rejected.connect(dlg.reject)
+    lay.addWidget(bb)
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return [b.currentText().strip() or "WIRES" for b in boxes]

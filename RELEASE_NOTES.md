@@ -22,6 +22,15 @@ build fails without them.
   height, and every one-line symbol's at another, so a disconnect, fuses and contactor in a
   row have their tags in a row. Library > Update blocks from library... gives a drawing you
   already have the new heights (it asks first; Undo takes it back).
+- Ratings: fuses, breakers, disconnects, overloads, motors, the transformer, the VFD and the
+  power supply have a Rating (30A, 5HP...): double-click the symbol to type it; it shows under
+  the symbol and goes on the bill of materials.
+- Bus: start it on a symbol's pin (a disconnect's L1, L2 or L3) and it takes that symbol's
+  poles and spacing by itself, each wire from its own pin; it no longer asks how many and how
+  far apart first. S runs it straight instead of turning; L puts its wires on layers: brown,
+  orange, yellow (480 V), black, red, blue, all black, or one by one.
+- Distribute objects (Modify menu, Panel tab): spread three or more selected objects out
+  evenly, horizontally or vertically.
 - Sheets in their own windows: Window > Open this sheet in a new window (Ctrl+Shift+N) opens
   the sheet you are on in a window you can put on another screen (it fills your second screen
   if you have one). Both windows work on the same project: one Undo, one Save. You can also

@@ -1122,33 +1122,116 @@ def bus_paths(points, count, spacing, flip=False):
             n1, n2 = normals[j - 1], normals[j]
             line.append((pts[j][0] + d * (n1[0] + n2[0]), pts[j][1] + d * (n1[1] + n2[1])))
         line.append((pts[-1][0] + d * normals[-1][0], pts[-1][1] + d * normals[-1][1]))
-        out.append(line)
+        # (a leg no longer than the wire's offset leaves it a point twice: a leg of nothing)
+        line = [tuple(q) for q in M._tidy(line)]
+        if len(line) >= 2:
+            out.append(line)
     return out
 
 
+def pin_side(sheet, p, tol=1e-6):
+    """The pins of a symbol on one side of it, in a line through the pin at p and evenly
+    spaced (a 3-pole device's L1, L2, L3; a VFD's T1-T3): ([world points] in the block's pin
+    order, spacing), or None. A line whose pins have the symbol's drawing on both sides of it
+    (a contact's 1 and 2: its in and out) is not a side."""
+    for e in sheet.query_point(p, tol):
+        if not isinstance(e, M.Insert) or e.defn is None or len(e.defn.pins) < 2:
+            continue
+        d = e.defn
+        pins = [(q["name"], q["pos"]) for q in d.pins]
+        hit = [n for n, q in pins if G.dist(e.to_world(q), p) <= tol]
+        if not hit:
+            continue
+        at = dict(pins)[hit[0]]
+        boxes = [x.bbox() for x in d.entities]
+        best = None
+        for axis in (0, 1):             # the same x (a column of pins), the same y (a row)
+            line = [(n, q) for n, q in pins if abs(q[axis] - at[axis]) <= 1e-6]
+            if len(line) < 2:
+                continue
+            along = sorted(q[1 - axis] for _n, q in line)
+            gaps = [b - a for a, b in zip(along, along[1:])]
+            if min(gaps) <= 1e-9 or max(gaps) - min(gaps) > 1e-6:
+                continue
+            c = at[axis]
+            lo = min((bb[axis] for bb in boxes), default=c)
+            hi = max((bb[axis + 2] for bb in boxes), default=c)
+            if lo < c - 1e-6 and hi > c + 1e-6:
+                continue                # (the drawing on both sides: in and out, not a side)
+            if best is None or len(line) > len(best[0]):
+                best = ([e.to_world(q) for _n, q in line], gaps[0] * e.scale)
+        if best is not None:
+            return best
+    return None
+
+
+# the Bus command's layer choices (the wires in order; past the list's end, its last layer)
+BUS_LAYERS = [
+    ("Wires (the WIRES layer)", ["WIRES"]),
+    ("Brown, orange, yellow (480 V)", ["WIRE BROWN", "WIRE ORANGE", "WIRE YELLOW", "WIRE GRAY"]),
+    ("Black, red, blue (208/240 V)", ["WIRE BLACK", "WIRE RED", "WIRE BLUE", "WIRE WHITE"]),
+    ("All black", ["WIRE BLACK"]),
+]
+# their colors, for layers the project hasn't got yet ("7": black on paper, white on screen)
+WIRE_LAYER_COLORS = {"WIRE BROWN": "#a0522d", "WIRE ORANGE": "#ff8c00", "WIRE YELLOW": "#ffd700",
+                     "WIRE GRAY": "#909090", "WIRE BLACK": "7", "WIRE RED": "#ff3030",
+                     "WIRE BLUE": "#3070ff", "WIRE WHITE": "#e0e0e0"}
+
+
+def bus_layer_list(layers, count):
+    """A layer for each of count wires from a choice (its last one again past its end)."""
+    layers = list(layers) or ["WIRES"]
+    return [layers[min(i, len(layers) - 1)] for i in range(count)]
+
+
 class BusCmd(Command):
-    """BUS: several wires side by side (three phases, say). How many and how far apart, then
-    click the path as for a wire: it runs straight across and up or down, turning 90 degrees
-    at each click as many times as needed, all the wires turning together. F puts the other
-    wires on the other side; Enter (or Esc) ends it."""
+    """BUS: several wires side by side (three phases, say). Start it on a symbol's pin and it
+    takes that side's pins (a disconnect's L1, L2, L3: how many and how far apart, the others
+    landing on their pins whichever way it goes); anywhere else, the last count and spacing (N,
+    D to change them). Then click the path as for a wire: across and up or down, turning 90
+    degrees at each click, all the wires turning together; S runs it straight instead (each
+    click straight across or straight up or down from the last, no corner). L picks each
+    wire's layer (brown, orange, yellow...). F puts the other wires on the other side; Enter
+    (or Esc) ends it."""
     name, title = "BUS", "Bus"
 
     def begin(self):
         self.count = int(getattr(self.ctx, "_bus_count", 3))
         self.spacing = float(getattr(self.ctx, "_bus_spacing", 0.5))
+        self.layers = list(getattr(self.ctx, "_bus_layers", ["WIRES"]))
+        self.straight = bool(getattr(self.ctx, "_bus_straight", False))
         self.flip = False
+        self.toward = None              # started on a symbol's pins: where its others are
         self.points = []
         self.hfirst = None
-        self.step = "count"
-        self.ctx.prompt("Number of wires <%d>" % self.count)
+        self._ask_start()
+
+    def _options(self):
+        opts = [("Straight" if not self.straight else "Corners", "S"), ("Layers", "L"),
+                ("Other side", "F")]
+        if self.points:
+            return opts + [("Undo", "U")]
+        return [("Wires", "N"), ("Spacing", "D")] + opts
+
+    def _ask_start(self):
+        self.step = "path"
+        self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.spacing
+        if self.points:
+            self.ctx.prompt("Specify next %s (Enter ends the bus)" % (
+                "point" if self.straight else "corner"), self._options())
+        else:
+            self.ctx.prompt("Specify start of the bus: a symbol's pin takes its poles (else %d "
+                            "wires, %s apart)" % (self.count, _fmt(self.spacing)),
+                            self._options())
 
     def number(self, v):
-        if self.step == "count":
+        if self.step in ("count", "path") and not self.points and \
+                (self.step == "count" or v == int(v)):
             if v < 2 or v != int(v) or v > 50:
                 self.ctx.message("A bus has 2 to 50 wires.")
                 return True
             self.count = int(v)
-            self._ask_spacing()
+            self._ask_spacing()          # (typed: how far apart next, as it always asked)
             return True
         if self.step == "spacing":
             if v <= 0:
@@ -1162,16 +1245,8 @@ class BusCmd(Command):
         self.step = "spacing"
         self.ctx.prompt("Spacing between wires <%s> (inches, or 12mm)" % _fmt(self.spacing))
 
-    def _ask_start(self):
-        self.step = "path"
-        self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.spacing
-        self.ctx.prompt("Specify start of the first wire (%d wires, %s apart)"
-                        % (self.count, _fmt(self.spacing)), [("Other side", "F")])
-
     def enter(self):
-        if self.step == "count":
-            self._ask_spacing()
-        elif self.step == "spacing":
+        if self.step in ("count", "spacing"):
             self._ask_start()
         else:
             self._make()
@@ -1180,33 +1255,103 @@ class BusCmd(Command):
         self._make()
 
     def _route(self, p):
+        """The points the next click at p adds (none repeating the one before)."""
+        out, last = [], self.points[-1]
+        for q in self._route_raw(p):
+            if G.dist(q, last) > 1e-9:
+                out.append(q)
+                last = q
+        return out
+
+    def _route_raw(self, p):
         a = self.points[-1]
+        if self.toward is not None and len(self.points) == 1:
+            # (off a symbol's pins: the first leg leaves them square, each wire from its pin;
+            # a click in line with the pins can't be reached so: nothing)
+            across = abs(self.toward[1]) >= abs(self.toward[0])     # (pins one above another)
+            if abs(p[0] - a[0] if across else p[1] - a[1]) < 1e-9:
+                return []
+            if self.straight:
+                return [(p[0], a[1])] if across else [(a[0], p[1])]
+            from .wires import route
+            return route(a, p, across)
+        if self.straight:
+            # straight across or straight up or down from the last point: no corner
+            return [(p[0], a[1])] if abs(p[0] - a[0]) >= abs(p[1] - a[1]) else [(a[0], p[1])]
         h = self.hfirst
         if h is None:
             h = abs(p[0] - a[0]) >= abs(p[1] - a[1])
         from .wires import route
         return route(a, p, h)
 
+    def _flip_for(self, pts):
+        """Which side the other wires go: started on a symbol's pins, the side its other pins
+        are on, whichever way the bus heads off (F turns it the other way)."""
+        if self.toward is not None and len(pts) >= 2:
+            a, b = pts[0], pts[1]
+            L = G.dist(a, b)
+            if L > 1e-9:
+                ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+                right = uy * self.toward[0] - ux * self.toward[1]
+                if abs(right) > 1e-9:
+                    return (right < 0) != self.flip
+        return self.flip
+
     def point(self, p):
         if self.step != "path":
             return
         if not self.points:
+            got = pin_side(self.ctx.sheet(), p)
+            if got is not None:
+                line, gap = got
+                self.count, self.spacing = len(line), gap
+                a, z = line[0], line[-1]
+                L = G.dist(a, z)
+                self.toward = ((z[0] - a[0]) / L, (z[1] - a[1]) / L)
+                p = a                   # (the first wire from the first of its pins)
+                self.ctx.message("%d wires, %s apart, from the symbol's pins" % (
+                    self.count, _fmt(self.spacing)))
             self.points = [p]
             self.base = self.last = p
-            self.ctx.prompt("Specify next corner (Enter ends the bus)",
-                            [("Other side", "F"), ("Undo", "U")])
+            self._ask_start()
             return
         if G.dist(self.points[-1], p) < 1e-9:
             return
-        self.points += self._route(p)
-        self.base = self.last = p
+        new = self._route(p)
+        if not new:
+            if self.toward is not None and len(self.points) == 1:
+                self.ctx.message("Click off the line of the symbol's pins: the bus leaves them "
+                                 "square")
+            return
+        self.points += new
+        self.base = self.last = self.points[-1]
 
     def text(self, s):
         k = s.strip().upper()
-        if self.step == "path" and k == "F":
+        if self.step != "path":
+            return False
+        if k == "F":
             self.flip = not self.flip
             return True
-        if self.step == "path" and k == "U" and len(self.points) > 1:
+        if k == "S":
+            self.straight = self.ctx._bus_straight = not self.straight
+            self._ask_start()
+            return True
+        if k == "L":
+            ask = getattr(self.ctx.host, "ask_bus_layers", None)
+            got = ask(self.count, self.layers) if ask is not None else None
+            if got:
+                self.layers = self.ctx._bus_layers = list(got)
+            self._ask_start()
+            return True
+        if k == "N" and not self.points:
+            self.step = "count"
+            self.ctx.prompt("Number of wires <%d>" % self.count)
+            return True
+        if k == "D" and not self.points:
+            self._ask_spacing()
+            return True
+        if k == "U" and len(self.points) > 1:
             self.points.pop()
             self.base = self.last = self.points[-1]
             return True
@@ -1215,11 +1360,16 @@ class BusCmd(Command):
     def _make(self):
         made = 0
         if self.step == "path" and len(self.points) >= 2:
-            paths = bus_paths(self.points, self.count, self.spacing, self.flip)
+            paths = bus_paths(self.points, self.count, self.spacing, self._flip_for(self.points))
             sheet = self.ctx.sheet()
+            project = self.ctx.project
+            layers = bus_layer_list(self.layers, len(paths))
             with self.ctx.edit("Bus") as ed:
-                for pts in paths:
-                    w = ed.add(sheet, M.Wire(pts))
+                for pts, layer in zip(paths, layers):
+                    if layer not in project.layers:
+                        ed.layer(layer, None, M.Layer(
+                            layer, WIRE_LAYER_COLORS.get(layer, "#ff3030")).to_dict())
+                    w = ed.add(sheet, M.Wire(pts, layer=layer))
                     made += 1
                     if _cleanup_on(self.ctx):
                         from .wires import tidy_new
@@ -1232,10 +1382,14 @@ class BusCmd(Command):
         if self.step != "path":
             return []
         if not self.points:
+            got = pin_side(self.ctx.sheet(), p)
+            if got is not None:
+                return [M.Wire([q, (q[0] - 0.25, q[1])]) for q in got[0]]
             return [M.Wire(q) for q in bus_paths([p, (p[0] + 0.25, p[1])], self.count,
                                                  self.spacing, self.flip)]
-        return [M.Wire(q) for q in bus_paths(self.points + self._route(p), self.count,
-                                             self.spacing, self.flip)]
+        pts = self.points + self._route(p)
+        return [M.Wire(q) for q in bus_paths(pts, self.count, self.spacing,
+                                             self._flip_for(pts))]
 
 
 class MakeBlockCmd(Command):
@@ -2223,6 +2377,57 @@ class AlignObjectsCmd(Command):
         self.finish()
 
 
+class DistributeCmd(Command):
+    """DISTRIBUTE: spread the selected objects (three or more) evenly, as drawing programs'
+    Distribute does: Horizontally or Vertically, the two outermost staying where they are and
+    the others moved straight across (or up and down) so the gaps between them are equal.
+    With Snap on, each move is rounded to the snap spacing (pins stay on the grid, so wires
+    still meet them; the gaps then differ by up to one snap step). One undoable step; wires on
+    a moved symbol's pins follow."""
+    name, title = "DISTRIBUTE", "Distribute objects"
+    selects = True
+
+    def begin(self):
+        self.ents = _selected(self.ctx)
+        if len(self.ents) < 3:
+            self.ctx.message("Select three or more objects to spread out")
+            self.finish()
+            return
+        self.ctx.prompt("Spread them out", [("Horizontally", "H"), ("Vertically", "V")])
+
+    def text(self, s):
+        k = s.strip().upper()[:1]
+        if k not in ("H", "V"):
+            return False
+        self._apply(0 if k == "H" else 1)
+        return True
+
+    def _apply(self, axis):
+        sheet = self.ctx.sheet()
+        boxes = [(e, e.bbox()) for e in self.ents]
+        boxes.sort(key=lambda t: (t[1][axis] + t[1][axis + 2]) / 2)
+        first, last = boxes[0][1], boxes[-1][1]
+        sizes = sum(b[axis + 2] - b[axis] for _e, b in boxes)
+        gap = ((last[axis + 2] - first[axis]) - sizes) / (len(boxes) - 1)
+        snap = self.ctx.snap_spacing if getattr(self.ctx, "snap_on", False) else 0.0
+        at = first[axis + 2] + gap
+        moved = 0
+        with self.ctx.edit(self.title) as ed:
+            for e, b in boxes[1:-1]:
+                d = at - b[axis]
+                if snap > 0:
+                    d = round(d / snap) * snap
+                at += (b[axis + 2] - b[axis]) + gap
+                cur = sheet.entities.get(e.id)
+                if cur is None or abs(d) <= 1e-9:
+                    continue
+                ed.change(sheet, cur.moved(d, 0.0) if axis == 0 else cur.moved(0.0, d))
+                moved += 1
+        self.ctx.message("Spread %d object(s) out %s" % (
+            len(boxes), "across" if axis == 0 else "up and down"))
+        self.finish()
+
+
 class TrimWireCmd(Command):
     """TRIMWIRE (AutoCAD Electrical's Trim Wire): click a wire and the piece clicked goes, up
     to the nearest wire or pin on either side (to its end when there is none). No cutting
@@ -2528,6 +2733,7 @@ COMMANDS = {
     "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)
     "SCOOT": (ScootCmd, ["AESCOOT"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
+    "DISTRIBUTE": (DistributeCmd, ["DIST"]),
     "ALIGNOBJ": (AlignObjectsCmd, ["ALO"]),
     "LAYOFF": (LayerOffCmd, []),
     "LAYISO": (LayerIsoCmd, []),

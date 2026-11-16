@@ -530,7 +530,8 @@ def random_editing(log, out, ops, seed, drawing=None):
     dump_at = int(os.environ["BATTERY_DUMP_AT"]) if os.environ.get("BATTERY_DUMP_AT") else None
     lib = win.library
     syms = ["Contact NO", "Contact NC", "Relay coil", "Pushbutton NO", "Pushbutton NC",
-            "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC"]
+            "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC",
+            "Disconnect 3-pole", "Fuses 3-pole", "Circuit breaker 3-pole"]
     syms = [n for n in syms if lib.get("symbol", n) is not None]
     start = norm(p.to_dict())
     counts = {}
@@ -577,16 +578,41 @@ def random_editing(log, out, ops, seed, drawing=None):
         finish()
 
     def op_bus():
-        v.run(C.BusCmd)
-        for t in (str(rnd.randint(2, 4)), "0.5"):
-            if v.cmd is not None:
-                v.input_text(t)
-        a = pt()
-        b = (a[0] + rnd.choice([-3, 3]), a[1])
-        for q in (a, b):
+        # (0.16: started on a symbol's pins it takes them; S straight; L layers)
+        sides = []
+        for e in s.inserts():
+            for _n, q in e.pin_points():
+                got = C.pin_side(s, q)
+                if got is not None:
+                    sides.append(got)
+                    break
+        before = set(s.entities)
+        cmd = v.run(C.BusCmd)
+        side = None
+        if sides and rnd.random() < 0.5:
+            side = rnd.choice(sides)
+            a = rnd.choice(side[0])
+        else:
+            for t in (str(rnd.randint(2, 4)), "0.5"):
+                if v.cmd is not None:
+                    v.input_text(t)
+            a = pt()
+        if v.cmd is not None and rnd.random() < 0.3:
+            v.input_text("S")
+        if v.cmd is not None and rnd.random() < 0.3:
+            cmd.layers = rnd.choice([ls for _t, ls in C.BUS_LAYERS])
+        for q in (a, (a[0] + rnd.choice([-3, 3]), a[1] + rnd.choice([0, 0, -2, 2]))):
             if v.cmd is not None:
                 v.input_text(fmt(q))
         finish()
+        if side is not None:
+            # each wire from its own pin of the side started on: worked out from the pins
+            new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+            starts = {tuple(w.points[0]) for w in new} | {tuple(w.points[-1]) for w in new}
+            if len(new) == len(side[0]):
+                missing = [q for q in side[0] if tuple(q) not in starts]
+                assert not missing, "bus from a symbol's pins missed %s" % missing
+                BC.CHECKED["bus from pins"] += 1
 
     def op_symbol():
         name = rnd.choice(syms)
@@ -1065,6 +1091,37 @@ def random_editing(log, out, ops, seed, drawing=None):
         BC.second_window(win, w2, p, listeners)
         w2.deleteLater()
 
+    def op_distribute():
+        ents = [e for e in s.entities.values() if not isinstance(e, (M.Wire, M.WireCross))]
+        if len(ents) < 3:
+            return
+        sel = rnd.sample(ents, min(len(ents), rnd.randint(3, 6)))
+        axis = rnd.choice([0, 1])
+        # (their order before: objects bigger than the room between the outermost two get a
+        # gap below nothing and can change order by their middles)
+        order = [e.id for e in sorted(sel, key=lambda e: (e.bbox()[axis] + e.bbox()[axis + 2]))]
+        snap = rnd.random() < 0.5
+        was = v.snap_on
+        v.snap_on = snap
+        try:
+            v.set_selection({e.id for e in sel})
+            v.run(C.DistributeCmd)
+            if v.cmd is not None:
+                v.input_text("H" if axis == 0 else "V")
+        finally:
+            v.snap_on = was
+        finish()
+        if snap:
+            return
+        # equal gaps between neighbours, the outermost two where they were: worked out from
+        # the boxes (an object whose box another of them moved, as a wire on a pin, aside)
+        boxes = [s.entities[i].bbox() for i in order if i in s.entities]
+        if len(boxes) == len(sel) and not any(isinstance(e, M.Insert) for e in sel):
+            gaps = [b[axis] - a[axis + 2] for a, b in zip(boxes, boxes[1:])]
+            tol = 1e-6 * max(1.0, max(abs(c) for b in boxes for c in b))
+            assert max(gaps) - min(gaps) <= tol, "distributed unevenly: %s" % gaps
+            BC.CHECKED["distribute"] += 1
+
     def op_update_blocks():
         # Library > Update blocks from library... on a project whose copy of a symbol is old
         # (its tag elsewhere, as 0.15's were): the copies take the library's, and keep their
@@ -1108,7 +1165,8 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
-             (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1)]
+             (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
+             (op_distribute, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

@@ -676,8 +676,10 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         if k == "TERM":
             e.setPlaceholderText("Numbered by itself on its strip; type one to set it")
         edits[k] = e
-        form.addRow({"TERM": "Terminal number", "ADDR": "Address (I:0/3, %I0.3...)"}.get(k, k),
-                    e)
+        if k == "RATING":
+            e.setPlaceholderText("30A, 5HP, 500VA... (shown under the symbol)")
+        form.addRow({"TERM": "Terminal number", "ADDR": "Address (I:0/3, %I0.3...)",
+                     "RATING": "Rating"}.get(k, k), e)
     if kind_of(ins) == "symbol":
         e = QLineEdit(ins.attrs.get("LOC", ""))
         e.setObjectName("location")

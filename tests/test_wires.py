@@ -139,8 +139,8 @@ class BusTest(unittest.TestCase):
             ys = sorted(round(x.points[0][1], 6) for x in ws)
             self.assertAlmostEqual(ys[-1] - ys[-2], gap, 5)
             self.assertTrue(all(len(x.points) == 4 for x in ws))      # two turns each
-            v.run(C.BusCmd)                       # it remembers 4 and 12 mm
-            type_in(v, "", "", "1,1", "3,1")
+            v.run(C.BusCmd)                       # it remembers 4 and 12 mm (and asks
+            type_in(v, "1,1", "3,1")              # nothing first since 0.16)
             v.cancel()                            # Esc keeps it
             self.assertEqual(len(wires_of(v)), 8)
         finally:
