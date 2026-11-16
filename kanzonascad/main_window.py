@@ -2241,6 +2241,14 @@ class MainWindow(BlockEditing, QMainWindow):
         shown = {}
         attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet(), shown)
         hidden = shown.get("hidden", ins.hidden)
+        if attrs is not None and ins.defn is not None and ins.defn.kind == "footprint" and \
+                attrs.get("TAG", "") != ins.attrs.get("TAG", ""):
+            # a footprint's tag typed: the device with that tag is the one it is now (none
+            # has it: linked to none), so its tag isn't put back by the old link
+            from . import tags
+            got = tags.find_tag(v.project, attrs.get("TAG", ""))
+            attrs = tags.link_footprint(attrs, got[1]) if got is not None else \
+                {k: x for k, x in attrs.items() if k != "PARENT"}
         if attrs is not None and (attrs != ins.attrs or hidden != ins.hidden):
             with v.project.edit("Attributes") as ed:
                 ed.change(v.sheet(), ins.copy(attrs=attrs, hidden=sorted(hidden)))

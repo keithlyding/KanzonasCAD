@@ -59,6 +59,7 @@ DEFAULT_SETTINGS = {
                                 # zone grid stops at
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
     "wire_gauge_shown": True,   # a wire layer's gauge and color beside its wires
+    "footprint_label": "tag",   # what a footprint placed shows to start (Footprint label)
     "wire_lead": False,         # a second wire on a pin leaves it on a 45-degree lead (the
                                 # owner, 0.16: "a little bend... That needs to go away": off)
     "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)

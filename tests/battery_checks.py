@@ -636,3 +636,19 @@ def second_window(win, w2, project, listeners_before):
         "listeners left behind: %d -> %d" % (listeners_before, len(project.listeners))
     assert not w2.isVisible(), "the closed window is still shown"
     CHECKED["second window"] += 1
+
+
+# ---- footprints and their devices --------------------------------------------------------------
+def footprints_follow(project):
+    """Every footprint linked to a device shows that device's tag as it is now (renumbered,
+    its sheet moved, undone...)."""
+    from kanzonascad import tags
+    index = tags.devices(project)
+    for s in project.sheets:
+        for e in s.inserts():
+            if tags.is_footprint(e) and e.attrs.get("PARENT") in index:
+                dev = index[e.attrs["PARENT"]][1]
+                assert e.attrs.get("TAG") == dev.attrs.get("TAG"), \
+                    "footprint shows %s, its device is %s" % (e.attrs.get("TAG"),
+                                                              dev.attrs.get("TAG"))
+                CHECKED["footprint follows its device"] += 1

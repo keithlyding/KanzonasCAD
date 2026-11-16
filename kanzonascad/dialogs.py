@@ -384,6 +384,15 @@ def project_properties(parent, project, tab=0):
     dim_h.setSuffix(" in")
     dim_h.setValue(float(st.get("dim_height", 0.1)))
     form.addRow("Dimension text height (on paper)", dim_h)
+    fp_show = QComboBox()
+    for key, text in (("tag", "Its tag (the device it is)"), ("cat", "Its part number"),
+                      ("desc", "Its description"), ("name", "Its block name"),
+                      ("", "No label")):
+        fp_show.addItem(text, key)
+    fp_show.setCurrentIndex(max(fp_show.findData(st.get("footprint_label", "tag")), 0))
+    fp_show.setToolTip("A footprint you place shows this to start (Footprint label changes "
+                       "it later); one with no tag shows its part number or block name.")
+    form.addRow("New footprints show", fp_show)
     stocks = {}
     for key, label in (("rail_stock", "DIN rail bought in lengths of"),
                        ("duct_stock", "Wire duct bought in lengths of")):
@@ -432,6 +441,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_cleanup"] = wclean.isChecked()
     settings["wire_lead"] = wlead.isChecked()
     settings["wire_gauge_shown"] = wgauge.isChecked()
+    settings["footprint_label"] = fp_show.currentData()
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():

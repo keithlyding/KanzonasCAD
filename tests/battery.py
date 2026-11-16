@@ -909,11 +909,28 @@ def random_editing(log, out, ops, seed, drawing=None):
     fps = sorted(n for n, d in lib.blocks("footprint")[0].items() if d.builtin)
 
     def op_footprint():
-        # a built-in generic footprint, placed as Insert footprint does
+        # a built-in generic footprint, placed as Insert footprint does (0.16: asked which
+        # device it is; Enter: the next one with no footprint)
+        from kanzonascad import tags
+        before = set(s.entities)
+        offered = tags.footprint_candidates(p)
         v.run(C.InsertCmd, lib.get("footprint", rnd.choice(fps)), {})
         if v.cmd is not None:
             v.input_text(fmt(pt()))
+        if v.cmd is not None and rnd.random() < 0.2:
+            v.input_text("N")
         finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if offered and len(new) == 1 and new[0].attrs.get("PARENT"):
+            # some device's footprint now, with its tag, and the only footprint with it
+            f = new[0]
+            dev = tags.devices(p).get(f.attrs["PARENT"])
+            assert dev is not None, "a footprint linked to no device"
+            assert f.attrs.get("TAG") == dev[1].attrs.get("TAG"), "a footprint's tag isn't its device's"
+            same = [e for sh in p.sheets for e in sh.inserts() if tags.is_footprint(e)
+                    and e.attrs.get("TAG", "").upper() == f.attrs["TAG"].upper()]
+            assert len(same) == 1, "two footprints tagged %s" % f.attrs["TAG"]
+            BC.CHECKED["footprint takes a device"] += 1
 
     def op_location():
         # as Sheet properties and a device's Location do: the sheet's location, or a device's
@@ -1269,6 +1286,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             if i % 25 == 24:
                 for other in p.sheets:
                     check_sheet(other)
+                BC.footprints_follow(p)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()

@@ -45,6 +45,9 @@ build fails without them.
 - Wire gauge and color: Layers has AWG and Wire color columns; wires on such a layer show
   "10 AWG BRN" under their wire number.
 - Fuse ratings show inside the fuse's box (on each pole of a 3-pole fuse block).
+- Footprints are labeled as you place them: placing one asks which schematic device it is
+  (Enter takes the next one without a footprint), and it shows that device's tag, which
+  follows the schematic when it is renumbered. New footprints show their tag to start.
 - Delete dot (Modify menu, Schematic tab): click a junction dot to remove it (the wires still
   connect); click again to bring it back. Why a dot sometimes appears when a wire is added at
   the end of another: that point was already a bend, or two wires met there, so three wires

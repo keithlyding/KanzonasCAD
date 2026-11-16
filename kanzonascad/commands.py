@@ -1774,6 +1774,7 @@ class InsertCmd(Command):
         self.hold = 0
         self.pending = None             # a contact's point, waiting for its device
         self.cands = []
+        self.footprint_of = False       # (the device asked for is a footprint's)
         self.link_name = None           # an off-sheet connector's name offered
 
     def begin(self):
@@ -1809,11 +1810,18 @@ class InsertCmd(Command):
                 pick = getattr(self.ctx.host, "pick_parent", None)
                 got = pick(self.cands) if pick is not None else None
                 if got is not None:
-                    self._place(self.pending, tags.link_attrs(self.attrs, got[1]))
+                    self._place(self.pending, self._link(got[1]))
+                return True
+            if self.footprint_of and k == "N":
+                self._place(self.pending, self.attrs)       # (none: a footprint of its own)
                 return True
             got = tags.find_tag(self.ctx.project, k)
             if got is not None:
-                self._place(self.pending, tags.link_attrs(self.attrs, got[1]))
+                self._place(self.pending, self._link(got[1]))
+            elif self.footprint_of:
+                self._place(self.pending, dict(self.attrs, TAG=k))
+                self.ctx.message("No device is tagged %s: the footprint shows it, linked to "
+                                 "none" % k)
             else:
                 # no device has that tag yet: the contact keeps it and links itself to the
                 # device that gets it
@@ -1838,10 +1846,16 @@ class InsertCmd(Command):
             self._place(self.pending, dict(self.attrs, TAG=self.link_name))
             return
         if self.pending is not None and self.cands:
-            from . import tags
-            self._place(self.pending, tags.link_attrs(self.attrs, self.cands[0][1]))
+            self._place(self.pending, self._link(self.cands[0][1]))
             return
         super().enter()
+
+    def _link(self, device):
+        """Its attributes as device's contact (or, a footprint, as device's footprint)."""
+        from . import tags
+        if self.footprint_of:
+            return tags.link_footprint(self.attrs, device)
+        return tags.link_attrs(self.attrs, device)
 
     def _make(self, p, defn):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
@@ -1894,6 +1908,21 @@ class InsertCmd(Command):
             self.ctx.message("Nothing to link this %s to yet (a %s device): placed unlinked "
                              "(double-click it to link it later)"
                              % (d.name.lower(), d.prefix or "parent"))
+        if d.kind == "footprint" and not self.attrs.get("TAG") and \
+                not self.attrs.get("PARENT"):
+            # which schematic device it is: its tag shows on it, and follows it
+            from . import tags
+            project = self.ctx.project
+            self.cands = tags.footprint_candidates(project, self.attrs.get("CAT") or d.catalog)
+            if self.cands:
+                self.pending, self.footprint_of = p, True
+                s, e = self.cands[0]
+                desc = e.attrs.get("DESC", "") or e.defn.description or e.defn.name
+                self.ctx.prompt("Which device is it: Enter for %s (%s, %s), type a tag, or N for "
+                                "none" % (e.attrs.get("TAG", "?"), desc,
+                                          project.zone_text(s, e.pos[0], e.pos[1]) or "?"),
+                                [("List", "L"), ("None", "N")])
+                return
         self._place(p, self.attrs)
 
     def _place(self, p, attrs):
@@ -1907,6 +1936,15 @@ class InsertCmd(Command):
             defn = project.blocks[self.defn.name]
             ins = self._make(p, defn).copy(attrs=attrs)
             ins = ins.copy(attrs=tags.new_attrs(project, sheet, defn, ins.attrs))
+            if defn.kind == "footprint":
+                # its label to start (Panel settings): its tag, or with none its part number,
+                # or its block's name
+                show = project.settings.get("footprint_label", "tag")
+                if show == "tag" and not ins.attrs.get("TAG"):
+                    show = "cat" if (ins.attrs.get("CAT") or defn.catalog) else "name"
+                if show:
+                    ins = ins.copy(label=show, tag_h=project.settings.get("tag_height", 0.1) *
+                                   sheet.k())
             if ins.layer not in project.layers:
                 ed.layer(ins.layer, None, M.Layer(ins.layer, M.ADAPTIVE).to_dict())
             ed.add(sheet, ins)

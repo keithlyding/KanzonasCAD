@@ -825,14 +825,24 @@ in one step, each keeping its own length.</li>
 <li><b>Footprint label</b> (Modify menu, the Panel tab's Footprints group, or a right-click
 with footprints selected): the selected footprints show, written across them, their
 <b>Show tag</b> (M1, CR3), <b>Show part number</b> (its catalog number; the block's own when
-the copy has none), <b>Show description</b> or <b>Show block name</b>, or <b>No label</b>
-(as they start). Select one or many, pick one: one step, Undo takes it back. Each footprint
+the copy has none), <b>Show description</b> or <b>Show block name</b>, or <b>No label</b>. A
+footprint you place shows its tag to start (one with no tag, its part number or block name):
+Project properties, Panel, <b>New footprints show</b> picks another. Select one or many, pick one: one step, Undo takes it back. Each footprint
 keeps its own choice, so some can show part numbers and others tags. The label is centered on
 the part (or at its block's label spot, set in Edit block), turned up the page or reading from
 the right as the part is turned, and paper-sized like the tags (Project properties: tag
 height). An empty tag or description shows "?". It prints and goes into PDF and DXF exports.
 Changing the tag, part number or description (double-click the footprint) changes the
 label.</li>
+<li><b>Which device a footprint is</b>: placing a footprint (Insert footprint, or a part's
+footprint) asks which schematic device it is, as a contact asks which coil: <b>Enter</b> takes
+the one offered (the next device with no footprint yet, in page order; one with the
+footprint's catalog number first), a typed tag takes that device, <b>L</b> lists them, <b>N</b>
+leaves it a footprint of its own. It then carries the device's tag (and its manufacturer,
+catalog number and description where it has none), shows it, and follows it: renumber the
+schematic and the panel's labels change with it. On the bill of materials the device and its
+footprint are one part. Typing another tag on a footprint (double-click it) makes it that
+device's footprint, or, if no device has that tag, a footprint of its own showing it.</li>
 <li><b>Footprints snap onto DIN rail.</b> While you place a footprint (Insert), move it,
 copy it or drag it, once its <b>DIN rail point</b> (the middle of its rail clip) comes over a
 rail it locks onto the rail's centerline and slides along the rail with the mouse, whatever
