@@ -14,6 +14,9 @@ build fails without them.
   contactor's power contacts and the overload heaters in one). The starter belongs to its
   Contactor coil like any contact: it shows the coil's tag and is listed under it. Both line
   up pole for pole and tag for tag with the other three-pole symbols.
+- Overload heaters are drawn as two hooks (the usual US heater symbol) instead of a hump up
+  and a hump down. A drawing you already have keeps the old look until you use
+  Library > Update blocks from library...
 - Move a symbol's tag: select the symbol and drag the grip on its tag (or on its rating)
   wherever you want it. It stays there on that copy and follows the symbol when you move it.
 

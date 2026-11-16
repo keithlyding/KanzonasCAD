@@ -77,6 +77,34 @@ class ComboSymbolsTest(unittest.TestCase):
             x, y = a["pos"]
             self.assertTrue(any(b[0] < x < b[2] and b[1] < y < b[3] for b in boxes), a)
 
+    def test_overload_heaters_are_two_hooks(self):
+        # (the owner, with a photo of the heaters they want: two hooks of three quarters of
+        # a turn, the first up and over from the wire in, the second round under to the wire
+        # out; no dashed line through the middle pole's hooks)
+        for n, poles, x0 in (("Overload heater", (0.0,), 0.0),
+                             ("Overload heaters 3-pole", J.POLES, 0.0),
+                             ("Starter 3-pole", J.POLES, 2 * J.PIN)):
+            d = self.lib.get("symbol", n)
+            for y in poles:
+                arcs = sorted((q for q in d.entities if isinstance(q, M.Arc) and
+                               abs(q.center[1] - y) < 1e-9), key=lambda q: q.center[0])
+                self.assertEqual(len(arcs), 2, n)
+                a, b = arcs
+                self.assertEqual((a.start, a.end), (270.0, 180.0))
+                self.assertEqual((b.start, b.end), (90.0, 0.0))
+                # the wire in meets the first's left end, the wire out the second's right end
+                left = (a.center[0] - a.radius, y)
+                right = (b.center[0] + b.radius, y)
+                ends = [q for q in d.entities if isinstance(q, M.Line)]
+                self.assertTrue(any(left in (q.p1, q.p2) for q in ends), n)
+                self.assertTrue(any(right in (q.p1, q.p2) for q in ends), n)
+                # nothing crosses between the hooks
+                for q in ends:
+                    if abs(q.p1[0] - q.p2[0]) < 1e-9 and abs(q.p1[0] - x0) < 1e-9:
+                        lo, hi = sorted((q.p1[1], q.p2[1]))
+                        self.assertFalse(lo < y + J.HEATER_R and hi > y - J.HEATER_R,
+                                         "%s: a line through the hooks at %s" % (n, y))
+
 
 if __name__ == "__main__":
     unittest.main()
