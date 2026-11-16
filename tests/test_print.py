@@ -1,6 +1,9 @@
 """Print... (File menu, Ctrl+P): the sheets chosen, one a page, fit to the paper (turned to
 match it) or at their real size; the Print window's choices; the Sheets list picking several
-sheets for it (the owner: "I need to be able to print selected or all sheets")."""
+sheets for it (the owner: "I need to be able to print selected or all sheets"); what of a
+sheet is printed (the owner: "whole page, window, extents, etc"): the whole sheet, its
+extents, what the window shows, two corners picked; orientation; the preview beside it (the
+owner: "Printing needs to support preview as well")."""
 import os
 import re
 import tempfile
@@ -9,7 +12,7 @@ import unittest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 
-from tests.util import APP, window
+from tests.util import APP, window, type_in
 
 from kanzonascad import model as M
 from kanzonascad import print_out as P
@@ -216,6 +219,161 @@ class PrintWindowTest(unittest.TestCase):
         APP.processEvents()
         self.assertEqual(self.v.sheet_id, shown)
         self.assertEqual(len(self.win.selected_sheet_ids()), 2)
+
+
+class AreaTest(unittest.TestCase):
+    def setUp(self):
+        self.p = M.Project.new()
+        self.s = self.p.sheets[0]
+        with self.p.edit("draw") as ed:
+            ed.add(self.s, M.Line((2, 3), (6, 5)))
+
+    def test_the_boxes(self):
+        w, h = self.s.paper_inches()
+        self.assertEqual(P.area_box(self.s), (0.0, 0.0, w, h))
+        b = P.area_box(self.s, "extents", project=self.p)
+        self.assertTrue(b[0] < 2 < 6 < b[2] and b[1] < 3 < 5 < b[3])
+        self.assertLess(b[2] - b[0], 4.2)
+        self.assertEqual(P.area_box(self.s, "window", (5, 4, 1, 2)), (1, 2, 5, 4))
+        self.assertEqual(P.area_box(self.s, "window", None), (0.0, 0.0, w, h))
+        # a scaled sheet: in its paper's inches
+        with self.p.edit("1:4") as ed:
+            ed.sheet_scale(self.s, 0.25)
+        self.assertEqual(P.area_box(self.s, "display", (0, 0, 40, 20)), (0, 0, 10, 5))
+
+    def test_extents_take_in_cross_references_and_wire_numbers(self):
+        from kanzonascad import wirenums, xrefs
+        win, v = window()
+        try:
+            from tests.util import type_in
+            from kanzonascad import commands as C
+            v.osnap_on = v.snap_on = False
+            lib = win.library
+            v.run(C.InsertCmd, lib.get("symbol", "Relay coil"), {})
+            type_in(v, "10,6")
+            v.run(C.InsertCmd, lib.get("symbol", "Contact NO"), {})
+            type_in(v, "3,6")
+            while v.cmd is not None:
+                v.cmd.enter()
+            v.run(C.WireCmd)
+            type_in(v, "1,4", "6,4")
+            if v.cmd is not None:
+                v.cmd.enter()
+            p, s = v.project, v.sheet()
+            texts = xrefs.texts(p, s) + list(wirenums.labels(p, s))
+            self.assertTrue(texts)
+            b = P.area_box(s, "extents", project=p)
+            for t in texts:
+                tb = t.bbox()
+                self.assertTrue(b[0] <= tb[0] and b[1] <= tb[1] and tb[2] <= b[2] and
+                                tb[3] <= b[3], t.text)
+            p.saved_at = len(p.undo_stack)
+        finally:
+            win.close()
+
+    def test_a_window_prints_only_what_is_in_it(self):
+        img = QImage(340, 440, QImage.Format_RGB32)
+        img.fill(QColor("white"))
+        pa = QPainter(img)
+        # the line's lower half: the line from the window's lower left to its middle right
+        P.paint_sheet(pa, self.p, self.s, 8.5, 11, 40, box=P.area_box(self.s, "window",
+                                                                      (2, 3, 6, 4)))
+        pa.end()
+        b = ink(img)
+        self.assertIsNotNone(b)
+        turn, f, x, y = P.placement(4, 1, 8.5, 11)
+        pw, ph = (1 * f, 4 * f) if turn else (4 * f, 1 * f)
+        self.assertGreaterEqual(b[0], x * 40 - 2)
+        self.assertLessEqual(b[2], (x + pw) * 40 + 2)
+        self.assertGreaterEqual(b[1], y * 40 - 2)
+        self.assertLessEqual(b[3], (y + ph) * 40 + 2)
+
+    def test_orientation_set_by_hand_never_turns(self):
+        self.assertEqual(P.placement(17, 11, 8.5, 11, turn=False)[0], False)
+        self.assertAlmostEqual(P.placement(17, 11, 8.5, 11, turn=False)[1], 0.5)
+
+
+class PrintAreaWindowTest(unittest.TestCase):
+    def setUp(self):
+        self.win, self.v = window()
+        self.p = self.v.project
+        with self.p.edit("draw") as ed:
+            ed.add(self.v.sheet(), M.Line((2, 3), (6, 5)))
+            ed.add_sheet(self.p.make_sheet("Two"), 1)
+
+    def tearDown(self):
+        self.p.saved_at = len(self.p.undo_stack)
+        self.win.close()
+
+    def dialog(self):
+        from kanzonascad.print_dialog import PrintDialog
+        return PrintDialog(self.win, self.p, self.v.sheet(), [], display=(0, 0, 8, 6))
+
+    def test_display_and_window_print_the_sheet_shown(self):
+        d = self.dialog()
+        d.all_of_them.setChecked(True)
+        d._update()
+        self.assertEqual(len(d.sheets()), 2)
+        d.area_box.setCurrentIndex(2)                       # Display
+        self.assertEqual(d.area(), ("display", (0, 0, 8, 6)))
+        self.assertEqual(d.sheets(), [self.v.sheet()])
+        self.assertFalse(d.all_of_them.isEnabled())
+        d.area_box.setCurrentIndex(3)                       # Window, none picked yet
+        self.assertFalse(d.print_button.isEnabled())
+        d.set_window((1, 1, 4, 3))
+        self.assertTrue(d.print_button.isEnabled())
+        self.assertEqual(d.area(), ("window", (1, 1, 4, 3)))
+        d.area_box.setCurrentIndex(1)                       # Extents: any sheets again
+        self.assertEqual(len(d.sheets()), 2)
+
+    def test_picking_a_window_on_the_drawing(self):
+        got = []
+        self.v.run(C_pick(), got.append)
+        type_in(self.v, "5,4", "1,2")
+        self.assertEqual(got, [(1.0, 2.0, 5.0, 4.0)])
+        self.v.run(C_pick(), got.append)                   # Esc: nothing
+        self.v.cancel()
+        self.assertEqual(got[-1], None)
+
+    def test_the_preview_draws_each_page(self):
+        d = self.dialog()
+        d.all_of_them.setChecked(True)
+        d._update()
+        d.show()
+        APP.processEvents()
+        self.assertEqual(d.page_label.text(), "Page 1 of 2")
+        d.next_button.click()
+        self.assertEqual(d.page_label.text(), "Page 2 of 2")
+        self.assertFalse(d.next_button.isEnabled())
+        img = d.preview_page.grab().toImage()
+        self.assertIsNotNone(ink(img))
+        paper_w, paper_h, (mx, my, pw, ph) = d.page_geometry()
+        self.assertAlmostEqual(paper_w, 8.5, places=2)       # (letter, to start)
+        self.assertLess(pw, paper_w + 1e-9)
+        d.orient_box.setCurrentIndex(2)                     # Landscape: a wide page
+        self.assertGreater(d.page_geometry()[0], d.page_geometry()[1])
+        d.close()
+
+    def test_print_a_window_into_a_pdf(self):
+        d = self.dialog()
+        d.printer_box.setCurrentIndex(d.printer_box.count() - 1)
+        d.area_box.setCurrentIndex(3)
+        d.set_window((1, 1, 4, 3))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "w.pdf")
+            from PySide6.QtWidgets import QFileDialog
+            saved = QFileDialog.getSaveFileName
+            QFileDialog.getSaveFileName = staticmethod(lambda *a, **k: (path, ""))
+            try:
+                self.assertEqual(d.run(tmp), 1)
+            finally:
+                QFileDialog.getSaveFileName = saved
+            self.assertEqual(pages(path), 1)
+
+
+def C_pick():
+    from kanzonascad import commands as C
+    return C.PickWindowCmd
 
 
 if __name__ == "__main__":

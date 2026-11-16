@@ -1,6 +1,6 @@
 import unittest
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, by_base_point
 
 from kanzonascad import commands as C
 from kanzonascad import model as M
@@ -22,6 +22,7 @@ class MoreSymbolsTest(unittest.TestCase):
 
     def place(self, name, at, *more):
         self.v.run(C.InsertCmd, self.lib.get("symbol", name), {})
+        by_base_point(self.v)
         type_in(self.v, "%g,%g" % at, *more)
         return max((e for e in self.v.sheet().entities.values() if isinstance(e, M.Insert)),
                    key=lambda e: e.id)

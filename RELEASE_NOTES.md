@@ -11,8 +11,13 @@ build fails without them.
 **New**
 - Print (File > Print..., Ctrl+P): print this sheet, all sheets, or the ones you tick, on any
   printer or into a PDF file. Select several sheets in the Sheets panel with Ctrl+click or
-  Shift+click and Print starts with those. Each sheet is fit to the printer's paper and turned
-  to match it (or printed at actual size), with a preview first.
+  Shift+click and Print starts with those. Print the whole sheet, its extents (everything
+  drawn), what the window shows, or a window you pick on the drawing; fit to paper or actual
+  size; automatic, portrait or landscape. A preview beside the settings shows each page as it
+  will print, and changes as you change them.
+- Inserting a symbol holds it by its first pin (L1, 1, A1...): click the pin or wire it joins
+  and it lands there. A 3-pole fuse clicked on a disconnect's T1 now joins all three poles.
+  Type B while placing it to hold it by another pin, or by its middle as before.
 - Sheets in their own windows: Window > Open this sheet in a new window (Ctrl+Shift+N) opens
   the sheet you are on in a window you can put on another screen (it fills your second screen
   if you have one). Both windows work on the same project: one Undo, one Save. You can also

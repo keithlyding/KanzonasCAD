@@ -534,11 +534,15 @@ def printed(path, chosen):
     CHECKED["print pages"] += 1
 
 
-def print_lands(project, sheet, page_w, page_h, fit, dpi=20):
+def print_lands(project, sheet, page_w, page_h, fit, dpi=20, box=None, turn_ok=True,
+                whole=True):
     """Paint a sheet as Print does on a page_w x page_h page: its ink lies inside the sheet's
     paper as printed (worked out here: the paper turned when that makes it bigger, or for
     Actual size when its long side and the page's differ; as big as the page holds or real
-    size; centered), and, fit to paper, that fills the page's width or height. Not skipped
+    size; centered), and, fit to paper, that fills the page's width or height. box: the part
+    printed (print_out.area_box: paper inches), the whole paper when None (then whole: its
+    frame is printed, and fills the page fit to it); turn_ok: Orientation Automatic. Not
+    skipped
     for a drawing that runs off its own paper (it prints past it, as on screen): then it is
     checked on a copy of the project with that sheet holding only what lies an inch (on
     paper) inside its edges."""
@@ -572,19 +576,25 @@ def print_lands(project, sheet, page_w, page_h, fit, dpi=20):
                 if not tb_on_paper(e.bbox()):
                     ed.remove(tb, e.id)
         CHECKED["print lands (a copy)"] += 1
+    full = box is None
+    if full:
+        box = (0.0, 0.0, w, h)
+    bw, bh = box[2] - box[0], box[3] - box[1]
     if fit:
-        flat, turned = min(page_w / w, page_h / h), min(page_w / h, page_h / w)
-        turn = turned > flat + 1e-12
-        f = max(flat, turned)
+        flat, turned = min(page_w / bw, page_h / bh), min(page_w / bh, page_h / bw)
+        turn = turn_ok and turned > flat + 1e-12
+        f = turned if turn else flat
     else:
-        turn = (w > h) != (page_w > page_h) and w != h and page_w != page_h
+        turn = turn_ok and (bw > bh) != (page_w > page_h) and abs(bw - bh) > 1e-9 and \
+            abs(page_w - page_h) > 1e-9
         f = 1.0
-    pw, ph = (h * f, w * f) if turn else (w * f, h * f)
+    pw, ph = (bh * f, bw * f) if turn else (bw * f, bh * f)
     x0, y0 = (page_w - pw) / 2, (page_h - ph) / 2
     img = QImage(max(1, round(page_w * dpi)), max(1, round(page_h * dpi)), QImage.Format_RGB32)
     img.fill(QColor("white"))
     pa = QPainter(img)
-    print_out.paint_sheet(pa, project, sheet, page_w, page_h, dpi, fit)
+    print_out.paint_sheet(pa, project, sheet, page_w, page_h, dpi, fit,
+                          box=None if full else box, turn_ok=turn_ok)
     pa.end()
     xs, ys = [], []
     for y in range(img.height()):
@@ -592,8 +602,8 @@ def print_lands(project, sheet, page_w, page_h, fit, dpi=20):
             if img.pixelColor(x, y).lightness() < 250:      # (hairlines: light gray)
                 xs.append(x)
                 ys.append(y)
-    whole = x0 >= -1e-9 and y0 >= -1e-9         # (the whole paper on the page: its frame shows)
-    assert xs or not whole, "nothing printed of sheet %s" % sheet.title
+    on_page = x0 >= -1e-9 and y0 >= -1e-9       # (the whole paper on the page: its frame shows)
+    assert xs or not (whole and on_page), "nothing printed of sheet %s" % sheet.title
     if not xs:
         return None
     slack = 2
@@ -602,7 +612,7 @@ def print_lands(project, sheet, page_w, page_h, fit, dpi=20):
         "printed outside its paper: ink %s, paper %s on a %s page" % (
             (min(xs), min(ys), max(xs), max(ys)),
             tuple(round(c * dpi) for c in (x0, y0, x0 + pw, y0 + ph)), (page_w, page_h))
-    if fit:
+    if fit and whole:
         span = max((max(xs) - min(xs)) / dpi / page_w, (max(ys) - min(ys)) / dpi / page_h)
         assert span > 0.8, "fit to paper but printed small: %.0f%% of the page" % (span * 100)
     CHECKED["print lands"] += 1

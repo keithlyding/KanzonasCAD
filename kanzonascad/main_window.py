@@ -1483,15 +1483,38 @@ class MainWindow(BlockEditing, QMainWindow):
         if v is None:
             return None
         from .print_dialog import PrintDialog
-        dlg = PrintDialog(self, v.project, v.sheet(), self.selected_sheet_ids())
-        if dlg.exec() != QDialog.Accepted:
+        w0, w1 = v.to_world(QPoint(0, v.height())), v.to_world(QPoint(v.width(), 0))
+        dlg = PrintDialog(self, v.project, v.sheet(), self.selected_sheet_ids(),
+                          display=(w0[0], w0[1], w1[0], w1[1]))
+        while True:
+            r = dlg.exec()
+            if r != PrintDialog.PICK:
+                break
+            dlg.set_window(self.pick_print_window(v))     # (Window: two corners, then back)
+        if r != QDialog.Accepted:
             return None
-        if not self._fits_or_go_on(v.project, dlg.sheets(), "Print"):
+        if dlg.area()[0] == "sheet" and \
+                not self._fits_or_go_on(v.project, dlg.sheets(), "Print"):
             return None
         n = dlg.run(self._last_dir())
         if n:
             self.statusBar().showMessage("Printed %d sheet(s)" % n, 5000)
         return n
+
+    def pick_print_window(self, v):
+        """Two corners picked on the drawing for Print's Window (Esc: None)."""
+        from PySide6.QtCore import QEventLoop
+        loop = QEventLoop()
+        got = []
+
+        def done(rect):
+            got.append(rect)
+            loop.quit()
+        v.run(C.PickWindowCmd, done)
+        v.setFocus()
+        if not got:
+            loop.exec()
+        return got[0] if got else None
 
     # ============================================================================================
     # editing

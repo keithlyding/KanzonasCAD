@@ -1338,8 +1338,12 @@ class MakeBlockCmd(Command):
 
 class InsertCmd(Command):
     """Place a symbol or footprint (from the Library panel): pick where; R turns it 90
-    degrees, F flips it. A contact then asks which device it belongs to: Enter takes the one
-    offered (the nearest coil with its prefix), a typed tag takes that device, L lists them."""
+    degrees, F flips it. A symbol with pins is held by its first pin (L1, 1, A1...), so the
+    point picked is where that pin lands, on the pin or wire it is to join (the owner: a 3-pole
+    fuse grabbed by its middle met the disconnect's pins with its middle); B moves the hold to
+    the next pin, then the block's own base point. A contact then asks which device it belongs
+    to: Enter takes the one offered (the nearest coil with its prefix), a typed tag takes that
+    device, L lists them."""
     name, title = "INSERT", "Insert"
     repeatable = False
 
@@ -1353,13 +1357,35 @@ class InsertCmd(Command):
         if getattr(defn, "catalog", "") and not self.attrs.get("CAT"):
             self.attrs["CAT"] = defn.catalog         # (its catalog number, as a part's)
         self.angle, self.mirror = 0.0, False
+        # where the block is held: its pins in order, then its own base point (None)
+        self.holds = [(p["name"], p["pos"]) for p in defn.pins] + [(None, (0.0, 0.0))] \
+            if defn.kind == "symbol" and defn.pins else [(None, (0.0, 0.0))]
+        self.hold = 0
         self.pending = None             # a contact's point, waiting for its device
         self.cands = []
         self.link_name = None           # an off-sheet connector's name offered
 
     def begin(self):
-        self.ctx.prompt("Specify insertion point for %s" % self.defn.name,
-                        [("Rotate 90", "R"), ("Flip", "F")])
+        self._ask()
+
+    def _ask(self):
+        name = self.holds[self.hold][0]
+        opts = [("Rotate 90", "R"), ("Flip", "F")]
+        if len(self.holds) > 1:
+            nxt = self.holds[(self.hold + 1) % len(self.holds)][0]
+            opts.append(("Base point: %s" % ("pin " + nxt if nxt else "center"), "B"))
+        self.ctx.prompt("Specify insertion point for %s%s" % (
+            self.defn.name, " (where pin %s goes)" % name if name else ""), opts)
+
+    def origin(self, p):
+        """The block's insertion point for its hold (a pin, or its base point) at p, as it is
+        turned and flipped now."""
+        q = self.holds[self.hold][1]
+        if q == (0.0, 0.0):
+            return p
+        w = M.Insert(self.defn.name, (0.0, 0.0), self.angle, 1.0, self.mirror, {},
+                     self.defn).to_world(q)
+        return (p[0] - w[0], p[1] - w[1])
 
     def text(self, s):
         k = s.strip().upper()
@@ -1390,6 +1416,10 @@ class InsertCmd(Command):
         if k == "F":
             self.mirror = not self.mirror
             return True
+        if k == "B" and len(self.holds) > 1:
+            self.hold = (self.hold + 1) % len(self.holds)
+            self._ask()
+            return True
         return False
 
     def enter(self):
@@ -1419,13 +1449,13 @@ class InsertCmd(Command):
         return (p[0] + dx, p[1] + dy)
 
     def preview(self, p):
-        return [self._make(self.pending if self.pending is not None else self._on_rail(p),
-                           self.defn)]
+        return [self._make(self.pending if self.pending is not None else
+                           self._on_rail(self.origin(p)), self.defn)]
 
     def point(self, p):
         if self.pending is not None:
             return                      # (waiting for the contact's device)
-        p = self._on_rail(p)
+        p = self._on_rail(self.origin(p))
         d = self.defn
         if d.wiring == "link" and not self.attrs.get("TAG"):
             # an off-sheet connector: its name pairs it with the other end
@@ -1476,6 +1506,45 @@ class InsertCmd(Command):
                     self.ctx.message("Wire cut to fit %s" % self.defn.name)
         self.ctx.set_selection(set())
         self.finish()
+
+
+class PickWindowCmd(Command):
+    """Two corners picked on the drawing (the Print window's Window): then got(rect), the
+    rectangle (x0, y0, x1, y1) in drawing units, or got(None) when cancelled."""
+    name, title = "PRINTWINDOW", "Print window"
+    repeatable = False
+
+    def __init__(self, ctx, got):
+        super().__init__(ctx)
+        self.got = got
+        self.first = None
+        self.rect = None
+
+    def begin(self):
+        self.ctx.prompt("Specify first corner of the area to print")
+
+    def point(self, p):
+        if self.first is None:
+            self.first = self.base = self.last = p
+            self.ctx.prompt("Specify opposite corner")
+            return
+        a = self.first
+        if abs(p[0] - a[0]) < 1e-9 or abs(p[1] - a[1]) < 1e-9:
+            return                      # (no area: pick another corner)
+        self.rect = (min(a[0], p[0]), min(a[1], p[1]), max(a[0], p[0]), max(a[1], p[1]))
+        self.finish()
+
+    def preview(self, p):
+        if self.first is None:
+            return []
+        a = self.first
+        return [M.Polyline([a, (p[0], a[1]), p, (a[0], p[1])], True)]
+
+    def finish(self):
+        got, self.got = self.got, None
+        super().finish()
+        if got is not None:
+            got(self.rect)
 
 
 class ExplodeCmd(Command):

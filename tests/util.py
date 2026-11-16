@@ -24,3 +24,12 @@ def type_in(view, *items):
         assert view.cmd is not None, "no command running for %r" % (t,)
         ok = view.input_text(t)
         assert ok, "input %r was not used" % (t,)
+
+
+def by_base_point(view):
+    """Hold the symbol being inserted by its base point (B until past its pins), as tests
+    written before 0.16 placed symbols: since then Insert holds a symbol by its first pin
+    (tests/test_insert_hold.py checks that)."""
+    cmd = view.cmd
+    for _i in range(len(cmd.holds) - 1):
+        assert view.input_text("B")

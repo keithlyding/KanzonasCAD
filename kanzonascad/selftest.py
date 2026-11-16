@@ -259,7 +259,7 @@ def run(log_path):
         v = state["view"]
         v.osnap_on = v.snap_on = False
         v.run(C.InsertCmd, syms["Relay coil"], {"TAG": "CR601"})
-        assert v.input_text("6,6")
+        assert v.input_text("5.75,6")       # (held by its first pin, A1: placed where it goes)
         ins = [e for e in v.sheet().entities.values() if isinstance(e, M.Insert)]
         assert ins and ins[0].pin_points()[0][1] == (5.75, 6.0), ins[0].pin_points()
         lib.save_block(M.BlockDef("Self-test footprint", "footprint", [M.Circle((0, 0), 1)]))
@@ -283,7 +283,7 @@ def run(log_path):
         for t in ("1,3", "8,3", ""):
             assert v.input_text(t)
         v.run(C.InsertCmd, Library().get("symbol", "Contact NO"), {})
-        assert v.input_text("4,3")
+        assert v.input_text("3.75,3")       # (its pin 1 on the wire)
         if v.cmd is not None:
             assert v.input_text("")     # (a coil is already on the sheet: it belongs to that)
         ws = [e for e in v.sheet().entities.values() if isinstance(e, M.Wire)]

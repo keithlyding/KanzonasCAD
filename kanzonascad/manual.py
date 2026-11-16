@@ -218,7 +218,12 @@ drawing keeps the whole width: <b>Insert symbol...</b> (Schematic tab) opens it 
 as you left it; its Parts tab lists your parts. Type in its search box to find one.
 Double-click a symbol or footprint (or select it and click <b>Insert</b>): the popup gets out
 of the way and you click where it goes; type R to turn it 90 degrees or F to flip it first.
-The popup opens again where you last put it. In the Parts tab, Insert asks whether to place
+A symbol with pins is held by its <b>first pin</b> (L1 on a 3-pole device, 1 on a contact, A1 on
+a coil): the point you click is where that pin goes, so click the pin or wire it is to join (a
+3-pole fuse clicked on a disconnect's T1 meets T1, T2 and T3 with its L1, L2 and L3). The
+command line says which pin it is held by; type B to hold it by the next pin, and after the
+last, by its base point (the middle of the library's symbols). Footprints are placed by their
+base point. The popup opens again where you last put it. In the Parts tab, Insert asks whether to place
 the part's symbol or its footprint.</p>
 <h3>Making your own</h3>
 <ol>
@@ -987,29 +992,39 @@ black on white (layer colors are for the screen).</li>
 
 <h2>Printing</h2>
 <p><b>Print...</b> (File menu, Ctrl+P, the Output tab, or right-click in the Sheets panel)
-opens the Print window:</p>
+opens the Print window. The <b>preview</b> on its right shows the page as it will print (the
+dashed line is the edge the printer can print to), and is drawn again as you change anything;
+<b>&lt;</b> and <b>&gt;</b> go through the pages. <b>Full preview...</b> shows them all
+bigger.</p>
 <ul>
 <li><b>Printer</b>: the printers your computer has, and <b>PDF file</b> (it asks for the
 file's name when you click Print). <b>Paper</b> lists the sizes the printer takes, starting
 with its own; <b>Copies</b> how many of each.</li>
+<li><b>Orientation</b>: <b>Automatic</b> (to start) turns each sheet a quarter turn when that
+prints it bigger (an ANSI B sheet on letter paper prints sideways, its title block at the top
+right, as a printer's Landscape does); <b>Portrait</b> and <b>Landscape</b> set the page's way
+and never turn the drawing.</li>
+<li><b>What to print</b>: <b>Whole sheet</b> (to start: the border, title block and drawing);
+<b>Extents</b>, everything drawn, cross-references and wire numbers too, without the empty
+paper around it; <b>Display</b>, what the drawing window shows now; <b>Window</b>, two corners
+you pick: choosing it hides the Print window, you pick the corners on the drawing (snaps
+work; Esc goes back without one), and the Print window comes back. <b>Pick window &lt;</b>
+picks again. Display and Window print the sheet shown.</li>
 <li><b>Sheets</b>: <b>This sheet</b> (the one shown), <b>All sheets</b>, or <b>These
 sheets</b>, ticked in the list (<b>Tick all</b>, <b>Tick none</b>). With several sheets
 selected in the Sheets panel (Ctrl+click, Shift+click), the window starts with those ticked.
 They print in the project's order, one sheet a page; the Print button says how many.</li>
-<li><b>Fit to paper</b> (to start): each sheet as big as the paper holds, turned a quarter
-turn when that makes it bigger (an ANSI B sheet on letter paper prints sideways, its title
-block at the top right, as a printer's Landscape does). A panel sheet prints its whole sheet
-at its scale, shrunk to the paper. Lines stay as thin on paper whatever the shrinking.</li>
-<li><b>Actual size</b>: each sheet at its own paper's size, centered on the page and turned to
-match it; a sheet bigger than the printer's paper is cut off at the page's edges (its middle
-shows).</li>
+<li><b>Fit to paper</b> (to start): what is printed as big as the paper holds. A panel sheet
+prints at its scale, shrunk to the paper. Lines stay as thin on paper whatever the
+shrinking.</li>
+<li><b>Actual size</b>: as on the sheet's own paper (a 1:4 panel sheet at 1:4), centered on
+the page; past the printer's paper is cut off at the page's edges (its middle shows).</li>
 <li><b>Black on white</b> (to start), as Export to PDF; untick it to print the layers'
 colors.</li>
-<li><b>Preview...</b> shows the pages as they will print.</li>
 </ul>
 <p>When a scaled sheet's drawing doesn't fit on it (the status bar's <b>doesn't fit</b>),
-Print asks first, as Export to PDF does. {{Print date}} in the title block is when you
-printed.</p>
+printing the whole sheet asks first, as Export to PDF does. {{Print date}} in the title block
+is when you printed.</p>
 
 <h2>Windows and two screens</h2>
 <p>Any sheet can have a window of its own, to put on another screen: the schematic on one

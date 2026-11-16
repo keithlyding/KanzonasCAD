@@ -1184,15 +1184,19 @@ class CadView(QWidget):
         pm = QPixmap(max(1, round(W * dpr)), max(1, round(H * dpr)))
         pm.setDevicePixelRatio(dpr)
         p = QPainter(pm)
-        p.fillRect(QRectF(0, 0, W, H), pal.backdrop)
-        p.setRenderHint(QPainter.Antialiasing, True)
-        p.setTransform(self.transform() * QTransform.fromTranslate(mx, my))
-        self.renderer().paint(p, under=(lambda q: self._paint_grid(q, pal, (mx, my)))
-                              if self.grid_on else None)
-        if self.overlay is not None:
-            self.overlay(p, self)
-        self._paint_selection(p, pal)
-        p.end()
+        try:
+            p.fillRect(QRectF(0, 0, W, H), pal.backdrop)
+            p.setRenderHint(QPainter.Antialiasing, True)
+            p.setTransform(self.transform() * QTransform.fromTranslate(mx, my))
+            self.renderer().paint(p, under=(lambda q: self._paint_grid(q, pal, (mx, my)))
+                                  if self.grid_on else None)
+            if self.overlay is not None:
+                self.overlay(p, self)
+            self._paint_selection(p, pal)
+        finally:
+            # (an error while painting must not leave the painter open: the
+            # picture would be destroyed while painted on, and Qt may crash)
+            p.end()
         self._wide = (key, self.scale, self.center, pm, mx, my)
 
     def _drawing_picture(self, pal):
@@ -1208,14 +1212,18 @@ class CadView(QWidget):
         pm = QPixmap(max(1, round(self.width() * dpr)), max(1, round(self.height() * dpr)))
         pm.setDevicePixelRatio(dpr)
         p = QPainter(pm)
-        p.fillRect(QRectF(0, 0, self.width(), self.height()), pal.backdrop)
-        p.setRenderHint(QPainter.Antialiasing, True)
-        p.setTransform(self.transform())
-        self.renderer().paint(p, under=(lambda q: self._paint_grid(q, pal))
-                              if self.grid_on else None)
-        if self.overlay is not None:
-            self.overlay(p, self)
-        p.end()
+        try:
+            p.fillRect(QRectF(0, 0, self.width(), self.height()), pal.backdrop)
+            p.setRenderHint(QPainter.Antialiasing, True)
+            p.setTransform(self.transform())
+            self.renderer().paint(p, under=(lambda q: self._paint_grid(q, pal))
+                                  if self.grid_on else None)
+            if self.overlay is not None:
+                self.overlay(p, self)
+        finally:
+            # (an error while painting must not leave the painter open: the
+            # picture would be destroyed while painted on, and Qt may crash)
+            p.end()
         self._picture = (key, pm)
         return pm
 
@@ -1238,18 +1246,26 @@ class CadView(QWidget):
             # imported panel)
             pm = QPixmap(got[1])
             p = QPainter(pm)
-            p.setRenderHint(QPainter.Antialiasing, True)
-            p.setTransform(self.transform())
-            self._paint_glow(p, [s.entities[i] for i in key[2] - got[0][2] if i in s.entities])
-            p.end()
+            try:
+                p.setRenderHint(QPainter.Antialiasing, True)
+                p.setTransform(self.transform())
+                self._paint_glow(p, [s.entities[i] for i in key[2] - got[0][2] if i in s.entities])
+            finally:
+                # (an error while painting must not leave the painter open: the
+                # picture would be destroyed while painted on, and Qt may crash)
+                p.end()
             self._lit = (key, pm)
             return pm
         pm = QPixmap(base)
         p = QPainter(pm)
-        p.setRenderHint(QPainter.Antialiasing, True)
-        p.setTransform(self.transform())
-        self._paint_selection(p, pal)
-        p.end()
+        try:
+            p.setRenderHint(QPainter.Antialiasing, True)
+            p.setTransform(self.transform())
+            self._paint_selection(p, pal)
+        finally:
+            # (an error while painting must not leave the painter open: the
+            # picture would be destroyed while painted on, and Qt may crash)
+            p.end()
         self._lit = (key, pm)
         return pm
 
@@ -1257,68 +1273,72 @@ class CadView(QWidget):
         pal = Palette(self.dark)
         fast = self._fast_view()
         p = QPainter(self)
-        if fast is not None:
-            # (panning or zooming: the last picture, moved and scaled; sharp once it stops)
-            t, old = fast
-            p.fillRect(QRectF(0, 0, self.width(), self.height()), pal.backdrop)
-            # (past the picture's edge, the sheet's paper where it lies, not an empty band;
-            # the objects there come with the sharp picture)
-            w, h = self.sheet().paper()
+        try:
+            if fast is not None:
+                # (panning or zooming: the last picture, moved and scaled; sharp once it stops)
+                t, old = fast
+                p.fillRect(QRectF(0, 0, self.width(), self.height()), pal.backdrop)
+                # (past the picture's edge, the sheet's paper where it lies, not an empty band;
+                # the objects there come with the sharp picture)
+                w, h = self.sheet().paper()
+                p.save()
+                p.setTransform(self.transform())
+                p.fillRect(QRectF(0, 0, w, h), pal.paper)
+                p.restore()
+                p.save()
+                p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+                p.setTransform(t)
+                p.drawPixmap(0, 0, old)
+                p.restore()
+            else:
+                pm = self._lit_picture(pal)
+                p.drawPixmap(0, 0, pm)
+                self._shown = (self._shown_key(), self.scale, self.center, pm)
+                if time.perf_counter() > self._moving_until:
+                    self._widen.start()         # (the wide picture, once the view stays still)
+            p.setRenderHint(QPainter.Antialiasing, True)
             p.save()
             p.setTransform(self.transform())
-            p.fillRect(QRectF(0, 0, w, h), pal.paper)
+            cmd = self.cmd
+            self._rail_hit = None
+            if cmd is not None and self.cursor is not None and not cmd.selecting() \
+                    and not cmd.picking:
+                pt = self.resolve(self.cursor)
+                sh = cmd.shift(pt) if hasattr(cmd, "shift") else None
+                prev = None if sh is not None else cmd.preview(pt)
+                if sh is not None:
+                    ents, dx, dy = sh
+                    self._paint_shifted(p, pal, ents, dx, dy)
+                    pen = QPen(pal.select, 0)
+                    pen.setCosmetic(True)
+                    p.setPen(pen)
+                    p.drawLine(QPointF(*cmd.from_pt), QPointF(*pt))
+                if prev:
+                    strokes, fills = entities_path(prev)
+                    pen = QPen(pal.select, 0)
+                    pen.setCosmetic(True)
+                    p.setPen(pen)
+                    p.setBrush(Qt.NoBrush)
+                    p.drawPath(strokes)
+                    p.setPen(Qt.NoPen)
+                    p.setBrush(pal.select)
+                    p.drawPath(fills)
+            d = self._drag
+            if d is not None and d["moved"] and self.cursor is not None:
+                dx, dy = self._drag_delta(d, self.cursor)
+                self._paint_shifted(p, pal, d["ents"], dx, dy)
             p.restore()
-            p.save()
-            p.setRenderHint(QPainter.SmoothPixmapTransform, True)
-            p.setTransform(t)
-            p.drawPixmap(0, 0, old)
-            p.restore()
-        else:
-            pm = self._lit_picture(pal)
-            p.drawPixmap(0, 0, pm)
-            self._shown = (self._shown_key(), self.scale, self.center, pm)
-            if time.perf_counter() > self._moving_until:
-                self._widen.start()         # (the wide picture, once the view stays still)
-        p.setRenderHint(QPainter.Antialiasing, True)
-        p.save()
-        p.setTransform(self.transform())
-        cmd = self.cmd
-        self._rail_hit = None
-        if cmd is not None and self.cursor is not None and not cmd.selecting() \
-                and not cmd.picking:
-            pt = self.resolve(self.cursor)
-            sh = cmd.shift(pt) if hasattr(cmd, "shift") else None
-            prev = None if sh is not None else cmd.preview(pt)
-            if sh is not None:
-                ents, dx, dy = sh
-                self._paint_shifted(p, pal, ents, dx, dy)
-                pen = QPen(pal.select, 0)
-                pen.setCosmetic(True)
-                p.setPen(pen)
-                p.drawLine(QPointF(*cmd.from_pt), QPointF(*pt))
-            if prev:
-                strokes, fills = entities_path(prev)
-                pen = QPen(pal.select, 0)
-                pen.setCosmetic(True)
-                p.setPen(pen)
-                p.setBrush(Qt.NoBrush)
-                p.drawPath(strokes)
-                p.setPen(Qt.NoPen)
-                p.setBrush(pal.select)
-                p.drawPath(fills)
-        d = self._drag
-        if d is not None and d["moved"] and self.cursor is not None:
-            dx, dy = self._drag_delta(d, self.cursor)
-            self._paint_shifted(p, pal, d["ents"], dx, dy)
-        p.restore()
-        self._paint_grips(p, pal)
-        self._paint_window(p)
-        self._paint_tracking(p)
-        self._paint_snap(p)
-        self._paint_rail(p)
-        self._paint_polar(p)
-        self._paint_crosshair(p, pal)
-        p.end()
+            self._paint_grips(p, pal)
+            self._paint_window(p)
+            self._paint_tracking(p)
+            self._paint_snap(p)
+            self._paint_rail(p)
+            self._paint_polar(p)
+            self._paint_crosshair(p, pal)
+        finally:
+            # (an error while painting must not leave the painter open: the
+            # picture would be destroyed while painted on, and Qt may crash)
+            p.end()
 
     def _paint_grid(self, p, pal, margin=(0, 0)):
         """The grid's dots over the view (and margin pixels more round it: the wide

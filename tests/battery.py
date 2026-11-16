@@ -57,6 +57,28 @@ from kanzonascad import wires, crossings, wirenums, fileio, templates  # noqa: E
 from tests import battery_checks as BC  # noqa: E402
 
 
+# An error raised while a view paints is reported here, with its traceback (an error in a paint
+# run from the event loop has no Python caller to see it; with a painter left open on a picture
+# it crashed the run with no word of what it was: 0.16's long battery, twice, under load)
+PAINT_ERRORS = []
+
+
+def _watch_paints():
+    from kanzonascad.view import CadView
+    if getattr(CadView, "_battery_watched", False):
+        return
+    real = CadView.paintEvent
+
+    def paint(self, e):
+        try:
+            return real(self, e)
+        except Exception:
+            PAINT_ERRORS.append(traceback.format_exc())
+            raise
+    CadView.paintEvent = paint
+    CadView._battery_watched = True
+
+
 class Log:
     def __init__(self, path):
         self.f = open(path, "w", encoding="utf-8")
@@ -69,8 +91,12 @@ class Log:
 
     def check(self, name, fn):
         t = time.perf_counter()
+        seen = len(PAINT_ERRORS)
         try:
             note = fn()
+            if len(PAINT_ERRORS) > seen:
+                raise AssertionError("%d error(s) while painting:\n%s" % (
+                    len(PAINT_ERRORS) - seen, "\n".join(PAINT_ERRORS[seen:seen + 3])))
         except Exception:                       # (a battery reports every failure, then goes on)
             self.failures += 1
             self.say("FAIL  %s (%.1f s)\n%s" % (name, time.perf_counter() - t,
@@ -522,7 +548,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         return (o[0] + q[0] * k, o[1] + q[1] * k)
 
     def fmt(q):
-        return "%g,%g" % q
+        return "%.12g,%.12g" % q       # (%g kept 6 digits: 12010.25 typed as 12010.2)
 
     def some(n=None):
         ents = list(s.entities.values())
@@ -564,10 +590,22 @@ def random_editing(log, out, ops, seed, drawing=None):
 
     def op_symbol():
         name = rnd.choice(syms)
-        v.run(C.InsertCmd, lib.get("symbol", name), {})
+        before = set(s.entities)
+        cmd = v.run(C.InsertCmd, lib.get("symbol", name), {})
+        for k in rnd.sample(["R", "F", "B"], rnd.randint(0, 2)):
+            v.input_text(k)
+        held = cmd.holds[cmd.hold][0]
+        at = pt()
         if v.cmd is not None:
-            v.input_text(fmt(pt()))
+            v.input_text(fmt(at))
         finish()
+        # (held by a pin, that pin is exactly where the point was given: 0.16)
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if held is not None and len(new) == 1:
+            got = dict(new[0].pin_points())[held]
+            assert got == at, "%s held by pin %s: the pin went to %s, not %s" % (
+                name, held, got, at)
+            BC.CHECKED["insert by its pin"] += 1
 
     def op_line():
         v.run(C.LineCmd)
@@ -982,16 +1020,25 @@ def random_editing(log, out, ops, seed, drawing=None):
         size = rnd.choice([(QPageSize.Letter, 8.5, 11), (QPageSize.Tabloid, 11, 17),
                            (QPageSize.AnsiD, 22, 34), (QPageSize.A4, 8.27, 11.69)])
         fit = rnd.random() < 0.7
+        area = rnd.choice(print_out.AREAS)
+        rect = None
+        if area in ("display", "window"):
+            chosen = [rnd.choice(chosen)]
+            a, b = pt(), pt()
+            rect = (a[0], a[1], b[0] + 0.25, b[1] + 0.25)
+        turn_ok = rnd.random() < 0.7
         before, rev = norm(p.to_dict()), p.revision
         path = os.path.join(out, "print.pdf")
         n = print_out.print_sheets(p, print_out.pdf_printer(path, QPageSize(size[0]), 72),
-                                   chosen, fit, mono=rnd.random() < 0.8)
+                                   chosen, fit, rnd.random() < 0.8, area, rect, turn_ok)
         assert n == len(chosen)
         BC.printed(path, chosen)
         assert norm(p.to_dict()) == before and p.revision == rev, "printing changed the project"
         sheet = rnd.choice(chosen)
         page = (size[1], size[2]) if rnd.random() < 0.5 else (size[2], size[1])
-        BC.print_lands(p, sheet, page[0], page[1], fit)
+        BC.print_lands(p, sheet, page[0], page[1], fit,
+                       box=print_out.area_box(sheet, area, rect, p), turn_ok=turn_ok,
+                       whole=area == "sheet")
 
     def op_window():
         listeners = len(p.listeners)
@@ -1554,6 +1601,7 @@ def main(argv):
     drawing = argv[argv.index("--drawing") + 1] if "--drawing" in argv else None
     os.makedirs(out, exist_ok=True)
     log = Log(os.path.join(out, "battery.log"))
+    _watch_paints()
     # (any dialog closes by itself for the whole run: one opened late, by an answer to a
     # command of an earlier section, Check for updates say, would otherwise wait forever)
     global CLOSER
