@@ -1,6 +1,6 @@
 import unittest
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, by_base_point
 
 from kanzonascad import commands as C
 from kanzonascad import model as M
@@ -27,6 +27,7 @@ class ScootTest(unittest.TestCase):
         with self.p.edit("rung") as ed:
             ed.add(self.s, M.Wire([(1, y), (11, y)]))
         self.v.run(C.InsertCmd, self.contact, {"TAG": "CR1"})
+        by_base_point(self.v)
         type_in(self.v, "%g,%g" % (x_contact, y))
         return max((e for e in self.s.inserts()), key=lambda e: e.id)
 

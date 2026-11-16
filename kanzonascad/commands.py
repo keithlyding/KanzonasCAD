@@ -1005,6 +1005,18 @@ class ZoomCmd(Command):
         return True
 
 
+def wire_layer(ctx):
+    """The layer a wire goes on: the current layer when it is a wire layer (WIRES, one named
+    WIRE..., or one with a gauge or wire color: Layers), else WIRES (the owner, 0.16: picking
+    WIRE BROWN and drawing a wire put it on WIRES; picking 0 for drafting leaves wires on
+    WIRES)."""
+    name = ctx.layer()
+    lay = ctx.project.layers.get(name)
+    if name.upper().startswith("WIRE") or (lay is not None and (lay.awg or lay.wire_color)):
+        return name
+    return "WIRES"
+
+
 class WireCmd(Command):
     """WIRE: click where it starts (a pin, a wire, or anywhere), then where it goes: it runs
     straight across and up or down, turning one corner per click (F flips which way the
@@ -1023,7 +1035,8 @@ class WireCmd(Command):
         sheet = self.ctx.sheet()
         a = self.points[-1]
         start = []
-        if len(self.points) == 1:
+        leads = bool(self.ctx.project.settings.get("wire_lead", False))
+        if len(self.points) == 1 and leads:
             got = lead(sheet, a, p)
             if got is not None:
                 a, out = got
@@ -1032,7 +1045,7 @@ class WireCmd(Command):
                     # (carry on the way the lead heads, unless the cursor is well off it)
                     h = abs(out[0]) > 0
                     return start + route(a, p, h)
-        end = lead(sheet, p, a)
+        end = lead(sheet, p, a) if leads else None
         if end is not None and G.dist(a, p) > 1e-9:
             c, out = end
             h = self.hfirst
@@ -1080,7 +1093,7 @@ class WireCmd(Command):
         if len(pts) >= 2:
             sheet = self.ctx.sheet()
             with self.ctx.edit("Wire") as ed:
-                w = ed.add(sheet, M.Wire(pts))
+                w = ed.add(sheet, M.Wire(pts, layer=wire_layer(self.ctx)))
                 if _cleanup_on(self.ctx):
                     from .wires import tidy_new
                     if tidy_new(ed, sheet, w) == "duplicate":
@@ -1097,7 +1110,7 @@ class WireCmd(Command):
     def preview(self, p):
         if not self.points:
             return []
-        return [M.Wire(self.points + self._route(p))]
+        return [M.Wire(self.points + self._route(p), layer=wire_layer(self.ctx))]
 
 
 def bus_paths(points, count, spacing, flip=False):
@@ -1122,33 +1135,241 @@ def bus_paths(points, count, spacing, flip=False):
             n1, n2 = normals[j - 1], normals[j]
             line.append((pts[j][0] + d * (n1[0] + n2[0]), pts[j][1] + d * (n1[1] + n2[1])))
         line.append((pts[-1][0] + d * normals[-1][0], pts[-1][1] + d * normals[-1][1]))
-        out.append(line)
+        # (a leg no longer than the wire's offset leaves it a point twice: a leg of nothing)
+        line = [tuple(q) for q in M._tidy(line)]
+        if len(line) >= 2:
+            out.append(line)
     return out
 
 
+def pin_side(sheet, p, tol=1e-6):
+    """The pins of a symbol on one side of it, in a line through the pin at p and evenly
+    spaced (a 3-pole device's L1, L2, L3; a VFD's T1-T3): ([world points] in the block's pin
+    order, spacing), or None. A line whose pins have the symbol's drawing on both sides of it
+    (a contact's 1 and 2: its in and out) is not a side."""
+    for e in sheet.query_point(p, tol):
+        if not isinstance(e, M.Insert) or e.defn is None or len(e.defn.pins) < 2:
+            continue
+        d = e.defn
+        pins = [(q["name"], q["pos"]) for q in d.pins]
+        hit = [n for n, q in pins if G.dist(e.to_world(q), p) <= tol]
+        if not hit:
+            continue
+        at = dict(pins)[hit[0]]
+        boxes = [x.bbox() for x in d.entities]
+        best = None
+        for axis in (0, 1):             # the same x (a column of pins), the same y (a row)
+            line = [(n, q) for n, q in pins if abs(q[axis] - at[axis]) <= 1e-6]
+            if len(line) < 2:
+                continue
+            along = sorted(q[1 - axis] for _n, q in line)
+            gaps = [b - a for a, b in zip(along, along[1:])]
+            if min(gaps) <= 1e-9 or max(gaps) - min(gaps) > 1e-6:
+                continue
+            c = at[axis]
+            lo = min((bb[axis] for bb in boxes), default=c)
+            hi = max((bb[axis + 2] for bb in boxes), default=c)
+            if lo < c - 1e-6 and hi > c + 1e-6:
+                continue                # (the drawing on both sides: in and out, not a side)
+            if best is None or len(line) > len(best[0]):
+                best = ([e.to_world(q) for _n, q in line], gaps[0] * e.scale)
+        if best is not None:
+            return best
+    return None
+
+
+def end_side(sheet, p, tol=1e-6):
+    """A bus's open end: the free ends of wires in a line through the free end at p, evenly
+    spaced, the wires running out of them the same way: ([points] top to bottom or left to
+    right, spacing, [their wires]), or None (the owner, 0.16: "I need to be able to extend a
+    bus of wires")."""
+    def free_end(q):
+        got = []
+        for e in sheet.query_point(q, tol):
+            if isinstance(e, M.Wire):
+                for i in (0, -1):
+                    if G.dist(e.points[i], q) <= tol:
+                        got.append((e, i))
+                    elif i == 0 and e.touches(q, tol) and G.dist(e.points[-1], q) > tol:
+                        got.append((e, None))           # (a wire through it: not free)
+        if len(got) != 1 or got[0][1] is None:
+            return None
+        from .wires import pins_on
+        if pins_on(sheet, q):
+            return None
+        w, i = got[0]
+        a, b = (w.points[1], w.points[0]) if i == 0 else (w.points[-2], w.points[-1])
+        L = G.dist(a, b)
+        return (w, ((b[0] - a[0]) / L, (b[1] - a[1]) / L)) if L > 1e-9 else None
+    me = free_end(p)
+    if me is None:
+        return None
+    w0, out = me
+    if abs(out[0]) > 1e-9 and abs(out[1]) > 1e-9:
+        return None                     # (a slanted end)
+    axis = 0 if abs(out[0]) > 0.5 else 1          # (ends one above another: the same x)
+    reach = 12.0 * sheet.k()
+    rect = (p[0] - tol, p[1] - reach, p[0] + tol, p[1] + reach) if axis == 0 else \
+        (p[0] - reach, p[1] - tol, p[0] + reach, p[1] + tol)
+    found = {}
+    for e in sheet.query(rect):
+        if not isinstance(e, M.Wire):
+            continue
+        for q in (e.points[0], e.points[-1]):
+            if abs(q[axis] - p[axis]) > tol:
+                continue
+            got = free_end(q)
+            if got is not None and got[0].id == e.id and \
+                    abs(got[1][0] - out[0]) < 1e-9 and abs(got[1][1] - out[1]) < 1e-9:
+                found[round(q[1 - axis], 9)] = (tuple(q), e)
+    run = _even_run(sorted(found), round(p[1 - axis], 9))
+    if run is None:
+        return None
+    coords, gap = run
+    if axis == 0:
+        coords = coords[::-1]                       # (top to bottom)
+    return [found[c][0] for c in coords], gap, [found[c][1] for c in coords]
+
+
+def _even_run(coords, c0):
+    """The evenly spaced run of sorted coords containing c0 (its nearest neighbours' gap):
+    ([coords], gap), or None when fewer than two."""
+    if c0 not in coords or len(coords) < 2:
+        return None
+    i = coords.index(c0)
+    gaps = [abs(coords[j] - c0) for j in (i - 1, i + 1) if 0 <= j < len(coords)]
+    gap = min(gaps)
+    if gap <= 1e-9:
+        return None
+    lo = hi = i
+    while lo > 0 and abs((coords[lo] - coords[lo - 1]) - gap) < 1e-6:
+        lo -= 1
+    while hi < len(coords) - 1 and abs((coords[hi + 1] - coords[hi]) - gap) < 1e-6:
+        hi += 1
+    run = coords[lo:hi + 1]
+    return (run, gap) if len(run) >= 2 else None
+
+
+def tap_lines(sheet, p, tol=1e-6):
+    """Wires running side by side through a point on the middle of one (three phases across
+    a sheet): straight runs parallel to the one at p, evenly spaced, all going past p's place
+    along them: (across, [their y, or x when they run up and down], spacing), or None. A bus
+    started or ended there takes or lands on one each (the owner, 0.16: "add a vertical 3ph
+    wire bus to horizontal 3 ph wires")."""
+    seg = None
+    for e in sheet.query_point(p, tol):
+        if not isinstance(e, M.Wire):
+            continue
+        if G.dist(e.points[0], p) <= tol or G.dist(e.points[-1], p) <= tol:
+            return None                 # (an end: that's carrying a wire on)
+        for a, b in zip(e.points, e.points[1:]):
+            if G.dist_to_segment(p, a, b) <= tol and G.dist(p, a) > tol and \
+                    G.dist(p, b) > tol:
+                if abs(a[1] - b[1]) < 1e-9:
+                    seg = (True, a[1])
+                elif abs(a[0] - b[0]) < 1e-9:
+                    seg = (False, a[0])
+    if seg is None:
+        return None
+    across = seg[0]
+    reach = 12.0 * sheet.k()
+    rect = (p[0] - tol, p[1] - reach, p[0] + tol, p[1] + reach) if across else \
+        (p[0] - reach, p[1] - tol, p[0] + reach, p[1] + tol)
+    found = set()
+    for e in sheet.query(rect):
+        if not isinstance(e, M.Wire):
+            continue
+        for a, b in zip(e.points, e.points[1:]):
+            if across and abs(a[1] - b[1]) < 1e-9 and min(a[0], b[0]) < p[0] - tol and \
+                    max(a[0], b[0]) > p[0] + tol:
+                found.add(round(a[1], 9))
+            elif not across and abs(a[0] - b[0]) < 1e-9 and min(a[1], b[1]) < p[1] - tol \
+                    and max(a[1], b[1]) > p[1] + tol:
+                found.add(round(a[0], 9))
+    run = _even_run(sorted(found), round(seg[1], 9))
+    if run is None:
+        return None
+    return across, run[0], run[1]
+
+
+# the Bus command's layer choices (the wires in order; past the list's end, its last layer)
+BUS_LAYERS = [
+    ("Wires (the WIRES layer)", ["WIRES"]),
+    ("Brown, orange, yellow (480 V)", ["WIRE BROWN", "WIRE ORANGE", "WIRE YELLOW", "WIRE GRAY"]),
+    ("Black, red, blue (208/240 V)", ["WIRE BLACK", "WIRE RED", "WIRE BLUE", "WIRE WHITE"]),
+    ("All black", ["WIRE BLACK"]),
+]
+# their colors, for layers the project hasn't got yet ("7": black on paper, white on screen)
+WIRE_LAYER_COLORS = {"WIRE BROWN": "#a0522d", "WIRE ORANGE": "#ff8c00", "WIRE YELLOW": "#ffd700",
+                     "WIRE GRAY": "#909090", "WIRE BLACK": "7", "WIRE RED": "#ff3030",
+                     "WIRE BLUE": "#3070ff", "WIRE WHITE": "#e0e0e0"}
+
+
+# the insulation color each of them stands for (the wire color the layer's wires show)
+WIRE_COLOR_NAMES = {"WIRE BROWN": "BRN", "WIRE ORANGE": "ORG", "WIRE YELLOW": "YEL",
+                    "WIRE GRAY": "GRY", "WIRE BLACK": "BLK", "WIRE RED": "RED",
+                    "WIRE BLUE": "BLU", "WIRE WHITE": "WHT"}
+
+
+def bus_layer_list(layers, count):
+    """A layer for each of count wires from a choice (its last one again past its end)."""
+    layers = list(layers) or ["WIRES"]
+    return [layers[min(i, len(layers) - 1)] for i in range(count)]
+
+
 class BusCmd(Command):
-    """BUS: several wires side by side (three phases, say). How many and how far apart, then
-    click the path as for a wire: it runs straight across and up or down, turning 90 degrees
-    at each click as many times as needed, all the wires turning together. F puts the other
-    wires on the other side; Enter (or Esc) ends it."""
+    """BUS: several wires side by side (three phases, say). Start it on a symbol's pin and it
+    takes that side's pins (a disconnect's L1, L2, L3: how many and how far apart, the others
+    landing on their pins whichever way it goes); anywhere else, the last count and spacing (N,
+    D to change them). Then click the path as for a wire: across and up or down, turning 90
+    degrees at each click, all the wires turning together; S runs it straight instead (each
+    click straight across or straight up or down from the last, no corner). L picks each
+    wire's layer (brown, orange, yellow...). F puts the other wires on the other side; Enter
+    (or Esc) ends it."""
     name, title = "BUS", "Bus"
 
     def begin(self):
         self.count = int(getattr(self.ctx, "_bus_count", 3))
         self.spacing = float(getattr(self.ctx, "_bus_spacing", 0.5))
+        self.layers = list(getattr(self.ctx, "_bus_layers", ["WIRES"]))
+        self.straight = bool(getattr(self.ctx, "_bus_straight", False))
         self.flip = False
+        self.toward = None              # started on a symbol's pins: where its others are
+        self.side_pins = []             # ...and those pins, each wire starting exactly on one
+        self.tap_start = None           # started on wires side by side: (across, [lines])
+        self.tap_end = None             # ...ended on them
+        self.shift = (0.0, 0.0)         # started on a pin or end not the first: from it to
+                                        # the first (later clicks are where the one clicked goes)
         self.points = []
         self.hfirst = None
-        self.step = "count"
-        self.ctx.prompt("Number of wires <%d>" % self.count)
+        self._ask_start()
+
+    def _options(self):
+        opts = [("Straight" if not self.straight else "Corners", "S"), ("Layers", "L"),
+                ("Other side", "F")]
+        if self.points:
+            return opts + [("Undo", "U")]
+        return [("Wires", "N"), ("Spacing", "D")] + opts
+
+    def _ask_start(self):
+        self.step = "path"
+        self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.spacing
+        if self.points:
+            self.ctx.prompt("Specify next %s (Enter ends the bus)" % (
+                "point" if self.straight else "corner"), self._options())
+        else:
+            self.ctx.prompt("Specify start of the bus: a symbol's pin takes its poles (else %d "
+                            "wires, %s apart)" % (self.count, _fmt(self.spacing)),
+                            self._options())
 
     def number(self, v):
-        if self.step == "count":
+        if self.step in ("count", "path") and not self.points and \
+                (self.step == "count" or v == int(v)):
             if v < 2 or v != int(v) or v > 50:
                 self.ctx.message("A bus has 2 to 50 wires.")
                 return True
             self.count = int(v)
-            self._ask_spacing()
+            self._ask_spacing()          # (typed: how far apart next, as it always asked)
             return True
         if self.step == "spacing":
             if v <= 0:
@@ -1162,16 +1383,8 @@ class BusCmd(Command):
         self.step = "spacing"
         self.ctx.prompt("Spacing between wires <%s> (inches, or 12mm)" % _fmt(self.spacing))
 
-    def _ask_start(self):
-        self.step = "path"
-        self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.spacing
-        self.ctx.prompt("Specify start of the first wire (%d wires, %s apart)"
-                        % (self.count, _fmt(self.spacing)), [("Other side", "F")])
-
     def enter(self):
-        if self.step == "count":
-            self._ask_spacing()
-        elif self.step == "spacing":
+        if self.step in ("count", "spacing"):
             self._ask_start()
         else:
             self._make()
@@ -1180,46 +1393,251 @@ class BusCmd(Command):
         self._make()
 
     def _route(self, p):
+        """The points the next click at p adds (none repeating the one before)."""
+        out, last = [], self.points[-1]
+        for q in self._route_raw(p):
+            if G.dist(q, last) > 1e-9:
+                out.append(q)
+                last = q
+        return out
+
+    def _route_raw(self, p):
         a = self.points[-1]
+        if self.tap_start is not None and len(self.points) == 1:
+            # (off wires side by side: square off them, each wire from its own)
+            across = not self.tap_start[0]
+            if abs(p[0] - a[0] if across else p[1] - a[1]) < 1e-9:
+                return []
+            if self.straight:
+                return [(p[0], a[1])] if across else [(a[0], p[1])]
+            from .wires import route
+            return route(a, p, across)
+        if self.toward is not None and len(self.points) == 1:
+            # (off a symbol's pins: the first leg leaves them square, each wire from its pin;
+            # a click in line with the pins can't be reached so: nothing)
+            across = abs(self.toward[1]) >= abs(self.toward[0])     # (pins one above another)
+            if abs(p[0] - a[0] if across else p[1] - a[1]) < 1e-9:
+                return []
+            if self.straight:
+                return [(p[0], a[1])] if across else [(a[0], p[1])]
+            from .wires import route
+            return route(a, p, across)
+        if self.straight:
+            # straight across or straight up or down from the last point: no corner
+            return [(p[0], a[1])] if abs(p[0] - a[0]) >= abs(p[1] - a[1]) else [(a[0], p[1])]
         h = self.hfirst
         if h is None:
             h = abs(p[0] - a[0]) >= abs(p[1] - a[1])
         from .wires import route
         return route(a, p, h)
 
+    def _flip_for(self, pts):
+        """Which side the other wires go: started on a symbol's pins, the side its other pins
+        are on, whichever way the bus heads off; started off wires side by side, at its first
+        corner the side it came from the far ones on, so no wire turns back across another
+        (F turns it the other way)."""
+        if self.tap_start is not None and len(pts) >= 3:
+            def unit(a, b):
+                L = G.dist(a, b)
+                return ((b[0] - a[0]) / L, (b[1] - a[1]) / L) if L > 1e-9 else (0.0, 0.0)
+            t1, t2 = unit(pts[0], pts[1]), unit(pts[1], pts[2])
+            right = t2[1] * t1[0] - t2[0] * t1[1]
+            if abs(right) > 1e-9:
+                return (right < 0) != self.flip
+            return self.flip
+        if self.toward is not None and len(pts) >= 2:
+            a, b = pts[0], pts[1]
+            L = G.dist(a, b)
+            if L > 1e-9:
+                ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+                right = uy * self.toward[0] - ux * self.toward[1]
+                if abs(right) > 1e-9:
+                    return (right < 0) != self.flip
+        return self.flip
+
     def point(self, p):
         if self.step != "path":
             return
         if not self.points:
+            sheet = self.ctx.sheet()
+            got = pin_side(sheet, p)
+            what = "the symbol's pins"
+            if got is None:
+                ends = end_side(sheet, p)
+                if ends is not None:
+                    # (a bus's open end: carried on, each wire on its own layer)
+                    got = ends[:2]
+                    self.layers = [w.layer for w in ends[2]]
+                    what = "the bus's ends"
+            if got is not None:
+                line, gap = got
+                self.count, self.spacing = len(line), gap
+                a, z = line[0], line[-1]
+                L = G.dist(a, z)
+                self.toward = ((z[0] - a[0]) / L, (z[1] - a[1]) / L)
+                self.side_pins = list(line)
+                self.shift = (a[0] - p[0], a[1] - p[1])
+                p = a                   # (the first wire from the first of its pins)
+                self.ctx.message("%d wires, %s apart, from %s" % (
+                    self.count, _fmt(self.spacing), what))
+            else:
+                tap = tap_lines(sheet, p)
+                if tap is not None:
+                    self.tap_start = (tap[0], tap[1])
+                    self.count, self.spacing = len(tap[1]), tap[2]
+                    self.ctx.message("%d wires, %s apart, one off each wire" % (
+                        self.count, _fmt(self.spacing)))
             self.points = [p]
             self.base = self.last = p
-            self.ctx.prompt("Specify next corner (Enter ends the bus)",
-                            [("Other side", "F"), ("Undo", "U")])
+            self._ask_start()
             return
+        sheet = self.ctx.sheet()
+        land = self._landing(sheet, p)
+        tap = tap_lines(sheet, p) if land is None and (self.tap_start is None or
+                                                       len(self.points) > 1) else None
+        p = land if land is not None else (p[0] + self.shift[0], p[1] + self.shift[1])
         if G.dist(self.points[-1], p) < 1e-9:
             return
-        self.points += self._route(p)
-        self.base = self.last = p
+        if tap is not None:
+            # (ended on wires side by side: the last leg square onto them, each wire landing
+            # on its own, and the bus is done)
+            a = self.points[-1]
+            if len(self.points) == 1 and (self.toward is not None or
+                                          self.tap_start is not None):
+                new = self._route(p)            # (still leaving its pins or wires square)
+            elif self.straight:
+                new = [(a[0], p[1])] if tap[0] else [(p[0], a[1])]
+            else:
+                from .wires import route
+                new = route(a, p, tap[0])
+            new = [q for q in new if G.dist(q, a) > 1e-9]
+            last = ([a] + new)[-2:] if new else None
+            if last is not None and abs(last[0][0 if tap[0] else 1] -
+                                        last[1][0 if tap[0] else 1]) > 1e-9:
+                new = []                        # (it can't land square on them: a plain click)
+            if new:
+                self.points += new
+                self.tap_end = (tap[0], tap[1])
+                self._make()
+                return
+        new = self._route(p)
+        if new and land is not None:
+            # (onto a symbol's pins as many and as far apart: wire for wire, then done)
+            self.points += new
+            self._make()
+            return
+        if not new:
+            if self.toward is not None and len(self.points) == 1:
+                self.ctx.message("Click off the line of the symbol's pins: the bus leaves them "
+                                 "square")
+            return
+        self.points += new
+        self.base = self.last = self.points[-1]
 
     def text(self, s):
         k = s.strip().upper()
-        if self.step == "path" and k == "F":
+        if self.step != "path":
+            return False
+        if k == "F":
             self.flip = not self.flip
             return True
-        if self.step == "path" and k == "U" and len(self.points) > 1:
+        if k == "S":
+            self.straight = self.ctx._bus_straight = not self.straight
+            self._ask_start()
+            return True
+        if k == "L":
+            ask = getattr(self.ctx.host, "ask_bus_layers", None)
+            got = ask(self.count, self.layers) if ask is not None else None
+            if got:
+                self.layers = self.ctx._bus_layers = list(got)
+            self._ask_start()
+            return True
+        if k == "N" and not self.points:
+            self.step = "count"
+            self.ctx.prompt("Number of wires <%d>" % self.count)
+            return True
+        if k == "D" and not self.points:
+            self._ask_spacing()
+            return True
+        if k == "U" and len(self.points) > 1:
             self.points.pop()
             self.base = self.last = self.points[-1]
             return True
         return False
 
+    def _on_pins(self, paths):
+        """Started on a symbol's pins: each wire starts exactly on its pin (its first leg kept
+        straight), not where the spacing puts it, a hair off on a turned symbol."""
+        if not self.side_pins:
+            return paths
+        out = []
+        for pts in paths:
+            pin = min(self.side_pins, key=lambda q: G.dist(q, pts[0]))
+            if G.dist(pin, pts[0]) <= 1e-6 and len(pts) >= 2:
+                a, b = pts[0], pts[1]
+                b = (b[0], pin[1]) if abs(a[1] - b[1]) < 1e-6 else (pin[0], b[1])
+                pts = [pin, b] + list(pts[2:])
+            out.append(pts)
+        return out
+
+    def _landing(self, sheet, p):
+        """A click on a pin of a symbol's side with as many pins as the bus has wires, as far
+        apart: where the first wire goes (onto the side's first pin: T1 lands on L1, whichever
+        of its pins was clicked), or None."""
+        got = pin_side(sheet, p)
+        if got is None or len(got[0]) != self.count or abs(got[1] - self.spacing) > 1e-6:
+            return None
+        return got[0][0]
+
+    @staticmethod
+    def _onto(paths, tap, at_start, main):
+        """Wires side by side at the bus's start (or end): each wire's first (or last) point
+        moved along its leg onto its own wire, in the order they are met along the bus's path
+        (main: its points)."""
+        if tap is None or len(main) < 2:
+            return paths
+        across, lines = tap
+        k = 1 if across else 0          # (the coordinate the lines differ in)
+        # (from the start: the farthest back first; at the end: the first met)
+        going = main[1][k] - main[0][k] if at_start else main[-1][k] - main[-2][k]
+        order = sorted(lines, reverse=going < 0)
+        out = []
+        for i, pts in enumerate(paths):
+            pts = list(pts)
+            if len(pts) >= 2:
+                a, b = (pts[0], pts[1]) if at_start else (pts[-1], pts[-2])
+                if abs(a[1 - k] - b[1 - k]) < 1e-9:            # (a leg square to them)
+                    if i < len(order):
+                        q = list(a)
+                        q[k] = order[i]
+                        if at_start:
+                            pts[0] = tuple(q)
+                        else:
+                            pts[-1] = tuple(q)
+            out.append([tuple(q) for q in M._tidy(pts)])
+        return [p for p in out if len(p) >= 2]
+
+    def _paths(self, pts):
+        paths = self._on_pins(bus_paths(pts, self.count, self.spacing, self._flip_for(pts)))
+        return self._onto(self._onto(paths, self.tap_start, True, pts), self.tap_end, False,
+                          pts)
+
     def _make(self):
         made = 0
         if self.step == "path" and len(self.points) >= 2:
-            paths = bus_paths(self.points, self.count, self.spacing, self.flip)
+            paths = self._paths(self.points)
             sheet = self.ctx.sheet()
+            project = self.ctx.project
+            # (left at the WIRES layer: the current wire layer, as a wire's)
+            chosen = self.layers if self.layers != ["WIRES"] else [wire_layer(self.ctx)]
+            layers = bus_layer_list(chosen, len(paths))
             with self.ctx.edit("Bus") as ed:
-                for pts in paths:
-                    w = ed.add(sheet, M.Wire(pts))
+                for pts, layer in zip(paths, layers):
+                    if layer not in project.layers:
+                        ed.layer(layer, None, M.Layer(
+                            layer, WIRE_LAYER_COLORS.get(layer, "#ff3030"),
+                            wire_color=WIRE_COLOR_NAMES.get(layer, "")).to_dict())
+                    w = ed.add(sheet, M.Wire(pts, layer=layer))
                     made += 1
                     if _cleanup_on(self.ctx):
                         from .wires import tidy_new
@@ -1232,10 +1650,15 @@ class BusCmd(Command):
         if self.step != "path":
             return []
         if not self.points:
+            got = pin_side(self.ctx.sheet(), p)
+            if got is not None:
+                return [M.Wire([q, (q[0] - 0.25, q[1])]) for q in got[0]]
             return [M.Wire(q) for q in bus_paths([p, (p[0] + 0.25, p[1])], self.count,
                                                  self.spacing, self.flip)]
-        return [M.Wire(q) for q in bus_paths(self.points + self._route(p), self.count,
-                                             self.spacing, self.flip)]
+        land = self._landing(self.ctx.sheet(), p)
+        p = land if land is not None else (p[0] + self.shift[0], p[1] + self.shift[1])
+        pts = self.points + self._route(p)
+        return [M.Wire(q) for q in self._paths(pts)]
 
 
 class MakeBlockCmd(Command):
@@ -1338,13 +1761,19 @@ class MakeBlockCmd(Command):
 
 class InsertCmd(Command):
     """Place a symbol or footprint (from the Library panel): pick where; R turns it 90
-    degrees, F flips it. A contact then asks which device it belongs to: Enter takes the one
-    offered (the nearest coil with its prefix), a typed tag takes that device, L lists them."""
+    degrees, F flips it. A symbol with pins is held by its first pin (L1, 1, A1...), so the
+    point picked is where that pin lands, on the pin or wire it is to join (the owner: a 3-pole
+    fuse grabbed by its middle met the disconnect's pins with its middle); B moves the hold to
+    the next pin, then the block's own base point. A contact then asks which device it belongs
+    to: Enter takes the one offered (the nearest coil with its prefix), a typed tag takes that
+    device, L lists them."""
     name, title = "INSERT", "Insert"
-    repeatable = False
+    repeatable = True       # (Enter: the same symbol again, the owner, 0.16)
 
     def __init__(self, ctx, defn, attrs=None):
         super().__init__(ctx)
+        # (as given: a repeat starts from these again, its tag and links worked out anew)
+        self.repeat_args = (defn, dict(attrs or {}))
         self.defn, self.attrs = defn, dict(attrs or {})
         if getattr(defn, "manufacturer", "") and not self.attrs.get("MFR"):
             # the block says who makes it: the copy's MFR, as a part's would (a part's own
@@ -1353,13 +1782,36 @@ class InsertCmd(Command):
         if getattr(defn, "catalog", "") and not self.attrs.get("CAT"):
             self.attrs["CAT"] = defn.catalog         # (its catalog number, as a part's)
         self.angle, self.mirror = 0.0, False
+        # where the block is held: its pins in order, then its own base point (None)
+        self.holds = [(p["name"], p["pos"]) for p in defn.pins] + [(None, (0.0, 0.0))] \
+            if defn.kind == "symbol" and defn.pins else [(None, (0.0, 0.0))]
+        self.hold = 0
         self.pending = None             # a contact's point, waiting for its device
         self.cands = []
+        self.footprint_of = False       # (the device asked for is a footprint's)
         self.link_name = None           # an off-sheet connector's name offered
 
     def begin(self):
-        self.ctx.prompt("Specify insertion point for %s" % self.defn.name,
-                        [("Rotate 90", "R"), ("Flip", "F")])
+        self._ask()
+
+    def _ask(self):
+        name = self.holds[self.hold][0]
+        opts = [("Rotate 90", "R"), ("Flip", "F")]
+        if len(self.holds) > 1:
+            nxt = self.holds[(self.hold + 1) % len(self.holds)][0]
+            opts.append(("Base point: %s" % ("pin " + nxt if nxt else "center"), "B"))
+        self.ctx.prompt("Specify insertion point for %s%s" % (
+            self.defn.name, " (where pin %s goes)" % name if name else ""), opts)
+
+    def origin(self, p):
+        """The block's insertion point for its hold (a pin, or its base point) at p, as it is
+        turned and flipped now."""
+        q = self.holds[self.hold][1]
+        if q == (0.0, 0.0):
+            return p
+        w = M.Insert(self.defn.name, (0.0, 0.0), self.angle, 1.0, self.mirror, {},
+                     self.defn).to_world(q)
+        return (p[0] - w[0], p[1] - w[1])
 
     def text(self, s):
         k = s.strip().upper()
@@ -1372,11 +1824,18 @@ class InsertCmd(Command):
                 pick = getattr(self.ctx.host, "pick_parent", None)
                 got = pick(self.cands) if pick is not None else None
                 if got is not None:
-                    self._place(self.pending, tags.link_attrs(self.attrs, got[1]))
+                    self._place(self.pending, self._link(got[1]))
+                return True
+            if self.footprint_of and k == "N":
+                self._place(self.pending, self.attrs)       # (none: a footprint of its own)
                 return True
             got = tags.find_tag(self.ctx.project, k)
             if got is not None:
-                self._place(self.pending, tags.link_attrs(self.attrs, got[1]))
+                self._place(self.pending, self._link(got[1]))
+            elif self.footprint_of:
+                self._place(self.pending, dict(self.attrs, TAG=k))
+                self.ctx.message("No device is tagged %s: the footprint shows it, linked to "
+                                 "none" % k)
             else:
                 # no device has that tag yet: the contact keeps it and links itself to the
                 # device that gets it
@@ -1390,6 +1849,10 @@ class InsertCmd(Command):
         if k == "F":
             self.mirror = not self.mirror
             return True
+        if k == "B" and len(self.holds) > 1:
+            self.hold = (self.hold + 1) % len(self.holds)
+            self._ask()
+            return True
         return False
 
     def enter(self):
@@ -1397,10 +1860,16 @@ class InsertCmd(Command):
             self._place(self.pending, dict(self.attrs, TAG=self.link_name))
             return
         if self.pending is not None and self.cands:
-            from . import tags
-            self._place(self.pending, tags.link_attrs(self.attrs, self.cands[0][1]))
+            self._place(self.pending, self._link(self.cands[0][1]))
             return
         super().enter()
+
+    def _link(self, device):
+        """Its attributes as device's contact (or, a footprint, as device's footprint)."""
+        from . import tags
+        if self.footprint_of:
+            return tags.link_footprint(self.attrs, device)
+        return tags.link_attrs(self.attrs, device)
 
     def _make(self, p, defn):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
@@ -1419,13 +1888,13 @@ class InsertCmd(Command):
         return (p[0] + dx, p[1] + dy)
 
     def preview(self, p):
-        return [self._make(self.pending if self.pending is not None else self._on_rail(p),
-                           self.defn)]
+        return [self._make(self.pending if self.pending is not None else
+                           self._on_rail(self.origin(p)), self.defn)]
 
     def point(self, p):
         if self.pending is not None:
             return                      # (waiting for the contact's device)
-        p = self._on_rail(p)
+        p = self._on_rail(self.origin(p))
         d = self.defn
         if d.wiring == "link" and not self.attrs.get("TAG"):
             # an off-sheet connector: its name pairs it with the other end
@@ -1453,6 +1922,21 @@ class InsertCmd(Command):
             self.ctx.message("Nothing to link this %s to yet (a %s device): placed unlinked "
                              "(double-click it to link it later)"
                              % (d.name.lower(), d.prefix or "parent"))
+        if d.kind == "footprint" and not self.attrs.get("TAG") and \
+                not self.attrs.get("PARENT"):
+            # which schematic device it is: its tag shows on it, and follows it
+            from . import tags
+            project = self.ctx.project
+            self.cands = tags.footprint_candidates(project, self.attrs.get("CAT") or d.catalog)
+            if self.cands:
+                self.pending, self.footprint_of = p, True
+                s, e = self.cands[0]
+                desc = e.attrs.get("DESC", "") or e.defn.description or e.defn.name
+                self.ctx.prompt("Which device is it: Enter for %s (%s, %s), type a tag, or N for "
+                                "none" % (e.attrs.get("TAG", "?"), desc,
+                                          project.zone_text(s, e.pos[0], e.pos[1]) or "?"),
+                                [("List", "L"), ("None", "N")])
+                return
         self._place(p, self.attrs)
 
     def _place(self, p, attrs):
@@ -1466,6 +1950,15 @@ class InsertCmd(Command):
             defn = project.blocks[self.defn.name]
             ins = self._make(p, defn).copy(attrs=attrs)
             ins = ins.copy(attrs=tags.new_attrs(project, sheet, defn, ins.attrs))
+            if defn.kind == "footprint":
+                # its label to start (Panel settings): its tag, or with none its part number,
+                # or its block's name
+                show = project.settings.get("footprint_label", "tag")
+                if show == "tag" and not ins.attrs.get("TAG"):
+                    show = "cat" if (ins.attrs.get("CAT") or defn.catalog) else "name"
+                if show:
+                    ins = ins.copy(label=show, tag_h=project.settings.get("tag_height", 0.1) *
+                                   sheet.k())
             if ins.layer not in project.layers:
                 ed.layer(ins.layer, None, M.Layer(ins.layer, M.ADAPTIVE).to_dict())
             ed.add(sheet, ins)
@@ -1476,6 +1969,45 @@ class InsertCmd(Command):
                     self.ctx.message("Wire cut to fit %s" % self.defn.name)
         self.ctx.set_selection(set())
         self.finish()
+
+
+class PickWindowCmd(Command):
+    """Two corners picked on the drawing (the Print window's Window): then got(rect), the
+    rectangle (x0, y0, x1, y1) in drawing units, or got(None) when cancelled."""
+    name, title = "PRINTWINDOW", "Print window"
+    repeatable = False
+
+    def __init__(self, ctx, got):
+        super().__init__(ctx)
+        self.got = got
+        self.first = None
+        self.rect = None
+
+    def begin(self):
+        self.ctx.prompt("Specify first corner of the area to print")
+
+    def point(self, p):
+        if self.first is None:
+            self.first = self.base = self.last = p
+            self.ctx.prompt("Specify opposite corner")
+            return
+        a = self.first
+        if abs(p[0] - a[0]) < 1e-9 or abs(p[1] - a[1]) < 1e-9:
+            return                      # (no area: pick another corner)
+        self.rect = (min(a[0], p[0]), min(a[1], p[1]), max(a[0], p[0]), max(a[1], p[1]))
+        self.finish()
+
+    def preview(self, p):
+        if self.first is None:
+            return []
+        a = self.first
+        return [M.Polyline([a, (p[0], a[1]), p, (a[0], p[1])], True)]
+
+    def finish(self):
+        got, self.got = self.got, None
+        super().finish()
+        if got is not None:
+            got(self.rect)
 
 
 class ExplodeCmd(Command):
@@ -2154,6 +2686,95 @@ class AlignObjectsCmd(Command):
         self.finish()
 
 
+class DistributeCmd(Command):
+    """DISTRIBUTE: spread the selected objects (three or more) evenly, as drawing programs'
+    Distribute does: Horizontally or Vertically, the two outermost staying where they are and
+    the others moved straight across (or up and down) so the gaps between them are equal.
+    With Snap on, each move is rounded to the snap spacing (pins stay on the grid, so wires
+    still meet them; the gaps then differ by up to one snap step). One undoable step; wires on
+    a moved symbol's pins follow."""
+    name, title = "DISTRIBUTE", "Distribute objects"
+    selects = True
+
+    def begin(self):
+        self.ents = _selected(self.ctx)
+        if len(self.ents) < 3:
+            self.ctx.message("Select three or more objects to spread out")
+            self.finish()
+            return
+        self.ctx.prompt("Spread them out", [("Horizontally", "H"), ("Vertically", "V")])
+
+    def text(self, s):
+        k = s.strip().upper()[:1]
+        if k not in ("H", "V"):
+            return False
+        self._apply(0 if k == "H" else 1)
+        return True
+
+    def _apply(self, axis):
+        sheet = self.ctx.sheet()
+        boxes = [(e, e.bbox()) for e in self.ents]
+        # (by their middles; objects on top of each other, a hatch and its outline, in the
+        # order they were drawn)
+        boxes.sort(key=lambda t: ((t[1][axis] + t[1][axis + 2]) / 2, t[0].id))
+        first, last = boxes[0][1], boxes[-1][1]
+        sizes = sum(b[axis + 2] - b[axis] for _e, b in boxes)
+        gap = ((last[axis + 2] - first[axis]) - sizes) / (len(boxes) - 1)
+        snap = self.ctx.snap_spacing if getattr(self.ctx, "snap_on", False) else 0.0
+        at = first[axis + 2] + gap
+        moved = 0
+        with self.ctx.edit(self.title) as ed:
+            for e, b in boxes[1:-1]:
+                d = at - b[axis]
+                if snap > 0:
+                    d = round(d / snap) * snap
+                at += (b[axis + 2] - b[axis]) + gap
+                cur = sheet.entities.get(e.id)
+                if cur is None or abs(d) <= 1e-9:
+                    continue
+                ed.change(sheet, cur.moved(d, 0.0) if axis == 0 else cur.moved(0.0, d))
+                moved += 1
+        self.ctx.message("Spread %d object(s) out %s" % (
+            len(boxes), "across" if axis == 0 else "up and down"))
+        self.finish()
+
+
+class DeleteDotCmd(Command):
+    """DELDOT: click a junction dot and it goes (the wires still join there; Undo, or a click
+    on the same spot again, brings it back). Keep clicking; Enter ends. A dot goes where three
+    wire ends meet, or a wire ends on another wire's middle or bend (the owner, 0.16: "I need
+    to be able to delete the connection dots if needed")."""
+    name, title = "DELDOT", "Delete dot"
+
+    def begin(self):
+        self.picking = True
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click a junction dot to delete (where one was deleted: back again; "
+                        "Enter to finish)")
+
+    def pick(self, p):
+        from . import wires
+        sheet = self.ctx.sheet()
+        r = max(10.0 / max(self.ctx.scale, 1e-9), 0.05 * sheet.k())
+        # (the nearest to the click, shown or deleted: two dots side by side are each theirs)
+        near = [(G.dist(q, p), 0, q) for q in wires.junctions(sheet) if G.dist(q, p) <= r]
+        near += [(G.dist(q, p), 1, q) for q in sheet.no_dots
+                 if G.dist(q, p) <= r and wires._dot_at(sheet, q)]
+        best = min(near) if near else None
+        if best is not None and best[1] == 0:
+            q = best[2]
+            with self.ctx.edit(self.title) as ed:
+                ed.sheet_meta(sheet, no_dots=[list(t) for t in sheet.no_dots] + [list(q)])
+            self.ctx.message("Dot deleted (the wires still join there)")
+        elif best is not None:
+            q = best[2]
+            with self.ctx.edit("Restore dot") as ed:
+                ed.sheet_meta(sheet, no_dots=[list(t) for t in sheet.no_dots if tuple(t) != q])
+            self.ctx.message("Dot back")
+        else:
+            self.ctx.message("No junction dot there")
+
+
 class TrimWireCmd(Command):
     """TRIMWIRE (AutoCAD Electrical's Trim Wire): click a wire and the piece clicked goes, up
     to the nearest wire or pin on either side (to its end when there is none). No cutting
@@ -2459,6 +3080,8 @@ COMMANDS = {
     "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)
     "SCOOT": (ScootCmd, ["AESCOOT"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
+    "DISTRIBUTE": (DistributeCmd, ["DIST"]),
+    "DELDOT": (DeleteDotCmd, ["DD"]),
     "ALIGNOBJ": (AlignObjectsCmd, ["ALO"]),
     "LAYOFF": (LayerOffCmd, []),
     "LAYISO": (LayerIsoCmd, []),

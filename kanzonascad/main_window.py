@@ -4,12 +4,13 @@ project, the Sheets panel, the command line and the status bar with the drafting
 import json
 import os
 
-from PySide6.QtCore import Qt, QMimeData, QTimer, QByteArray
+from PySide6.QtCore import Qt, QMimeData, QTimer, QByteArray, QPoint
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QGuiApplication
 from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QListWidget,
                                QListWidgetItem, QFileDialog, QMessageBox, QLabel, QToolBar,
                                QToolButton, QComboBox, QInputDialog, QMenu, QApplication,
-                               QDialog, QVBoxLayout, QTextBrowser, QDialogButtonBox, QWidget)
+                               QDialog, QVBoxLayout, QTextBrowser, QDialogButtonBox, QWidget,
+                               QTabBar, QAbstractItemView)
 
 from . import __version__
 from . import commands as C
@@ -54,12 +55,24 @@ class Document(QWidget):
     def __init__(self, project):
         super().__init__()
         self.project = project
-        import uuid
-        self.autosave_key = "untitled-" + uuid.uuid4().hex     # (its path once saved)
         self.view = CadView(project)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(self.view)
+
+    @property
+    def autosave_key(self):
+        """The project's autosave copy's name (its path once saved): one for every window
+        showing the project."""
+        k = getattr(self.project, "autosave_key", None)
+        if k is None:
+            import uuid
+            k = self.project.autosave_key = "untitled-" + uuid.uuid4().hex
+        return k
+
+    @autosave_key.setter
+    def autosave_key(self, key):
+        self.project.autosave_key = key
 
     def name(self):
         if is_block_doc(self):                  # (a block editor: Edit block...)
@@ -67,6 +80,40 @@ class Document(QWidget):
         if self.project.path:
             return os.path.splitext(os.path.basename(self.project.path))[0]
         return "Untitled"
+
+
+class DetachTabBar(QTabBar):
+    """The project tabs' bar: a tab dragged away from it and let go moves to a window of its
+    own there, or into the KanzonasCAD window it is let go over (as a browser's tabs)."""
+    AWAY = 40                   # pixels from the bar that count as away
+
+    def __init__(self, win):
+        super().__init__()
+        self.win = win
+        self._pressed = None    # the tab's page pressed on
+
+    def mousePressEvent(self, e):
+        i = self.tabAt(e.position().toPoint())
+        self._pressed = self.win.tabs.widget(i) if e.button() == Qt.LeftButton and i >= 0 \
+            else None
+        super().mousePressEvent(e)
+
+    def mouseReleaseEvent(self, e):
+        page, self._pressed = self._pressed, None
+        super().mouseReleaseEvent(e)
+        if page is None or e.button() != Qt.LeftButton:
+            return
+        a = self.AWAY
+        if not self.rect().adjusted(-a, -a, a, a).contains(e.position().toPoint()):
+            self.win.tab_dropped(page, e.globalPosition().toPoint())
+
+
+class ProjectTabs(QTabWidget):
+    """One tab per open project (or another window on one: Open this sheet in a new window)."""
+
+    def __init__(self, win):
+        super().__init__()
+        self.setTabBar(DetachTabBar(win))
 
 
 class StayOpenMenu(QMenu):
@@ -114,8 +161,13 @@ def _scale_name(name, val):
 
 
 class MainWindow(BlockEditing, QMainWindow):
-    def __init__(self):
+    def __init__(self, family=None):
+        """family: the windows this one opens projects and sheets with (a window from Open
+        this sheet in a new window joins its opener's); the first is the main one, which
+        keeps the window's place and closes the others with it."""
         super().__init__()
+        self.family = family if family is not None else []
+        self.family.append(self)
         install_text_measure()
         from . import paths
         # (portable: settings.ini in the data folder beside the program, not the registry)
@@ -125,7 +177,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self.resize(1400, 900)
         self._untitled = 0
 
-        self.tabs = QTabWidget()
+        self.tabs = ProjectTabs(self)
         self.tabs.setDocumentMode(True)
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)
@@ -143,6 +195,8 @@ class MainWindow(BlockEditing, QMainWindow):
         self.addDockWidget(Qt.BottomDockWidgetArea, dock)
 
         self.sheet_list = QListWidget()
+        # (Ctrl+click and Shift+click pick several sheets, for Print)
+        self.sheet_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.sheet_list.itemClicked.connect(self._sheet_clicked)
         self.sheet_list.itemDoubleClicked.connect(lambda _i: self.sheet_properties())
         self.sheet_list.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -188,7 +242,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self.acts["black"].blockSignals(False)
         self._apply_theme(self.settings.value("theme", "light"), save=False)
 
-        geo = self.settings.value("geometry")
+        geo = self.settings.value("geometry") if self.is_main() else None
         if isinstance(geo, QByteArray):
             self.restoreGeometry(geo)
         state = self.settings.value("window_state")
@@ -232,9 +286,25 @@ class MainWindow(BlockEditing, QMainWindow):
         tip = "%s (%s)" % (text.replace("&", ""), ", ".join([name] + aliases))
         return self._act(key, text, lambda: self._run(cls), tip=tip, label=label)
 
+    def _escape(self):
+        """Esc anywhere in the window (the layer box, the Sheets list, a tab...), not only in
+        the drawing: what it does there (the command cancelled, else nothing selected), and
+        the keyboard back to the drawing (the owner, 0.16: after the ribbon, Esc never
+        deselected until the drawing was clicked)."""
+        v = self.view()
+        self.cmdline.edit.clear()
+        if v is not None:
+            v.escape()
+            v.setFocus()
+
     def _build_actions(self):
         self.acts = {}
         A = self._act
+        esc = QAction("Cancel", self)
+        esc.setShortcut(QKeySequence(Qt.Key_Escape))
+        esc.setShortcutContext(Qt.WindowShortcut)
+        esc.triggered.connect(self._escape)
+        self.addAction(esc)
         A("new", "&New project", self.new_project, "Ctrl+N", label="New")
         A("new_template", "New project from &template...", self.new_from_template,
           icon="new", label="From template")
@@ -251,6 +321,12 @@ class MainWindow(BlockEditing, QMainWindow):
         A("export_dxf_all", "Export all sheets to DX&F...", self.export_dxf_all, icon="dxf_out",
           label="All to DXF")
         A("export_pdf", "Export to &PDF...", self.export_pdf, icon="pdf", label="PDF")
+        A("print", "&Print...", self.print_sheets, "Ctrl+P", label="Print")
+        A("new_window", "Open this sheet in a new &window", lambda: self.new_window(),
+          "Ctrl+Shift+N", label="New window")
+        A("move_window", "&Move this project to a new window",
+          lambda: self.move_to_new_window(), label="Move to window")
+        A("close_window", "&Close this window", self.close)
         A("backups", "Open &backups folder", self.open_backups_folder, icon="open",
           label="Backups")
         A("close", "&Close project", lambda: self.close_tab(self.tabs.currentIndex()), "Ctrl+W",
@@ -316,8 +392,10 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("scoot", "Sc&oot", C.ScootCmd, "Scoot")
         self._cmd_act("align_dev", "&Align devices", C.AlignDevicesCmd, "Align")
         self._cmd_act("align_obj", "Align ob&jects", C.AlignObjectsCmd, "Align")
+        self._cmd_act("distribute", "Dis&tribute objects", C.DistributeCmd, "Distribute")
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("del_wire", "&Delete wire", C.DeleteWireCmd, "Delete wire")
+        self._cmd_act("del_dot", "Delete d&ot", C.DeleteDotCmd, "Delete dot")
         self._cmd_act("clean_wires", "Clea&n up wires", C.CleanWiresCmd, "Clean up")
         self._cmd_act("del_comp", "Delete co&mponent", C.DeleteComponentCmd, "Delete component")
         self._cmd_act("lay_off", "&Hide layer", C.LayerOffCmd, "Hide layer")
@@ -440,6 +518,8 @@ class MainWindow(BlockEditing, QMainWindow):
           icon="block_props", label="Duplicate block",
           tip="Copy the selected block under a new name in your library (catalog number left "
               "blank) and open the copy in Edit block")
+        A("update_blocks", "&Update blocks from library...", self.update_blocks_from_library,
+          icon="update_blocks", label="Update blocks")
         A("save_block_as", "Save block &as...", self.save_block_as, icon="save_block",
           label="Save block as",
           tip="Save the block open in this tab to your library under a new name (the one it "
@@ -479,6 +559,8 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("import_dxf", "export_dxf", "export_dxf_all", "export_pdf"):
             m.addAction(a[k])
         m.addSeparator()
+        m.addAction(a["print"])
+        m.addSeparator()
         m.addAction(a["backups"])
         m.addSeparator()
         m.addAction(a["close"])
@@ -510,7 +592,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
-                  "scoot", "align_dev", "align_obj", None, "trim_wire", "del_wire", "clean_wires", "del_comp", None,
+                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             if k == "FPLABEL":
@@ -532,8 +614,11 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
-                  "save_block_as", None,
+                  "save_block_as", "update_blocks", None,
                   "new_part", "library_folder"):
+            m.addSeparator() if k is None else m.addAction(a[k])
+        m = mb.addMenu("&Window")
+        for k in ("new_window", "move_window", None, "close_window"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Help")
         m.addAction(a["manual"])
@@ -574,12 +659,15 @@ class MainWindow(BlockEditing, QMainWindow):
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
+            # (the owner: "Copy is not included in schematic and needs to be")
+            ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"], a["attr_vis"],
                                   a["del_comp"]]),
             ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"],
                                  a["dup_block"], a["save_block_as"]]),
             ("Parts", "large", [a["new_part"]]),
-            ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["clean_wires"]]),
+            ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["del_dot"],
+                                     a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Tags", "large", [a["renumber"]]),
             ("Cross-references", "large", [a["xref_update"], a["xref_freeze"], a["xref_auto"]]),
@@ -590,12 +678,13 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"],
                                      a["attr_vis"],
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
+            ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
             ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"],
                                  a["dup_block"], a["save_block_as"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
-            ("Arrange", "large", [a["align_obj"]]),
+            ("Arrange", "large", [a["align_obj"], a["distribute"]]),
             ("Parts", "small", [a["new_part"], a["panel_settings"]]),
             ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
@@ -609,6 +698,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Revisions", "large", [a["new_revision"], a["revisions"]]),
         ])
         r.add_tab("Output", [
+            ("Print", "large", [a["print"]]),
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
             ("Import", "large", [a["import_dxf"]]),
             ("Reports", "large", [a["bom"], a["cables"], a["materials"]]),
@@ -619,6 +709,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["polar"],
                                         a["osnap"], a["drafting"]]),
             ("Panels", "small", [a["command_line"], a["sheets"], a["black"]]),
+            ("Windows", "large", [a["new_window"], a["move_window"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
             ("Ribbon", "small", [a["collapse"], a["group_names"]]),
         ])
@@ -644,6 +735,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for key in ("grid", "snap", "ortho", "polar", "osnap"):
             b = QToolButton()
             b.setDefaultAction(self.acts[key])
+            b.setFocusPolicy(Qt.NoFocus)
             b.setToolButtonStyle(Qt.ToolButtonTextOnly)
             b.setAutoRaise(True)
             b.setText(self.acts[key].iconText().upper())
@@ -698,6 +790,7 @@ class MainWindow(BlockEditing, QMainWindow):
                     (True, "true"))
         v.cursorMoved.connect(self._cursor_moved)
         v.selectionChanged.connect(self._update_ui)
+        v.selectionChanged.connect(self._fill_layers)
         v.sheetChanged.connect(self._fill_sheets)
         v.sheetChanged.connect(self._update_ui)
         v.sheetChanged.connect(lambda v=v: self._ribbon_for_sheet(v))
@@ -709,7 +802,8 @@ class MainWindow(BlockEditing, QMainWindow):
         v.host = self
         v.contextMenuWanted.connect(self._view_menu)
         v.typed.connect(self.cmdline.take_key)
-        project.listeners.append(lambda d=d: self._project_changed(d))
+        d.listener = lambda d=d: self._project_changed(d)
+        project.listeners.append(d.listener)
         i = self.tabs.addTab(d, d.name())
         self.tabs.setCurrentIndex(i)
         v.setFocus()
@@ -849,16 +943,114 @@ class MainWindow(BlockEditing, QMainWindow):
             v.setFocus()
 
     def close_tab(self, index):
+        """Close a tab: the project (asking to save it) when no other window shows it, else
+        only this window on it."""
         w = self.tabs.widget(index)
         if not isinstance(w, Document):
             return True
-        if not self._maybe_save(w):
-            return False
-        self._drop_autosave(w)
+        if not self.sharing(w):
+            if not self._maybe_save(w):
+                return False
+            self._drop_autosave(w)
         self.tabs.removeTab(index)
         w.view.cancel()
+        for f in (getattr(w, "listener", None), w.view._project_changed):
+            if f in w.project.listeners:
+                w.project.listeners.remove(f)
         w.deleteLater()
+        if not self.is_main() and self.tabs.count() == 0 and self.isVisible():
+            QTimer.singleShot(0, self.close)    # (a window of its own, emptied: it goes)
         return True
+
+    # ---- windows (Open this sheet in a new window; tabs dragged out) -------------------------
+    def is_main(self):
+        return bool(self.family) and self.family[0] is self
+
+    def documents(self):
+        """[(window, document)] of every tab in this window's family."""
+        out = []
+        for win in list(self.family):
+            for i in range(win.tabs.count()):
+                d = win.tabs.widget(i)
+                if isinstance(d, Document):
+                    out.append((win, d))
+        return out
+
+    def sharing(self, d):
+        """The other tabs (any window of the family) showing d's project."""
+        return [(w, o) for w, o in self.documents() if o is not d and o.project is d.project]
+
+    def _window_for(self, d, where=None):
+        """A new window of the family with a tab on d's project (its view as d's), put on
+        the other screen when there is one, else at `where` (a global point) or beside this
+        one."""
+        if is_block_doc(d):
+            QMessageBox.information(self, APP, "A block being edited stays in its window: "
+                                    "save or close it first.")
+            return None
+        win = MainWindow(self.family)
+        nd = win.add_document(d.project)
+        v, nv = d.view, nd.view
+        nv.show_sheet(v.sheet_id)
+        nv.current_layer = v.current_layer
+        win.resize(self.size())
+        others = [sc for sc in QGuiApplication.screens() if sc is not self.screen()]
+        if where is not None:
+            win.move(where - QPoint(120, 12))
+            win.show()
+        elif others:
+            win.setGeometry(others[0].availableGeometry())
+            win.showMaximized()
+        else:
+            win.move(self.pos() + QPoint(40, 40))
+            win.show()
+        QApplication.processEvents()
+        nv.zoom("sheet")
+        win.raise_()
+        win.activateWindow()
+        return win
+
+    def new_window(self, sheet_id=None):
+        """Open this sheet in a new window (or the sheet sheet_id): the same project, so an
+        edit in either is in both, with one Undo and one Save; the window can go on another
+        screen. Returns the new window."""
+        d = self.doc()
+        if d is None:
+            return None
+        win = self._window_for(d)
+        if win is not None and sheet_id is not None:
+            win.view().show_sheet(sheet_id)
+            win._fill_sheets()
+        return win
+
+    def move_to_new_window(self, d=None, where=None):
+        """Move this project to a new window: its tab goes to a window of its own."""
+        d = d or self.doc()
+        if d is None:
+            return None
+        win = self._window_for(d, where)
+        if win is not None:
+            self.close_tab(self.tabs.indexOf(d))
+        return win
+
+    def tab_dropped(self, d, where):
+        """A tab dragged away from the tab bar and let go at `where` (a global point): into
+        the family's window there, else into a window of its own."""
+        if not isinstance(d, Document) or self.tabs.indexOf(d) < 0:
+            return
+        at = QApplication.widgetAt(where)
+        target = at.window() if at is not None else None
+        if target is not self and target in self.family:
+            if is_block_doc(d):
+                return
+            nd = target.add_document(d.project)
+            nd.view.show_sheet(d.view.sheet_id)
+            nd.view.current_layer = d.view.current_layer
+            self.close_tab(self.tabs.indexOf(d))
+            target.raise_()
+            target.activateWindow()
+        elif self.tabs.count() > 1 or not self.is_main():
+            self.move_to_new_window(d, where)
 
     def _maybe_save(self, d):
         if is_block_doc(d):
@@ -875,13 +1067,21 @@ class MainWindow(BlockEditing, QMainWindow):
         return True
 
     def closeEvent(self, e):
+        if self.is_main():
+            for other in self.family[1:]:
+                if not other.close():
+                    e.ignore()
+                    return
         for i in reversed(range(self.tabs.count())):
             if not self.close_tab(i):
                 e.ignore()
                 return
-        self.settings.setValue("geometry", self.saveGeometry())
-        self.settings.setValue("window_state", self.saveState())
-        hand_over_clipboard()
+        if self.is_main():
+            self.settings.setValue("geometry", self.saveGeometry())
+            self.settings.setValue("window_state", self.saveState())
+            hand_over_clipboard()
+        if self in self.family:
+            self.family.remove(self)
         e.accept()
 
     # ---- opening and saving ----------------------------------------------------------------
@@ -896,11 +1096,12 @@ class MainWindow(BlockEditing, QMainWindow):
     def open_path(self, path):
         from .paths import path_key
         path = os.path.abspath(path)
-        for i in range(self.tabs.count()):
-            d = self.tabs.widget(i)
-            if isinstance(d, Document) and d.project.path and \
-                    path_key(d.project.path) == path_key(path):
-                self.tabs.setCurrentIndex(i)
+        for win, d in self.documents():
+            if d.project.path and path_key(d.project.path) == path_key(path):
+                win.tabs.setCurrentWidget(d)
+                if win is not self:
+                    win.raise_()
+                    win.activateWindow()
                 return d
         try:
             if path.lower().endswith((".dxf", ".dwg")):
@@ -984,7 +1185,9 @@ class MainWindow(BlockEditing, QMainWindow):
         self._drop_autosave(d)
         d.autosave_key = path
         self._remember(path)
-        self._project_changed(d)
+        for win, o in self.documents():
+            if o.project is d.project:
+                win._project_changed(o)
         self.statusBar().showMessage("Saved %s" % path, 4000)
         return True
 
@@ -1003,9 +1206,12 @@ class MainWindow(BlockEditing, QMainWindow):
         n = 0
         for i in range(self.tabs.count()):
             d = self.tabs.widget(i)
-            if isinstance(d, Document) and d.project.is_modified() and not is_block_doc(d):
+            if isinstance(d, Document) and d.project.is_modified() and not is_block_doc(d) \
+                    and getattr(d.project, "autosaved_at", None) != d.project.revision:
                 try:
                     backup.write_autosave(d.project, d.autosave_key)
+                    # (another window showing it, or the next tick with nothing new, skips it)
+                    d.project.autosaved_at = d.project.revision
                     n += 1
                 except OSError as ex:
                     self.statusBar().showMessage("Autosave failed: %s" % ex, 8000)
@@ -1275,16 +1481,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                                "PDF (*.pdf)")
         if not path:
             return
-        from . import scalefit
-        p = d.project
-        bad = ["%s (%s, %s)" % (p.sheet_number(s), s.title, why) for s, why in
-               ((s, scalefit.outside(p, s)) for s in p.sheets
-                if s.kind == "panel" or abs(s.scale - 1.0) > 1e-12) if why]
-        if bad and QMessageBox.question(
-                self, APP, "The drawing doesn't fit on sheet(s) %s at their scale: it would "
-                "print cut off or under the title block.\n\nExport anyway? (No: go back and "
-                "use Fit, in the status bar's Scale or Sheet scale...)" % ", ".join(bad)) \
-                != QMessageBox.Yes:
+        if not self._fits_or_go_on(d.project, d.project.sheets, "Export"):
             return
         try:
             n = fileio.export_pdf(d.project, path)
@@ -1292,6 +1489,58 @@ class MainWindow(BlockEditing, QMainWindow):
             QMessageBox.warning(self, APP, "Couldn't write %s:\n%s" % (path, ex))
             return
         self.statusBar().showMessage("Exported %d sheet(s) to %s" % (n, path), 5000)
+
+    def _fits_or_go_on(self, p, sheets, what):
+        """True unless a scaled sheet's drawing doesn't fit on it and the user goes back."""
+        from . import scalefit
+        bad = ["%s (%s, %s)" % (p.sheet_number(s), s.title, why) for s, why in
+               ((s, scalefit.outside(p, s)) for s in sheets
+                if s.kind == "panel" or abs(s.scale - 1.0) > 1e-12) if why]
+        return not bad or QMessageBox.question(
+            self, APP, "The drawing doesn't fit on sheet(s) %s at their scale: it would "
+            "print cut off or under the title block.\n\n%s anyway? (No: go back and "
+            "use Fit, in the status bar's Scale or Sheet scale...)" % (", ".join(bad), what)) \
+            == QMessageBox.Yes
+
+    def print_sheets(self):
+        """Print... (Ctrl+P): this sheet, all of them or those picked (in the Print window,
+        or selected in the Sheets list), on a printer or into a PDF file."""
+        v = self.view()
+        if v is None:
+            return None
+        from .print_dialog import PrintDialog
+        w0, w1 = v.to_world(QPoint(0, v.height())), v.to_world(QPoint(v.width(), 0))
+        dlg = PrintDialog(self, v.project, v.sheet(), self.selected_sheet_ids(),
+                          display=(w0[0], w0[1], w1[0], w1[1]))
+        while True:
+            r = dlg.exec()
+            if r != PrintDialog.PICK:
+                break
+            dlg.set_window(self.pick_print_window(v))     # (Window: two corners, then back)
+        if r != QDialog.Accepted:
+            return None
+        if dlg.area()[0] == "sheet" and \
+                not self._fits_or_go_on(v.project, dlg.sheets(), "Print"):
+            return None
+        n = dlg.run(self._last_dir())
+        if n:
+            self.statusBar().showMessage("Printed %d sheet(s)" % n, 5000)
+        return n
+
+    def pick_print_window(self, v):
+        """Two corners picked on the drawing for Print's Window (Esc: None)."""
+        from PySide6.QtCore import QEventLoop
+        loop = QEventLoop()
+        got = []
+
+        def done(rect):
+            got.append(rect)
+            loop.quit()
+        v.run(C.PickWindowCmd, done)
+        v.setFocus()
+        if not got:
+            loop.exec()
+        return got[0] if got else None
 
     # ============================================================================================
     # editing
@@ -1446,6 +1695,7 @@ class MainWindow(BlockEditing, QMainWindow):
         # every layer with its light bulb (shown/hidden) and lock, a click away (AutoCAD's
         # layer list)
         states = _TB()
+        states.setFocusPolicy(Qt.NoFocus)
         states.setIcon(theme.icon("lay_states"))
         states.setToolTip("Layers: show or hide, lock or unlock, each one")
         states.setPopupMode(_TB.InstantPopup)
@@ -1455,14 +1705,25 @@ class MainWindow(BlockEditing, QMainWindow):
         return box, states
 
     def _fill_layers(self):
+        """The layer boxes: the selected objects' layer (empty when they are on several), as
+        AutoCAD's; with nothing selected, the current layer (the owner, 0.16: a layer picked
+        for selected objects moved them, but the box showed the current layer again, as if
+        nothing had happened)."""
         v = self.view()
+        sel = self._selected() if v is not None else []
+        on = {e.layer for e in sel}
         for box in self.layer_boxes:
             box.blockSignals(True)
             box.clear()
             if v is not None:
                 for name, lay in v.project.layers.items():
                     box.addItem(dialogs._swatch(lay.color), name)
-                box.setCurrentText(v.layer())
+                if not sel:
+                    box.setCurrentText(v.layer())
+                elif len(on) == 1:
+                    box.setCurrentText(next(iter(on)))
+                else:
+                    box.setCurrentIndex(-1)
             box.blockSignals(False)
         self.layer_label.setText("Layer: %s" % (v.layer() if v else ""))
 
@@ -1508,11 +1769,9 @@ class MainWindow(BlockEditing, QMainWindow):
 
     def _store_osnap(self, modes):
         self.settings.setValue("osnap_modes", json.dumps(sorted(modes)))
-        for i in range(self.tabs.count()):
-            d = self.tabs.widget(i)
-            if isinstance(d, Document):
-                d.view.osnap_modes = set(modes)
-                d.view.update()
+        for _w, d in self.documents():
+            d.view.osnap_modes = set(modes)
+            d.view.update()
 
     def _build_quick_access(self, mb):
         """Undo and Redo as icons right after the menus (added once the menus are in)."""
@@ -1607,19 +1866,30 @@ class MainWindow(BlockEditing, QMainWindow):
     def _fill_sheets(self):
         lst = self.sheet_list
         lst.blockSignals(True)
+        picked = set(self.selected_sheet_ids())
         lst.clear()
         v = self.view()
         if v is not None:
             p = v.project
+            items = []
             for s in p.sheets:
                 kind = "" if s.kind == "schematic" else "  [%s]" % M.SHEET_KINDS[s.kind]
                 it = QListWidgetItem("%s   %s%s" % (p.sheet_number(s), s.title or "(untitled)",
                                                     kind))
                 it.setData(Qt.UserRole, s.id)
                 lst.addItem(it)
+                items.append(it)
                 if s.id == v.sheet_id:
                     lst.setCurrentItem(it)
+            if len(picked) > 1:         # (several picked, for Print: still picked)
+                for it in items:
+                    if it.data(Qt.UserRole) in picked:
+                        it.setSelected(True)
         lst.blockSignals(False)
+
+    def selected_sheet_ids(self):
+        """The ids of the sheets selected in the Sheets list (Ctrl+click, Shift+click)."""
+        return [it.data(Qt.UserRole) for it in self.sheet_list.selectedItems()]
 
     def _ribbon_for_sheet(self, v):
         """Showing a sheet brings up its kind's ribbon tab (Schematic or Panel)."""
@@ -1634,6 +1904,8 @@ class MainWindow(BlockEditing, QMainWindow):
                 break
 
     def _sheet_clicked(self, item):
+        if QApplication.keyboardModifiers() & (Qt.ControlModifier | Qt.ShiftModifier):
+            return                      # (picking several sheets: the one shown stays)
         v = self.view()
         if v is not None:
             self._leave_title_block(v)
@@ -1645,6 +1917,15 @@ class MainWindow(BlockEditing, QMainWindow):
         m = QMenu(self)
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_props"):
             m.addAction(self.acts[k])
+        m.addSeparator()
+        it = self.sheet_list.itemAt(pos)
+        if it is not None:
+            sid = it.data(Qt.UserRole)
+            m.addAction(theme.icon("new_window"), "Open in a new window",
+                        lambda: self.new_window(sid))
+        n = len(self.selected_sheet_ids())
+        m.addAction(theme.icon("print"), "Print the %d selected sheets..." % n if n > 1
+                    else "Print...", self.print_sheets)
         m.exec(self.sheet_list.mapToGlobal(pos))
 
     def add_sheet(self):
@@ -1965,6 +2246,11 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         dialogs.materials_dialog(self, v.project, self._last_dir())
 
+    def ask_bus_layers(self, count, current):
+        """The Bus command's Layers (L): a layer for each wire, or None."""
+        v = self.view()
+        return dialogs.bus_layers(self, v.project, count, current) if v is not None else None
+
     def edit_attributes(self, ins):
         v = self.view()
         if v is None:
@@ -1985,6 +2271,14 @@ class MainWindow(BlockEditing, QMainWindow):
         shown = {}
         attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet(), shown)
         hidden = shown.get("hidden", ins.hidden)
+        if attrs is not None and ins.defn is not None and ins.defn.kind == "footprint" and \
+                attrs.get("TAG", "") != ins.attrs.get("TAG", ""):
+            # a footprint's tag typed: the device with that tag is the one it is now (none
+            # has it: linked to none), so its tag isn't put back by the old link
+            from . import tags
+            got = tags.find_tag(v.project, attrs.get("TAG", ""))
+            attrs = tags.link_footprint(attrs, got[1]) if got is not None else \
+                {k: x for k, x in attrs.items() if k != "PARENT"}
         if attrs is not None and (attrs != ins.attrs or hidden != ins.hidden):
             with v.project.edit("Attributes") as ed:
                 ed.change(v.sheet(), ins.copy(attrs=attrs, hidden=sorted(hidden)))
@@ -2110,10 +2404,12 @@ class MainWindow(BlockEditing, QMainWindow):
 
     def _set_black(self, on):
         self.settings.setValue("black_drawing", bool(on))
-        for i in range(self.tabs.count()):
-            d = self.tabs.widget(i)
-            if isinstance(d, Document):
-                d.view.set_dark(on)
+        for win, d in self.documents():
+            d.view.set_dark(on)
+            if win is not self and win.acts["black"].isChecked() != bool(on):
+                win.acts["black"].blockSignals(True)
+                win.acts["black"].setChecked(bool(on))
+                win.acts["black"].blockSignals(False)
 
     def drafting_settings(self):
         v = self.view()
@@ -2130,9 +2426,8 @@ class MainWindow(BlockEditing, QMainWindow):
             st.setValue("crosshair_size", v.crosshair_size)
             st.setValue("crosshair_full", bool(v.crosshair_full))
             st.setValue("osnap_modes", json.dumps(sorted(v.osnap_modes)))
-            for i in range(self.tabs.count()):
-                d = self.tabs.widget(i)
-                if isinstance(d, Document) and d.view is not v:
+            for _w, d in self.documents():
+                if d.view is not v:
                     self._load_drafting(d.view)
 
     def _load_drafting(self, v):
@@ -2230,7 +2525,8 @@ class MainWindow(BlockEditing, QMainWindow):
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev",
-                  "align_obj", "trim_wire", "del_wire", "clean_wires", "del_comp"):
+                  "align_obj", "distribute", "trim_wire", "del_wire", "del_dot", "clean_wires",
+                  "del_comp"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())
         a["save_block"].setEnabled(in_block)

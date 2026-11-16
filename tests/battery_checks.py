@@ -15,7 +15,11 @@ missed before.
   copy, description lines, a frame block bigger than the sheet, coordinates far from the
   origin), made by the battery itself: the owner's drawings never go in the repository.
 - windows_paths: the recent files list with Windows' path rules (ntpath), on any system.
-No Qt here except through the view passed in.
+- printed / print_lands: Print gives one page a sheet chosen and changes nothing; a sheet
+  printed lands inside its paper as printed, which fills the page one way (Fit to paper).
+- second_window: a sheet in a window of its own edits the same project, and closing that
+  window leaves nothing of it behind.
+No Qt here except through the view passed in (and pictures painted for print_lands).
 """
 
 import collections
@@ -164,10 +168,17 @@ def snap_oracle(view, rnd):
 # ---- pressing where nothing is drawn -------------------------------------------------------------
 def blank_spot(view, rnd, tries=60):
     """A pixel on the sheet with nothing drawn within the pickbox around it (only the paper's
-    color in the picture of the drawing), or None."""
-    from PySide6.QtCore import QPoint
+    color in the picture of the drawing), and no wire crossing's gap there either (the gap is
+    painted in the paper's color over the wire: a 1/16" gap on paper is 1.5" at 1:24, all of a
+    short wire drawn small), or None."""
+    from PySide6.QtCore import QPoint, QPointF
+    from kanzonascad import crossings
     from kanzonascad.render import Palette
     from kanzonascad.view import PICKBOX
+    sheet = view.sheet()
+    jr = crossings.size(sheet)
+    gaps = [((p[0] - u[0] * jr, p[1] - u[1] * jr), (p[0] + u[0] * jr, p[1] + u[1] * jr))
+            for p, u, _cu, _st in crossings.jumps(view.project, sheet)]
     grid, view.grid_on = view.grid_on, False         # (the grid's dots aren't objects)
     try:
         pm = view._lit_picture(Palette(view.dark))
@@ -187,6 +198,10 @@ def blank_spot(view, rnd, tries=60):
                     break
             if not ok:
                 break
+        if ok and gaps:
+            w = view.to_world(QPointF(x, y))
+            near = (PICKBOX + 2) / view.scale
+            ok = all(G.dist_to_segment(w, a, b) > near for a, b in gaps)
         if ok:
             return QPoint(x, y)
     return None
@@ -217,7 +232,15 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
                 if o.id == w.id:
                     continue
                 if isinstance(o, M.Wire):
-                    d = min(G.dist(p, o.points[0]), G.dist(p, o.points[-1]), o.distance(p))
+                    # (its ends, and its runs straight across or up and down: a slanted run, a
+                    # wire stretched far by a device moved on its pin, passes as near to grid
+                    # points as chance has it, 0.0022" in seed 160: not rounding)
+                    d = min(G.dist(p, o.points[0]), G.dist(p, o.points[-1]))
+                    for a, b in zip(o.points, o.points[1:]):
+                        if abs(a[0] - b[0]) < 1e-9 or abs(a[1] - b[1]) < 1e-9:
+                            d = min(d, G.dist_to_segment(p, a, b))
+                        else:
+                            CHECKED["near misses: slanted runs left out"] += 1
                 elif isinstance(o, M.Insert) and o.defn is not None and o.defn.pins:
                     d = min((G.dist(p, q) for _n, q in o.pin_points()), default=hi * 2)
                 else:
@@ -507,3 +530,125 @@ def windows_paths(rnd, rounds=400):
         assert len(recent) <= 8
         assert all("/" not in p for p in recent), "not written as Windows writes it: %s" % recent
     return "%d files opened and saved under mixed spellings: never listed twice" % rounds
+
+
+# ---- Print -------------------------------------------------------------------------------------
+def printed(path, chosen):
+    """The PDF Print wrote has one page a sheet chosen."""
+    import re
+    with open(path, "rb") as f:
+        n = len(re.findall(rb"/Type\s*/Page[^s]", f.read()))
+    assert n == len(chosen), "printed %d sheet(s) on %d page(s)" % (len(chosen), n)
+    CHECKED["print pages"] += 1
+
+
+def print_lands(project, sheet, page_w, page_h, fit, dpi=20, box=None, turn_ok=True,
+                whole=True):
+    """Paint a sheet as Print does on a page_w x page_h page: its ink lies inside the sheet's
+    paper as printed (worked out here: the paper turned when that makes it bigger, or for
+    Actual size when its long side and the page's differ; as big as the page holds or real
+    size; centered), and, fit to paper, that fills the page's width or height. box: the part
+    printed (print_out.area_box: paper inches), the whole paper when None (then whole: its
+    frame is printed, and fills the page fit to it); turn_ok: Orientation Automatic. Not
+    skipped
+    for a drawing that runs off its own paper (it prints past it, as on screen): then it is
+    checked on a copy of the project with that sheet holding only what lies an inch (on
+    paper) inside its edges."""
+    import json
+    from PySide6.QtGui import QColor, QImage, QPainter
+    from kanzonascad import print_out
+    w, h = sheet.paper_inches()
+    k = sheet.k()
+
+    def on_paper(b, m=k):
+        # (an inch, on paper, inside its edges: what is drawn beside an object without being
+        # one, a wire's number, can be past its box)
+        return b[0] >= m and b[1] >= m and b[2] <= w * k - m and b[3] <= h * k - m
+    # (the title block, drawn on every sheet, is in paper inches on the paper as laid out;
+    # "Use as title block" can make one of anything, off the paper too)
+    lw, lh = M.SHEET_SIZES[sheet.size]
+
+    def tb_on_paper(b):
+        return b[0] >= -1e-6 and b[1] >= -1e-6 and b[2] <= lw + 1e-6 and b[3] <= lh + 1e-6
+    ext, tb_ext = sheet.extents(), project.title_block.extents()
+    if (ext is not None and not on_paper(ext)) or (tb_ext is not None and
+                                                   not tb_on_paper(tb_ext)):
+        project = M.Project.from_dict(json.loads(json.dumps(project.to_dict())))
+        sheet = project.sheet_by_id(sheet.id)
+        tb = project.title_block
+        with project.edit("only what is on the paper") as ed:
+            for e in list(sheet.entities.values()):
+                if not on_paper(e.bbox()):
+                    ed.remove(sheet, e.id)
+            for e in list(tb.entities.values()):
+                if not tb_on_paper(e.bbox()):
+                    ed.remove(tb, e.id)
+        CHECKED["print lands (a copy)"] += 1
+    full = box is None
+    if full:
+        box = (0.0, 0.0, w, h)
+    bw, bh = box[2] - box[0], box[3] - box[1]
+    if fit:
+        flat, turned = min(page_w / bw, page_h / bh), min(page_w / bh, page_h / bw)
+        turn = turn_ok and turned > flat + 1e-12
+        f = turned if turn else flat
+    else:
+        turn = turn_ok and (bw > bh) != (page_w > page_h) and abs(bw - bh) > 1e-9 and \
+            abs(page_w - page_h) > 1e-9
+        f = 1.0
+    pw, ph = (bh * f, bw * f) if turn else (bw * f, bh * f)
+    x0, y0 = (page_w - pw) / 2, (page_h - ph) / 2
+    img = QImage(max(1, round(page_w * dpi)), max(1, round(page_h * dpi)), QImage.Format_RGB32)
+    img.fill(QColor("white"))
+    pa = QPainter(img)
+    print_out.paint_sheet(pa, project, sheet, page_w, page_h, dpi, fit,
+                          box=None if full else box, turn_ok=turn_ok)
+    pa.end()
+    xs, ys = [], []
+    for y in range(img.height()):
+        for x in range(0, img.width(), 2):
+            if img.pixelColor(x, y).lightness() < 250:      # (hairlines: light gray)
+                xs.append(x)
+                ys.append(y)
+    on_page = x0 >= -1e-9 and y0 >= -1e-9       # (the whole paper on the page: its frame shows)
+    assert xs or not (whole and on_page), "nothing printed of sheet %s" % sheet.title
+    if not xs:
+        return None
+    slack = 2
+    assert min(xs) >= max(0, x0 * dpi) - slack and min(ys) >= max(0, y0 * dpi) - slack and \
+        max(xs) <= (x0 + pw) * dpi + slack and max(ys) <= (y0 + ph) * dpi + slack, \
+        "printed outside its paper: ink %s, paper %s on a %s page" % (
+            (min(xs), min(ys), max(xs), max(ys)),
+            tuple(round(c * dpi) for c in (x0, y0, x0 + pw, y0 + ph)), (page_w, page_h))
+    if fit and whole:
+        span = max((max(xs) - min(xs)) / dpi / page_w, (max(ys) - min(ys)) / dpi / page_h)
+        assert span > 0.8, "fit to paper but printed small: %.0f%% of the page" % (span * 100)
+    CHECKED["print lands"] += 1
+    return True
+
+
+# ---- a second window ---------------------------------------------------------------------------
+def second_window(win, w2, project, listeners_before):
+    """After a window opened on a project's sheet was closed: the family is back to the one
+    window, and none of the closed window's listeners is left on the project."""
+    assert win.family == [win], "%d windows left" % len(win.family)
+    assert len(project.listeners) == listeners_before, \
+        "listeners left behind: %d -> %d" % (listeners_before, len(project.listeners))
+    assert not w2.isVisible(), "the closed window is still shown"
+    CHECKED["second window"] += 1
+
+
+# ---- footprints and their devices --------------------------------------------------------------
+def footprints_follow(project):
+    """Every footprint linked to a device shows that device's tag as it is now (renumbered,
+    its sheet moved, undone...)."""
+    from kanzonascad import tags
+    index = tags.devices(project)
+    for s in project.sheets:
+        for e in s.inserts():
+            if tags.is_footprint(e) and e.attrs.get("PARENT") in index:
+                dev = index[e.attrs["PARENT"]][1]
+                assert e.attrs.get("TAG") == dev.attrs.get("TAG"), \
+                    "footprint shows %s, its device is %s" % (e.attrs.get("TAG"),
+                                                              dev.attrs.get("TAG"))
+                CHECKED["footprint follows its device"] += 1

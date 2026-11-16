@@ -57,6 +57,28 @@ from kanzonascad import wires, crossings, wirenums, fileio, templates  # noqa: E
 from tests import battery_checks as BC  # noqa: E402
 
 
+# An error raised while a view paints is reported here, with its traceback (an error in a paint
+# run from the event loop has no Python caller to see it; with a painter left open on a picture
+# it crashed the run with no word of what it was: 0.16's long battery, twice, under load)
+PAINT_ERRORS = []
+
+
+def _watch_paints():
+    from kanzonascad.view import CadView
+    if getattr(CadView, "_battery_watched", False):
+        return
+    real = CadView.paintEvent
+
+    def paint(self, e):
+        try:
+            return real(self, e)
+        except Exception:
+            PAINT_ERRORS.append(traceback.format_exc())
+            raise
+    CadView.paintEvent = paint
+    CadView._battery_watched = True
+
+
 class Log:
     def __init__(self, path):
         self.f = open(path, "w", encoding="utf-8")
@@ -69,8 +91,12 @@ class Log:
 
     def check(self, name, fn):
         t = time.perf_counter()
+        seen = len(PAINT_ERRORS)
         try:
             note = fn()
+            if len(PAINT_ERRORS) > seen:
+                raise AssertionError("%d error(s) while painting:\n%s" % (
+                    len(PAINT_ERRORS) - seen, "\n".join(PAINT_ERRORS[seen:seen + 3])))
         except Exception:                       # (a battery reports every failure, then goes on)
             self.failures += 1
             self.say("FAIL  %s (%.1f s)\n%s" % (name, time.perf_counter() - t,
@@ -391,7 +417,8 @@ def mouse_lasso(v, rnd):
 
 
 def mouse_drag(v, rnd):
-    """Selected objects dragged by one of them move exactly as far as the mouse did."""
+    """Selected objects dragged by one of them move exactly as far as the mouse did (with Snap
+    on, that rounded to whole snap steps)."""
     Qt, QPoint, QPointF, QTest = _qt()
     if v.cmd is not None:
         v.cancel()
@@ -431,7 +458,26 @@ def mouse_drag(v, rnd):
     before = {i: s.entities[i].bbox() for i in v.sel}
     w0, w1 = v.to_world(QPointF(start)), v.to_world(QPointF(end))
     d = (w1[0] - w0[0], w1[1] - w0[1])
-    _drag_path(v, start, end, steps=10)
+    # wires and symbols with pins are dragged with Snap on, as they are drawn (a freehand drag
+    # can leave a wire end a hair from another: the user's doing, not the program's, and the
+    # near-miss check would blame the program): then they go whole snap steps; anything else
+    # freehand half the time, exactly as far as the mouse
+    joins = any(isinstance(e, M.Wire) or (isinstance(e, M.Insert) and e.defn is not None and
+                                          e.defn.pins) for e in sel)
+    snap = joins or rnd.random() < 0.5
+    was = v.snap_on
+    v.snap_on = snap
+    if snap:
+        k = v.snap_spacing
+        d = (round(d[0] / k) * k, round(d[1] / k) * k)
+        if d == (0.0, 0.0):
+            v.snap_on = was
+            v.set_selection(set())
+            return
+    try:
+        _drag_path(v, start, end, steps=10)
+    finally:
+        v.snap_on = was
     tol = 1e-6 * max(1.0, max(abs(c) for b in before.values() for c in b))
     for i, b in before.items():
         e = s.entities.get(i)
@@ -484,7 +530,8 @@ def random_editing(log, out, ops, seed, drawing=None):
     dump_at = int(os.environ["BATTERY_DUMP_AT"]) if os.environ.get("BATTERY_DUMP_AT") else None
     lib = win.library
     syms = ["Contact NO", "Contact NC", "Relay coil", "Pushbutton NO", "Pushbutton NC",
-            "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC"]
+            "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC",
+            "Disconnect 3-pole", "Fuses 3-pole", "Circuit breaker 3-pole"]
     syms = [n for n in syms if lib.get("symbol", n) is not None]
     start = norm(p.to_dict())
     counts = {}
@@ -502,7 +549,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         return (o[0] + q[0] * k, o[1] + q[1] * k)
 
     def fmt(q):
-        return "%g,%g" % q
+        return "%.12g,%.12g" % q       # (%g kept 6 digits: 12010.25 typed as 12010.2)
 
     def some(n=None):
         ents = list(s.entities.values())
@@ -518,6 +565,16 @@ def random_editing(log, out, ops, seed, drawing=None):
             v.cancel()
 
     def op_wire():
+        # (0.16: on the current layer when it is a wire layer, else WIRES)
+        want = "WIRES"
+        if rnd.random() < 0.2:
+            name = rnd.choice(["WIRE BROWN", "WIRE BLACK", "0"])
+            if name not in p.layers:
+                with p.edit("layer") as ed:
+                    ed.layer(name, None, M.Layer(name).to_dict())
+            v.current_layer = name
+            want = name if name.startswith("WIRE") else "WIRES"
+        before = set(s.entities)
         v.run(C.WireCmd)
         a = pt()
         type_in(v, fmt(a))
@@ -529,25 +586,132 @@ def random_editing(log, out, ops, seed, drawing=None):
                 v.input_text(fmt(b))
                 a = b
         finish()
+        v.current_layer = "0"
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+        if want != "WIRES" and len(new) == 1 and not wires.pins_on(s, new[0].points[0]):
+            # (a wire joined to another keeps the older's layer: only a wire on its own)
+            if not any(wires.connects_at(s, q, exclude=new[0].id)
+                       for q in (new[0].points[0], new[0].points[-1])):
+                assert new[0].layer == want, "a wire drawn on %s went on %s" % (want,
+                                                                              new[0].layer)
+                BC.CHECKED["wire on the current layer"] += 1
 
     def op_bus():
-        v.run(C.BusCmd)
-        for t in (str(rnd.randint(2, 4)), "0.5"):
-            if v.cmd is not None:
-                v.input_text(t)
-        a = pt()
-        b = (a[0] + rnd.choice([-3, 3]), a[1])
-        for q in (a, b):
+        # (0.16: started on a symbol's pins it takes them; S straight; L layers)
+        sides = []
+        for e in s.inserts():
+            for _n, q in e.pin_points():
+                got = C.pin_side(s, q)
+                if got is not None:
+                    sides.append(got)
+                    break
+        ends, taps = [], []
+        for w in s.wires():
+            for q in (w.points[0], w.points[-1]):
+                got = C.end_side(s, q)
+                if got is not None:
+                    ends.append((q, got))
+            for a, b in zip(w.points, w.points[1:]):
+                m = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+                got = C.tap_lines(s, m)
+                # (a symbol's pin or a bus's end there too is what a click takes first: seed
+                # 2793, a pin on the middle of a wire)
+                if got is not None and C.pin_side(s, m) is None and C.end_side(s, m) is None:
+                    taps.append((m, got))
+            if len(ends) > 8 and len(taps) > 8:
+                break
+        before = set(s.entities)
+        before_dots = set(wires.junctions(s))
+        cmd = v.run(C.BusCmd)
+        side = None
+        from_ends = from_taps = None
+        what = rnd.random()
+        if ends and what < 0.2:
+            from_ends = rnd.choice(ends)
+            a = from_ends[0]
+        elif taps and what < 0.4:
+            from_taps = rnd.choice(taps)
+            a = from_taps[0]
+        elif sides and rnd.random() < 0.5:
+            a = rnd.choice(rnd.choice(sides)[0])
+            # (the side of the pin clicked: two symbols overlapping can share a pin, and the
+            # bus takes one of theirs)
+            side = C.pin_side(s, a)
+        else:
+            for t in (str(rnd.randint(2, 4)), "0.5"):
+                if v.cmd is not None:
+                    v.input_text(t)
+            a = pt()
+        if v.cmd is not None and rnd.random() < 0.3:
+            v.input_text("S")
+        if v.cmd is not None and rnd.random() < 0.3 and from_ends is None:
+            cmd.layers = rnd.choice([ls for _t, ls in C.BUS_LAYERS])
+        for q in (a, (a[0] + rnd.choice([-3, 3]), a[1] + rnd.choice([0, 0, -2, 2]))):
             if v.cmd is not None:
                 v.input_text(fmt(q))
         finish()
+        if from_ends is not None and len(s.wires()) and \
+                not any(i in before and i not in s.entities for i in before):
+            # a bus carried on from its open end: every old end carried on (joined, no dot)
+            for q in from_ends[1][0]:
+                assert wires.connects_at(s, q), "a carried-on bus left %s loose" % (q,)
+                if tuple(q) not in before_dots:
+                    assert tuple(q) not in set(wires.junctions(s)), \
+                        "carrying a bus on put a dot at %s" % (q,)
+            BC.CHECKED["bus carried on"] += 1
+        if from_taps is not None:
+            # one off each of the wires side by side: each new wire starts on a different one
+            across, lines, _gap = from_taps[1]
+            new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+            k = 1 if across else 0
+            got = sorted(round(w.points[0][k], 6) for w in new)
+            if len(new) == len(lines):
+                assert got == sorted(round(c, 6) for c in lines), \
+                    "a bus off wires side by side started at %s, not %s" % (got, lines)
+                BC.CHECKED["bus off wires side by side"] += 1
+        if side is not None:
+            # each wire from its own pin of the side started on: worked out from the pins
+            new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+            starts = {tuple(w.points[0]) for w in new} | {tuple(w.points[-1]) for w in new}
+            if len(new) == len(side[0]):
+                missing = [q for q in side[0] if tuple(q) not in starts]
+                assert not missing, "bus from a symbol's pins missed %s" % missing
+                BC.CHECKED["bus from pins"] += 1
 
     def op_symbol():
         name = rnd.choice(syms)
-        v.run(C.InsertCmd, lib.get("symbol", name), {})
+        before = set(s.entities)
+        cmd = v.run(C.InsertCmd, lib.get("symbol", name), {})
+        for k in rnd.sample(["R", "F", "B"], rnd.randint(0, 2)):
+            v.input_text(k)
+        held = cmd.holds[cmd.hold][0]
+        at = pt()
         if v.cmd is not None:
-            v.input_text(fmt(pt()))
+            v.input_text(fmt(at))
         finish()
+        # (held by a pin, that pin is exactly where the point was given: 0.16)
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if held is not None and len(new) == 1:
+            got = dict(new[0].pin_points())[held]
+            assert got == at, "%s held by pin %s: the pin went to %s, not %s" % (
+                name, held, got, at)
+            BC.CHECKED["insert by its pin"] += 1
+        if v.cmd is None and rnd.random() < 0.25:
+            # Enter: the same symbol again (0.16), held by its first pin
+            before = set(s.entities)
+            v.enter()
+            assert isinstance(v.cmd, C.InsertCmd) and v.cmd.defn.name == name, \
+                "Enter didn't insert %s again" % name
+            at = pt()
+            v.input_text(fmt(at))
+            finish()
+            again = [e for i, e in s.entities.items() if i not in before and
+                     isinstance(e, M.Insert)]
+            assert len(again) == 1 and again[0].block == name, "Enter inserted %s" % again
+            first = again[0].defn.pins[0]["name"] if again[0].defn.pins else None
+            if first is not None:
+                assert dict(again[0].pin_points())[first] == at
+            BC.CHECKED["insert again with Enter"] += 1
 
     def op_line():
         v.run(C.LineCmd)
@@ -766,11 +930,28 @@ def random_editing(log, out, ops, seed, drawing=None):
     fps = sorted(n for n, d in lib.blocks("footprint")[0].items() if d.builtin)
 
     def op_footprint():
-        # a built-in generic footprint, placed as Insert footprint does
+        # a built-in generic footprint, placed as Insert footprint does (0.16: asked which
+        # device it is; Enter: the next one with no footprint)
+        from kanzonascad import tags
+        before = set(s.entities)
+        offered = tags.footprint_candidates(p)
         v.run(C.InsertCmd, lib.get("footprint", rnd.choice(fps)), {})
         if v.cmd is not None:
             v.input_text(fmt(pt()))
+        if v.cmd is not None and rnd.random() < 0.2:
+            v.input_text("N")
         finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if offered and len(new) == 1 and new[0].attrs.get("PARENT"):
+            # some device's footprint now, with its tag, and the only footprint with it
+            f = new[0]
+            dev = tags.devices(p).get(f.attrs["PARENT"])
+            assert dev is not None, "a footprint linked to no device"
+            assert f.attrs.get("TAG") == dev[1].attrs.get("TAG"), "a footprint's tag isn't its device's"
+            same = [e for sh in p.sheets for e in sh.inserts() if tags.is_footprint(e)
+                    and e.attrs.get("TAG", "").upper() == f.attrs["TAG"].upper()]
+            assert len(same) == 1, "two footprints tagged %s" % f.attrs["TAG"]
+            BC.CHECKED["footprint takes a device"] += 1
 
     def op_location():
         # as Sheet properties and a device's Location do: the sheet's location, or a device's
@@ -954,6 +1135,139 @@ def random_editing(log, out, ops, seed, drawing=None):
     def op_pan():
         mouse_pan(v, crnd)
 
+    # ---- Print and a sheet in a window of its own (0.16) --------------------------------------
+    def op_print():
+        from PySide6.QtGui import QPageSize
+        from kanzonascad import print_out
+        chosen = rnd.sample(p.sheets, rnd.randint(1, min(4, len(p.sheets))))
+        size = rnd.choice([(QPageSize.Letter, 8.5, 11), (QPageSize.Tabloid, 11, 17),
+                           (QPageSize.AnsiD, 22, 34), (QPageSize.A4, 8.27, 11.69)])
+        fit = rnd.random() < 0.7
+        area = rnd.choice(print_out.AREAS)
+        rect = None
+        if area in ("display", "window"):
+            chosen = [rnd.choice(chosen)]
+            a, b = pt(), pt()
+            rect = (a[0], a[1], b[0] + 0.25, b[1] + 0.25)
+        turn_ok = rnd.random() < 0.7
+        before, rev = norm(p.to_dict()), p.revision
+        path = os.path.join(out, "print.pdf")
+        n = print_out.print_sheets(p, print_out.pdf_printer(path, QPageSize(size[0]), 72),
+                                   chosen, fit, rnd.random() < 0.8, area, rect, turn_ok)
+        assert n == len(chosen)
+        BC.printed(path, chosen)
+        assert norm(p.to_dict()) == before and p.revision == rev, "printing changed the project"
+        sheet = rnd.choice(chosen)
+        page = (size[1], size[2]) if rnd.random() < 0.5 else (size[2], size[1])
+        BC.print_lands(p, sheet, page[0], page[1], fit,
+                       box=print_out.area_box(sheet, area, rect, p), turn_ok=turn_ok,
+                       whole=area == "sheet")
+
+    def op_window():
+        listeners = len(p.listeners)
+        w2 = win.new_window(rnd.choice(p.sheets).id)
+        v2 = w2.view()
+        assert v2.project is p, "the new window shows another project"
+        v2.osnap_on = v2.snap_on = v2.polar_on = v2.ortho_on = False
+        s2 = v2.sheet()
+        n = len(s2.entities)
+        a, b = pt(), pt()
+        while b == a:                           # (a line of no length isn't drawn)
+            b = pt()
+        asked = []
+        w2._maybe_save = lambda d: asked.append(d) or True
+        try:
+            v2.run(C.LineCmd)
+            type_in(v2, fmt(a), fmt(b))
+            if v2.cmd is not None:
+                v2.cancel()
+            assert len(s2.entities) == n + 1, \
+                "a line drawn in the new window isn't in the project"
+            if rnd.random() < 0.5:
+                win.undo()                      # (Undo in the main window takes it back)
+                assert len(s2.entities) == n
+                w2.redo()
+        finally:
+            # (closed whatever happened: a window left open fails every later window step)
+            assert w2.close(), "the new window didn't close"
+            APP.processEvents()
+        assert not asked, "closing a second window asked to save the project"
+        BC.second_window(win, w2, p, listeners)
+        w2.deleteLater()
+
+    def op_distribute():
+        ents = [e for e in s.entities.values() if not isinstance(e, (M.Wire, M.WireCross))]
+        if len(ents) < 3:
+            return
+        sel = rnd.sample(ents, min(len(ents), rnd.randint(3, 6)))
+        axis = rnd.choice([0, 1])
+        # (their order before: objects bigger than the room between the outermost two get a
+        # gap below nothing and can change order by their middles)
+        order = [e.id for e in sorted(sel, key=lambda e: ((e.bbox()[axis] + e.bbox()[axis + 2])
+                                                         / 2, e.id))]
+        snap = rnd.random() < 0.5
+        was = v.snap_on
+        v.snap_on = snap
+        try:
+            v.set_selection({e.id for e in sel})
+            v.run(C.DistributeCmd)
+            if v.cmd is not None:
+                v.input_text("H" if axis == 0 else "V")
+        finally:
+            v.snap_on = was
+        finish()
+        if snap:
+            return
+        # equal gaps between neighbours, the outermost two where they were: worked out from
+        # the boxes (an object whose box another of them moved, as a wire on a pin, aside)
+        boxes = [s.entities[i].bbox() for i in order if i in s.entities]
+        if len(boxes) == len(sel) and not any(isinstance(e, M.Insert) for e in sel):
+            gaps = [b[axis] - a[axis + 2] for a, b in zip(boxes, boxes[1:])]
+            tol = 1e-6 * max(1.0, max(abs(c) for b in boxes for c in b))
+            assert max(gaps) - min(gaps) <= tol, "distributed unevenly: %s" % gaps
+            BC.CHECKED["distribute"] += 1
+
+    def op_del_dot():
+        dots = wires.junctions(s)
+        if not dots:
+            return
+        q = rnd.choice(dots)
+        v.run(C.DeleteDotCmd)
+        v.cmd.pick(q)
+        assert q not in wires.junctions(s), "Delete dot left the dot at %s" % (q,)
+        assert wires.connects_at(s, q), "Delete dot cut the wires at %s" % (q,)
+        if rnd.random() < 0.3:
+            v.cmd.pick(q)
+            assert q in wires.junctions(s), "a second click didn't bring the dot back"
+        finish()
+        BC.CHECKED["delete dot"] += 1
+
+    def op_update_blocks():
+        # Library > Update blocks from library... on a project whose copy of a symbol is old
+        # (its tag elsewhere, as 0.15's were): the copies take the library's, and keep their
+        # places, tags and wires (the near-miss and index checks after the step see the wires)
+        placed = [e for e in s.inserts() if e.defn is not None and e.defn.kind == "symbol"
+                  and lib.get("symbol", e.block) is not None]
+        if not placed:
+            return
+        name = rnd.choice(placed).block
+        old = p.blocks[name]
+        if old.tag_pos is not None:
+            with p.edit("an old copy") as ed:
+                ed.block(M.BlockDef.from_dict(dict(
+                    old.to_dict(), tag_pos=[old.tag_pos[0], old.tag_pos[1] - 0.08])))
+        keep = {e.id: (e.pos, e.attrs.get("TAG")) for e in s.inserts() if e.block == name}
+        saved = QMessageBox.question
+        QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
+        try:
+            win.update_blocks_from_library()
+        finally:
+            QMessageBox.question = saved
+        assert p.blocks[name].same_as(lib.get("symbol", name)), "%s not updated" % name
+        now = {e.id: (e.pos, e.attrs.get("TAG")) for e in s.inserts() if e.block == name}
+        assert now == keep, "updating %s moved or retagged its copies" % name
+        BC.CHECKED["update blocks"] += 1
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -971,7 +1285,8 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
-             (op_redo, 4)]
+             (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
+             (op_distribute, 2), (op_del_dot, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -992,6 +1307,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             if i % 25 == 24:
                 for other in p.sheets:
                     check_sheet(other)
+                BC.footprints_follow(p)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()
@@ -1490,6 +1806,7 @@ def main(argv):
     drawing = argv[argv.index("--drawing") + 1] if "--drawing" in argv else None
     os.makedirs(out, exist_ok=True)
     log = Log(os.path.join(out, "battery.log"))
+    _watch_paints()
     # (any dialog closes by itself for the whole run: one opened late, by an answer to a
     # command of an earlier section, Check for updates say, would otherwise wait forever)
     global CLOSER

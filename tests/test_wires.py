@@ -1,6 +1,6 @@
 import unittest
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, by_base_point
 
 from kanzonascad import commands as C
 from kanzonascad import model as M
@@ -44,6 +44,7 @@ class WireCommandTest(unittest.TestCase):
 
     def place(self, defn, at, angle_keys=()):
         self.v.run(C.InsertCmd, defn, {})
+        by_base_point(self.v)
         type_in(self.v, *angle_keys, "%g,%g" % at)
         return [e for e in self.v.sheet().entities.values() if isinstance(e, M.Insert)][-1]
 
@@ -138,8 +139,8 @@ class BusTest(unittest.TestCase):
             ys = sorted(round(x.points[0][1], 6) for x in ws)
             self.assertAlmostEqual(ys[-1] - ys[-2], gap, 5)
             self.assertTrue(all(len(x.points) == 4 for x in ws))      # two turns each
-            v.run(C.BusCmd)                       # it remembers 4 and 12 mm
-            type_in(v, "", "", "1,1", "3,1")
+            v.run(C.BusCmd)                       # it remembers 4 and 12 mm (and asks
+            type_in(v, "1,1", "3,1")              # nothing first since 0.16)
             v.cancel()                            # Esc keeps it
             self.assertEqual(len(wires_of(v)), 8)
         finally:
@@ -160,9 +161,11 @@ class FollowPinsBothEndsTest(unittest.TestCase):
             s, p = v.sheet(), v.project
             coil = w.library.get("symbol", "Relay coil")
             v.run(C.InsertCmd, coil, {"TAG": "CR1"})
+            by_base_point(v)
             type_in(v, "4,5")
             a = max(s.inserts(), key=lambda e: e.id)
             v.run(C.InsertCmd, coil, {"TAG": "CR2"})
+            by_base_point(v)
             type_in(v, "6,5")
             b = max(s.inserts(), key=lambda e: e.id)
             pa = max(q for _n, q in a.pin_points())

@@ -58,6 +58,10 @@ DEFAULT_SETTINGS = {
                                 # the right ("right") or along the bottom ("bottom") that the
                                 # zone grid stops at
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
+    "wire_gauge_shown": True,   # a wire layer's gauge and color beside its wires
+    "footprint_label": "tag",   # what a footprint placed shows to start (Footprint label)
+    "wire_lead": False,         # a second wire on a pin leaves it on a 45-degree lead (the
+                                # owner, 0.16: "a little bend... That needs to go away": off)
     "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)
     "wire_jump": "vertical",    # which one jumps: vertical or horizontal
     "rail_profile": "TS35x7.5",             # DIN rail and wire duct drawn next
@@ -1862,20 +1866,36 @@ def _mirror_fix(src, mapped, ins):
 # Layers, sheets, project
 # ============================================================================================
 class Layer:
-    def __init__(self, name, color=ADAPTIVE, visible=True, locked=False):
+    def __init__(self, name, color=ADAPTIVE, visible=True, locked=False, awg="",
+                 wire_color=""):
         self.name = name
         self.color = color
         self.visible = bool(visible)
         self.locked = bool(locked)
+        # a wire layer's wire: its gauge (14, 2/0...) and insulation color (BLK, BRN...),
+        # shown beside its wires (the owner, 0.16: "set the awg and color of wire layers")
+        self.awg = str(awg or "").strip()
+        self.wire_color = str(wire_color or "").strip()
+
+    def wire_label(self):
+        """What its wires show: "14 AWG BLK", "14 AWG", "BLK", or ""."""
+        parts = (["%s AWG" % self.awg] if self.awg else []) + \
+            ([self.wire_color] if self.wire_color else [])
+        return " ".join(parts)
 
     def to_dict(self):
-        return {"name": self.name, "color": self.color, "visible": self.visible,
-                "locked": self.locked}
+        d = {"name": self.name, "color": self.color, "visible": self.visible,
+             "locked": self.locked}
+        if self.awg:
+            d["awg"] = self.awg
+        if self.wire_color:
+            d["wire_color"] = self.wire_color
+        return d
 
     @classmethod
     def from_dict(cls, d):
         return cls(d["name"], d.get("color", ADAPTIVE), d.get("visible", True),
-                   d.get("locked", False))
+                   d.get("locked", False), d.get("awg", ""), d.get("wire_color", ""))
 
 
 def row_letters(n, start=0):
@@ -2051,6 +2071,7 @@ class Sheet:
         self.xref_frozen = False            # cross-references kept as they were (issued sheet)
         self.xref_shown = None              # the cross-references shown while frozen (or while
                                             # the project's aren't automatic): xrefs.py
+        self.no_dots = []                   # junction dots deleted (Delete dot): [(x, y)]
         self.col_start = int(col_start)     # the first column's number (1 to start)
         self.row_start = int(row_start)     # the first row's letter: 0 = A, 1 = B...
         self.fields = dict(fields or {})
@@ -2255,7 +2276,8 @@ class Sheet:
                 "cabinet": list(self.cabinet) if self.cabinet else None,
                 "xref_frozen": self.xref_frozen,
                 "xref_shown": [list(t) for t in self.xref_shown]
-                if self.xref_shown is not None else None}
+                if self.xref_shown is not None else None,
+                "no_dots": [list(q) for q in self.no_dots]}
 
     def to_dict(self):
         d = self.meta_dict()
@@ -2292,6 +2314,8 @@ class Sheet:
         self.xref_frozen = bool(d.get("xref_frozen", False))
         shown = d.get("xref_shown")
         self.xref_shown = [tuple(t) for t in shown] if shown is not None else None
+        self.no_dots = [(round(float(q[0]), 6), round(float(q[1]), 6))
+                        for q in (d.get("no_dots") or [])]
         self.version += 1
 
     @classmethod

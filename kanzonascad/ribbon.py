@@ -58,6 +58,7 @@ class SplitButton(QToolButton):
 
     def __init__(self, actions, parent=None):
         super().__init__(parent)
+        self.setFocusPolicy(Qt.NoFocus)     # (as every ribbon button: the drawing keeps it)
         self.setPopupMode(QToolButton.MenuButtonPopup)
         menu = QMenu(self)
         menu.addActions(actions)
@@ -156,6 +157,9 @@ class Ribbon(QTabWidget):
                 w = QToolButton()
                 w.setDefaultAction(item)
                 w.setAutoRaise(True)
+                # (clicked, it leaves the keyboard with the drawing, so Esc still cancels and
+                # deselects: the owner, 0.16)
+                w.setFocusPolicy(Qt.NoFocus)
                 if size == "large":
                     w.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
                     w.setIconSize(QSize(LARGE_ICON, LARGE_ICON))

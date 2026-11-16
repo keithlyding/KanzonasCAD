@@ -148,6 +148,13 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
+- Printing and windows (owner, Nov 2026; 0.16): "I need to be able to print selected or all
+  sheets": File > Print... prints this sheet, all sheets or those picked (several selected in
+  the Sheets panel start ticked), on a printer or into a PDF file; Fit to paper by default
+  (owner's choice), turned to match the paper; Actual size as the option. "I would like to be
+  able to pull out a drawing tab to another screen": asked whether a whole project or any sheet,
+  the owner chose any sheet in its own window. Windows on one project share it (one Undo, one
+  Save); a project tab can also be moved or dragged out to a window of its own.
 - Testing (owner, Nov 2026): "Let's do the extended battery on every big update 0.xx.0. And the
   smaller battery can be done on minor updates." Every build runs the short battery (1,000
   steps); a middle-number release (0.16...) also runs the long one (3,000 steps x 3 seeds, job

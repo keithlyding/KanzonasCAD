@@ -9,7 +9,7 @@ from unittest import mock
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QFormLayout, QMessageBox, QWidget
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, by_base_point
 
 from kanzonascad import block_editor as BE
 from kanzonascad import commands as C
@@ -120,6 +120,7 @@ class BlockWindowTest(unittest.TestCase):
 
     def place(self, defn, at, attrs=None):
         self.v.run(C.InsertCmd, defn, attrs or {})
+        by_base_point(self.v)
         type_in(self.v, "%g,%g" % at)
         return max(self.v.sheet().inserts(), key=lambda e: e.id)
 

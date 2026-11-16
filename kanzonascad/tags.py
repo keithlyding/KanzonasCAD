@@ -13,6 +13,8 @@ number of its sheet and a two-digit count on that page: CR601, CR602, M601; on p
 - Every device also carries a hidden id (attribute DEV) that survives renaming: contacts,
   cross-references and panel footprints link through it.
 - A contact (role "child") belongs to a device through that id and shows its tag (below).
+- A footprint on a panel sheet belongs to a device the same way (asked as it is placed:
+  footprint_candidates) and shows its tag, following it when it is renumbered.
 """
 
 import re
@@ -177,6 +179,50 @@ def is_child(e):
     return isinstance(e, Insert) and d is not None and d.kind == "symbol" and d.role == "child"
 
 
+def is_footprint(e):
+    d = getattr(e, "defn", None)
+    return isinstance(e, Insert) and d is not None and d.kind == "footprint"
+
+
+def footprint_candidates(project, cat=""):
+    """[(sheet, device)] a footprint about to be placed can be (the owner, 0.16: "I need parts
+    to auto label when inserting footprints"): the devices no footprint is yet (linked, or
+    with its tag), one with the footprint's catalog number first, then in page order and,
+    on a page, by tag."""
+    linked, tagged = set(), set()
+    for s in project.sheets:
+        for e in s.inserts():
+            if is_footprint(e):
+                if e.attrs.get("PARENT"):
+                    linked.add(e.attrs["PARENT"])
+                if e.attrs.get("TAG"):
+                    tagged.add(e.attrs["TAG"].strip().upper())
+    cat = (cat or "").strip().upper()
+    out = []
+    for i, s in enumerate(project.sheets):
+        for e in s.inserts():
+            dev, tag = e.attrs.get("DEV"), e.attrs.get("TAG", "").strip()
+            if not is_device(e) or not dev or dev in linked or tag.upper() in tagged:
+                continue
+            same = bool(cat) and e.attrs.get("CAT", "").strip().upper() == cat
+            m = re.match(r"([A-Za-z]*)(\d*)", tag)
+            out.append(((0 if same else 1, i, m.group(1), int(m.group(2) or 0), tag), s, e))
+    out.sort(key=lambda t: t[0])
+    return [(s, e) for _k, s, e in out]
+
+
+def link_footprint(attrs, device):
+    """A footprint's attributes as the footprint of device: its id and tag, and the device's
+    manufacturer, catalog number and description where the footprint has none."""
+    out = dict(attrs or {})
+    out["PARENT"] = device.attrs["DEV"]
+    out["TAG"] = device.attrs.get("TAG", "")
+    for k in ("MFR", "CAT", "DESC"):
+        if not out.get(k) and device.attrs.get(k):
+            out[k] = device.attrs[k]
+    return out
+
+
 def devices(project):
     """{hidden id: (sheet, device)} of every device in the project."""
     out = {}
@@ -247,8 +293,8 @@ def sync_children(ed, project):
         by_tag.setdefault(e.attrs.get("TAG", "").upper(), e)
     for s in project.sheets:
         for e in list(s.inserts()):
-            if not is_child(e):
-                continue
+            if not is_child(e) and not (is_footprint(e) and e.attrs.get("PARENT")):
+                continue                # (a footprint follows the device it was placed as)
             dev = e.attrs.get("PARENT")
             got = index.get(dev) if dev else None
             if got is not None:

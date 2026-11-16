@@ -206,6 +206,34 @@ def extension(acquired, p, r):
     return out
 
 
+def alignment(points, base, p, r):
+    """[(point, from, inner)]: in line with an acquired point, straight across or straight up
+    and down from it (AutoCAD's object snap tracking: the owner, 0.16, extending a wire to be
+    in line with another wire's end got no snap): where its line meets the line straight
+    across or up and down from base (the last point picked) or another acquired point's line
+    (inner -1: preferred over the other tracking snaps), else anywhere on its line (inner 1);
+    all within r of p."""
+    out = []
+    for q0 in points:
+        if base is not None and G.dist(q0, base) < 1e-9:
+            continue                    # (the point the line runs from: that's Ortho's)
+        lines = [(q0[0], None), (None, q0[1])]      # (its up-and-down line, its across line)
+        for x, y in lines:
+            q = (x, p[1]) if x is not None else (p[0], y)
+            if G.dist(q, p) <= r and G.dist(q, q0) > r:
+                out.append((q, q0, 1))
+            if base is not None:
+                q = (x, base[1]) if x is not None else (base[0], y)
+                if G.dist(q, p) <= r and G.dist(q, q0) > 1e-9 and G.dist(q, base) > 1e-9:
+                    out.append((q, q0, -1))
+        for q1 in points:
+            if q1 is not q0 and abs(q1[0] - q0[0]) > 1e-9 and abs(q1[1] - q0[1]) > 1e-9:
+                q = (q0[0], q1[1])
+                if G.dist(q, p) <= r:
+                    out.append((q, q0, -1))
+    return out
+
+
 def parallel(base, dirs, p, r):
     """[point] on a line from base parallel to one of dirs, within r of p (and away from
     base)."""

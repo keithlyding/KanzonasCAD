@@ -1,6 +1,6 @@
 import unittest
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, by_base_point
 
 from kanzonascad import commands as C
 from kanzonascad import model as M
@@ -22,6 +22,7 @@ class DeleteComponentTest(unittest.TestCase):
 
     def drop(self, name, at, tag="CR1"):
         self.v.run(C.InsertCmd, self.lib.get("symbol", name), {"TAG": tag})
+        by_base_point(self.v)
         type_in(self.v, at)
         return max(self.s.inserts(), key=lambda e: e.id)
 

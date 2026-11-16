@@ -385,6 +385,47 @@ def labels(project, sheet):
     return out
 
 
+def gauge_labels(project, sheet):
+    """A wire layer's gauge and color (Layers: AWG, Wire color) beside its wires: one label
+    per run of joined wires on the layer, on its longest straight piece, on the other side of
+    the wire from its number (under it, or right of it when upright), a little smaller."""
+    if not project.settings.get("wire_gauge_shown", True) or sheet is project.title_block:
+        return []
+    shown = {n: lay.wire_label() for n, lay in project.layers.items() if lay.wire_label()}
+    if not shown:
+        return []
+    h = float(project.settings.get("wire_number_height", 0.08)) * sheet.k()
+    sig = (sheet.version, sheet.scale, h, tuple(sorted(shown.items())))
+    got = getattr(sheet, "_gauge_labels", None)
+    if got is not None and got[0] == sig:
+        return got[1]
+    roots = _sheet_groups(sheet)
+    parts = {}
+    for w in sheet.wires():
+        if w.layer in shown:
+            parts.setdefault((roots.get(w.id, w.id), w.layer), []).append(w)
+    busy = _busy_points(sheet)
+    out = []
+    for (_r, layer), ws in parts.items():
+        best = None
+        for w in ws:
+            for a, b in zip(w.points, w.points[1:]):
+                d = abs(a[0] - b[0]) + abs(a[1] - b[1])
+                if best is None or d > best[0]:
+                    best = (d, a, b)
+        if best is None:
+            continue
+        _d, a, b = best
+        mx, my = _clear_spot(a, b, busy)
+        g = h * 0.85
+        if abs(a[1] - b[1]) > abs(a[0] - b[0]):
+            out.append(Text((mx + h * 0.4 + g, my), shown[layer], g, 90.0, "center"))
+        else:
+            out.append(Text((mx, my - h * 0.4 - g), shown[layer], g, 0.0, "center"))
+    sheet._gauge_labels = (sig, out)
+    return out
+
+
 _CELL = 0.5
 
 

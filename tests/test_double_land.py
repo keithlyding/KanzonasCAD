@@ -13,6 +13,9 @@ class DoubleLandTest(unittest.TestCase):
         self.v.osnap_on = self.v.snap_on = False
         self.v.polar_on = self.v.ortho_on = False
         self.p = self.v.project
+        # (the 45-degree lead is a setting since 0.16, off to start: the owner, "a little
+        # bend... That needs to go away"; these check it with it on)
+        self.p.settings["wire_lead"] = True
         self.s = self.v.sheet()
         coil = self.win.library.get("symbol", "Relay coil")
         self.v.run(C.InsertCmd, coil, {"TAG": "CR1"})

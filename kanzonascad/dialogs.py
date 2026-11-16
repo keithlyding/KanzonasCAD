@@ -348,6 +348,17 @@ def project_properties(parent, project, tab=0):
                       "the wires they leave meeting end to end.")
     wclean.setChecked(bool(st.get("wire_cleanup", True)))
     form.addRow("", wclean)
+    wgauge = QCheckBox("Show a wire layer's gauge and color beside its wires")
+    wgauge.setToolTip("Layers: AWG and Wire color. Each run of wire on such a layer shows "
+                      "them (10 AWG BRN), under its wire number.")
+    wgauge.setChecked(bool(st.get("wire_gauge_shown", True)))
+    form.addRow("", wgauge)
+    wlead = QCheckBox("A second wire on a pin leaves it on a 45-degree lead")
+    wlead.setToolTip("Double landing as drawn by hand: a wire started or ended on a pin that "
+                     "already has one bends off it beside the first. Off: it runs straight "
+                     "onto the pin.")
+    wlead.setChecked(bool(st.get("wire_lead", False)))
+    form.addRow("", wlead)
     xref_h = QDoubleSpinBox()
     xref_h.setDecimals(4)
     xref_h.setRange(0.01, 5)
@@ -373,6 +384,15 @@ def project_properties(parent, project, tab=0):
     dim_h.setSuffix(" in")
     dim_h.setValue(float(st.get("dim_height", 0.1)))
     form.addRow("Dimension text height (on paper)", dim_h)
+    fp_show = QComboBox()
+    for key, text in (("tag", "Its tag (the device it is)"), ("cat", "Its part number"),
+                      ("desc", "Its description"), ("name", "Its block name"),
+                      ("", "No label")):
+        fp_show.addItem(text, key)
+    fp_show.setCurrentIndex(max(fp_show.findData(st.get("footprint_label", "tag")), 0))
+    fp_show.setToolTip("A footprint you place shows this to start (Footprint label changes "
+                       "it later); one with no tag shows its part number or block name.")
+    form.addRow("New footprints show", fp_show)
     stocks = {}
     for key, label in (("rail_stock", "DIN rail bought in lengths of"),
                        ("duct_stock", "Wire duct bought in lengths of")):
@@ -419,6 +439,9 @@ def project_properties(parent, project, tab=0):
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
+    settings["wire_lead"] = wlead.isChecked()
+    settings["wire_gauge_shown"] = wgauge.isChecked()
+    settings["footprint_label"] = fp_show.currentData()
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():
@@ -464,14 +487,18 @@ def _swatch(color):
 
 class LayersDialog(QDialog):
     """Add, rename, recolor, hide and lock layers (each change is one undoable step)."""
-    COLS = ["Name", "Color", "On", "Locked"]
+    COLS = ["Name", "Color", "On", "Locked", "AWG", "Wire color"]
+    GAUGES = ["22", "20", "18", "16", "14", "12", "10", "8", "6", "4", "3", "2", "1", "1/0",
+              "2/0", "3/0", "4/0", "250 kcmil", "350 kcmil", "500 kcmil"]
+    WIRE_COLORS = ["BLK", "WHT", "RED", "BLU", "GRN", "GRN/YEL", "BRN", "ORG", "YEL", "GRY",
+                   "VIO", "PNK", "WHT/BLU", "BLU/WHT"]
 
     def __init__(self, parent, project, current):
         super().__init__(parent)
         self.project = project
         self.current = current
         self.setWindowTitle("Layers")
-        self.resize(460, 380)
+        self.resize(600, 380)
         v = QVBoxLayout(self)
         self.table = QTableWidget(0, len(self.COLS))
         self.table.setHorizontalHeaderLabels(self.COLS)
@@ -495,8 +522,10 @@ class LayersDialog(QDialog):
             row.addWidget(b)
         v.addLayout(row)
         note = QLabel("Click On or Locked to switch it. Double-click a name to make it the "
-                      "current layer (new objects go on it). Select several (Ctrl or Shift) "
-                      "to delete them together; Select unused picks the empty ones.")
+                      "current layer (new objects go on it). Double-click AWG or Wire color to "
+                      "give a wire layer its wire's gauge and color: its wires show them. "
+                      "Select several (Ctrl or Shift) to delete them together; Select unused "
+                      "picks the empty ones.")
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
         v.addWidget(note)
@@ -519,6 +548,8 @@ class LayersDialog(QDialog):
             t.setItem(r, 1, c)
             t.setItem(r, 2, QTableWidgetItem("Yes" if lay.visible else "No"))
             t.setItem(r, 3, QTableWidgetItem("Yes" if lay.locked else "No"))
+            t.setItem(r, 4, QTableWidgetItem(lay.awg))
+            t.setItem(r, 5, QTableWidgetItem(lay.wire_color))
 
     def _name(self):
         r = self.table.currentRow()
@@ -551,6 +582,26 @@ class LayersDialog(QDialog):
             self._fill()
         elif c == 1:
             self._color()
+        elif c in (4, 5):
+            self._wire(self.table.item(r, 0).data(Qt.UserRole), c == 4)
+
+    def _wire(self, name, gauge):
+        """A wire layer's gauge (AWG) or insulation color: picked from the usual ones or
+        typed; empty for none."""
+        lay = self.project.layers[name]
+        items = [""] + (self.GAUGES if gauge else self.WIRE_COLORS)
+        cur = lay.awg if gauge else lay.wire_color
+        if cur and cur not in items:
+            items.insert(1, cur)
+        got, ok = QInputDialog.getItem(
+            self, "Layers", "%s for the wires on %s:" % ("Gauge (AWG)" if gauge else
+                                                      "Wire color", name),
+            items, items.index(cur) if cur in items else 0, True)
+        if ok:
+            got = got.strip()
+            if gauge and got.upper().endswith("AWG"):
+                got = got[:-3].strip()
+            self._change(name, **({"awg": got} if gauge else {"wire_color": got.upper()}))
 
     def _set_current(self):
         n = self._name()
@@ -1532,3 +1583,44 @@ def attribute_visibility(parent, project, sheet, inserts):
         for e in changes:
             ed.change(sheet, e)
     return True
+
+
+def bus_layers(parent, project, count, current):
+    """The Bus command's Layers (L): a layer for each of its wires, from a choice (brown,
+    orange, yellow for 480 V; black, red, blue; all black; the WIRES layer) or one by one
+    from the project's layers. Returns the list (one a wire), or None when cancelled."""
+    from .commands import BUS_LAYERS, bus_layer_list
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Bus: layers")
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel("Each wire of the bus goes on its layer (and takes its color):"))
+    preset = QComboBox()
+    preset.addItem("(one by one, below)", None)
+    for text, layers in BUS_LAYERS:
+        preset.addItem(text, layers)
+    lay.addWidget(preset)
+    form = QFormLayout()
+    names = sorted(set(project.layers) | {n for _t, ls in BUS_LAYERS for n in ls})
+    boxes = []
+    for i, name in enumerate(bus_layer_list(current, count)):
+        b = QComboBox()
+        b.setEditable(True)
+        b.addItems(names)
+        b.setCurrentText(name)
+        boxes.append(b)
+        form.addRow("Wire %d%s" % (i + 1, " (L%d)" % (i + 1) if count == 3 else ""), b)
+    lay.addLayout(form)
+
+    def chosen(_i):
+        layers = preset.currentData()
+        if layers:
+            for b, name in zip(boxes, bus_layer_list(layers, count)):
+                b.setCurrentText(name)
+    preset.currentIndexChanged.connect(chosen)
+    bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    bb.accepted.connect(dlg.accept)
+    bb.rejected.connect(dlg.reject)
+    lay.addWidget(bb)
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return [b.currentText().strip() or "WIRES" for b in boxes]

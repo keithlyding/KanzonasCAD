@@ -18,13 +18,17 @@ and reports come next.</i></p>
 <ul>
 <li><b>Menus and ribbon</b> along the top, as in KanzonasPDF. The ribbon's tabs are
 <b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>; each
-group of buttons has its name under it (Rail and duct, Dimensions, Blocks...). Double-click a
+group of buttons has its name under it (Rail and duct, Dimensions, Blocks...). Move, Copy,
+Rotate, Mirror and Erase are on the Schematic and Panel tabs too (Modify), not only Home. Double-click a
 tab name (or <b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
 <b>Ribbon group names</b> (View) turns the names off, for a more compact ribbon, and on
 again.</li>
-<li><b>Project tabs</b>: each open project has its own tab.</li>
+<li><b>Project tabs</b>: each open project has its own tab. Drag a tab away from the tabs and
+let go to give it a window of its own (see <b>Windows and two screens</b>).</li>
 <li><b>Sheets panel</b> on the left: the project's sheets with their page numbers. Click one to
-show it, double-click to open its properties, right-click for more.</li>
+show it, double-click to open its properties, right-click for more (<b>Open in a new window</b>,
+<b>Print...</b>). Ctrl+click and Shift+click select several sheets without changing the one
+shown, for printing them.</li>
 <li><b>Command line</b> along the bottom (Ctrl+9 shows or hides it).</li>
 <li><b>Status bar</b>: the cursor's X and Y in inches and its <b>zone</b> (for example
 6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches.</li>
@@ -78,13 +82,25 @@ a layer moves them to it.</li>
 <p>As in AutoCAD, every object takes its <b>layer's color</b> (ByLayer) unless you give it its
 own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel tabs) to pick a
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
-layer it sits on, or its own color if you gave it one. Wires go on layer WIRES, symbols on
+layer it sits on, or its own color if you gave it one. Wires go on the current layer when it
+is a wire layer (WIRES, one named WIRE..., or one with a gauge or wire color), else on layer
+WIRES; symbols on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them. On the black drawing,
 black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
 black, so nothing disappears (as AutoCAD's color 7); their color stays as you set it, and they
 print in it.</p>
-<p><b>Layers</b>, as in AutoCAD: a hidden layer isn't drawn, printed or picked; a locked one
+<p><b>Wire gauge and color</b>: in <b>Layers...</b>, double-click a wire layer's <b>AWG</b> or
+<b>Wire color</b> to give its wires a gauge (14, 10, 2/0...) and insulation color (BLK, BRN,
+GRN/YEL...), picked from the usual ones or typed. Each run of joined wires on that layer then
+shows them, <b>10 AWG BRN</b>, on the other side of the wire from its number (under it, or right
+of it on an upright wire), a little smaller; Project properties, Schematic, <b>Show a wire
+layer's gauge and color beside its wires</b> turns that off. The layers a bus adds (WIRE BROWN,
+WIRE ORANGE...) come with their color's name; give them a gauge once and every wire on them
+shows it.</p>
+<p><b>Layers</b>, as in AutoCAD: pick one in the layer box with objects selected and they go on
+it (the box shows their layer, empty when they are on several); with nothing selected it
+becomes the current layer. A hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
 Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the layer box, the layer list,
 Layers..., Color, Hide layer and Show all too) and the Modify menu:</p>
@@ -215,7 +231,17 @@ drawing keeps the whole width: <b>Insert symbol...</b> (Schematic tab) opens it 
 as you left it; its Parts tab lists your parts. Type in its search box to find one.
 Double-click a symbol or footprint (or select it and click <b>Insert</b>): the popup gets out
 of the way and you click where it goes; type R to turn it 90 degrees or F to flip it first.
-The popup opens again where you last put it. In the Parts tab, Insert asks whether to place
+Once it is placed, <b>Enter</b> (or Space) inserts the same symbol again, with a tag of its
+own.
+A symbol with pins is held by its <b>first pin</b> (L1 on a 3-pole device, 1 on a contact, A1 on
+a coil): the point you click is where that pin goes, so click the pin or wire it is to join (a
+3-pole fuse clicked on a disconnect's T1 meets T1, T2 and T3 with its L1, L2 and L3). The
+command line says which pin it is held by; type B to hold it by the next pin, and after the
+last, by its base point (the middle of the library's symbols). Footprints are placed by their
+base point. The popup opens again where you last put it. The JIC symbols' tags sit at one
+height above the wire (all the three-pole devices at one, all the one-line symbols at
+another), so the tags of symbols side by side line up; a project started before 0.16 takes
+the new heights with <b>Update blocks from library...</b>. In the Parts tab, Insert asks whether to place
 the part's symbol or its footprint.</p>
 <h3>Making your own</h3>
 <ol>
@@ -238,7 +264,13 @@ Wire numbers) and the pin names.</li>
 block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
 footprint.</p>
 <p>Double-click a placed symbol or footprint to change its tag, description, manufacturer and
-catalog number, or pick one of the library's parts for it. Its <b>Shown on the drawing</b>
+catalog number, or pick one of the library's parts for it. Fuses, circuit breakers,
+disconnects, overloads, motors, the control transformer, the VFD and the power supply also
+have a <b>Rating</b> (30A, 5HP, 500VA...): typed there, it shows <b>in a fuse's box</b> (in
+each of a three-pole fuse block's), and under the other symbols (at one height for every
+one-line symbol and another for every three-pole one, so a row's ratings line up), and on the bill of materials it is added to the description (two fuses without a catalog
+number but with different ratings are different lines). A project started before 0.16 gets the
+Rating with <b>Update blocks from library...</b>. Its <b>Shown on the drawing</b>
 boxes choose which of its attributes (its tag, a terminal's number, an imported block's
 location, rating...) show on this copy; a hidden one keeps its value, and reports still use
 it. <b>Show or hide attributes...</b> (Modify menu; Schematic tab: Symbols, Panel tab:
@@ -287,7 +319,10 @@ manufacturer.</p>
 <b>Block properties...</b> in the Library menu): the details Make block asked for, filled in:
 name, category, description, manufacturer, family, series and, for a symbol, its part in
 cross-references, contact, tag prefix, wire numbers through it and its pin names in order
-(renaming pins; Edit block adds or removes them). Its kind can't change. Renaming it saves it
+(renaming pins; Edit block adds or removes them). Those last are greyed out on a panel
+footprint (Make block makes one when you are on a panel sheet): change its <b>Kind</b> to
+<b>Schematic symbol</b> to give it a tag prefix and the rest (it gets a tag spot above its
+drawing; Edit block... adds its pins); the kind can change either way. Renaming it saves it
 under the new name, removes your file under the old one and points your parts at the new
 name.</li>
 <li><b>Edit block...</b> (a button in the Library popup, its right-click menu, or the Library
@@ -329,6 +364,12 @@ descriptions, manufacturers and catalog numbers stay. Wires stay on the pins (ma
 name) and stretch to where the pins moved; a wire on a pin that is gone stays where it was,
 and the command line says how many. No keeps the old drawing. Other projects keep their own
 copies of the block as they were.</p>
+<p><b>Update blocks from library...</b> (Library menu) does the same for every block in the
+project in the drawing tab that the library has differently: one of yours changed since it
+was placed, or a JIC symbol a newer KanzonasCAD draws differently. It lists them and asks
+first; Yes updates them all in one step (Undo takes it back), each copy keeping its tag,
+attributes and place, its wires on its pins. A project keeps its own copy of every block it
+uses, so it opens the same anywhere: this is how it takes a newer one.</p>
 
 
 <h2>Device tags</h2>
@@ -395,12 +436,31 @@ other way. The wire <b>ends by itself</b> when you click a pin or another wire; 
 anywhere; so does Esc or starting another command (what is drawn is kept). U takes back
 the last click.</p>
 <p><b>Bus</b> (BU; Draw menu and the Schematic tab) draws several wires side by side, three
-phases say. Type how many wires (3 to start) and how far apart (1/2 inch to start; 12mm works
-too), pressing Enter to keep what it offers; then click the path as for a wire. Every click
-turns it 90 degrees, as many times as you need, and all the wires turn together, keeping their
-spacing. The first wire runs where you click, the others to the right of the direction you
-draw (F puts them on the other side). Enter or Esc ends it; each wire of the bus is an ordinary
-wire, connecting wherever its ends land.</p>
+phases say. <b>Start it on a symbol's pin</b> (a disconnect's L1, L2 or L3, a breaker's T1...)
+and it takes that side of the symbol: as many wires as it has pins there, as far apart as they
+are, the first from its first pin and the others from the others, whichever way you head off
+(the first leg leaves the pins square); whichever pin you start on, the next clicks are where
+that pin's wire goes. Click a pin of a symbol with as many pins as far apart (any of a fuse
+block's L1, L2, L3) and the bus lands wire for wire (T1 on L1, T2 on L2...) and is done.
+<b>Start it on a bus's open end</b> (the free ends of wires side by side, as far apart) and it
+carries that bus on: each wire joins its own, keeping its layer. <b>Start it on wires side by
+side</b> (on the middle of one of three phases running across the sheet) and it drops one wire
+off each, the first off the farthest back, each with a dot where it leaves its own; <b>end it
+on them</b> (the last click on one of them, the bus arriving square) and each wire lands on its
+own, the first on the first it meets, crossing the others, and the bus is done: a vertical
+3-phase bus onto horizontal L1, L2, L3. Started anywhere else, it uses the last bus's count and spacing (3 wires,
+1/2 inch to start): type <b>N</b> (or just the number) for how many, then how far apart (1/2
+inch; 12mm works too), or <b>D</b> for the spacing alone. Then click the path as for a wire:
+every click turns it 90 degrees, as many times as you need, and all the wires turn together,
+keeping their spacing. <b>S</b> runs it <b>straight</b> instead: each click goes straight
+across or straight up or down from the last point, with no corner (S again goes back to
+corners; the next bus remembers). The other wires go to the right of the direction you draw (F
+puts them on the other side). <b>L</b> picks each wire's <b>layer</b>, and so its color:
+<b>Brown, orange, yellow (480 V)</b>, <b>Black, red, blue (208/240 V)</b>, <b>All black</b>,
+<b>Wires</b> (the WIRES layer), or a layer for each wire; the layers it needs are added to the
+project (WIRE BROWN, WIRE ORANGE...; black prints black and shows white on the black drawing
+area), and the next bus remembers the choice. Enter or Esc ends it; each wire of the bus is an
+ordinary wire, connecting wherever its ends land, whatever its layer.</p>
 <ul>
 <li><b>Connections</b> are worked out from where wire ends are, never stored: a wire end on a
 pin, on another wire's end, or on the middle of another wire connects there. A wire ending on
@@ -417,10 +477,19 @@ it should jump, on a crossing or anywhere else on it (over a symbol's line, say)
 found by itself). A mark placed by hand lights up as a small circle when the cursor is over
 it; select and Erase it to take it away.</li>
 <li><b>Two wires on one terminal</b> (double landing): start a wire on a pin that already has
-one, or end it there, and the new wire leaves the pin on a short 45-degree lead (1/8 inch on
-paper) and then runs straight beside the first, as drawn by hand. It goes to the side the
-cursor is on; a third wire takes the other side. The lead keeps its angle when the symbol
-moves. Several wires on a pin get no dot: the pin is the connection.</li>
+one, or end it there, and the new wire runs straight onto the pin like the first. Schematic
+settings, <b>A second wire on a pin leaves it on a 45-degree lead</b>, makes it leave the pin on
+a short 45-degree lead (1/8 inch on paper) and then run beside the first, as drawn by hand (to
+the side the cursor is on; a third wire takes the other side; the lead keeps its angle when the
+symbol moves); it is off to start. Several wires on a pin get no dot: the pin is the connection.</li>
+<li><b>Junction dots</b>: a dot goes where <b>three or more wire ends meet</b>, or where a wire
+<b>ends on another wire's middle or bend</b> (a T). A wire carried on from a free end of another
+joins it into one wire, with no dot; carried on from a point that is already a bend, or where
+two wires already meet end to end, it makes three: a dot (on the screen both look like the end
+of one wire). <b>Delete dot</b> (DELDOT, DD; Modify menu, Schematic tab: Edit wires): click a
+dot and it goes from the drawing, the print and the PDF; the wires still join there. Click the
+same spot again (or Undo) to bring it back; keep clicking, Enter ends. It is kept with the
+sheet.</li>
 <li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
 Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
 where needed). Select the wires too and they move with it instead.</li>
@@ -444,8 +513,9 @@ them (trimmed pieces stay wires), and they print and export (DXF) as polylines.<
 <p>The Schematic tab's <b>Edit wires</b> group (also on the Modify menu):</p>
 <ul>
 <li><b>Trim wire</b> (TRIMWIRE, AETRIM, TW), as AutoCAD Electrical's: click a piece of wire
-and it goes, up to the nearest wire or pin on either side (to the wire's end when there is
-none): no cutting edges to pick, and only wires are trimmed, even where a symbol's line is
+and it goes, up to the nearest wire, pin or bend on either side (to the wire's end when there
+is none): on a wire that turns a corner, only the straight run you clicked goes, up to the
+corner. No cutting edges to pick, and only wires are trimmed, even where a symbol's line is
 nearer. Keep clicking; U takes back the last one, Enter ends.</li>
 <li><b>Delete wire</b> (DELWIRE, DW): with objects selected, only the wires among them go
 (window-select a whole area and the symbols stay); with nothing selected, click wires one by
@@ -640,7 +710,10 @@ last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point)
 <b>Nearest</b> (NEA: the closest point on any object). And three that follow what the cursor
 has hovered over, as AutoCAD's tracking (a small green cross marks what was picked up):
 <b>Extension</b> (EXT: hover over a line's end, then move along the line past it: a dotted line
-follows it out), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the
+follows it out; and, as AutoCAD's object snap tracking, hover over a wire's end, a pin or an
+intersection and the points straight across and straight up or down from it snap, first where
+that line meets the one you are drawing: draw a wire across, hover over another wire's end
+above, and the wire stops exactly under it), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the
 last point: the new line runs parallel to it) and <b>Apparent intersection</b> (APP: hover
 over two lines, then near where they would meet if they were longer).</li>
 <li><b>Blocks snap too</b>: the ends, middles, centers and quadrants of a placed symbol's or
@@ -739,6 +812,12 @@ duct or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right<
 them up with, or press Enter to line them up with the selection's own outer edge (or its
 middle). Each moves only straight across (Left, Center, Right) or straight up and down (Top,
 Middle, Bottom), by its outline; one Undo puts them back.</li>
+<li><b>Distribute objects</b> (DISTRIBUTE, DIST; Modify menu, Panel tab) spreads three or more
+selected objects out evenly: <b>Horizontally</b> or <b>Vertically</b> (H, V). The two
+outermost stay where they are and the others move straight across (or straight up and down)
+so the gaps between them are equal. With Snap on, each move is rounded to the snap spacing, so
+symbols' pins stay on the grid and wires still meet them (the gaps can then differ by up to
+one snap step); wires on a moved symbol's pins follow. One Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
 one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
 slots. They always go straight across or straight up and down (a snap off that line only sets
@@ -753,14 +832,24 @@ in one step, each keeping its own length.</li>
 <li><b>Footprint label</b> (Modify menu, the Panel tab's Footprints group, or a right-click
 with footprints selected): the selected footprints show, written across them, their
 <b>Show tag</b> (M1, CR3), <b>Show part number</b> (its catalog number; the block's own when
-the copy has none), <b>Show description</b> or <b>Show block name</b>, or <b>No label</b>
-(as they start). Select one or many, pick one: one step, Undo takes it back. Each footprint
+the copy has none), <b>Show description</b> or <b>Show block name</b>, or <b>No label</b>. A
+footprint you place shows its tag to start (one with no tag, its part number or block name):
+Project properties, Panel, <b>New footprints show</b> picks another. Select one or many, pick one: one step, Undo takes it back. Each footprint
 keeps its own choice, so some can show part numbers and others tags. The label is centered on
 the part (or at its block's label spot, set in Edit block), turned up the page or reading from
 the right as the part is turned, and paper-sized like the tags (Project properties: tag
 height). An empty tag or description shows "?". It prints and goes into PDF and DXF exports.
 Changing the tag, part number or description (double-click the footprint) changes the
 label.</li>
+<li><b>Which device a footprint is</b>: placing a footprint (Insert footprint, or a part's
+footprint) asks which schematic device it is, as a contact asks which coil: <b>Enter</b> takes
+the one offered (the next device with no footprint yet, in page order; one with the
+footprint's catalog number first), a typed tag takes that device, <b>L</b> lists them, <b>N</b>
+leaves it a footprint of its own. It then carries the device's tag (and its manufacturer,
+catalog number and description where it has none), shows it, and follows it: renumber the
+schematic and the panel's labels change with it. On the bill of materials the device and its
+footprint are one part. Typing another tag on a footprint (double-click it) makes it that
+device's footprint, or, if no device has that tag, a footprint of its own showing it.</li>
 <li><b>Footprints snap onto DIN rail.</b> While you place a footprint (Insert), move it,
 copy it or drag it, once its <b>DIN rail point</b> (the middle of its rail clip) comes over a
 rail it locks onto the rail's centerline and slides along the rail with the mouse, whatever
@@ -982,6 +1071,65 @@ cut), it offers to recover them the next time it starts.</li>
 black on white (layer colors are for the screen).</li>
 </ul>
 
+<h2>Printing</h2>
+<p><b>Print...</b> (File menu, Ctrl+P, the Output tab, or right-click in the Sheets panel)
+opens the Print window. The <b>preview</b> on its right shows the page as it will print (the
+dashed line is the edge the printer can print to), and is drawn again as you change anything;
+<b>&lt;</b> and <b>&gt;</b> go through the pages. <b>Full preview...</b> shows them all
+bigger.</p>
+<ul>
+<li><b>Printer</b>: the printers your computer has, and <b>PDF file</b> (it asks for the
+file's name when you click Print). <b>Paper</b> lists the sizes the printer takes, starting
+with its own; <b>Copies</b> how many of each.</li>
+<li><b>Orientation</b>: <b>Automatic</b> (to start) turns each sheet a quarter turn when that
+prints it bigger (an ANSI B sheet on letter paper prints sideways, its title block at the top
+right, as a printer's Landscape does); <b>Portrait</b> and <b>Landscape</b> set the page's way
+and never turn the drawing.</li>
+<li><b>What to print</b>: <b>Whole sheet</b> (to start: the border, title block and drawing);
+<b>Extents</b>, everything drawn, cross-references and wire numbers too, without the empty
+paper around it; <b>Display</b>, what the drawing window shows now; <b>Window</b>, two corners
+you pick: choosing it hides the Print window, you pick the corners on the drawing (snaps
+work; Esc goes back without one), and the Print window comes back. <b>Pick window &lt;</b>
+picks again. Display and Window print the sheet shown.</li>
+<li><b>Sheets</b>: <b>This sheet</b> (the one shown), <b>All sheets</b>, or <b>These
+sheets</b>, ticked in the list (<b>Tick all</b>, <b>Tick none</b>). With several sheets
+selected in the Sheets panel (Ctrl+click, Shift+click), the window starts with those ticked.
+They print in the project's order, one sheet a page; the Print button says how many.</li>
+<li><b>Fit to paper</b> (to start): what is printed as big as the paper holds. A panel sheet
+prints at its scale, shrunk to the paper. Lines stay as thin on paper whatever the
+shrinking.</li>
+<li><b>Actual size</b>: as on the sheet's own paper (a 1:4 panel sheet at 1:4), centered on
+the page; past the printer's paper is cut off at the page's edges (its middle shows).</li>
+<li><b>Black on white</b> (to start), as Export to PDF; untick it to print the layers'
+colors.</li>
+</ul>
+<p>When a scaled sheet's drawing doesn't fit on it (the status bar's <b>doesn't fit</b>),
+printing the whole sheet asks first, as Export to PDF does. {{Print date}} in the title block
+is when you printed.</p>
+
+<h2>Windows and two screens</h2>
+<p>Any sheet can have a window of its own, to put on another screen: the schematic on one
+screen and the panel layout on the other, say.</p>
+<ul>
+<li><b>Open this sheet in a new window</b> (Window menu, Ctrl+Shift+N, the View tab's
+<b>New window</b>): a new window on the same project, showing the sheet you are on (right-click
+a sheet in the Sheets panel and <b>Open in a new window</b> for another one). With two screens
+it opens filling the other one; drag it wherever you like.</li>
+<li>Both windows work on <b>the same project</b>: what you draw in one is in the other at once,
+<b>Undo</b> and <b>Redo</b> in either take back or redo the last change made in any of them,
+and <b>Save</b> saves the project once for both. Each window has its own ribbon, command line,
+Sheets panel and selection, and shows the sheet you pick in it.</li>
+<li><b>Move this project to a new window</b> (Window menu, the View tab's <b>Move to
+window</b>) moves the tab to a window of its own. Dragging a project tab away from the tabs and
+letting go does the same, where you let go; let go over another KanzonasCAD window to move the
+tab into it.</li>
+<li><b>Close this window</b> (Window menu) closes that window; closing a window, or a tab, only
+asks to save a project when no other window shows it. Closing the first window (the one
+KanzonasCAD started with) closes the others too.</li>
+<li>Settings (Black drawing area, the object snaps, Drafting settings) apply in every
+window.</li>
+</ul>
+
 <h2>Project templates</h2>
 <p>A <b>template</b> is an ordinary project that new projects start from: everything in it
 comes along, so set it up once. Its settings (Project properties), layers and their colors
@@ -1026,12 +1174,14 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>F10</td><td>Polar tracking on/off</td></tr>
 <tr><td>Ctrl+9</td><td>Command line on/off</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
-<tr><td>Enter / Space</td><td>Finish a step; repeat the last command</td></tr>
-<tr><td>Esc</td><td>Cancel the command; clear the selection</td></tr>
+<tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same symbol)</td></tr>
+<tr><td>Esc</td><td>Cancel the command; clear the selection (anywhere in the window)</td></tr>
 <tr><td>Delete</td><td>Erase the selection</td></tr>
 <tr><td>Ctrl+arrows / Ctrl+Shift+arrows</td><td>Move the selection one snap step / a tenth of one</td></tr>
 <tr><td>Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S</td><td>New / Open / Save / Save as</td></tr>
 <tr><td>Ctrl+W / Ctrl+Q</td><td>Close project / Exit</td></tr>
+<tr><td>Ctrl+P</td><td>Print...</td></tr>
+<tr><td>Ctrl+Shift+N</td><td>Open this sheet in a new window</td></tr>
 <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>
 <tr><td>Ctrl+X / Ctrl+C / Ctrl+V / Ctrl+A</td><td>Cut / Copy / Paste / Select all</td></tr>
 <tr><td>Ctrl+Shift+E / Ctrl+0 / Ctrl+= / Ctrl+-</td><td>Zoom extents / sheet / in / out</td></tr>

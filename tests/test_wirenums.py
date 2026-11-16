@@ -1,6 +1,6 @@
 import unittest
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, by_base_point
 
 from kanzonascad import commands as C
 from kanzonascad import model as M
@@ -59,6 +59,7 @@ class WireNumberTest(unittest.TestCase):
     def test_a_symbol_splits_a_wire_into_two_numbers(self):
         self.wire((1, 8), (9, 8))
         self.v.run(C.InsertCmd, self.coil, {})
+        by_base_point(self.v)
         type_in(self.v, "5,8")
         self.assertEqual((self.num_at(2, 8), self.num_at(8, 8)), ("6001", "6002"))
         # deleted numbers come back: remove the right half, draw again
@@ -86,6 +87,7 @@ class WireNumberTest(unittest.TestCase):
 
     def test_distribution_block_branches(self):
         self.v.run(C.InsertCmd, self.db, {})
+        by_base_point(self.v)
         type_in(self.v, "5,6")
         self.wire((1, 6), (4.75, 6))                     # in
         for y in (6.375, 6.125, 5.875):                  # three of the four outs
@@ -98,10 +100,12 @@ class WireNumberTest(unittest.TestCase):
 
     def test_off_sheet_connectors_carry_the_number(self):
         self.v.run(C.InsertCmd, self.link, {})
+        by_base_point(self.v)
         type_in(self.v, "8,5", "")                       # Enter: name A
         self.wire((1, 5), (8, 5))
         self.v.show_sheet(self.s7.id)
         self.v.run(C.InsertCmd, self.link, {})
+        by_base_point(self.v)
         type_in(self.v, "1,7", "")                       # Enter: A, waiting for its other end
         self.wire((1, 7), (6, 7))
         self.wire((1, 3), (6, 3))

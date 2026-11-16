@@ -6,6 +6,69 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.16
+
+**New**
+- Print (File > Print..., Ctrl+P): print this sheet, all sheets, or the ones you tick, on any
+  printer or into a PDF file. Select several sheets in the Sheets panel with Ctrl+click or
+  Shift+click and Print starts with those. Print the whole sheet, its extents (everything
+  drawn), what the window shows, or a window you pick on the drawing; fit to paper or actual
+  size; automatic, portrait or landscape. A preview beside the settings shows each page as it
+  will print, and changes as you change them.
+- Inserting a symbol holds it by its first pin (L1, 1, A1...): click the pin or wire it joins
+  and it lands there. A 3-pole fuse clicked on a disconnect's T1 now joins all three poles.
+  Type B while placing it to hold it by another pin, or by its middle as before.
+- The tags of the built-in symbols line up: every three-pole device's tag sits at the same
+  height, and every one-line symbol's at another, so a disconnect, fuses and contactor in a
+  row have their tags in a row. Library > Update blocks from library... gives a drawing you
+  already have the new heights (it asks first; Undo takes it back).
+- Ratings: fuses, breakers, disconnects, overloads, motors, the transformer, the VFD and the
+  power supply have a Rating (30A, 5HP...): double-click the symbol to type it; it shows under
+  the symbol and goes on the bill of materials.
+- Bus: start it on a symbol's pin (a disconnect's L1, L2 or L3) and it takes that symbol's
+  poles and spacing by itself, each wire from its own pin; it no longer asks how many and how
+  far apart first. S runs it straight instead of turning; L puts its wires on layers: brown,
+  orange, yellow (480 V), black, red, blue, all black, or one by one.
+- Distribute objects (Modify menu, Panel tab): spread three or more selected objects out
+  evenly, horizontally or vertically.
+- Copy (with Move, Rotate, Mirror and Erase) is on the Schematic and Panel tabs.
+- A second wire on a pin runs straight onto it: the little 45-degree bend is gone (Schematic
+  settings can turn it back on).
+- Trim wire on a wire with a bend trims only up to the bend, not the whole wire.
+- Lining up with another wire's end: with Extension on, hover over the end, then draw; the
+  point straight across or up and down from it snaps, with a dotted line.
+- After placing a symbol, Enter places the same symbol again.
+- Bus: start it on the open ends of a bus to carry it on (each wire joins its own); end it
+  on three phase wires running across (or start it on them) and each wire lands on (or leaves
+  from) its own phase: a vertical 3-phase drop onto horizontal L1, L2, L3. Clicking any pin of
+  the next symbol lands the bus wire for wire.
+- Wire gauge and color: Layers has AWG and Wire color columns; wires on such a layer show
+  "10 AWG BRN" under their wire number.
+- Fuse ratings show inside the fuse's box (on each pole of a 3-pole fuse block).
+- Footprints are labeled as you place them: placing one asks which schematic device it is
+  (Enter takes the next one without a footprint), and it shows that device's tag, which
+  follows the schematic when it is renumbered. New footprints show their tag to start.
+- Delete dot (Modify menu, Schematic tab): click a junction dot to remove it (the wires still
+  connect); click again to bring it back. Why a dot sometimes appears when a wire is added at
+  the end of another: that point was already a bend, or two wires met there, so three wires
+  now meet (the manual explains it under Wires).
+- Sheets in their own windows: Window > Open this sheet in a new window (Ctrl+Shift+N) opens
+  the sheet you are on in a window you can put on another screen (it fills your second screen
+  if you have one). Both windows work on the same project: one Undo, one Save. You can also
+  drag a project tab out of the tabs to give it its own window.
+
+**Fixed**
+- The layer box: picking a layer for selected objects moved them but the box went back to
+  the current layer, as if nothing happened; it now shows their layer. And wires drawn with
+  a wire layer current (WIRE BROWN, or one with a gauge) go on it instead of always WIRES.
+- Esc deselects (or cancels the command) wherever the keyboard is: after clicking a ribbon
+  button, in the layer box or the Sheets list. Ribbon buttons no longer take the keyboard from
+  the drawing.
+- Block properties: a block made as a panel footprint (Make block makes one on a panel sheet)
+  had its tag prefix, part in cross-references and the rest greyed out, with no way to change
+  it. Its Kind can now be changed to schematic symbol (and back), and the window says why
+  those rows are greyed.
+
 ## 0.15.14
 
 **Fixed**
