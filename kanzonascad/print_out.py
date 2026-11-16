@@ -50,6 +50,7 @@ def drawn_box(project, sheet):
     if project is not None:
         boxes += [t.bbox() for t in xrefs.texts(project, sheet)]
         boxes += [t.bbox() for t in wirenums.labels(project, sheet)]
+        boxes += [t.bbox() for t in wirenums.gauge_labels(project, sheet)]
     boxes = [b for b in boxes if b is not None]
     if not boxes:
         return None

@@ -38,6 +38,13 @@ build fails without them.
 - Lining up with another wire's end: with Extension on, hover over the end, then draw; the
   point straight across or up and down from it snaps, with a dotted line.
 - After placing a symbol, Enter places the same symbol again.
+- Bus: start it on the open ends of a bus to carry it on (each wire joins its own); end it
+  on three phase wires running across (or start it on them) and each wire lands on (or leaves
+  from) its own phase: a vertical 3-phase drop onto horizontal L1, L2, L3. Clicking any pin of
+  the next symbol lands the bus wire for wire.
+- Wire gauge and color: Layers has AWG and Wire color columns; wires on such a layer show
+  "10 AWG BRN" under their wire number.
+- Fuse ratings show inside the fuse's box (on each pole of a 3-pole fuse block).
 - Delete dot (Modify menu, Schematic tab): click a junction dot to remove it (the wires still
   connect); click again to bring it back. Why a dot sometimes appears when a wire is added at
   the end of another: that point was already a bend, or two wires met there, so three wires

@@ -13,6 +13,7 @@ import unittest
 from tests.util import APP, window, type_in
 
 from kanzonascad import bom
+from kanzonascad import wires
 from kanzonascad import commands as C
 from kanzonascad import model as M
 from kanzonascad import symbols_jic as J
@@ -55,7 +56,7 @@ class Base(unittest.TestCase):
 
 class RatingTest(Base):
     def test_shown_under_the_symbol_once_typed(self):
-        e = self.insert("Fuses 3-pole", (3.0, 6.0))
+        e = self.insert("Circuit breaker 3-pole", (3.0, 6.0))
         texts = [t.text for t in e.world_entities() if isinstance(t, M.Text)]
         self.assertNotIn("30A", texts)
         with self.p.edit("rating") as ed:
@@ -67,7 +68,7 @@ class RatingTest(Base):
         self.assertLess(got[0].bbox()[3], body_bottom)          # (under its poles)
 
     def test_ratings_line_up_and_the_symbols_have_one(self):
-        rated = ["Fuse", "Circuit breaker 1-pole", "Disconnect 1-pole", "Overload heater"]
+        rated = ["Circuit breaker 1-pole", "Disconnect 1-pole", "Overload heater"]
         for n in rated + ["Fuses 3-pole", "Circuit breaker 3-pole", "Disconnect 3-pole",
                           "Overload heaters 3-pole", "Motor 3-phase", "Motor",
                           "Control transformer", "Variable frequency drive",
@@ -77,6 +78,22 @@ class RatingTest(Base):
         ys = {[a for a in self.lib.get("symbol", n).attr_texts if a["attr"] == "RATING"][0][
             "pos"][1] for n in rated}
         self.assertEqual(ys, {J.RATING_Y})
+
+    def test_a_fuses_rating_is_in_its_box(self):
+        # (the owner: "all schematic fuses to display fuse rating on the fuse itself")
+        for name, poles in (("Fuse", 1), ("Fuses 3-pole", 3)):
+            e = self.insert(name, (3.0, 6.0))
+            with self.p.edit("rating") as ed:
+                ed.change(self.s, e.copy(attrs=dict(e.attrs, RATING="30A")))
+            e = self.s.entities[e.id]
+            got = [t for t in e.world_entities() if isinstance(t, M.Text) and t.text == "30A"]
+            self.assertEqual(len(got), poles, name)
+            boxes = [q.bbox() for q in e.world_entities() if isinstance(q, M.Polyline)
+                     and q.closed]
+            for t in got:
+                tb = t.bbox()
+                self.assertTrue(any(b[0] <= tb[0] and b[1] <= tb[1] and tb[2] <= b[2] and
+                                    tb[3] <= b[3] for b in boxes), (name, tb))
 
     def test_the_bill_of_materials_tells_ratings_apart(self):
         for at, r in (((2.0, 2.0), "30A"), ((4.0, 2.0), "30A"), ((6.0, 2.0), "10A")):
@@ -180,6 +197,58 @@ class BusTest(Base):
         finally:
             QDialog.exec = saved
         self.assertEqual(got["l"], ["WIRE BLACK"] * 3)
+
+
+class BusMoreTest(Base):
+    """"I need to be able to extend a bus of wires" and "add a vertical 3ph wire bus to
+    horizontal 3 ph wires" (the owner, 0.16)."""
+
+    def phases(self, x0, x1, layers=("WIRE BROWN", "WIRE ORANGE", "WIRE YELLOW")):
+        with self.p.edit("phases") as ed:
+            return [ed.add(self.s, M.Wire([(x0, y), (x1, y)], layer=lay)).id
+                    for y, lay in zip((6.0, 5.5, 5.0), layers)]
+
+    def test_extend_a_bus_from_its_ends(self):
+        ids = self.phases(1.0, 4.0)
+        self.bus("4,5.5", "9,5.5")                      # (its middle end, then in line)
+        got = sorted((w.points, w.layer) for w in self.s.wires())
+        self.assertEqual(got, [([(1.0, 5.0), (9.0, 5.0)], "WIRE YELLOW"),
+                               ([(1.0, 5.5), (9.0, 5.5)], "WIRE ORANGE"),
+                               ([(1.0, 6.0), (9.0, 6.0)], "WIRE BROWN")])
+        self.assertEqual(wires.junctions(self.s), [])
+        self.assertTrue(set(ids) & {w.id for w in self.s.wires()})   # (carried on, joined)
+
+    def test_a_vertical_bus_onto_horizontal_phases(self):
+        self.phases(1.0, 12.0)
+        ws = self.bus("6,9", "6,5.5")
+        ends = sorted(tuple(w.points[-1]) for w in ws)
+        self.assertEqual(ends, [(5.0, 5.0), (5.5, 5.5), (6.0, 6.0)])   # (each on its own)
+        self.assertEqual(wires.junctions(self.s), [(5.0, 5.0), (5.5, 5.5), (6.0, 6.0)])
+        self.assertIsNone(self.v.cmd)                   # (done by itself)
+
+    def test_a_vertical_bus_off_horizontal_phases(self):
+        self.phases(1.0, 12.0)
+        ws = self.bus("8,5.5", "8,2")
+        starts = sorted(tuple(w.points[0]) for w in ws)
+        self.assertEqual(len(starts), 3)
+        self.assertEqual(sorted(q[1] for q in starts), [5.0, 5.5, 6.0])  # (one off each)
+        self.assertEqual(len(wires.junctions(self.s)), 3)
+        self.assertTrue(all(w.points[-1][1] == 2.0 for w in ws))
+
+    def test_onto_a_symbols_pins_wire_for_wire(self):
+        ds = self.insert("Disconnect 3-pole", (3.0, 6.0))
+        fu = self.insert("Fuses 3-pole", (6.0, 6.0))
+        d, f = dict(ds.pin_points()), dict(fu.pin_points())
+        for clicked in ("L1", "L2", "L3"):
+            before = set(self.s.entities)
+            ws = self.bus("%r,%r" % d["T2"], "%r,%r" % f[clicked])
+            self.assertEqual(self.ends(ws), {(d["T%d" % i], f["L%d" % i]) for i in (1, 2, 3)},
+                             clicked)
+            self.assertIsNone(self.v.cmd)
+            with self.p.edit("undo it") as ed:
+                for i in list(self.s.entities):
+                    if i not in before:
+                        ed.remove(self.s, i)
 
 
 class DistributeTest(Base):

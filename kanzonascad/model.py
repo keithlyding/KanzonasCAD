@@ -58,6 +58,7 @@ DEFAULT_SETTINGS = {
                                 # the right ("right") or along the bottom ("bottom") that the
                                 # zone grid stops at
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
+    "wire_gauge_shown": True,   # a wire layer's gauge and color beside its wires
     "wire_lead": False,         # a second wire on a pin leaves it on a 45-degree lead (the
                                 # owner, 0.16: "a little bend... That needs to go away": off)
     "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)
@@ -1864,20 +1865,36 @@ def _mirror_fix(src, mapped, ins):
 # Layers, sheets, project
 # ============================================================================================
 class Layer:
-    def __init__(self, name, color=ADAPTIVE, visible=True, locked=False):
+    def __init__(self, name, color=ADAPTIVE, visible=True, locked=False, awg="",
+                 wire_color=""):
         self.name = name
         self.color = color
         self.visible = bool(visible)
         self.locked = bool(locked)
+        # a wire layer's wire: its gauge (14, 2/0...) and insulation color (BLK, BRN...),
+        # shown beside its wires (the owner, 0.16: "set the awg and color of wire layers")
+        self.awg = str(awg or "").strip()
+        self.wire_color = str(wire_color or "").strip()
+
+    def wire_label(self):
+        """What its wires show: "14 AWG BLK", "14 AWG", "BLK", or ""."""
+        parts = (["%s AWG" % self.awg] if self.awg else []) + \
+            ([self.wire_color] if self.wire_color else [])
+        return " ".join(parts)
 
     def to_dict(self):
-        return {"name": self.name, "color": self.color, "visible": self.visible,
-                "locked": self.locked}
+        d = {"name": self.name, "color": self.color, "visible": self.visible,
+             "locked": self.locked}
+        if self.awg:
+            d["awg"] = self.awg
+        if self.wire_color:
+            d["wire_color"] = self.wire_color
+        return d
 
     @classmethod
     def from_dict(cls, d):
         return cls(d["name"], d.get("color", ADAPTIVE), d.get("visible", True),
-                   d.get("locked", False))
+                   d.get("locked", False), d.get("awg", ""), d.get("wire_color", ""))
 
 
 def row_letters(n, start=0):

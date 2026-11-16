@@ -331,10 +331,12 @@ class SheetRenderer:
         from . import xrefs, wirenums
         shown = tuple(tuple(t) for t in xrefs.shown(self.project, self.sheet))
         nums = tuple((t.text, t.pos, t.angle, t.height)
-                     for t in wirenums.labels(self.project, self.sheet))
+                     for t in wirenums.labels(self.project, self.sheet) +
+                     wirenums.gauge_labels(self.project, self.sheet))
         if self._xrefs is None or self._xrefs[0] != (shown, nums):
             items = [text_item(M.Text((x, y), t, h, 0.0, "center")) for x, y, t, h in shown]
             items += [text_item(t) for t in wirenums.labels(self.project, self.sheet)]
+            items += [text_item(t) for t in wirenums.gauge_labels(self.project, self.sheet)]
             self._xrefs = ((shown, nums), items)
         draw_texts(painter, self._xrefs[1], self.pal.color(self.project, M.Text(
             (0, 0), "", 0.1, layer="SYMBOLS")), outlines)

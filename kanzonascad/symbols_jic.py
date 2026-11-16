@@ -28,6 +28,16 @@ def _rating(x=0.0, y=RATING_Y):
     return [{"attr": "RATING", "pos": (x, y), "height": 0.08}]
 
 
+FUSE_TEXT = 0.07    # a rating in a fuse's box (1/8" tall): centered, its baseline this low
+FUSE_BASE = -0.035
+
+
+def _in_fuse(poles=(0.0,)):
+    """The rating in each fuse's box (a three-pole fuse block: in all three)."""
+    return [{"attr": "RATING", "pos": (0.0, y + FUSE_BASE), "height": FUSE_TEXT}
+            for y in poles]
+
+
 def _leads(gap, out):
     """Wire leads from each pin in to +-gap."""
     out.append(Line((-PIN, 0), (-gap, 0)))
@@ -196,11 +206,12 @@ def builtin_symbols():
                                      Circle((0.0, 0.2), 0.05)], False,
            "Float (level) switch, normally open")
     # ---- protection ---------------------------------------------------------------------
+    # (a box: its rating shows in it, the owner, 0.16: "all schematic fuses to display fuse
+    # rating on the fuse itself"; the line through the box would strike it out)
     o = [Line((-PIN, 0), (-0.125, 0)), Line((0.125, 0), (PIN, 0)),
-         Polyline([(-0.125, -0.0625), (0.125, -0.0625), (0.125, 0.0625), (-0.125, 0.0625)], True),
-         Line((-0.125, 0), (0.125, 0))]
+         Polyline([(-0.125, -0.0625), (0.125, -0.0625), (0.125, 0.0625), (-0.125, 0.0625)], True)]
     S.append(_sym("Fuse", "JIC/Protection", o, "device", "", "FU", tag=TAG,
-                  description="Fuse", attr_texts=_rating()))
+                  description="Fuse", attr_texts=_in_fuse()))
     o = []
     _pb_terminals(o)
     o.append(Arc((0, -0.05), 0.16, 30, 150))
@@ -267,7 +278,7 @@ def builtin_symbols():
 
     def fu_pole():
         return [Line((-PIN, 0), (-0.125, 0)), Line((0.125, 0), (PIN, 0)),
-                _box(-0.125, -0.0625, 0.125, 0.0625), Line((-0.125, 0), (0.125, 0))]
+                _box(-0.125, -0.0625, 0.125, 0.0625)]
 
     def heater_pole():
         k = 0.0625
@@ -282,7 +293,7 @@ def builtin_symbols():
                   description="Disconnect switch, three poles", attr_texts=_rating(y=RATING3_Y)))
     S.append(_sym("Fuses 3-pole", "JIC/Power", _three(fu_pole), "device", "", "FU",
                   _three_pins(), tag=(0.0, TAG3_Y), description="Fuses, three poles",
-                  attr_texts=_rating(y=RATING3_Y)))
+                  attr_texts=_in_fuse(POLES)))
     S.append(_sym("Contactor power contacts 3-pole", "JIC/Motor control",
                   _three(lambda: _contact(False)) + _link(0.0, 0.4, -0.4), "child", "NO", "M",
                   _three_pins(), tag=(0.0, TAG3_Y),

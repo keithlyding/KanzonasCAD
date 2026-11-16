@@ -348,6 +348,11 @@ def project_properties(parent, project, tab=0):
                       "the wires they leave meeting end to end.")
     wclean.setChecked(bool(st.get("wire_cleanup", True)))
     form.addRow("", wclean)
+    wgauge = QCheckBox("Show a wire layer's gauge and color beside its wires")
+    wgauge.setToolTip("Layers: AWG and Wire color. Each run of wire on such a layer shows "
+                      "them (10 AWG BRN), under its wire number.")
+    wgauge.setChecked(bool(st.get("wire_gauge_shown", True)))
+    form.addRow("", wgauge)
     wlead = QCheckBox("A second wire on a pin leaves it on a 45-degree lead")
     wlead.setToolTip("Double landing as drawn by hand: a wire started or ended on a pin that "
                      "already has one bends off it beside the first. Off: it runs straight "
@@ -426,6 +431,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
     settings["wire_lead"] = wlead.isChecked()
+    settings["wire_gauge_shown"] = wgauge.isChecked()
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():
@@ -471,14 +477,18 @@ def _swatch(color):
 
 class LayersDialog(QDialog):
     """Add, rename, recolor, hide and lock layers (each change is one undoable step)."""
-    COLS = ["Name", "Color", "On", "Locked"]
+    COLS = ["Name", "Color", "On", "Locked", "AWG", "Wire color"]
+    GAUGES = ["22", "20", "18", "16", "14", "12", "10", "8", "6", "4", "3", "2", "1", "1/0",
+              "2/0", "3/0", "4/0", "250 kcmil", "350 kcmil", "500 kcmil"]
+    WIRE_COLORS = ["BLK", "WHT", "RED", "BLU", "GRN", "GRN/YEL", "BRN", "ORG", "YEL", "GRY",
+                   "VIO", "PNK", "WHT/BLU", "BLU/WHT"]
 
     def __init__(self, parent, project, current):
         super().__init__(parent)
         self.project = project
         self.current = current
         self.setWindowTitle("Layers")
-        self.resize(460, 380)
+        self.resize(600, 380)
         v = QVBoxLayout(self)
         self.table = QTableWidget(0, len(self.COLS))
         self.table.setHorizontalHeaderLabels(self.COLS)
@@ -502,8 +512,10 @@ class LayersDialog(QDialog):
             row.addWidget(b)
         v.addLayout(row)
         note = QLabel("Click On or Locked to switch it. Double-click a name to make it the "
-                      "current layer (new objects go on it). Select several (Ctrl or Shift) "
-                      "to delete them together; Select unused picks the empty ones.")
+                      "current layer (new objects go on it). Double-click AWG or Wire color to "
+                      "give a wire layer its wire's gauge and color: its wires show them. "
+                      "Select several (Ctrl or Shift) to delete them together; Select unused "
+                      "picks the empty ones.")
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
         v.addWidget(note)
@@ -526,6 +538,8 @@ class LayersDialog(QDialog):
             t.setItem(r, 1, c)
             t.setItem(r, 2, QTableWidgetItem("Yes" if lay.visible else "No"))
             t.setItem(r, 3, QTableWidgetItem("Yes" if lay.locked else "No"))
+            t.setItem(r, 4, QTableWidgetItem(lay.awg))
+            t.setItem(r, 5, QTableWidgetItem(lay.wire_color))
 
     def _name(self):
         r = self.table.currentRow()
@@ -558,6 +572,26 @@ class LayersDialog(QDialog):
             self._fill()
         elif c == 1:
             self._color()
+        elif c in (4, 5):
+            self._wire(self.table.item(r, 0).data(Qt.UserRole), c == 4)
+
+    def _wire(self, name, gauge):
+        """A wire layer's gauge (AWG) or insulation color: picked from the usual ones or
+        typed; empty for none."""
+        lay = self.project.layers[name]
+        items = [""] + (self.GAUGES if gauge else self.WIRE_COLORS)
+        cur = lay.awg if gauge else lay.wire_color
+        if cur and cur not in items:
+            items.insert(1, cur)
+        got, ok = QInputDialog.getItem(
+            self, "Layers", "%s for the wires on %s:" % ("Gauge (AWG)" if gauge else
+                                                      "Wire color", name),
+            items, items.index(cur) if cur in items else 0, True)
+        if ok:
+            got = got.strip()
+            if gauge and got.upper().endswith("AWG"):
+                got = got[:-3].strip()
+            self._change(name, **({"awg": got} if gauge else {"wire_color": got.upper()}))
 
     def _set_current(self):
         n = self._name()

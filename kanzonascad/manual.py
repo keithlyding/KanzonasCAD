@@ -88,6 +88,14 @@ Project properties set those colors, which recolors everything on them. On the b
 black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
 black, so nothing disappears (as AutoCAD's color 7); their color stays as you set it, and they
 print in it.</p>
+<p><b>Wire gauge and color</b>: in <b>Layers...</b>, double-click a wire layer's <b>AWG</b> or
+<b>Wire color</b> to give its wires a gauge (14, 10, 2/0...) and insulation color (BLK, BRN,
+GRN/YEL...), picked from the usual ones or typed. Each run of joined wires on that layer then
+shows them, <b>10 AWG BRN</b>, on the other side of the wire from its number (under it, or right
+of it on an upright wire), a little smaller; Project properties, Schematic, <b>Show a wire
+layer's gauge and color beside its wires</b> turns that off. The layers a bus adds (WIRE BROWN,
+WIRE ORANGE...) come with their color's name; give them a gauge once and every wire on them
+shows it.</p>
 <p><b>Layers</b>, as in AutoCAD: a hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
 Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the layer box, the layer list,
@@ -254,9 +262,9 @@ footprint.</p>
 <p>Double-click a placed symbol or footprint to change its tag, description, manufacturer and
 catalog number, or pick one of the library's parts for it. Fuses, circuit breakers,
 disconnects, overloads, motors, the control transformer, the VFD and the power supply also
-have a <b>Rating</b> (30A, 5HP, 500VA...): typed there, it shows under the symbol (at one
-height for every one-line symbol and another for every three-pole one, so a row's ratings line
-up), and on the bill of materials it is added to the description (two fuses without a catalog
+have a <b>Rating</b> (30A, 5HP, 500VA...): typed there, it shows <b>in a fuse's box</b> (in
+each of a three-pole fuse block's), and under the other symbols (at one height for every
+one-line symbol and another for every three-pole one, so a row's ratings line up), and on the bill of materials it is added to the description (two fuses without a catalog
 number but with different ratings are different lines). A project started before 0.16 gets the
 Rating with <b>Update blocks from library...</b>. Its <b>Shown on the drawing</b>
 boxes choose which of its attributes (its tag, a terminal's number, an imported block's
@@ -424,8 +432,16 @@ the last click.</p>
 phases say. <b>Start it on a symbol's pin</b> (a disconnect's L1, L2 or L3, a breaker's T1...)
 and it takes that side of the symbol: as many wires as it has pins there, as far apart as they
 are, the first from its first pin and the others from the others, whichever way you head off
-(the first leg leaves the pins square). Click the next symbol's pin (its L1) and every wire
-lands on its own pin. Started anywhere else, it uses the last bus's count and spacing (3 wires,
+(the first leg leaves the pins square); whichever pin you start on, the next clicks are where
+that pin's wire goes. Click a pin of a symbol with as many pins as far apart (any of a fuse
+block's L1, L2, L3) and the bus lands wire for wire (T1 on L1, T2 on L2...) and is done.
+<b>Start it on a bus's open end</b> (the free ends of wires side by side, as far apart) and it
+carries that bus on: each wire joins its own, keeping its layer. <b>Start it on wires side by
+side</b> (on the middle of one of three phases running across the sheet) and it drops one wire
+off each, the first off the farthest back, each with a dot where it leaves its own; <b>end it
+on them</b> (the last click on one of them, the bus arriving square) and each wire lands on its
+own, the first on the first it meets, crossing the others, and the bus is done: a vertical
+3-phase bus onto horizontal L1, L2, L3. Started anywhere else, it uses the last bus's count and spacing (3 wires,
 1/2 inch to start): type <b>N</b> (or just the number) for how many, then how far apart (1/2
 inch; 12mm works too), or <b>D</b> for the spacing alone. Then click the path as for a wire:
 every click turns it 90 degrees, as many times as you need, and all the wires turn together,

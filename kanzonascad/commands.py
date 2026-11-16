@@ -1166,6 +1166,120 @@ def pin_side(sheet, p, tol=1e-6):
     return None
 
 
+def end_side(sheet, p, tol=1e-6):
+    """A bus's open end: the free ends of wires in a line through the free end at p, evenly
+    spaced, the wires running out of them the same way: ([points] top to bottom or left to
+    right, spacing, [their wires]), or None (the owner, 0.16: "I need to be able to extend a
+    bus of wires")."""
+    def free_end(q):
+        got = []
+        for e in sheet.query_point(q, tol):
+            if isinstance(e, M.Wire):
+                for i in (0, -1):
+                    if G.dist(e.points[i], q) <= tol:
+                        got.append((e, i))
+                    elif i == 0 and e.touches(q, tol) and G.dist(e.points[-1], q) > tol:
+                        got.append((e, None))           # (a wire through it: not free)
+        if len(got) != 1 or got[0][1] is None:
+            return None
+        from .wires import pins_on
+        if pins_on(sheet, q):
+            return None
+        w, i = got[0]
+        a, b = (w.points[1], w.points[0]) if i == 0 else (w.points[-2], w.points[-1])
+        L = G.dist(a, b)
+        return (w, ((b[0] - a[0]) / L, (b[1] - a[1]) / L)) if L > 1e-9 else None
+    me = free_end(p)
+    if me is None:
+        return None
+    w0, out = me
+    if abs(out[0]) > 1e-9 and abs(out[1]) > 1e-9:
+        return None                     # (a slanted end)
+    axis = 0 if abs(out[0]) > 0.5 else 1          # (ends one above another: the same x)
+    reach = 12.0 * sheet.k()
+    rect = (p[0] - tol, p[1] - reach, p[0] + tol, p[1] + reach) if axis == 0 else \
+        (p[0] - reach, p[1] - tol, p[0] + reach, p[1] + tol)
+    found = {}
+    for e in sheet.query(rect):
+        if not isinstance(e, M.Wire):
+            continue
+        for q in (e.points[0], e.points[-1]):
+            if abs(q[axis] - p[axis]) > tol:
+                continue
+            got = free_end(q)
+            if got is not None and got[0].id == e.id and \
+                    abs(got[1][0] - out[0]) < 1e-9 and abs(got[1][1] - out[1]) < 1e-9:
+                found[round(q[1 - axis], 9)] = (tuple(q), e)
+    run = _even_run(sorted(found), round(p[1 - axis], 9))
+    if run is None:
+        return None
+    coords, gap = run
+    if axis == 0:
+        coords = coords[::-1]                       # (top to bottom)
+    return [found[c][0] for c in coords], gap, [found[c][1] for c in coords]
+
+
+def _even_run(coords, c0):
+    """The evenly spaced run of sorted coords containing c0 (its nearest neighbours' gap):
+    ([coords], gap), or None when fewer than two."""
+    if c0 not in coords or len(coords) < 2:
+        return None
+    i = coords.index(c0)
+    gaps = [abs(coords[j] - c0) for j in (i - 1, i + 1) if 0 <= j < len(coords)]
+    gap = min(gaps)
+    if gap <= 1e-9:
+        return None
+    lo = hi = i
+    while lo > 0 and abs((coords[lo] - coords[lo - 1]) - gap) < 1e-6:
+        lo -= 1
+    while hi < len(coords) - 1 and abs((coords[hi + 1] - coords[hi]) - gap) < 1e-6:
+        hi += 1
+    run = coords[lo:hi + 1]
+    return (run, gap) if len(run) >= 2 else None
+
+
+def tap_lines(sheet, p, tol=1e-6):
+    """Wires running side by side through a point on the middle of one (three phases across
+    a sheet): straight runs parallel to the one at p, evenly spaced, all going past p's place
+    along them: (across, [their y, or x when they run up and down], spacing), or None. A bus
+    started or ended there takes or lands on one each (the owner, 0.16: "add a vertical 3ph
+    wire bus to horizontal 3 ph wires")."""
+    seg = None
+    for e in sheet.query_point(p, tol):
+        if not isinstance(e, M.Wire):
+            continue
+        if G.dist(e.points[0], p) <= tol or G.dist(e.points[-1], p) <= tol:
+            return None                 # (an end: that's carrying a wire on)
+        for a, b in zip(e.points, e.points[1:]):
+            if G.dist_to_segment(p, a, b) <= tol and G.dist(p, a) > tol and \
+                    G.dist(p, b) > tol:
+                if abs(a[1] - b[1]) < 1e-9:
+                    seg = (True, a[1])
+                elif abs(a[0] - b[0]) < 1e-9:
+                    seg = (False, a[0])
+    if seg is None:
+        return None
+    across = seg[0]
+    reach = 12.0 * sheet.k()
+    rect = (p[0] - tol, p[1] - reach, p[0] + tol, p[1] + reach) if across else \
+        (p[0] - reach, p[1] - tol, p[0] + reach, p[1] + tol)
+    found = set()
+    for e in sheet.query(rect):
+        if not isinstance(e, M.Wire):
+            continue
+        for a, b in zip(e.points, e.points[1:]):
+            if across and abs(a[1] - b[1]) < 1e-9 and min(a[0], b[0]) < p[0] - tol and \
+                    max(a[0], b[0]) > p[0] + tol:
+                found.add(round(a[1], 9))
+            elif not across and abs(a[0] - b[0]) < 1e-9 and min(a[1], b[1]) < p[1] - tol \
+                    and max(a[1], b[1]) > p[1] + tol:
+                found.add(round(a[0], 9))
+    run = _even_run(sorted(found), round(seg[1], 9))
+    if run is None:
+        return None
+    return across, run[0], run[1]
+
+
 # the Bus command's layer choices (the wires in order; past the list's end, its last layer)
 BUS_LAYERS = [
     ("Wires (the WIRES layer)", ["WIRES"]),
@@ -1177,6 +1291,12 @@ BUS_LAYERS = [
 WIRE_LAYER_COLORS = {"WIRE BROWN": "#a0522d", "WIRE ORANGE": "#ff8c00", "WIRE YELLOW": "#ffd700",
                      "WIRE GRAY": "#909090", "WIRE BLACK": "7", "WIRE RED": "#ff3030",
                      "WIRE BLUE": "#3070ff", "WIRE WHITE": "#e0e0e0"}
+
+
+# the insulation color each of them stands for (the wire color the layer's wires show)
+WIRE_COLOR_NAMES = {"WIRE BROWN": "BRN", "WIRE ORANGE": "ORG", "WIRE YELLOW": "YEL",
+                    "WIRE GRAY": "GRY", "WIRE BLACK": "BLK", "WIRE RED": "RED",
+                    "WIRE BLUE": "BLU", "WIRE WHITE": "WHT"}
 
 
 def bus_layer_list(layers, count):
@@ -1204,6 +1324,10 @@ class BusCmd(Command):
         self.flip = False
         self.toward = None              # started on a symbol's pins: where its others are
         self.side_pins = []             # ...and those pins, each wire starting exactly on one
+        self.tap_start = None           # started on wires side by side: (across, [lines])
+        self.tap_end = None             # ...ended on them
+        self.shift = (0.0, 0.0)         # started on a pin or end not the first: from it to
+                                        # the first (later clicks are where the one clicked goes)
         self.points = []
         self.hfirst = None
         self._ask_start()
@@ -1267,6 +1391,15 @@ class BusCmd(Command):
 
     def _route_raw(self, p):
         a = self.points[-1]
+        if self.tap_start is not None and len(self.points) == 1:
+            # (off wires side by side: square off them, each wire from its own)
+            across = not self.tap_start[0]
+            if abs(p[0] - a[0] if across else p[1] - a[1]) < 1e-9:
+                return []
+            if self.straight:
+                return [(p[0], a[1])] if across else [(a[0], p[1])]
+            from .wires import route
+            return route(a, p, across)
         if self.toward is not None and len(self.points) == 1:
             # (off a symbol's pins: the first leg leaves them square, each wire from its pin;
             # a click in line with the pins can't be reached so: nothing)
@@ -1288,7 +1421,18 @@ class BusCmd(Command):
 
     def _flip_for(self, pts):
         """Which side the other wires go: started on a symbol's pins, the side its other pins
-        are on, whichever way the bus heads off (F turns it the other way)."""
+        are on, whichever way the bus heads off; started off wires side by side, at its first
+        corner the side it came from the far ones on, so no wire turns back across another
+        (F turns it the other way)."""
+        if self.tap_start is not None and len(pts) >= 3:
+            def unit(a, b):
+                L = G.dist(a, b)
+                return ((b[0] - a[0]) / L, (b[1] - a[1]) / L) if L > 1e-9 else (0.0, 0.0)
+            t1, t2 = unit(pts[0], pts[1]), unit(pts[1], pts[2])
+            right = t2[1] * t1[0] - t2[0] * t1[1]
+            if abs(right) > 1e-9:
+                return (right < 0) != self.flip
+            return self.flip
         if self.toward is not None and len(pts) >= 2:
             a, b = pts[0], pts[1]
             L = G.dist(a, b)
@@ -1303,7 +1447,16 @@ class BusCmd(Command):
         if self.step != "path":
             return
         if not self.points:
-            got = pin_side(self.ctx.sheet(), p)
+            sheet = self.ctx.sheet()
+            got = pin_side(sheet, p)
+            what = "the symbol's pins"
+            if got is None:
+                ends = end_side(sheet, p)
+                if ends is not None:
+                    # (a bus's open end: carried on, each wire on its own layer)
+                    got = ends[:2]
+                    self.layers = [w.layer for w in ends[2]]
+                    what = "the bus's ends"
             if got is not None:
                 line, gap = got
                 self.count, self.spacing = len(line), gap
@@ -1311,16 +1464,56 @@ class BusCmd(Command):
                 L = G.dist(a, z)
                 self.toward = ((z[0] - a[0]) / L, (z[1] - a[1]) / L)
                 self.side_pins = list(line)
+                self.shift = (a[0] - p[0], a[1] - p[1])
                 p = a                   # (the first wire from the first of its pins)
-                self.ctx.message("%d wires, %s apart, from the symbol's pins" % (
-                    self.count, _fmt(self.spacing)))
+                self.ctx.message("%d wires, %s apart, from %s" % (
+                    self.count, _fmt(self.spacing), what))
+            else:
+                tap = tap_lines(sheet, p)
+                if tap is not None:
+                    self.tap_start = (tap[0], tap[1])
+                    self.count, self.spacing = len(tap[1]), tap[2]
+                    self.ctx.message("%d wires, %s apart, one off each wire" % (
+                        self.count, _fmt(self.spacing)))
             self.points = [p]
             self.base = self.last = p
             self._ask_start()
             return
+        sheet = self.ctx.sheet()
+        land = self._landing(sheet, p)
+        tap = tap_lines(sheet, p) if land is None and (self.tap_start is None or
+                                                       len(self.points) > 1) else None
+        p = land if land is not None else (p[0] + self.shift[0], p[1] + self.shift[1])
         if G.dist(self.points[-1], p) < 1e-9:
             return
+        if tap is not None:
+            # (ended on wires side by side: the last leg square onto them, each wire landing
+            # on its own, and the bus is done)
+            a = self.points[-1]
+            if len(self.points) == 1 and (self.toward is not None or
+                                          self.tap_start is not None):
+                new = self._route(p)            # (still leaving its pins or wires square)
+            elif self.straight:
+                new = [(a[0], p[1])] if tap[0] else [(p[0], a[1])]
+            else:
+                from .wires import route
+                new = route(a, p, tap[0])
+            new = [q for q in new if G.dist(q, a) > 1e-9]
+            last = ([a] + new)[-2:] if new else None
+            if last is not None and abs(last[0][0 if tap[0] else 1] -
+                                        last[1][0 if tap[0] else 1]) > 1e-9:
+                new = []                        # (it can't land square on them: a plain click)
+            if new:
+                self.points += new
+                self.tap_end = (tap[0], tap[1])
+                self._make()
+                return
         new = self._route(p)
+        if new and land is not None:
+            # (onto a symbol's pins as many and as far apart: wire for wire, then done)
+            self.points += new
+            self._make()
+            return
         if not new:
             if self.toward is not None and len(self.points) == 1:
                 self.ctx.message("Click off the line of the symbol's pins: the bus leaves them "
@@ -1375,11 +1568,52 @@ class BusCmd(Command):
             out.append(pts)
         return out
 
+    def _landing(self, sheet, p):
+        """A click on a pin of a symbol's side with as many pins as the bus has wires, as far
+        apart: where the first wire goes (onto the side's first pin: T1 lands on L1, whichever
+        of its pins was clicked), or None."""
+        got = pin_side(sheet, p)
+        if got is None or len(got[0]) != self.count or abs(got[1] - self.spacing) > 1e-6:
+            return None
+        return got[0][0]
+
+    @staticmethod
+    def _onto(paths, tap, at_start, main):
+        """Wires side by side at the bus's start (or end): each wire's first (or last) point
+        moved along its leg onto its own wire, in the order they are met along the bus's path
+        (main: its points)."""
+        if tap is None or len(main) < 2:
+            return paths
+        across, lines = tap
+        k = 1 if across else 0          # (the coordinate the lines differ in)
+        # (from the start: the farthest back first; at the end: the first met)
+        going = main[1][k] - main[0][k] if at_start else main[-1][k] - main[-2][k]
+        order = sorted(lines, reverse=going < 0)
+        out = []
+        for i, pts in enumerate(paths):
+            pts = list(pts)
+            if len(pts) >= 2:
+                a, b = (pts[0], pts[1]) if at_start else (pts[-1], pts[-2])
+                if abs(a[1 - k] - b[1 - k]) < 1e-9:            # (a leg square to them)
+                    if i < len(order):
+                        q = list(a)
+                        q[k] = order[i]
+                        if at_start:
+                            pts[0] = tuple(q)
+                        else:
+                            pts[-1] = tuple(q)
+            out.append([tuple(q) for q in M._tidy(pts)])
+        return [p for p in out if len(p) >= 2]
+
+    def _paths(self, pts):
+        paths = self._on_pins(bus_paths(pts, self.count, self.spacing, self._flip_for(pts)))
+        return self._onto(self._onto(paths, self.tap_start, True, pts), self.tap_end, False,
+                          pts)
+
     def _make(self):
         made = 0
         if self.step == "path" and len(self.points) >= 2:
-            paths = self._on_pins(bus_paths(self.points, self.count, self.spacing,
-                                            self._flip_for(self.points)))
+            paths = self._paths(self.points)
             sheet = self.ctx.sheet()
             project = self.ctx.project
             layers = bus_layer_list(self.layers, len(paths))
@@ -1387,7 +1621,8 @@ class BusCmd(Command):
                 for pts, layer in zip(paths, layers):
                     if layer not in project.layers:
                         ed.layer(layer, None, M.Layer(
-                            layer, WIRE_LAYER_COLORS.get(layer, "#ff3030")).to_dict())
+                            layer, WIRE_LAYER_COLORS.get(layer, "#ff3030"),
+                            wire_color=WIRE_COLOR_NAMES.get(layer, "")).to_dict())
                     w = ed.add(sheet, M.Wire(pts, layer=layer))
                     made += 1
                     if _cleanup_on(self.ctx):
@@ -1406,9 +1641,10 @@ class BusCmd(Command):
                 return [M.Wire([q, (q[0] - 0.25, q[1])]) for q in got[0]]
             return [M.Wire(q) for q in bus_paths([p, (p[0] + 0.25, p[1])], self.count,
                                                  self.spacing, self.flip)]
+        land = self._landing(self.ctx.sheet(), p)
+        p = land if land is not None else (p[0] + self.shift[0], p[1] + self.shift[1])
         pts = self.points + self._route(p)
-        return [M.Wire(q) for q in bus_paths(pts, self.count, self.spacing,
-                                             self._flip_for(pts))]
+        return [M.Wire(q) for q in self._paths(pts)]
 
 
 class MakeBlockCmd(Command):

@@ -586,10 +586,32 @@ def random_editing(log, out, ops, seed, drawing=None):
                 if got is not None:
                     sides.append(got)
                     break
+        ends, taps = [], []
+        for w in s.wires():
+            for q in (w.points[0], w.points[-1]):
+                got = C.end_side(s, q)
+                if got is not None:
+                    ends.append((q, got))
+            for a, b in zip(w.points, w.points[1:]):
+                m = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+                got = C.tap_lines(s, m)
+                if got is not None:
+                    taps.append((m, got))
+            if len(ends) > 8 and len(taps) > 8:
+                break
         before = set(s.entities)
+        before_dots = set(wires.junctions(s))
         cmd = v.run(C.BusCmd)
         side = None
-        if sides and rnd.random() < 0.5:
+        from_ends = from_taps = None
+        what = rnd.random()
+        if ends and what < 0.2:
+            from_ends = rnd.choice(ends)
+            a = from_ends[0]
+        elif taps and what < 0.4:
+            from_taps = rnd.choice(taps)
+            a = from_taps[0]
+        elif sides and rnd.random() < 0.5:
             a = rnd.choice(rnd.choice(sides)[0])
             # (the side of the pin clicked: two symbols overlapping can share a pin, and the
             # bus takes one of theirs)
@@ -601,12 +623,31 @@ def random_editing(log, out, ops, seed, drawing=None):
             a = pt()
         if v.cmd is not None and rnd.random() < 0.3:
             v.input_text("S")
-        if v.cmd is not None and rnd.random() < 0.3:
+        if v.cmd is not None and rnd.random() < 0.3 and from_ends is None:
             cmd.layers = rnd.choice([ls for _t, ls in C.BUS_LAYERS])
         for q in (a, (a[0] + rnd.choice([-3, 3]), a[1] + rnd.choice([0, 0, -2, 2]))):
             if v.cmd is not None:
                 v.input_text(fmt(q))
         finish()
+        if from_ends is not None and len(s.wires()) and \
+                not any(i in before and i not in s.entities for i in before):
+            # a bus carried on from its open end: every old end carried on (joined, no dot)
+            for q in from_ends[1][0]:
+                assert wires.connects_at(s, q), "a carried-on bus left %s loose" % (q,)
+                if tuple(q) not in before_dots:
+                    assert tuple(q) not in set(wires.junctions(s)), \
+                        "carrying a bus on put a dot at %s" % (q,)
+            BC.CHECKED["bus carried on"] += 1
+        if from_taps is not None:
+            # one off each of the wires side by side: each new wire starts on a different one
+            across, lines, _gap = from_taps[1]
+            new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+            k = 1 if across else 0
+            got = sorted(round(w.points[0][k], 6) for w in new)
+            if len(new) == len(lines):
+                assert got == sorted(round(c, 6) for c in lines), \
+                    "a bus off wires side by side started at %s, not %s" % (got, lines)
+                BC.CHECKED["bus off wires side by side"] += 1
         if side is not None:
             # each wire from its own pin of the side started on: worked out from the pins
             new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
