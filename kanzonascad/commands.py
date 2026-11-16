@@ -1613,10 +1613,20 @@ class BusCmd(Command):
         own pin, arriving square from outside the symbol): the usual route, else one with a
         corner more (a Z: leaving square and arriving square, the owner, 0.16: "will wires
         automatically snap to the correct location?"), or None."""
+        for new, fault in self._land_tries(sheet, p, pins):
+            if fault is None:
+                return new
+        return None
+
+    def _land_tries(self, sheet, p, pins):
+        """[(route, why it doesn't land or None)] for the routes onto a side of pins: the usual
+        one, then the Zs. Every one that doesn't land says why (_why_not_landed shows the
+        first: a bus that neither landed nor said why, seed 289 on CI)."""
         if not self.points:
-            return None
+            return []
         a, b = self.points[-1], pins[0]
-        cands = [self._route(b)]
+        first = self._route(b)
+        cands = [first]
         for across in (True, False):
             m = (a[0] + b[0]) / 2 if across else (a[1] + b[1]) / 2
             k = 0.125 * sheet.k()
@@ -1626,21 +1636,22 @@ class BusCmd(Command):
             z = [(m, a[1]), (m, b[1]), b] if across else [(a[0], m), (b[0], m), b]
             z = [q for i, q in enumerate(z) if G.dist(q, ([a] + z)[i]) > 1e-9]
             cands.append(z)
-        first = self._route(b)
+        out = []
+        square = "leaving its pins square, the bus can't come at that side square: click a " \
+            "point on the way first"
         for new in cands:
             if not new:
+                out.append((new, square))
                 continue
             if len(self.points) == 1 and (self.toward is not None or
-                                          self.tap_start is not None) and first:
+                                          self.tap_start is not None):
                 # (still leaving its pins or wires square: the first leg as the usual one)
-                same = abs(first[0][1] - a[1]) < 1e-9 if abs(first[0][0] - a[0]) > 1e-9 \
-                    else abs(first[0][0] - a[0]) < 1e-9
-                if not same or not ((abs(new[0][1] - a[1]) < 1e-9) ==
-                                    (abs(first[0][1] - a[1]) < 1e-9)):
+                if not first or (abs(new[0][1] - a[1]) < 1e-9) != \
+                        (abs(first[0][1] - a[1]) < 1e-9):
+                    out.append((new, square))
                     continue
-            if self._landing_fault(sheet, p, pins, new) is None:
-                return new
-        return None
+            out.append((new, self._landing_fault(sheet, p, pins, new)))
+        return out
 
     def _landing_fault(self, sheet, p, pins, new=None):
         """Why the bus, ended on a side of pins as many and as far apart as its wires, would
@@ -1685,8 +1696,12 @@ class BusCmd(Command):
             return None
         pins, gap = got
         if len(pins) == self.count and abs(gap - self.spacing) <= 1e-6:
-            fault = self._landing_fault(sheet, p, pins)
-            return "Not landed wire for wire: %s" % fault if fault else None
+            tries = self._land_tries(sheet, p, pins)
+            # (the usual route's reason first, else a Z's)
+            faults = [f for _r, f in tries if f]
+            if not faults:
+                return None
+            return "Not landed wire for wire: %s" % faults[0]
         what = []
         if len(pins) != self.count:
             what.append("that side has %d pins, the bus %d wires" % (len(pins), self.count))
