@@ -210,9 +210,11 @@ class FitUpToTheFrameTest(unittest.TestCase):
         self.assertIsNone(F.outside(self.p, self.s))
         b = [c * 0.25 for c in F.drawing_box(self.s)]
         a, t = F.limits(area, tb)
-        # centered in the room above the title block, the margin shared top and bottom
-        self.assertAlmostEqual(b[1] - t[3], a[3] - b[3])
-        self.assertAlmostEqual(b[0] - a[0], a[2] - b[2])
+        # in the room above the title block, in its middle but for the move kept on the snap
+        # grid (scalefit.on_grid: by whole inches here, so at most 1/2" off the middle, real)
+        for lo, hi in ((b[1] - t[3], a[3] - b[3]), (b[0] - a[0], a[2] - b[2])):
+            self.assertGreaterEqual(min(lo, hi), -1e-9)
+            self.assertLessEqual(abs(lo - hi) / 2, 0.5 * 0.25 + 1e-9)
 
     def test_margin_kept_when_there_is_room(self):
         with self.p.edit("draw") as ed:

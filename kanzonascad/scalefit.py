@@ -256,17 +256,43 @@ def outside(project, sheet):
     return None
 
 
+# A move of the whole drawing (Fit, turning a sheet, a DWG placed on the page) goes by whole
+# inches when it can, else by the biggest of these steps that keeps it where it must be: a
+# drawing moved by an odd amount (0.53229", -0.00375") is off the snap grid after it, and a
+# wire then drawn on the grid stops a few thousandths short of the old ones without joining
+# them (found by the battery's drawing slop check, seed 264). A whole inch keeps every snap
+# spacing that divides an inch (0.1, 0.125, 0.25, 0.5, 1).
+GRID_STEPS = (1.0, 0.5, 0.25, 0.125)
+
+
+def on_grid(d, ok):
+    """(dx, dy) rounded to the first of GRID_STEPS for which ok(dx, dy) holds; d itself when
+    none does."""
+    for step in GRID_STEPS:
+        r = (round(d[0] / step) * step, round(d[1] / step) * step)
+        if ok(*r):
+            return r
+    return d
+
+
 def centering(box, scale, area, tb):
     """(dx, dy) in real inches that puts a drawing box (real inches) in the middle of the
     free box it fits best at `scale` (with the margin kept clear when there is space for it,
-    else in the room up to the frame and the title block), or None when it fits none."""
+    else in the room up to the frame and the title block), or None when it fits none. The
+    move is rounded to the snap grid (on_grid) as long as the box stays inside that free box."""
     w, h = box[2] - box[0], box[3] - box[1]
     pw, ph = w * scale, h * scale
     for a, t in ((area, tb), limits(area, tb)):
         for b in free_boxes(a, t):
             if pw <= b[2] - b[0] + 1e-9 and ph <= b[3] - b[1] + 1e-9:
                 cx, cy = (b[0] + b[2]) / 2 / scale, (b[1] + b[3]) / 2 / scale
-                return cx - (box[0] + box[2]) / 2, cy - (box[1] + box[3]) / 2
+
+                def inside(dx, dy, b=b):
+                    return ((box[0] + dx) * scale >= b[0] - 1e-9 and
+                            (box[1] + dy) * scale >= b[1] - 1e-9 and
+                            (box[2] + dx) * scale <= b[2] + 1e-9 and
+                            (box[3] + dy) * scale <= b[3] + 1e-9)
+                return on_grid((cx - (box[0] + box[2]) / 2, cy - (box[1] + box[3]) / 2), inside)
     return None
 
 
@@ -312,10 +338,13 @@ def turned_offset(project, sheet, rotation, scale=None):
     tmp_scaled.rotation, tmp_scaled.scale, tmp_scaled.reserve = rotation, scale, tmp.reserve
     w0, h0 = (v / scale for v in sheet.paper_inches())     # (both papers at the new scale)
     w1, h1 = (v / scale for v in tmp_scaled.paper_inches())
-    dx, dy = (w1 - w0) / 2, (h1 - h0) / 2
-    moved = (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy)
     area, tb = room(project, tmp_scaled)
-    if not placed_inside(moved, scale, area, tb):
+
+    def kept(dx, dy):
+        return placed_inside((box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy), scale,
+                             area, tb)
+    dx, dy = on_grid(((w1 - w0) / 2, (h1 - h0) / 2), kept)
+    if not kept(dx, dy):
         c = centering(box, scale, area, tb)
         if c is not None:
             dx, dy = c

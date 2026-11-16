@@ -694,6 +694,9 @@ space</b>), red when it is too big (it names a scale that fits). Pick 1:1, 1:2, 
 one) at which the drawing fits inside the border and clear of the title block; past 1:20, the
 next whole 1:N that fits (1:23). It uses the same test as the status bar's <b>doesn't fit</b>,
 and when it has to move the drawing, centers it with a little space kept around it if there is room for that.
+It moves the drawing by whole inches (by 1/2", 1/4" or 1/8" when the room is tight), so a drawing
+on the snap grid stays on it and new wires still meet the old ones; turning a sheet and opening a
+DXF or DWG move it the same way.
 It measures the drawing as it will be at each scale it tries: text, dimensions and tags keep
 their size on paper, so they take more of the drawing at a smaller scale. With nothing drawn yet, give the <b>Cabinet size</b> (width, height and,
 optionally, depth, in inches): Fit then makes room for the cabinet's front and, with a depth,
