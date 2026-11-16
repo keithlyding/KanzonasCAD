@@ -1170,8 +1170,11 @@ is never changed by it. To change a template, open it like any project, change i
 <p><b>Options...</b> (Edit menu) holds what belongs to you and this computer, for every project
 (<b>Project properties</b> holds what belongs to one project):</p>
 <ul>
-<li><b>General</b>: the theme (Light, Dark, Same as system), the black drawing area, and
-checking for updates automatically.</li>
+<li><b>General</b>: the theme (Light, Dark, Same as system), the black drawing area,
+checking for updates automatically, and <b>Open the files that were open when KanzonasCAD
+last closed</b> (off to start): on, KanzonasCAD starts with the saved projects that were open
+when you last closed it (all its windows' tabs, as tabs of one window; not when another
+KanzonasCAD is already running, which has them).</li>
 <li><b>Files</b>: the library folder, the template for new projects (Browse..., or Built-in),
 how many backups to keep of each project (None turns them off), and how often unsaved work is
 autosaved (Off turns it off).</li>
@@ -1251,7 +1254,11 @@ open), quietly: nothing shows unless there is one. Then a box tells you what cha
 version since yours, with three buttons: <b>Update now</b>, <b>Skip this version</b> (you're
 not told about it again; a newer one still shows) and <b>Later</b>. While Update now
 downloads, its window shows a progress bar with how much has come (48.3 of 75.2 MB, 64%), and
-<b>Cancel</b> stops the download; once it's done (or failed) the button is <b>Close</b>.</p>
+<b>Cancel</b> stops the download; once it's done (or failed) the button is <b>Close</b>.
+When you finish the update, every other KanzonasCAD you have running closes first, as Quit
+would (each asks to save its changes); if you cancel in one, it stays open and the update
+stops until you close it. With <b>Open the files that were open...</b> on (Options), the new
+version opens the files all of them had open.</p>
 <ul>
 <li>Run from source (the README's way): Update now gets the new version (git pull) and what it
 needs, shows what it did, and offers to start the new version.</li>

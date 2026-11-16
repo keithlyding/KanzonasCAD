@@ -20,7 +20,12 @@ build fails without them.
 - Move a symbol's tag: select the symbol and drag the grip on its tag (or on its rating)
   wherever you want it. It stays there on that copy and follows the symbol when you move it.
 
+- Edit > Options..., General: **Open the files that were open when KanzonasCAD last closed**.
+  Turn it on and KanzonasCAD starts with the projects you had open.
+
 **Fixed**
+- Updating with two or more KanzonasCAD windows running closes all of them (each asks to save
+  its changes first), not just the one you updated from.
 - A symbol turned sideways shows its tag beside it, clear of its poles, instead of on top of
   the outer pole.
 - A 3-pole symbol turned either way now lands every pole on the bus you click it onto (turned

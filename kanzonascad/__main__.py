@@ -25,7 +25,21 @@ def main(argv=None):
 
     from .main_window import MainWindow
     win = MainWindow()
+    # (the other copies running: an update closes them all; see instances.py)
+    try:
+        from .instances import Instances
+        MainWindow.instances = Instances()
+    except OSError as e:
+        win.statusBar().showMessage("An update can't close other KanzonasCAD windows: %s" % e,
+                                    10000)
+    if MainWindow.instances is not None:
+        MainWindow.instances.asked.connect(win.answer_close_for_update)
+        app.aboutToQuit.connect(MainWindow.instances.stop)
     opened = False
+    if win.reopen_on() and (MainWindow.instances is None or
+                            not MainWindow.instances.running_others()):
+        # (Options: the files open when it last closed; not when another copy has them)
+        opened = win.reopen_last() > 0
     for f in args.files:
         if os.path.exists(f) and win.open_path(f) is not None:
             opened = True
