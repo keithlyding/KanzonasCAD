@@ -23,6 +23,8 @@ BUDGET = {
     "view_step": 0.016,         # a pan or wheel zoom step shown (60 a second): the last picture
                                 # moved and scaled, no object drawn again until it stops
     "peak_mb": 800,
+    "big_print": 5.0,           # that sheet printed, fit to letter paper (into a PDF file)
+    "big_window": 2.0,          # that sheet opened in a new window and drawn, then closed
     "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings
     # a sheet of notes: 2,000 hatches (and their outlines), 1,000 leaders, 1,000 multi-line
     # notes and 2,000 texts (text drawn as filled outlines took seconds a zoom step here)
@@ -569,13 +571,30 @@ def run(log_path):
         assert ds < BUDGET["snap_move"], "a mouse move with snaps, drawn, took %.1f ms" % (
             ds * 1000)
         assert dv < BUDGET["view_step"], "a pan or zoom step took %.1f ms" % (dv * 1000)
+        # Print (fit to letter paper, into a PDF file) and the sheet in a window of its own
+        from . import print_out
+        t = time.perf_counter()
+        pdf = os.path.join(tmp, "big-print.pdf")
+        assert print_out.print_sheets(p, print_out.pdf_printer(pdf), [s]) == 1
+        dp = time.perf_counter() - t
+        assert os.path.getsize(pdf) > 10000, "the printed sheet is nearly empty"
+        assert dp < BUDGET["big_print"], "printing the sheet took %.2f s" % dp
+        t = time.perf_counter()
+        w2 = w.new_window(s.id)
+        w2.view().repaint()
+        w2.close()
+        app.processEvents()
+        dw = time.perf_counter() - t
+        assert w.family == [w], "the second window didn't close"
+        assert dw < BUDGET["big_window"], "the sheet in a new window took %.2f s" % dw
         p.saved_at = len(p.undo_stack)
         w.close_tab(w.tabs.indexOf(d))
         mb = _peak_mb()
         assert mb < BUDGET["peak_mb"], "peak memory %.0f MB" % mb
         return ("open+draw %.2f s, 10 zooms %.2f s, 1,000 adds %.2f s, 1,000 moved %.2f s, "
-                "hover %.1f ms, snap move drawn %.1f ms, pan/zoom step %.1f ms, peak %.0f MB"
-                % (dt, dz, da, dm, dh * 1000, ds * 1000, dv * 1000, mb))
+                "hover %.1f ms, snap move drawn %.1f ms, pan/zoom step %.1f ms, printed %.2f s, "
+                "new window %.2f s, peak %.0f MB"
+                % (dt, dz, da, dm, dh * 1000, ds * 1000, dv * 1000, dp, dw, mb))
 
     def text_font():
         """The font text is drawn and measured with: the letters as tall as asked, a line as

@@ -22,9 +22,12 @@ group of buttons has its name under it (Rail and duct, Dimensions, Blocks...). D
 tab name (or <b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
 <b>Ribbon group names</b> (View) turns the names off, for a more compact ribbon, and on
 again.</li>
-<li><b>Project tabs</b>: each open project has its own tab.</li>
+<li><b>Project tabs</b>: each open project has its own tab. Drag a tab away from the tabs and
+let go to give it a window of its own (see <b>Windows and two screens</b>).</li>
 <li><b>Sheets panel</b> on the left: the project's sheets with their page numbers. Click one to
-show it, double-click to open its properties, right-click for more.</li>
+show it, double-click to open its properties, right-click for more (<b>Open in a new window</b>,
+<b>Print...</b>). Ctrl+click and Shift+click select several sheets without changing the one
+shown, for printing them.</li>
 <li><b>Command line</b> along the bottom (Ctrl+9 shows or hides it).</li>
 <li><b>Status bar</b>: the cursor's X and Y in inches and its <b>zone</b> (for example
 6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches.</li>
@@ -982,6 +985,55 @@ cut), it offers to recover them the next time it starts.</li>
 black on white (layer colors are for the screen).</li>
 </ul>
 
+<h2>Printing</h2>
+<p><b>Print...</b> (File menu, Ctrl+P, the Output tab, or right-click in the Sheets panel)
+opens the Print window:</p>
+<ul>
+<li><b>Printer</b>: the printers your computer has, and <b>PDF file</b> (it asks for the
+file's name when you click Print). <b>Paper</b> lists the sizes the printer takes, starting
+with its own; <b>Copies</b> how many of each.</li>
+<li><b>Sheets</b>: <b>This sheet</b> (the one shown), <b>All sheets</b>, or <b>These
+sheets</b>, ticked in the list (<b>Tick all</b>, <b>Tick none</b>). With several sheets
+selected in the Sheets panel (Ctrl+click, Shift+click), the window starts with those ticked.
+They print in the project's order, one sheet a page; the Print button says how many.</li>
+<li><b>Fit to paper</b> (to start): each sheet as big as the paper holds, turned a quarter
+turn when that makes it bigger (an ANSI B sheet on letter paper prints sideways, its title
+block at the top right, as a printer's Landscape does). A panel sheet prints its whole sheet
+at its scale, shrunk to the paper. Lines stay as thin on paper whatever the shrinking.</li>
+<li><b>Actual size</b>: each sheet at its own paper's size, centered on the page and turned to
+match it; a sheet bigger than the printer's paper is cut off at the page's edges (its middle
+shows).</li>
+<li><b>Black on white</b> (to start), as Export to PDF; untick it to print the layers'
+colors.</li>
+<li><b>Preview...</b> shows the pages as they will print.</li>
+</ul>
+<p>When a scaled sheet's drawing doesn't fit on it (the status bar's <b>doesn't fit</b>),
+Print asks first, as Export to PDF does. {{Print date}} in the title block is when you
+printed.</p>
+
+<h2>Windows and two screens</h2>
+<p>Any sheet can have a window of its own, to put on another screen: the schematic on one
+screen and the panel layout on the other, say.</p>
+<ul>
+<li><b>Open this sheet in a new window</b> (Window menu, Ctrl+Shift+N, the View tab's
+<b>New window</b>): a new window on the same project, showing the sheet you are on (right-click
+a sheet in the Sheets panel and <b>Open in a new window</b> for another one). With two screens
+it opens filling the other one; drag it wherever you like.</li>
+<li>Both windows work on <b>the same project</b>: what you draw in one is in the other at once,
+<b>Undo</b> and <b>Redo</b> in either take back or redo the last change made in any of them,
+and <b>Save</b> saves the project once for both. Each window has its own ribbon, command line,
+Sheets panel and selection, and shows the sheet you pick in it.</li>
+<li><b>Move this project to a new window</b> (Window menu, the View tab's <b>Move to
+window</b>) moves the tab to a window of its own. Dragging a project tab away from the tabs and
+letting go does the same, where you let go; let go over another KanzonasCAD window to move the
+tab into it.</li>
+<li><b>Close this window</b> (Window menu) closes that window; closing a window, or a tab, only
+asks to save a project when no other window shows it. Closing the first window (the one
+KanzonasCAD started with) closes the others too.</li>
+<li>Settings (Black drawing area, the object snaps, Drafting settings) apply in every
+window.</li>
+</ul>
+
 <h2>Project templates</h2>
 <p>A <b>template</b> is an ordinary project that new projects start from: everything in it
 comes along, so set it up once. Its settings (Project properties), layers and their colors
@@ -1032,6 +1084,8 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>Ctrl+arrows / Ctrl+Shift+arrows</td><td>Move the selection one snap step / a tenth of one</td></tr>
 <tr><td>Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S</td><td>New / Open / Save / Save as</td></tr>
 <tr><td>Ctrl+W / Ctrl+Q</td><td>Close project / Exit</td></tr>
+<tr><td>Ctrl+P</td><td>Print...</td></tr>
+<tr><td>Ctrl+Shift+N</td><td>Open this sheet in a new window</td></tr>
 <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>
 <tr><td>Ctrl+X / Ctrl+C / Ctrl+V / Ctrl+A</td><td>Cut / Copy / Paste / Select all</td></tr>
 <tr><td>Ctrl+Shift+E / Ctrl+0 / Ctrl+= / Ctrl+-</td><td>Zoom extents / sheet / in / out</td></tr>

@@ -391,7 +391,8 @@ def mouse_lasso(v, rnd):
 
 
 def mouse_drag(v, rnd):
-    """Selected objects dragged by one of them move exactly as far as the mouse did."""
+    """Selected objects dragged by one of them move exactly as far as the mouse did (with Snap
+    on, that rounded to whole snap steps)."""
     Qt, QPoint, QPointF, QTest = _qt()
     if v.cmd is not None:
         v.cancel()
@@ -431,7 +432,26 @@ def mouse_drag(v, rnd):
     before = {i: s.entities[i].bbox() for i in v.sel}
     w0, w1 = v.to_world(QPointF(start)), v.to_world(QPointF(end))
     d = (w1[0] - w0[0], w1[1] - w0[1])
-    _drag_path(v, start, end, steps=10)
+    # wires and symbols with pins are dragged with Snap on, as they are drawn (a freehand drag
+    # can leave a wire end a hair from another: the user's doing, not the program's, and the
+    # near-miss check would blame the program): then they go whole snap steps; anything else
+    # freehand half the time, exactly as far as the mouse
+    joins = any(isinstance(e, M.Wire) or (isinstance(e, M.Insert) and e.defn is not None and
+                                          e.defn.pins) for e in sel)
+    snap = joins or rnd.random() < 0.5
+    was = v.snap_on
+    v.snap_on = snap
+    if snap:
+        k = v.snap_spacing
+        d = (round(d[0] / k) * k, round(d[1] / k) * k)
+        if d == (0.0, 0.0):
+            v.snap_on = was
+            v.set_selection(set())
+            return
+    try:
+        _drag_path(v, start, end, steps=10)
+    finally:
+        v.snap_on = was
     tol = 1e-6 * max(1.0, max(abs(c) for b in before.values() for c in b))
     for i, b in before.items():
         e = s.entities.get(i)
@@ -954,6 +974,50 @@ def random_editing(log, out, ops, seed, drawing=None):
     def op_pan():
         mouse_pan(v, crnd)
 
+    # ---- Print and a sheet in a window of its own (0.16) --------------------------------------
+    def op_print():
+        from PySide6.QtGui import QPageSize
+        from kanzonascad import print_out
+        chosen = rnd.sample(p.sheets, rnd.randint(1, min(4, len(p.sheets))))
+        size = rnd.choice([(QPageSize.Letter, 8.5, 11), (QPageSize.Tabloid, 11, 17),
+                           (QPageSize.AnsiD, 22, 34), (QPageSize.A4, 8.27, 11.69)])
+        fit = rnd.random() < 0.7
+        before, rev = norm(p.to_dict()), p.revision
+        path = os.path.join(out, "print.pdf")
+        n = print_out.print_sheets(p, print_out.pdf_printer(path, QPageSize(size[0]), 72),
+                                   chosen, fit, mono=rnd.random() < 0.8)
+        assert n == len(chosen)
+        BC.printed(path, chosen)
+        assert norm(p.to_dict()) == before and p.revision == rev, "printing changed the project"
+        sheet = rnd.choice(chosen)
+        page = (size[1], size[2]) if rnd.random() < 0.5 else (size[2], size[1])
+        BC.print_lands(p, sheet, page[0], page[1], fit)
+
+    def op_window():
+        listeners = len(p.listeners)
+        w2 = win.new_window(rnd.choice(p.sheets).id)
+        v2 = w2.view()
+        assert v2.project is p, "the new window shows another project"
+        v2.osnap_on = v2.snap_on = v2.polar_on = v2.ortho_on = False
+        s2 = v2.sheet()
+        n = len(s2.entities)
+        v2.run(C.LineCmd)
+        type_in(v2, fmt(pt()), fmt(pt()))
+        if v2.cmd is not None:
+            v2.cancel()
+        assert len(s2.entities) == n + 1, "a line drawn in the new window isn't in the project"
+        if rnd.random() < 0.5:
+            win.undo()                          # (Undo in the main window takes it back)
+            assert len(s2.entities) == n
+            w2.redo()
+        asked = []
+        w2._maybe_save = lambda d: asked.append(d) or True
+        assert w2.close(), "the new window didn't close"
+        APP.processEvents()
+        assert not asked, "closing a second window asked to save the project"
+        BC.second_window(win, w2, p, listeners)
+        w2.deleteLater()
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -971,7 +1035,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
-             (op_redo, 4)]
+             (op_redo, 4), (op_print, 2), (op_window, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.16
+
+**New**
+- Print (File > Print..., Ctrl+P): print this sheet, all sheets, or the ones you tick, on any
+  printer or into a PDF file. Select several sheets in the Sheets panel with Ctrl+click or
+  Shift+click and Print starts with those. Each sheet is fit to the printer's paper and turned
+  to match it (or printed at actual size), with a preview first.
+- Sheets in their own windows: Window > Open this sheet in a new window (Ctrl+Shift+N) opens
+  the sheet you are on in a window you can put on another screen (it fills your second screen
+  if you have one). Both windows work on the same project: one Undo, one Save. You can also
+  drag a project tab out of the tabs to give it its own window.
+
 ## 0.15.14
 
 **Fixed**
