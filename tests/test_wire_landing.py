@@ -164,6 +164,19 @@ class WireLandingTest(unittest.TestCase):
                 self.assertEqual(X.found(s), [])
                 self.v.project.undo()
 
+    def test_in_line_with_its_own_pins_it_says_why_and_doesnt_run_down_them(self):
+        # (CI, seed 289: a bus that neither landed nor said why; the same case "landed" by
+        # running wire 1 straight down the column of pins it started from)
+        ds = self.insert("Disconnect 3-pole", (2.0, 8.0))
+        fu = self.insert("Fuses 3-pole", (2.5, 4.0), "RRR")
+        cmd = self.bus_from(self.pins(ds)["T1"])
+        s = self.v.sheet()
+        for n in ("L1", "T1"):
+            q = self.pins(fu)[n]
+            self.assertIsNone(cmd._landing(s, q), n)
+            self.assertIn("square", cmd._why_not_landed(s, q) or "", n)
+        self.v.cancel()
+
     def test_a_bus_doesnt_land_through_a_symbol(self):
         a = self.insert("Fuses 3-pole", (10.5, 8.0))
         b = self.insert("Fuses 3-pole", (4.0, 8.0))
