@@ -697,6 +697,52 @@ def random_editing(log, out, ops, seed, drawing=None):
                 assert not missing, "bus from a symbol's pins missed %s" % missing
                 BC.CHECKED["bus from pins"] += 1
 
+    def op_bus_land():
+        # (0.16.3: a bus from one symbol's pins ended on another's lands wire for wire, each
+        # wire on its own pin in order and none crossing another, taking a Z when it must; or
+        # it doesn't claim to and says why)
+        sides = []
+        for e in s.inserts():
+            for _n, q in e.pin_points():
+                got = C.pin_side(s, q)
+                if got is not None and len(got[0]) == 3 and abs(got[1] - 0.5) < 1e-9:
+                    sides.append((e.id, got[0]))
+        if len(sides) < 2:
+            return
+        (ia, a), (ib, b) = rnd.sample(sides, 2)
+        if ia == ib:
+            return
+        before = set(s.entities)
+        cmd = v.run(C.BusCmd)
+        v.input_text(fmt(rnd.choice(a)))
+        if v.cmd is None:
+            return
+        click = rnd.choice(b)
+        # (symbols overlapping can share a pin: the side the click takes is the one it lands
+        # on, seed 11)
+        b = C.pin_side(s, click)[0]
+        why = cmd._why_not_landed(s, click)
+        landed = cmd._landing(s, click) is not None
+        v.input_text(fmt(click))
+        done = v.cmd is None
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+        if landed:
+            assert done, "a bus that lands on a symbol's pins didn't end there"
+            # (cleanup may join a new wire to an old one: the pins are checked on every wire)
+            every = {tuple(q) for w in s.wires() for q in (w.points[0], w.points[-1])}
+            missing = [q for q in list(a) + list(b) if tuple(q) not in every]
+            assert not missing, "a landed bus left pins %s without their wire" % missing
+            def on(w, q):
+                return any(G.dist_to_segment(q, *seg) < 1e-9
+                           for seg in zip(w.points, w.points[1:]))
+            mine = [x[0] for x in crossings.found(s) if sum(1 for w in new if on(w, x[0])) >= 2]
+            assert not mine, "a landed bus's own wires cross at %s" % mine
+            BC.CHECKED["bus lands wire for wire"] += 1
+        else:
+            assert why, "a bus ended on a symbol's pins without landing, and said nothing"
+            BC.CHECKED["bus says why it didn't land"] += 1
+
     def op_symbol():
         name = rnd.choice(syms)
         before = set(s.entities)
@@ -1279,7 +1325,10 @@ def random_editing(log, out, ops, seed, drawing=None):
         # gap below nothing and can change order by their middles)
         order = [e.id for e in sorted(sel, key=lambda e: ((e.bbox()[axis] + e.bbox()[axis + 2])
                                                          / 2, e.id))]
-        snap = rnd.random() < 0.5
+        # (symbols, which wires land on, with Snap on: with it off they move by whatever evens
+        # the gaps and a pin can stop by chance 0.0092" from a wire end, seed 5: the user's
+        # doing, as a mouse drag's; mouse_drag does the same)
+        snap = rnd.random() < 0.5 or any(isinstance(e, M.Insert) for e in sel)
         was = v.snap_on
         v.snap_on = snap
         try:
@@ -1360,7 +1409,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

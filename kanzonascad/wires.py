@@ -7,6 +7,7 @@
 - Placing a symbol on a wire cuts the wire between the symbol's pins (break_under).
 """
 
+from . import geometry as G
 from .model import Wire, Insert
 from .trim import _poly_cum, _poly_param, _poly_piece
 
@@ -463,3 +464,45 @@ def heal(ed, sheet, ins):
         used.update((a, b))
         n += 1
     return n
+
+
+MISS = 0.03125      # paper inches: a wire end this near a pin or wire without joining it
+
+
+def near_misses(sheet, points, hi=None):
+    """Wire ends (points) that stop just short of a pin or another wire without joining it
+    (the owner, 0.16: wires that look connected and aren't; the battery has found them in the
+    program's own drawing, a user drawing with snaps off makes them): [(point, what it nearly
+    meets: "pin 2 of CR101" or "a wire", how far)], nearer than hi (MISS on paper) but farther
+    than TOL."""
+    hi = MISS * sheet.k() if hi is None else hi
+    out = []
+    for p in points:
+        box = (p[0] - hi, p[1] - hi, p[0] + hi, p[1] + hi)
+        best = None
+        joined = False
+        touching = 0                    # (wires at p: its own wire is one)
+        for o in sheet.query(box):
+            if isinstance(o, Wire):
+                own = G.dist(p, o.points[0]) <= TOL or G.dist(p, o.points[-1]) <= TOL
+                if own:
+                    touching += 1
+                    continue            # (the wire this end belongs to, or one joined end on)
+                for a, b in zip(o.points, o.points[1:]):
+                    d = G.dist_to_segment(p, a, b)
+                    if d <= TOL:
+                        joined = True   # (on another wire's middle: a T)
+                    elif d < hi and (best is None or d < best[2]):
+                        best = (p, "a wire", d)
+            elif isinstance(o, Insert) and o.defn is not None and o.defn.pins:
+                for n, q in o.pin_points():
+                    d = G.dist(p, q)
+                    if d <= TOL:
+                        joined = True
+                    elif d < hi and (best is None or d < best[2]):
+                        best = (p, "pin %s of %s" % (n, o.attrs.get("TAG") or o.block), d)
+        if touching >= 2:
+            joined = True               # (another wire's end here: joined end to end)
+        if best is not None and not joined:
+            out.append(best)
+    return out
