@@ -1790,6 +1790,7 @@ class InsertCmd(Command):
         self.cands = []
         self.footprint_of = False       # (the device asked for is a footprint's)
         self.link_name = None           # an off-sheet connector's name offered
+        self.placed_mirror = None       # flipped as placed (_fit), once a point is picked
 
     def begin(self):
         self._ask()
@@ -1803,15 +1804,46 @@ class InsertCmd(Command):
         self.ctx.prompt("Specify insertion point for %s%s" % (
             self.defn.name, " (where pin %s goes)" % name if name else ""), opts)
 
-    def origin(self, p):
+    def origin(self, p, mirror=None):
         """The block's insertion point for its hold (a pin, or its base point) at p, as it is
-        turned and flipped now."""
+        turned and flipped now (or flipped as mirror says)."""
         q = self.holds[self.hold][1]
         if q == (0.0, 0.0):
             return p
-        w = M.Insert(self.defn.name, (0.0, 0.0), self.angle, 1.0, self.mirror, {},
-                     self.defn).to_world(q)
+        w = M.Insert(self.defn.name, (0.0, 0.0), self.angle, 1.0,
+                     self.mirror if mirror is None else mirror, {}, self.defn).to_world(q)
         return (p[0] - w[0], p[1] - w[1])
+
+    def _landed(self, sheet, q, tol=1e-6):
+        """A pin at q would join something: a wire through or ending at q, or a pin there."""
+        for e in sheet.query_point(q, tol):
+            if isinstance(e, M.Wire):
+                if any(G.dist_to_segment(q, a, b) <= tol
+                       for a, b in zip(e.points, e.points[1:])):
+                    return True
+            elif isinstance(e, M.Insert) and any(G.dist(q, r) <= tol
+                                                 for _n, r in e.pin_points()):
+                return True
+        return False
+
+    def _fit(self, p):
+        """Where it goes for a point picked (the insertion point) and whether it is flipped:
+        as turned and flipped, unless flipped the other way more of its pins land on wires
+        or pins (the owner, 0.16: "I want to be able to orient it either direction and still
+        connect to wires or devices properly": a 3-pole symbol turned to run down a vertical
+        bus had its poles off the bus, only L1 on it)."""
+        here = self.mirror
+        d = self.defn
+        if d.kind != "symbol" or len(d.pins) < 3 or self.holds[self.hold][0] is None:
+            return self.origin(p), here
+        sheet = self.ctx.sheet()
+
+        def count(m):
+            ins = M.Insert(d.name, self.origin(p, m), self.angle, 1.0, m, {}, d)
+            return sum(1 for _n, q in ins.pin_points() if self._landed(sheet, q))
+        if count(not here) > count(here):
+            here = not here
+        return self.origin(p, here), here
 
     def text(self, s):
         k = s.strip().upper()
@@ -1871,11 +1903,12 @@ class InsertCmd(Command):
             return tags.link_footprint(self.attrs, device)
         return tags.link_attrs(self.attrs, device)
 
-    def _make(self, p, defn):
+    def _make(self, p, defn, mirror=None):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
         tag_h = self.ctx.project.settings.get("tag_height") * self.ctx.sheet().k() \
             if self.defn.kind == "symbol" else None
-        return M.Insert(self.defn.name, p, self.angle, 1.0, self.mirror, self.attrs, defn,
+        return M.Insert(self.defn.name, p, self.angle, 1.0,
+                        self.mirror if mirror is None else mirror, self.attrs, defn,
                         tag_h, layer=layer)
 
     def _on_rail(self, p):
@@ -1888,13 +1921,16 @@ class InsertCmd(Command):
         return (p[0] + dx, p[1] + dy)
 
     def preview(self, p):
-        return [self._make(self.pending if self.pending is not None else
-                           self._on_rail(self.origin(p)), self.defn)]
+        if self.pending is not None:
+            return [self._make(self.pending, self.defn, self.placed_mirror)]
+        at, m = self._fit(p)
+        return [self._make(self._on_rail(at), self.defn, m)]
 
     def point(self, p):
         if self.pending is not None:
             return                      # (waiting for the contact's device)
-        p = self._on_rail(self.origin(p))
+        at, self.placed_mirror = self._fit(p)
+        p = self._on_rail(at)
         d = self.defn
         if d.wiring == "link" and not self.attrs.get("TAG"):
             # an off-sheet connector: its name pairs it with the other end
@@ -1948,7 +1984,7 @@ class InsertCmd(Command):
                 ed.block(self.defn)
             from . import tags
             defn = project.blocks[self.defn.name]
-            ins = self._make(p, defn).copy(attrs=attrs)
+            ins = self._make(p, defn, self.placed_mirror).copy(attrs=attrs)
             ins = ins.copy(attrs=tags.new_attrs(project, sheet, defn, ins.attrs))
             if defn.kind == "footprint":
                 # its label to start (Panel settings): its tag, or with none its part number,

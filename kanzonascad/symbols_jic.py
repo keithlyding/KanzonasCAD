@@ -123,6 +123,29 @@ def _coil(out, letter=None):
         out.append(Text((0, -0.035), letter, 0.07, align="center"))
 
 
+HEATER_R = 0.06     # an overload heater's two hooks: their radius, and their centers'
+HEATER_D = 0.065    # distance from the middle (the hooks just clear of each other)
+
+
+def _heater():
+    """A thermal overload heater on a wire (the owner, 0.16.2, with a photo of the ones they
+    want): two hooks of three quarters of a turn. The first leaves the wire, goes up and over
+    and ends below it; the second starts above the wire, goes round under and joins the
+    wire out."""
+    r, d = HEATER_R, HEATER_D
+    return [Line((-PIN, 0), (-d - r, 0)), Line((d + r, 0), (PIN, 0)),
+            Arc((-d, 0), r, 270, 180),       # (bottom, right, top, then the left: the wire in)
+            Arc((d, 0), r, 90, 0)]           # (top, left, bottom, then the right: the wire out)
+
+
+def _heater_link():
+    """The dashed line joining three heaters, between the poles (not through the middle
+    one's hooks)."""
+    gap = HEATER_R + 0.03
+    return _link(0.0, POLE - gap + 0.0625, gap - 0.0625) + \
+        _link(0.0, -gap + 0.0625, -POLE + gap - 0.0625)
+
+
 def builtin_symbols():
     S = []
     # ---- relays, contactors, timers ------------------------------------------------------
@@ -222,10 +245,7 @@ def builtin_symbols():
     o += [Line((-0.125, 0.03125), (0.125, 0.125))]
     S.append(_sym("Disconnect 1-pole", "JIC/Protection", o, "device", "", "DS",
                   tag=TAG, description="Disconnect switch, one pole", attr_texts=_rating()))
-    o = [Line((-PIN, 0), (-0.125, 0)), Line((0.125, 0), (PIN, 0))]
-    k = 0.0625
-    o.append(Arc((-0.125 + k, 0), k, 0, 180))
-    o.append(Arc((0.125 - k, 0), k, 180, 360))
+    o = _heater()
     S.append(_sym("Overload heater", "JIC/Motor control", o, "parent", "", "OL",
                   tag=TAG, description="Thermal overload heater", attr_texts=_rating()))
     o = _contact(True)
@@ -281,9 +301,7 @@ def builtin_symbols():
                 _box(-0.125, -0.0625, 0.125, 0.0625)]
 
     def heater_pole():
-        k = 0.0625
-        return [Line((-PIN, 0), (-0.125, 0)), Line((0.125, 0), (PIN, 0)),
-                Arc((-0.125 + k, 0), k, 0, 180), Arc((0.125 - k, 0), k, 180, 360)]
+        return _heater()
 
     S.append(_sym("Circuit breaker 3-pole", "JIC/Power", _three(cb_pole) + _link(0, 0.6, -0.4),
                   "device", "", "CB", _three_pins(), tag=(0.0, TAG3_Y),
@@ -299,10 +317,34 @@ def builtin_symbols():
                   _three_pins(), tag=(0.0, TAG3_Y),
                   description="Main (power) contacts of a contactor, three poles"))
     S.append(_sym("Overload heaters 3-pole", "JIC/Motor control",
-                  _three(heater_pole) + _link(0.0, 0.42, -0.42), "parent", "", "OL",
+                  _three(heater_pole) + _heater_link(), "parent", "", "OL",
                   _three_pins(), tag=(0.0, TAG3_Y),
                   description="Thermal overload heaters, three poles",
                   attr_texts=_rating(y=RATING3_Y)))
+    # two devices in one symbol, as they're bought and wired (the owner, 0.16.2: "Please add
+    # 3ph disconnect with fuses and 3phase starter with overloads as symbols"): the second
+    # half drawn 1/2" on, L1-L3 in on the left, T1-T3 out 1" away
+    def shifted(one, dx=2 * PIN):
+        return [e._map(lambda q: (q[0] + dx, q[1])) for e in _three(one)]
+
+    o = _three(ds_pole) + _link(0.0, 0.58, -0.42) + shifted(fu_pole)
+    S.append(_sym("Fused disconnect 3-pole", "JIC/Power", o, "device", "", "DS",
+                  [{"name": "L%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(POLES)] +
+                  [{"name": "T%d" % (i + 1), "pos": (3 * PIN, y)} for i, y in enumerate(POLES)],
+                  tag=(PIN, TAG3_Y), description="Fused disconnect switch, three poles",
+                  attr_texts=[dict(a, pos=(a["pos"][0] + 2 * PIN, a["pos"][1]))
+                              for a in _in_fuse(POLES)]))
+    # a contactor's power contacts and its overload heaters: a contact of the starter's coil
+    # (Contactor coil, M), which lists it; the overload contact belongs to the coil too
+    o = _three(lambda: _contact(False)) + _link(0.0, 0.4, -0.4) + shifted(heater_pole) + \
+        [e._map(lambda q: (q[0] + 2 * PIN, q[1])) for e in _heater_link()]
+    S.append(_sym("Starter 3-pole", "JIC/Motor control", o, "child", "NO", "M",
+                  [{"name": "L%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(POLES)] +
+                  [{"name": "T%d" % (i + 1), "pos": (3 * PIN, y)} for i, y in enumerate(POLES)],
+                  tag=(PIN, TAG3_Y),
+                  description="Motor starter: contactor power contacts and overload heaters, "
+                              "three poles (a contact of its Contactor coil)",
+                  attr_texts=_rating(2 * PIN, RATING3_Y)))
     r, cx = 0.55, 0.625                 # (the circle clear of the pins, every lead reaching it)
     o = [Circle((cx, 0), r), Text((cx, -0.06), "MTR", 0.15, align="center")]
     for y in POLES:

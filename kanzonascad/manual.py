@@ -207,8 +207,8 @@ A starter set of JIC/NFPA symbols is built in (relay, contactor and timer coils,
 timed contacts, pushbuttons, E-stop, selector, limit/pressure/temperature/float switches,
 fuse, breaker, disconnect, overload heater and contact, pilot light, motor, solenoid, control
 transformer, terminal strip and terminal, ground, distribution block, off-sheet connector;
-three-phase: 3-pole breaker, disconnect and fuses, contactor power contacts, overload heaters,
-motor, variable frequency drive; power supply; PLC I/O card with input and output points).
+three-phase: 3-pole breaker, disconnect and fuses, fused disconnect, contactor power contacts,
+overload heaters, starter, motor, variable frequency drive; power supply; PLC I/O card with input and output points).
 A symbol of yours with the same name replaces a built-in one.</li>
 <li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.
 KanzonasCAD comes with generic ones at typical sizes, in the Generic categories: breakers 1, 2
@@ -238,10 +238,17 @@ a coil): the point you click is where that pin goes, so click the pin or wire it
 3-pole fuse clicked on a disconnect's T1 meets T1, T2 and T3 with its L1, L2 and L3). The
 command line says which pin it is held by; type B to hold it by the next pin, and after the
 last, by its base point (the middle of the library's symbols). Footprints are placed by their
-base point. The popup opens again where you last put it. The JIC symbols' tags sit at one
+base point. Turned (R) and flipped (F) as you like, a symbol with several pins clicked onto
+wires or pins flips itself when that lands more of its pins: a 3-pole symbol turned either way
+onto a bus running up and down lands every pole on its own wire (the preview shows it as it
+will go). The popup opens again where you last put it. The JIC symbols' tags sit at one
 height above the wire (all the three-pole devices at one, all the one-line symbols at
 another), so the tags of symbols side by side line up; a project started before 0.16 takes
-the new heights with <b>Update blocks from library...</b>. In the Parts tab, Insert asks whether to place
+the new heights with <b>Update blocks from library...</b>. A symbol turned sideways shows its
+tag beside it, read across, starting at its spot and running away from the symbol (clear of
+its poles). Select a symbol to see a grip on its tag (and on a Rating or other attribute it
+shows at one spot): drag it anywhere, and it stays there on that copy, following the symbol
+when it is moved or turned (Undo puts it back). In the Parts tab, Insert asks whether to place
 the part's symbol or its footprint.</p>
 <h3>Making your own</h3>
 <ol>
@@ -547,6 +554,13 @@ heaters) have their poles 1/2 inch apart, top to bottom L1/T1, L2/T2, L3/T3, the
 its wire. The motor and the drive (VFD: L1-L3 in, T1-T3 out) line up the same way.</li>
 <li><b>Contactor power contacts</b> belong to the contactor's coil like any contact (M601)
 and list under it.</li>
+<li>Two devices in one symbol, as they're bought and wired: the <b>Fused disconnect 3-pole</b>
+(the disconnect and its fuses: tag DS, the fuse rating in each fuse) and the <b>Starter
+3-pole</b> (the contactor's power contacts and its overload heaters: a contact of its
+<b>Contactor coil</b>, so it shows the coil's tag, M601, and lists under it; the heaters'
+rating under them). Each is 1 inch long, L1-L3 in on the left and T1-T3 out on the right,
+and lines up with the other three-pole symbols. The <b>Overload contact NC</b> in the coil's
+rung belongs to the same coil.</li>
 <li><b>Terminals</b> belong to a <b>Terminal strip</b> (place the strip first, anywhere: it
 takes a tag, TB601). Placing a terminal asks which strip, as a contact asks for its coil; it
 shows the strip's tag and numbers itself on the strip: 1, 2, 3... (the lowest free number;
@@ -946,7 +960,8 @@ too).</li>
 <li>While a window or lasso is open, the objects it would select light up.</li>
 <li><b>Select all</b> (Ctrl+A); Esc clears the selection.</li>
 <li>Selected objects show blue <b>grips</b>. Click a grip, then click where it goes, to stretch
-that end, corner, radius or text position.</li>
+that end, corner, radius or text position (a symbol: its insertion point, its tag, an
+attribute shown).</li>
 <li>Select first, then start Move, Copy objects, Rotate... (or start the command and then
 select, pressing Enter when done).</li>
 <li>Right-click: Enter while a command runs; otherwise a menu with Repeat, the clipboard and
@@ -1155,8 +1170,11 @@ is never changed by it. To change a template, open it like any project, change i
 <p><b>Options...</b> (Edit menu) holds what belongs to you and this computer, for every project
 (<b>Project properties</b> holds what belongs to one project):</p>
 <ul>
-<li><b>General</b>: the theme (Light, Dark, Same as system), the black drawing area, and
-checking for updates automatically.</li>
+<li><b>General</b>: the theme (Light, Dark, Same as system), the black drawing area,
+checking for updates automatically, and <b>Open the files that were open when KanzonasCAD
+last closed</b> (off to start): on, KanzonasCAD starts with the saved projects that were open
+when you last closed it (all its windows' tabs, as tabs of one window; not when another
+KanzonasCAD is already running, which has them).</li>
 <li><b>Files</b>: the library folder, the template for new projects (Browse..., or Built-in),
 how many backups to keep of each project (None turns them off), and how often unsaved work is
 autosaved (Off turns it off).</li>
@@ -1236,7 +1254,11 @@ open), quietly: nothing shows unless there is one. Then a box tells you what cha
 version since yours, with three buttons: <b>Update now</b>, <b>Skip this version</b> (you're
 not told about it again; a newer one still shows) and <b>Later</b>. While Update now
 downloads, its window shows a progress bar with how much has come (48.3 of 75.2 MB, 64%), and
-<b>Cancel</b> stops the download; once it's done (or failed) the button is <b>Close</b>.</p>
+<b>Cancel</b> stops the download; once it's done (or failed) the button is <b>Close</b>.
+When you finish the update, every other KanzonasCAD you have running closes first, as Quit
+would (each asks to save its changes); if you cancel in one, it stays open and the update
+stops until you close it. With <b>Open the files that were open...</b> on (Options), the new
+version opens the files all of them had open.</p>
 <ul>
 <li>Run from source (the README's way): Update now gets the new version (git pull) and what it
 needs, shows what it did, and offers to start the new version.</li>

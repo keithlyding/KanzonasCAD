@@ -898,6 +898,7 @@ class MainWindow(BlockEditing, QMainWindow):
         cur = {"theme": self.settings.value("theme", "light"),
                "black": self.acts["black"].isChecked(),
                "update_check": self._auto_updates_on(),
+               "reopen": self.reopen_on(),
                "library_folder": self.library.folder,
                "template_path": self.settings.value("template_path", "") or "",
                "backups_keep": self.backups_keep(),
@@ -916,6 +917,7 @@ class MainWindow(BlockEditing, QMainWindow):
             self.library.folder = got["library_folder"]
             self.settings.setValue("library_folder", got["library_folder"])
             self.library_panel.refresh()
+        self.settings.setValue("reopen_files", bool(got.get("reopen", False)))
         self.settings.setValue("template_path", got["template_path"])
         self.settings.setValue("backups_keep", int(got["backups_keep"]))
         self.settings.setValue("autosave_minutes", int(got["autosave_minutes"]))
@@ -1066,8 +1068,69 @@ class MainWindow(BlockEditing, QMainWindow):
             return self.save()
         return True
 
+    # ---- the files open when KanzonasCAD last closed, and the other copies running --------
+    instances = None        # this copy's instances.Instances (set at start-up: __main__)
+    reopen_extra = ()       # files the other copies had open when an update closed them
+
+    def reopen_on(self):
+        v = self.settings.value("reopen_files", False)
+        return v in (True, "true", "1", 1)
+
+    def open_files(self):
+        """The saved files open in this window's family, in tab order (no untitled ones)."""
+        out = []
+        for _w, d in self.documents():
+            if d.project.path and d.project.path not in out:
+                out.append(d.project.path)
+        return out
+
+    def last_open_files(self):
+        """The files open when KanzonasCAD last closed (those that still exist)."""
+        try:
+            got = json.loads(self.settings.value("open_files", "[]") or "[]")
+        except (TypeError, ValueError):
+            return []
+        return [f for f in got if isinstance(f, str) and os.path.exists(f)]
+
+    def reopen_last(self):
+        """Open the files that were open when KanzonasCAD last closed (Options: Open the
+        files...). Returns how many opened."""
+        n = 0
+        for f in self.last_open_files():
+            if self.open_path(f) is not None:
+                n += 1
+        return n
+
+    def answer_close_for_update(self):
+        """Another copy asked this one to close for an update: close as Quit would (asking
+        to save), and tell it so, with the files that were open."""
+        files = self.open_files()
+        ok = self.close()
+        self.instances.answer(ok, files)
+        if ok:
+            QApplication.instance().quit()
+
+    def close_other_copies(self):
+        """Before an update replaces the program: every other running copy asked to close
+        (each asks to save its changes). True when none is left running; else the user is
+        told and the update stops."""
+        if self.instances is None or not self.instances.others():
+            return True
+        self.statusBar().showMessage("Closing the other KanzonasCAD windows for the update...")
+        closed, kept, files = self.instances.close_others()
+        self.statusBar().clearMessage()
+        MainWindow.reopen_extra = tuple(files)
+        if kept:
+            QMessageBox.warning(self, "Update", "%d other KanzonasCAD window%s stayed open (its "
+                                "changes weren't saved). Close %s, then choose Update again."
+                                % (kept, "" if kept == 1 else "s", "it" if kept == 1 else
+                                   "them"))
+            return False
+        return True
+
     def closeEvent(self, e):
         if self.is_main():
+            files = self.open_files()
             for other in self.family[1:]:
                 if not other.close():
                     e.ignore()
@@ -1077,6 +1140,10 @@ class MainWindow(BlockEditing, QMainWindow):
                 e.ignore()
                 return
         if self.is_main():
+            for f in MainWindow.reopen_extra:       # (the other copies an update closed)
+                if f not in files:
+                    files.append(f)
+            self.settings.setValue("open_files", json.dumps(files))
             self.settings.setValue("geometry", self.saveGeometry())
             self.settings.setValue("window_state", self.saveState())
             hand_over_clipboard()
@@ -2786,7 +2853,8 @@ class MainWindow(BlockEditing, QMainWindow):
                     dlg, "Updated", "KanzonasCAD is updated. Start the new version now? (You'll "
                     "be asked to save any changes first.)") == QMessageBox.Yes:
                 dlg.accept()
-                self._restart()
+                if self.close_other_copies():
+                    self._restart()
         up.finished.connect(done)
         up.start()
         dlg.exec()
@@ -2805,7 +2873,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                     "now? (You'll be asked to save any changes first.)"
                                     ) == QMessageBox.Yes:
                 dlg.accept()
-                if self.close():
+                if self.close_other_copies() and self.close():
                     if setup:
                         start_setup(new, app_dir)
                     else:
@@ -2871,7 +2939,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                     ) != QMessageBox.Yes:
                 return
             dlg.accept()
-            if not self.close():
+            if not self.close_other_copies() or not self.close():
                 return
             cwd = os.environ.get("OWD") or os.path.expanduser("~")
             # (started once this process has ended: see updates.appimage_restart_command)

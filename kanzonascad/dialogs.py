@@ -1237,6 +1237,9 @@ def options_dialog(parent, cur, view, tab=None):
     upd = QCheckBox("Check for updates automatically (once a day)")
     upd.setChecked(bool(cur["update_check"]))
     form.addRow("", upd)
+    reopen = QCheckBox("Open the files that were open when KanzonasCAD last closed")
+    reopen.setChecked(bool(cur.get("reopen", False)))
+    form.addRow("", reopen)
     tabs.addTab(page, "General")
 
     # Files
@@ -1325,7 +1328,8 @@ def options_dialog(parent, cur, view, tab=None):
         if apply_drafting is not None and not apply_drafting(parent):
             continue
         return {"theme": theme.currentData(), "black": black.isChecked(),
-                "update_check": upd.isChecked(), "library_folder": folder,
+                "update_check": upd.isChecked(), "reopen": reopen.isChecked(),
+                "library_folder": folder,
                 "template_path": path, "backups_keep": keep.value(),
                 "autosave_minutes": auto.value(), "drafting": apply_drafting is not None}
 
