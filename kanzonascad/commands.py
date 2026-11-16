@@ -2405,7 +2405,9 @@ class DistributeCmd(Command):
     def _apply(self, axis):
         sheet = self.ctx.sheet()
         boxes = [(e, e.bbox()) for e in self.ents]
-        boxes.sort(key=lambda t: (t[1][axis] + t[1][axis + 2]) / 2)
+        # (by their middles; objects on top of each other, a hatch and its outline, in the
+        # order they were drawn)
+        boxes.sort(key=lambda t: ((t[1][axis] + t[1][axis + 2]) / 2, t[0].id))
         first, last = boxes[0][1], boxes[-1][1]
         sizes = sum(b[axis + 2] - b[axis] for _e, b in boxes)
         gap = ((last[axis + 2] - first[axis]) - sizes) / (len(boxes) - 1)

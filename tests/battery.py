@@ -1074,19 +1074,26 @@ def random_editing(log, out, ops, seed, drawing=None):
         v2.osnap_on = v2.snap_on = v2.polar_on = v2.ortho_on = False
         s2 = v2.sheet()
         n = len(s2.entities)
-        v2.run(C.LineCmd)
-        type_in(v2, fmt(pt()), fmt(pt()))
-        if v2.cmd is not None:
-            v2.cancel()
-        assert len(s2.entities) == n + 1, "a line drawn in the new window isn't in the project"
-        if rnd.random() < 0.5:
-            win.undo()                          # (Undo in the main window takes it back)
-            assert len(s2.entities) == n
-            w2.redo()
+        a, b = pt(), pt()
+        while b == a:                           # (a line of no length isn't drawn)
+            b = pt()
         asked = []
         w2._maybe_save = lambda d: asked.append(d) or True
-        assert w2.close(), "the new window didn't close"
-        APP.processEvents()
+        try:
+            v2.run(C.LineCmd)
+            type_in(v2, fmt(a), fmt(b))
+            if v2.cmd is not None:
+                v2.cancel()
+            assert len(s2.entities) == n + 1, \
+                "a line drawn in the new window isn't in the project"
+            if rnd.random() < 0.5:
+                win.undo()                      # (Undo in the main window takes it back)
+                assert len(s2.entities) == n
+                w2.redo()
+        finally:
+            # (closed whatever happened: a window left open fails every later window step)
+            assert w2.close(), "the new window didn't close"
+            APP.processEvents()
         assert not asked, "closing a second window asked to save the project"
         BC.second_window(win, w2, p, listeners)
         w2.deleteLater()
@@ -1099,7 +1106,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         axis = rnd.choice([0, 1])
         # (their order before: objects bigger than the room between the outermost two get a
         # gap below nothing and can change order by their middles)
-        order = [e.id for e in sorted(sel, key=lambda e: (e.bbox()[axis] + e.bbox()[axis + 2]))]
+        order = [e.id for e in sorted(sel, key=lambda e: ((e.bbox()[axis] + e.bbox()[axis + 2])
+                                                         / 2, e.id))]
         snap = rnd.random() < 0.5
         was = v.snap_on
         v.snap_on = snap
