@@ -82,7 +82,9 @@ a layer moves them to it.</li>
 <p>As in AutoCAD, every object takes its <b>layer's color</b> (ByLayer) unless you give it its
 own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel tabs) to pick a
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
-layer it sits on, or its own color if you gave it one. Wires go on layer WIRES, symbols on
+layer it sits on, or its own color if you gave it one. Wires go on the current layer when it
+is a wire layer (WIRES, one named WIRE..., or one with a gauge or wire color), else on layer
+WIRES; symbols on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them. On the black drawing,
 black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
@@ -96,7 +98,9 @@ of it on an upright wire), a little smaller; Project properties, Schematic, <b>S
 layer's gauge and color beside its wires</b> turns that off. The layers a bus adds (WIRE BROWN,
 WIRE ORANGE...) come with their color's name; give them a gauge once and every wire on them
 shows it.</p>
-<p><b>Layers</b>, as in AutoCAD: a hidden layer isn't drawn, printed or picked; a locked one
+<p><b>Layers</b>, as in AutoCAD: pick one in the layer box with objects selected and they go on
+it (the box shows their layer, empty when they are on several); with nothing selected it
+becomes the current layer. A hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
 Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the layer box, the layer list,
 Layers..., Color, Hide layer and Show all too) and the Modify menu:</p>

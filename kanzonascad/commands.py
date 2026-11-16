@@ -1005,6 +1005,18 @@ class ZoomCmd(Command):
         return True
 
 
+def wire_layer(ctx):
+    """The layer a wire goes on: the current layer when it is a wire layer (WIRES, one named
+    WIRE..., or one with a gauge or wire color: Layers), else WIRES (the owner, 0.16: picking
+    WIRE BROWN and drawing a wire put it on WIRES; picking 0 for drafting leaves wires on
+    WIRES)."""
+    name = ctx.layer()
+    lay = ctx.project.layers.get(name)
+    if name.upper().startswith("WIRE") or (lay is not None and (lay.awg or lay.wire_color)):
+        return name
+    return "WIRES"
+
+
 class WireCmd(Command):
     """WIRE: click where it starts (a pin, a wire, or anywhere), then where it goes: it runs
     straight across and up or down, turning one corner per click (F flips which way the
@@ -1081,7 +1093,7 @@ class WireCmd(Command):
         if len(pts) >= 2:
             sheet = self.ctx.sheet()
             with self.ctx.edit("Wire") as ed:
-                w = ed.add(sheet, M.Wire(pts))
+                w = ed.add(sheet, M.Wire(pts, layer=wire_layer(self.ctx)))
                 if _cleanup_on(self.ctx):
                     from .wires import tidy_new
                     if tidy_new(ed, sheet, w) == "duplicate":
@@ -1098,7 +1110,7 @@ class WireCmd(Command):
     def preview(self, p):
         if not self.points:
             return []
-        return [M.Wire(self.points + self._route(p))]
+        return [M.Wire(self.points + self._route(p), layer=wire_layer(self.ctx))]
 
 
 def bus_paths(points, count, spacing, flip=False):
@@ -1616,7 +1628,9 @@ class BusCmd(Command):
             paths = self._paths(self.points)
             sheet = self.ctx.sheet()
             project = self.ctx.project
-            layers = bus_layer_list(self.layers, len(paths))
+            # (left at the WIRES layer: the current wire layer, as a wire's)
+            chosen = self.layers if self.layers != ["WIRES"] else [wire_layer(self.ctx)]
+            layers = bus_layer_list(chosen, len(paths))
             with self.ctx.edit("Bus") as ed:
                 for pts, layer in zip(paths, layers):
                     if layer not in project.layers:

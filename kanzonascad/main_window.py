@@ -773,6 +773,7 @@ class MainWindow(BlockEditing, QMainWindow):
                     (True, "true"))
         v.cursorMoved.connect(self._cursor_moved)
         v.selectionChanged.connect(self._update_ui)
+        v.selectionChanged.connect(self._fill_layers)
         v.sheetChanged.connect(self._fill_sheets)
         v.sheetChanged.connect(self._update_ui)
         v.sheetChanged.connect(lambda v=v: self._ribbon_for_sheet(v))
@@ -1686,14 +1687,25 @@ class MainWindow(BlockEditing, QMainWindow):
         return box, states
 
     def _fill_layers(self):
+        """The layer boxes: the selected objects' layer (empty when they are on several), as
+        AutoCAD's; with nothing selected, the current layer (the owner, 0.16: a layer picked
+        for selected objects moved them, but the box showed the current layer again, as if
+        nothing had happened)."""
         v = self.view()
+        sel = self._selected() if v is not None else []
+        on = {e.layer for e in sel}
         for box in self.layer_boxes:
             box.blockSignals(True)
             box.clear()
             if v is not None:
                 for name, lay in v.project.layers.items():
                     box.addItem(dialogs._swatch(lay.color), name)
-                box.setCurrentText(v.layer())
+                if not sel:
+                    box.setCurrentText(v.layer())
+                elif len(on) == 1:
+                    box.setCurrentText(next(iter(on)))
+                else:
+                    box.setCurrentIndex(-1)
             box.blockSignals(False)
         self.layer_label.setText("Layer: %s" % (v.layer() if v else ""))
 

@@ -565,6 +565,16 @@ def random_editing(log, out, ops, seed, drawing=None):
             v.cancel()
 
     def op_wire():
+        # (0.16: on the current layer when it is a wire layer, else WIRES)
+        want = "WIRES"
+        if rnd.random() < 0.2:
+            name = rnd.choice(["WIRE BROWN", "WIRE BLACK", "0"])
+            if name not in p.layers:
+                with p.edit("layer") as ed:
+                    ed.layer(name, None, M.Layer(name).to_dict())
+            v.current_layer = name
+            want = name if name.startswith("WIRE") else "WIRES"
+        before = set(s.entities)
         v.run(C.WireCmd)
         a = pt()
         type_in(v, fmt(a))
@@ -576,6 +586,15 @@ def random_editing(log, out, ops, seed, drawing=None):
                 v.input_text(fmt(b))
                 a = b
         finish()
+        v.current_layer = "0"
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+        if want != "WIRES" and len(new) == 1 and not wires.pins_on(s, new[0].points[0]):
+            # (a wire joined to another keeps the older's layer: only a wire on its own)
+            if not any(wires.connects_at(s, q, exclude=new[0].id)
+                       for q in (new[0].points[0], new[0].points[-1])):
+                assert new[0].layer == want, "a wire drawn on %s went on %s" % (want,
+                                                                              new[0].layer)
+                BC.CHECKED["wire on the current layer"] += 1
 
     def op_bus():
         # (0.16: started on a symbol's pins it takes them; S straight; L layers)
