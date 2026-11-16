@@ -266,10 +266,12 @@ def _hits(sheet, w):
 
 def trim_wire(sheet, w, click):
     """Trim wire at click: the part of w between the nearest points on either side where it
-    meets another wire or a pin goes (to the wire's end when nothing is met on that side).
-    Returns (the pieces left, as new wires keeping its layer, color and number; the points
-    where the cut part met the rest)."""
+    meets another wire or a pin, or bends, goes (to the wire's end when there is none on that
+    side: the owner, 0.16: a bent wire crossing nothing went whole, "Trim wire should not
+    function as delete wire in those instances"). Returns (the pieces left, as new wires
+    keeping its layer, color and number; the points where the cut part met the rest)."""
     pts, cum, cuts = _hits(sheet, w)
+    cuts = sorted(set(cuts) | {round(c, 9) for c in cum[1:-1]})     # (its bends)
     total = cum[-1]
     s0 = _poly_param(pts, cum, click)
     lo = max([s for s in cuts if TOL < s < s0 - TOL], default=0.0)

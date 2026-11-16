@@ -108,6 +108,7 @@ class CadView(QWidget):
         self.osnap_modes = set(OS.DEFAULT)      # the running snaps (Drafting settings)
         self.osnap_once = None                  # a snap typed for the next point only
         self.tracked = []                       # ends acquired by hovering (Extension)
+        self.track_pts = []                     # points acquired: in line with them (Extension)
         self.par_dirs = []                      # directions acquired by hovering (Parallel)
         self.app_segs = []                      # lines hovered (Apparent intersection)
         self.snap_from = None                   # where an Extension / Parallel snap runs from
@@ -244,6 +245,8 @@ class CadView(QWidget):
             self.cmd = None
             if cmd.repeatable:
                 self.last_cmd = type(cmd)
+                # (what it was started with: Insert repeats the same symbol)
+                self.last_args = tuple(getattr(cmd, "repeat_args", ()))
             self.idle_prompt()
             self.commandChanged.emit()
             self.update()
@@ -256,6 +259,7 @@ class CadView(QWidget):
         self._window = None
         self.osnap_once = None
         self.tracked, self.par_dirs, self.app_segs = [], [], []
+        self.track_pts = []
         self.cmd = cls(self, *args)
         self.commandChanged.emit()
         self.messaged.emit(self.cmd.title.upper())
@@ -288,7 +292,7 @@ class CadView(QWidget):
         if self.cmd is not None:
             self.cmd.enter()
         elif self.last_cmd is not None:
-            self.run(self.last_cmd)
+            self.run(self.last_cmd, *getattr(self, "last_args", ()))
         self.update()
 
     def input_text(self, text):
@@ -582,6 +586,8 @@ class CadView(QWidget):
         if "ext" in modes:
             for q, q0 in OS.extension(self.tracked, p, r):
                 offer("ext", q, q0)
+            for q, q0, inner in OS.alignment(self.track_pts, base, p, r):
+                offer("ext", q, q0, inner)
         if base is not None and "par" in modes:
             for q in OS.parallel(base, self.par_dirs, p, r):
                 offer("par", q, base)
@@ -598,6 +604,12 @@ class CadView(QWidget):
         """Hovering acquires what tracking follows (as AutoCAD's): the ends under an
         Endpoint snap (for Extension), the line under the cursor (for Parallel)."""
         modes = self.snap_modes()
+        if "ext" in modes and self.snap is not None and \
+                self.snap[0] in ("end", "int", "node", "insert"):
+            # (a wire's end, a pin...: what is in line with it snaps, across and up or down)
+            q0 = self.snap[1]
+            if not any(G.dist(q0, t) < 1e-9 for t in self.track_pts):
+                self.track_pts = (self.track_pts + [q0])[-6:]
         if "ext" in modes and self.snap is not None and self.snap[0] in ("end", "int"):
             q = self.snap[1]
             tol = 1e-6
@@ -1542,7 +1554,7 @@ class CadView(QWidget):
             return
         col = QColor(60, 200, 90)
         p.setPen(QPen(col, 1))
-        for q, _u in self.tracked:
+        for q in [t[0] for t in self.tracked] + self.track_pts:
             c = self.to_screen(q)
             p.drawLine(QPointF(c.x() - 4, c.y()), QPointF(c.x() + 4, c.y()))
             p.drawLine(QPointF(c.x(), c.y() - 4), QPointF(c.x(), c.y() + 4))

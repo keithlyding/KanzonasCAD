@@ -18,7 +18,8 @@ and reports come next.</i></p>
 <ul>
 <li><b>Menus and ribbon</b> along the top, as in KanzonasPDF. The ribbon's tabs are
 <b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>; each
-group of buttons has its name under it (Rail and duct, Dimensions, Blocks...). Double-click a
+group of buttons has its name under it (Rail and duct, Dimensions, Blocks...). Move, Copy,
+Rotate, Mirror and Erase are on the Schematic and Panel tabs too (Modify), not only Home. Double-click a
 tab name (or <b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
 <b>Ribbon group names</b> (View) turns the names off, for a more compact ribbon, and on
 again.</li>
@@ -218,6 +219,8 @@ drawing keeps the whole width: <b>Insert symbol...</b> (Schematic tab) opens it 
 as you left it; its Parts tab lists your parts. Type in its search box to find one.
 Double-click a symbol or footprint (or select it and click <b>Insert</b>): the popup gets out
 of the way and you click where it goes; type R to turn it 90 degrees or F to flip it first.
+Once it is placed, <b>Enter</b> (or Space) inserts the same symbol again, with a tag of its
+own.
 A symbol with pins is held by its <b>first pin</b> (L1 on a 3-pole device, 1 on a contact, A1 on
 a coil): the point you click is where that pin goes, so click the pin or wire it is to join (a
 3-pole fuse clicked on a disconnect's T1 meets T1, T2 and T3 with its L1, L2 and L3). The
@@ -451,10 +454,11 @@ it should jump, on a crossing or anywhere else on it (over a symbol's line, say)
 found by itself). A mark placed by hand lights up as a small circle when the cursor is over
 it; select and Erase it to take it away.</li>
 <li><b>Two wires on one terminal</b> (double landing): start a wire on a pin that already has
-one, or end it there, and the new wire leaves the pin on a short 45-degree lead (1/8 inch on
-paper) and then runs straight beside the first, as drawn by hand. It goes to the side the
-cursor is on; a third wire takes the other side. The lead keeps its angle when the symbol
-moves. Several wires on a pin get no dot: the pin is the connection.</li>
+one, or end it there, and the new wire runs straight onto the pin like the first. Schematic
+settings, <b>A second wire on a pin leaves it on a 45-degree lead</b>, makes it leave the pin on
+a short 45-degree lead (1/8 inch on paper) and then run beside the first, as drawn by hand (to
+the side the cursor is on; a third wire takes the other side; the lead keeps its angle when the
+symbol moves); it is off to start. Several wires on a pin get no dot: the pin is the connection.</li>
 <li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
 Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
 where needed). Select the wires too and they move with it instead.</li>
@@ -478,8 +482,9 @@ them (trimmed pieces stay wires), and they print and export (DXF) as polylines.<
 <p>The Schematic tab's <b>Edit wires</b> group (also on the Modify menu):</p>
 <ul>
 <li><b>Trim wire</b> (TRIMWIRE, AETRIM, TW), as AutoCAD Electrical's: click a piece of wire
-and it goes, up to the nearest wire or pin on either side (to the wire's end when there is
-none): no cutting edges to pick, and only wires are trimmed, even where a symbol's line is
+and it goes, up to the nearest wire, pin or bend on either side (to the wire's end when there
+is none): on a wire that turns a corner, only the straight run you clicked goes, up to the
+corner. No cutting edges to pick, and only wires are trimmed, even where a symbol's line is
 nearer. Keep clicking; U takes back the last one, Enter ends.</li>
 <li><b>Delete wire</b> (DELWIRE, DW): with objects selected, only the wires among them go
 (window-select a whole area and the symbols stay); with nothing selected, click wires one by
@@ -674,7 +679,10 @@ last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point)
 <b>Nearest</b> (NEA: the closest point on any object). And three that follow what the cursor
 has hovered over, as AutoCAD's tracking (a small green cross marks what was picked up):
 <b>Extension</b> (EXT: hover over a line's end, then move along the line past it: a dotted line
-follows it out), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the
+follows it out; and, as AutoCAD's object snap tracking, hover over a wire's end, a pin or an
+intersection and the points straight across and straight up or down from it snap, first where
+that line meets the one you are drawing: draw a wire across, hover over another wire's end
+above, and the wire stops exactly under it), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the
 last point: the new line runs parallel to it) and <b>Apparent intersection</b> (APP: hover
 over two lines, then near where they would meet if they were longer).</li>
 <li><b>Blocks snap too</b>: the ends, middles, centers and quadrants of a placed symbol's or
@@ -1125,7 +1133,7 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>F10</td><td>Polar tracking on/off</td></tr>
 <tr><td>Ctrl+9</td><td>Command line on/off</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
-<tr><td>Enter / Space</td><td>Finish a step; repeat the last command</td></tr>
+<tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same symbol)</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection</td></tr>
 <tr><td>Delete</td><td>Erase the selection</td></tr>
 <tr><td>Ctrl+arrows / Ctrl+Shift+arrows</td><td>Move the selection one snap step / a tenth of one</td></tr>

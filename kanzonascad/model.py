@@ -58,6 +58,8 @@ DEFAULT_SETTINGS = {
                                 # the right ("right") or along the bottom ("bottom") that the
                                 # zone grid stops at
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
+    "wire_lead": False,         # a second wire on a pin leaves it on a 45-degree lead (the
+                                # owner, 0.16: "a little bend... That needs to go away": off)
     "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)
     "wire_jump": "vertical",    # which one jumps: vertical or horizontal
     "rail_profile": "TS35x7.5",             # DIN rail and wire duct drawn next

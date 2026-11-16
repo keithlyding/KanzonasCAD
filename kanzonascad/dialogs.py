@@ -348,6 +348,12 @@ def project_properties(parent, project, tab=0):
                       "the wires they leave meeting end to end.")
     wclean.setChecked(bool(st.get("wire_cleanup", True)))
     form.addRow("", wclean)
+    wlead = QCheckBox("A second wire on a pin leaves it on a 45-degree lead")
+    wlead.setToolTip("Double landing as drawn by hand: a wire started or ended on a pin that "
+                     "already has one bends off it beside the first. Off: it runs straight "
+                     "onto the pin.")
+    wlead.setChecked(bool(st.get("wire_lead", False)))
+    form.addRow("", wlead)
     xref_h = QDoubleSpinBox()
     xref_h.setDecimals(4)
     xref_h.setRange(0.01, 5)
@@ -419,6 +425,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
+    settings["wire_lead"] = wlead.isChecked()
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():

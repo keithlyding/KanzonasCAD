@@ -1023,7 +1023,8 @@ class WireCmd(Command):
         sheet = self.ctx.sheet()
         a = self.points[-1]
         start = []
-        if len(self.points) == 1:
+        leads = bool(self.ctx.project.settings.get("wire_lead", False))
+        if len(self.points) == 1 and leads:
             got = lead(sheet, a, p)
             if got is not None:
                 a, out = got
@@ -1032,7 +1033,7 @@ class WireCmd(Command):
                     # (carry on the way the lead heads, unless the cursor is well off it)
                     h = abs(out[0]) > 0
                     return start + route(a, p, h)
-        end = lead(sheet, p, a)
+        end = lead(sheet, p, a) if leads else None
         if end is not None and G.dist(a, p) > 1e-9:
             c, out = end
             h = self.hfirst
@@ -1202,6 +1203,7 @@ class BusCmd(Command):
         self.straight = bool(getattr(self.ctx, "_bus_straight", False))
         self.flip = False
         self.toward = None              # started on a symbol's pins: where its others are
+        self.side_pins = []             # ...and those pins, each wire starting exactly on one
         self.points = []
         self.hfirst = None
         self._ask_start()
@@ -1308,6 +1310,7 @@ class BusCmd(Command):
                 a, z = line[0], line[-1]
                 L = G.dist(a, z)
                 self.toward = ((z[0] - a[0]) / L, (z[1] - a[1]) / L)
+                self.side_pins = list(line)
                 p = a                   # (the first wire from the first of its pins)
                 self.ctx.message("%d wires, %s apart, from the symbol's pins" % (
                     self.count, _fmt(self.spacing)))
@@ -1357,10 +1360,26 @@ class BusCmd(Command):
             return True
         return False
 
+    def _on_pins(self, paths):
+        """Started on a symbol's pins: each wire starts exactly on its pin (its first leg kept
+        straight), not where the spacing puts it, a hair off on a turned symbol."""
+        if not self.side_pins:
+            return paths
+        out = []
+        for pts in paths:
+            pin = min(self.side_pins, key=lambda q: G.dist(q, pts[0]))
+            if G.dist(pin, pts[0]) <= 1e-6 and len(pts) >= 2:
+                a, b = pts[0], pts[1]
+                b = (b[0], pin[1]) if abs(a[1] - b[1]) < 1e-6 else (pin[0], b[1])
+                pts = [pin, b] + list(pts[2:])
+            out.append(pts)
+        return out
+
     def _make(self):
         made = 0
         if self.step == "path" and len(self.points) >= 2:
-            paths = bus_paths(self.points, self.count, self.spacing, self._flip_for(self.points))
+            paths = self._on_pins(bus_paths(self.points, self.count, self.spacing,
+                                            self._flip_for(self.points)))
             sheet = self.ctx.sheet()
             project = self.ctx.project
             layers = bus_layer_list(self.layers, len(paths))
@@ -1499,10 +1518,12 @@ class InsertCmd(Command):
     to: Enter takes the one offered (the nearest coil with its prefix), a typed tag takes that
     device, L lists them."""
     name, title = "INSERT", "Insert"
-    repeatable = False
+    repeatable = True       # (Enter: the same symbol again, the owner, 0.16)
 
     def __init__(self, ctx, defn, attrs=None):
         super().__init__(ctx)
+        # (as given: a repeat starts from these again, its tag and links worked out anew)
+        self.repeat_args = (defn, dict(attrs or {}))
         self.defn, self.attrs = defn, dict(attrs or {})
         if getattr(defn, "manufacturer", "") and not self.attrs.get("MFR"):
             # the block says who makes it: the copy's MFR, as a part's would (a part's own

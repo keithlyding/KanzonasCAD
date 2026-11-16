@@ -642,6 +642,8 @@ class MainWindow(BlockEditing, QMainWindow):
         # schematic and panel work, both always there (any sheet can hold either)
         r.add_tab("Schematic", [
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"]]),
+            # (the owner: "Copy is not included in schematic and needs to be")
+            ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"], a["attr_vis"],
                                   a["del_comp"]]),
             ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"],
@@ -658,6 +660,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"],
                                      a["attr_vis"],
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
+            ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
             ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"],
                                  a["dup_block"], a["save_block_as"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),

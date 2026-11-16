@@ -632,6 +632,22 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert got == at, "%s held by pin %s: the pin went to %s, not %s" % (
                 name, held, got, at)
             BC.CHECKED["insert by its pin"] += 1
+        if v.cmd is None and rnd.random() < 0.25:
+            # Enter: the same symbol again (0.16), held by its first pin
+            before = set(s.entities)
+            v.enter()
+            assert isinstance(v.cmd, C.InsertCmd) and v.cmd.defn.name == name, \
+                "Enter didn't insert %s again" % name
+            at = pt()
+            v.input_text(fmt(at))
+            finish()
+            again = [e for i, e in s.entities.items() if i not in before and
+                     isinstance(e, M.Insert)]
+            assert len(again) == 1 and again[0].block == name, "Enter inserted %s" % again
+            first = again[0].defn.pins[0]["name"] if again[0].defn.pins else None
+            if first is not None:
+                assert dict(again[0].pin_points())[first] == at
+            BC.CHECKED["insert again with Enter"] += 1
 
     def op_line():
         v.run(C.LineCmd)

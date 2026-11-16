@@ -31,6 +31,13 @@ build fails without them.
   orange, yellow (480 V), black, red, blue, all black, or one by one.
 - Distribute objects (Modify menu, Panel tab): spread three or more selected objects out
   evenly, horizontally or vertically.
+- Copy (with Move, Rotate, Mirror and Erase) is on the Schematic and Panel tabs.
+- A second wire on a pin runs straight onto it: the little 45-degree bend is gone (Schematic
+  settings can turn it back on).
+- Trim wire on a wire with a bend trims only up to the bend, not the whole wire.
+- Lining up with another wire's end: with Extension on, hover over the end, then draw; the
+  point straight across or up and down from it snaps, with a dotted line.
+- After placing a symbol, Enter places the same symbol again.
 - Sheets in their own windows: Window > Open this sheet in a new window (Ctrl+Shift+N) opens
   the sheet you are on in a window you can put on another screen (it fills your second screen
   if you have one). Both windows work on the same project: one Undo, one Save. You can also
