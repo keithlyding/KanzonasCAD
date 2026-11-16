@@ -379,6 +379,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("distribute", "Dis&tribute objects", C.DistributeCmd, "Distribute")
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("del_wire", "&Delete wire", C.DeleteWireCmd, "Delete wire")
+        self._cmd_act("del_dot", "Delete d&ot", C.DeleteDotCmd, "Delete dot")
         self._cmd_act("clean_wires", "Clea&n up wires", C.CleanWiresCmd, "Clean up")
         self._cmd_act("del_comp", "Delete co&mponent", C.DeleteComponentCmd, "Delete component")
         self._cmd_act("lay_off", "&Hide layer", C.LayerOffCmd, "Hide layer")
@@ -575,7 +576,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
-                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "del_wire", "clean_wires", "del_comp", None,
+                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             if k == "FPLABEL":
@@ -649,7 +650,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"],
                                  a["dup_block"], a["save_block_as"]]),
             ("Parts", "large", [a["new_part"]]),
-            ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["clean_wires"]]),
+            ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["del_dot"],
+                                     a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Tags", "large", [a["renumber"]]),
             ("Cross-references", "large", [a["xref_update"], a["xref_freeze"], a["xref_auto"]]),
@@ -2485,7 +2487,8 @@ class MainWindow(BlockEditing, QMainWindow):
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev",
-                  "align_obj", "distribute", "trim_wire", "del_wire", "clean_wires", "del_comp"):
+                  "align_obj", "distribute", "trim_wire", "del_wire", "del_dot", "clean_wires",
+                  "del_comp"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())
         a["save_block"].setEnabled(in_block)

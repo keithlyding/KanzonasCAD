@@ -2451,6 +2451,42 @@ class DistributeCmd(Command):
         self.finish()
 
 
+class DeleteDotCmd(Command):
+    """DELDOT: click a junction dot and it goes (the wires still join there; Undo, or a click
+    on the same spot again, brings it back). Keep clicking; Enter ends. A dot goes where three
+    wire ends meet, or a wire ends on another wire's middle or bend (the owner, 0.16: "I need
+    to be able to delete the connection dots if needed")."""
+    name, title = "DELDOT", "Delete dot"
+
+    def begin(self):
+        self.picking = True
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click a junction dot to delete (where one was deleted: back again; "
+                        "Enter to finish)")
+
+    def pick(self, p):
+        from . import wires
+        sheet = self.ctx.sheet()
+        r = max(10.0 / max(self.ctx.scale, 1e-9), 0.05 * sheet.k())
+        # (the nearest to the click, shown or deleted: two dots side by side are each theirs)
+        near = [(G.dist(q, p), 0, q) for q in wires.junctions(sheet) if G.dist(q, p) <= r]
+        near += [(G.dist(q, p), 1, q) for q in sheet.no_dots
+                 if G.dist(q, p) <= r and wires._dot_at(sheet, q)]
+        best = min(near) if near else None
+        if best is not None and best[1] == 0:
+            q = best[2]
+            with self.ctx.edit(self.title) as ed:
+                ed.sheet_meta(sheet, no_dots=[list(t) for t in sheet.no_dots] + [list(q)])
+            self.ctx.message("Dot deleted (the wires still join there)")
+        elif best is not None:
+            q = best[2]
+            with self.ctx.edit("Restore dot") as ed:
+                ed.sheet_meta(sheet, no_dots=[list(t) for t in sheet.no_dots if tuple(t) != q])
+            self.ctx.message("Dot back")
+        else:
+            self.ctx.message("No junction dot there")
+
+
 class TrimWireCmd(Command):
     """TRIMWIRE (AutoCAD Electrical's Trim Wire): click a wire and the piece clicked goes, up
     to the nearest wire or pin on either side (to its end when there is none). No cutting
@@ -2757,6 +2793,7 @@ COMMANDS = {
     "SCOOT": (ScootCmd, ["AESCOOT"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
     "DISTRIBUTE": (DistributeCmd, ["DIST"]),
+    "DELDOT": (DeleteDotCmd, ["DD"]),
     "ALIGNOBJ": (AlignObjectsCmd, ["ALO"]),
     "LAYOFF": (LayerOffCmd, []),
     "LAYISO": (LayerIsoCmd, []),

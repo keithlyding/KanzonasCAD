@@ -459,6 +459,14 @@ settings, <b>A second wire on a pin leaves it on a 45-degree lead</b>, makes it 
 a short 45-degree lead (1/8 inch on paper) and then run beside the first, as drawn by hand (to
 the side the cursor is on; a third wire takes the other side; the lead keeps its angle when the
 symbol moves); it is off to start. Several wires on a pin get no dot: the pin is the connection.</li>
+<li><b>Junction dots</b>: a dot goes where <b>three or more wire ends meet</b>, or where a wire
+<b>ends on another wire's middle or bend</b> (a T). A wire carried on from a free end of another
+joins it into one wire, with no dot; carried on from a point that is already a bend, or where
+two wires already meet end to end, it makes three: a dot (on the screen both look like the end
+of one wire). <b>Delete dot</b> (DELDOT, DD; Modify menu, Schematic tab: Edit wires): click a
+dot and it goes from the drawing, the print and the PDF; the wires still join there. Click the
+same spot again (or Undo) to bring it back; keep clicking, Enter ends. It is kept with the
+sheet.</li>
 <li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
 Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
 where needed). Select the wires too and they move with it instead.</li>

@@ -38,6 +38,10 @@ build fails without them.
 - Lining up with another wire's end: with Extension on, hover over the end, then draw; the
   point straight across or up and down from it snaps, with a dotted line.
 - After placing a symbol, Enter places the same symbol again.
+- Delete dot (Modify menu, Schematic tab): click a junction dot to remove it (the wires still
+  connect); click again to bring it back. Why a dot sometimes appears when a wire is added at
+  the end of another: that point was already a bend, or two wires met there, so three wires
+  now meet (the manual explains it under Wires).
 - Sheets in their own windows: Window > Open this sheet in a new window (Ctrl+Shift+N) opens
   the sheet you are on in a window you can put on another screen (it fills your second screen
   if you have one). Both windows work on the same project: one Undo, one Save. You can also

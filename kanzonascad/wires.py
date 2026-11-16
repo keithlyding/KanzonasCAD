@@ -154,9 +154,11 @@ def junctions(sheet):
             else:
                 dots.discard(k)
     sheet._junction_state = (cur, dots)
-    out = sorted(dots)
+    hidden = set(getattr(sheet, "no_dots", ()) or ())
+    out = sorted(k for k in dots if k not in hidden)    # (Delete dot: the wires still join)
     sheet._junctions = (sheet.version, out)
     return out
+
 
 
 def break_under(ed, sheet, ins):

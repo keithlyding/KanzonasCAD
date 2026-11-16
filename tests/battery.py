@@ -590,8 +590,10 @@ def random_editing(log, out, ops, seed, drawing=None):
         cmd = v.run(C.BusCmd)
         side = None
         if sides and rnd.random() < 0.5:
-            side = rnd.choice(sides)
-            a = rnd.choice(side[0])
+            a = rnd.choice(rnd.choice(sides)[0])
+            # (the side of the pin clicked: two symbols overlapping can share a pin, and the
+            # bus takes one of theirs)
+            side = C.pin_side(s, a)
         else:
             for t in (str(rnd.randint(2, 4)), "0.5"):
                 if v.cmd is not None:
@@ -1146,6 +1148,21 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert max(gaps) - min(gaps) <= tol, "distributed unevenly: %s" % gaps
             BC.CHECKED["distribute"] += 1
 
+    def op_del_dot():
+        dots = wires.junctions(s)
+        if not dots:
+            return
+        q = rnd.choice(dots)
+        v.run(C.DeleteDotCmd)
+        v.cmd.pick(q)
+        assert q not in wires.junctions(s), "Delete dot left the dot at %s" % (q,)
+        assert wires.connects_at(s, q), "Delete dot cut the wires at %s" % (q,)
+        if rnd.random() < 0.3:
+            v.cmd.pick(q)
+            assert q in wires.junctions(s), "a second click didn't bring the dot back"
+        finish()
+        BC.CHECKED["delete dot"] += 1
+
     def op_update_blocks():
         # Library > Update blocks from library... on a project whose copy of a symbol is old
         # (its tag elsewhere, as 0.15's were): the copies take the library's, and keep their
@@ -1190,7 +1207,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2)]
+             (op_distribute, 2), (op_del_dot, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
