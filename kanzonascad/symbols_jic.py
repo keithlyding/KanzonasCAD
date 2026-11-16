@@ -303,6 +303,30 @@ def builtin_symbols():
                   _three_pins(), tag=(0.0, TAG3_Y),
                   description="Thermal overload heaters, three poles",
                   attr_texts=_rating(y=RATING3_Y)))
+    # two devices in one symbol, as they're bought and wired (the owner, 0.16.2: "Please add
+    # 3ph disconnect with fuses and 3phase starter with overloads as symbols"): the second
+    # half drawn 1/2" on, L1-L3 in on the left, T1-T3 out 1" away
+    def shifted(one, dx=2 * PIN):
+        return [e._map(lambda q: (q[0] + dx, q[1])) for e in _three(one)]
+
+    o = _three(ds_pole) + _link(0.0, 0.58, -0.42) + shifted(fu_pole)
+    S.append(_sym("Fused disconnect 3-pole", "JIC/Power", o, "device", "", "DS",
+                  [{"name": "L%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(POLES)] +
+                  [{"name": "T%d" % (i + 1), "pos": (3 * PIN, y)} for i, y in enumerate(POLES)],
+                  tag=(PIN, TAG3_Y), description="Fused disconnect switch, three poles",
+                  attr_texts=[dict(a, pos=(a["pos"][0] + 2 * PIN, a["pos"][1]))
+                              for a in _in_fuse(POLES)]))
+    # a contactor's power contacts and its overload heaters: a contact of the starter's coil
+    # (Contactor coil, M), which lists it; the overload contact belongs to the coil too
+    o = _three(lambda: _contact(False)) + _link(0.0, 0.4, -0.4) + shifted(heater_pole) + \
+        [e._map(lambda q: (q[0] + 2 * PIN, q[1])) for e in _link(0.0, 0.42, -0.42)]
+    S.append(_sym("Starter 3-pole", "JIC/Motor control", o, "child", "NO", "M",
+                  [{"name": "L%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(POLES)] +
+                  [{"name": "T%d" % (i + 1), "pos": (3 * PIN, y)} for i, y in enumerate(POLES)],
+                  tag=(PIN, TAG3_Y),
+                  description="Motor starter: contactor power contacts and overload heaters, "
+                              "three poles (a contact of its Contactor coil)",
+                  attr_texts=_rating(2 * PIN, RATING3_Y)))
     r, cx = 0.55, 0.625                 # (the circle clear of the pins, every lead reaching it)
     o = [Circle((cx, 0), r), Text((cx, -0.06), "MTR", 0.15, align="center")]
     for y in POLES:

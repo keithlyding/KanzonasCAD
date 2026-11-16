@@ -549,7 +549,8 @@ def random_editing(log, out, ops, seed, drawing=None):
     lib = win.library
     syms = ["Contact NO", "Contact NC", "Relay coil", "Pushbutton NO", "Pushbutton NC",
             "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC",
-            "Disconnect 3-pole", "Fuses 3-pole", "Circuit breaker 3-pole"]
+            "Disconnect 3-pole", "Fuses 3-pole", "Circuit breaker 3-pole",
+            "Fused disconnect 3-pole", "Starter 3-pole"]
     syms = [n for n in syms if lib.get("symbol", n) is not None]
     start = norm(p.to_dict())
     counts = {}

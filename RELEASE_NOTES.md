@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.16.2
+
+**New**
+- Two new three-phase symbols in the Library: **Fused disconnect 3-pole** (the disconnect and
+  its fuses in one, the fuse rating shown in each fuse) and **Starter 3-pole** (the
+  contactor's power contacts and the overload heaters in one). The starter belongs to its
+  Contactor coil like any contact: it shows the coil's tag and is listed under it. Both line
+  up pole for pole and tag for tag with the other three-pole symbols.
+
 ## 0.16.1
 
 **Fixed**

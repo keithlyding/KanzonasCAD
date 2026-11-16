@@ -207,8 +207,8 @@ A starter set of JIC/NFPA symbols is built in (relay, contactor and timer coils,
 timed contacts, pushbuttons, E-stop, selector, limit/pressure/temperature/float switches,
 fuse, breaker, disconnect, overload heater and contact, pilot light, motor, solenoid, control
 transformer, terminal strip and terminal, ground, distribution block, off-sheet connector;
-three-phase: 3-pole breaker, disconnect and fuses, contactor power contacts, overload heaters,
-motor, variable frequency drive; power supply; PLC I/O card with input and output points).
+three-phase: 3-pole breaker, disconnect and fuses, fused disconnect, contactor power contacts,
+overload heaters, starter, motor, variable frequency drive; power supply; PLC I/O card with input and output points).
 A symbol of yours with the same name replaces a built-in one.</li>
 <li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.
 KanzonasCAD comes with generic ones at typical sizes, in the Generic categories: breakers 1, 2
@@ -547,6 +547,13 @@ heaters) have their poles 1/2 inch apart, top to bottom L1/T1, L2/T2, L3/T3, the
 its wire. The motor and the drive (VFD: L1-L3 in, T1-T3 out) line up the same way.</li>
 <li><b>Contactor power contacts</b> belong to the contactor's coil like any contact (M601)
 and list under it.</li>
+<li>Two devices in one symbol, as they're bought and wired: the <b>Fused disconnect 3-pole</b>
+(the disconnect and its fuses: tag DS, the fuse rating in each fuse) and the <b>Starter
+3-pole</b> (the contactor's power contacts and its overload heaters: a contact of its
+<b>Contactor coil</b>, so it shows the coil's tag, M601, and lists under it; the heaters'
+rating under them). Each is 1 inch long, L1-L3 in on the left and T1-T3 out on the right,
+and lines up with the other three-pole symbols. The <b>Overload contact NC</b> in the coil's
+rung belongs to the same coil.</li>
 <li><b>Terminals</b> belong to a <b>Terminal strip</b> (place the strip first, anywhere: it
 takes a tag, TB601). Placing a terminal asks which strip, as a contact asks for its coil; it
 shows the strip's tag and numbers itself on the strip: 1, 2, 3... (the lowest free number;
