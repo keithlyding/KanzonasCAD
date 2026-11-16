@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.16.1
+
+**Fixed**
+- The mouse disappeared over the page while drawing a bus, and the bus showed no preview.
+  It is back, with the bus drawn under it as you go.
+
 ## 0.16
 
 **New**

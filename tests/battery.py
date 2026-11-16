@@ -76,6 +76,24 @@ def _watch_paints():
             PAINT_ERRORS.append(traceback.format_exc())
             raise
     CadView.paintEvent = paint
+    real_input = CadView.input_text
+
+    def typed(self, text):
+        # the mouse first where a typed point goes (when on screen) and the view painted
+        # there: the command's preview and the crosshair drawn on its way, as a user sees them
+        # (0.16.1: Bus failed every paint, and the mouse vanished over the page; typed points
+        # never painted a command on its way)
+        if self.cmd is not None and isinstance(text, str) and "," in text and "@" not in text:
+            try:
+                q = self.to_screen(tuple(float(c) for c in text.split(",")[:2]))
+            except ValueError:
+                q = None
+            if q is not None and 0 <= q.x() < self.width() and 0 <= q.y() < self.height():
+                from PySide6.QtCore import QPoint
+                _move(self, QPoint(round(q.x()), round(q.y())))
+                self.repaint()
+        return real_input(self, text)
+    CadView.input_text = typed
     CadView._battery_watched = True
 
 
