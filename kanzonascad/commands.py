@@ -3847,7 +3847,12 @@ class ScootCmd(_TwoPoint):
             return
         with self.ctx.edit(self.title) as ed:
             for e in got:
-                ed.change(sheet, e)
+                if isinstance(e, M.Wire) and len(e.points) < 2:
+                    # (a wire squeezed to nothing between what moves and what stays: it goes,
+                    # as Clean up wires takes wires of no length; the battery, seed 4101)
+                    ed.remove(sheet, e.id)
+                else:
+                    ed.change(sheet, e)
         self.ctx.message("Scooted %s%s" % (M.fmt_inches(abs(d)), "" if self.only else
                                            " with everything attached (%d objects)"
                                            % len(got)))
