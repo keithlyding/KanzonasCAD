@@ -387,6 +387,8 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("rotate", "&Rotate", C.RotateCmd, "Rotate")
         self._cmd_act("scale", "&Scale", C.ScaleCmd, "Scale")
         self._cmd_act("mirror", "M&irror", C.MirrorCmd, "Mirror")
+        self._cmd_act("array", "Arra&y", C.ArrayCmd, "Array")
+        self._cmd_act("offset", "O&ffset", C.OffsetCmd, "Offset")
         self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
         self._cmd_act("scoot", "Sc&oot", C.ScootCmd, "Scoot")
@@ -592,7 +594,8 @@ class MainWindow(BlockEditing, QMainWindow):
             else:
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
-        for k in ("move", "copy", "rotate", "scale", "mirror", "erase", "trim", None,
+        for k in ("move", "copy", "rotate", "scale", "mirror", "array", "offset", "erase",
+                  "trim", None,
                   "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
@@ -651,7 +654,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
                                a["arc"], a["text"], a["mtext"], a["hatch"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
-                                 a["erase"], a["trim"]]),
+                                 a["array"], a["offset"], a["erase"], a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
             ("Layers", "small", [self.layer_box, self.layer_states, a["layers"], a["lay_off"],
                                  a["lay_iso"], a["lay_on"], a["lay_lock"], a["lay_unlock"]]),
@@ -2664,8 +2667,8 @@ class MainWindow(BlockEditing, QMainWindow):
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
-                  "scale", "mirror", "erase", "trim", "paste", "scoot", "align_dev",
-                  "align_obj", "distribute", "trim_wire", "del_wire", "del_dot", "clean_wires",
+                  "scale", "mirror", "array", "offset", "dash_box", "erase", "trim", "paste",
+                  "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "del_wire", "del_dot", "clean_wires",
                   "del_comp"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())

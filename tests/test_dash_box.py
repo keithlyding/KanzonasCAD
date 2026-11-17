@@ -44,7 +44,7 @@ class DashBoxTest(unittest.TestCase):
         s = self.v.sheet()
         before = set(s.entities)
         self.v.run(C.DashBoxCmd)
-        type_in(self.v, "%r,%r" % a, "%r,%r" % b)
+        type_in(self.v, "%r,%r" % a, "#%r,%r" % b)
         got = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.DashBox)]
         return got[0] if got else None
 
@@ -111,7 +111,7 @@ class DashBoxTest(unittest.TestCase):
         self.v.show_sheet(s1.id)
         self.win.ask_dash_box = lambda box: {"text": "N", "device": None, "pick": True}
         self.v.run(C.DashBoxCmd)
-        type_in(self.v, "2,8", "6,5")
+        type_in(self.v, "2,8", "#6,5")
         self.assertIsInstance(self.v.cmd, C.PickDeviceCmd)
         self.v.show_sheet(s2.id)
         QApplication.processEvents()
@@ -133,7 +133,7 @@ class DashBoxTest(unittest.TestCase):
         s1 = self.v.sheet()
         self.win.ask_dash_box = lambda box: {"text": "", "device": None, "pick": True}
         self.v.run(C.DashBoxCmd)
-        type_in(self.v, "2,8", "6,5")
+        type_in(self.v, "2,8", "#6,5")
         self.v.escape()
         for _i in range(3):
             QApplication.processEvents()

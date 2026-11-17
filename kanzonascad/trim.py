@@ -149,16 +149,7 @@ def trim(ent, click, cutters):
         return [Arc(ent.center, ent.radius, after, before, **keep)]
 
     if isinstance(ent, Arc):
-        sw = G.sweep(ent.start, ent.end)
-        rel = sorted({round((G.angle_of(ent.center, p) - ent.start) % 360.0, 9)
-                      for p in crossings})
-        rel = [r for r in rel if r <= sw + 1e-7]
-        r0 = (G.angle_of(ent.center, click) - ent.start) % 360.0
-        if r0 > sw:     # picked past an end: nearest end
-            r0 = sw if (r0 - sw) < (360.0 - r0) else 0.0
-        tol = math.degrees(EPS / max(ent.radius, EPS))
-        lo = max([r for r in rel if r < r0 - tol], default=None)
-        hi = min([r for r in rel if r > r0 + tol], default=None)
+        sw, lo, hi, tol = _arc_cut(ent, click, crossings)
         out = []
         if lo is not None and lo > tol:
             out.append(Arc(ent.center, ent.radius, ent.start, ent.start + lo, **keep))
@@ -166,6 +157,82 @@ def trim(ent, click, cutters):
             out.append(Arc(ent.center, ent.radius, ent.start + hi, ent.end, **keep))
         return out
 
+    return None
+
+
+def _arc_cut(ent, click, crossings):
+    """An arc cut at click: (its sweep, the crossing before the click and the one after it,
+    in degrees from its start (None: none that side), the angle tolerance)."""
+    sw = G.sweep(ent.start, ent.end)
+    rel = sorted({round((G.angle_of(ent.center, p) - ent.start) % 360.0, 9)
+                  for p in crossings})
+    rel = [r for r in rel if r <= sw + 1e-7]
+    r0 = (G.angle_of(ent.center, click) - ent.start) % 360.0
+    if r0 > sw:     # picked past an end: nearest end
+        r0 = sw if (r0 - sw) < (360.0 - r0) else 0.0
+    tol = math.degrees(EPS / max(ent.radius, EPS))
+    lo = max([r for r in rel if r < r0 - tol], default=None)
+    hi = min([r for r in rel if r > r0 + tol], default=None)
+    return sw, lo, hi, tol
+
+
+def trimmed_away(ent, click, cutters):
+    """The piece of ent a trim at click would cut away (the owner, 0.16: "For regular trim, it
+    needs to only highlight the portion of the line that will actually get trimmed"):
+    [entities] drawn as that piece (the whole object when nothing crosses it), or None when it
+    can't be trimmed. The same crossings and the same piece as trim()."""
+    crossings = []
+    for c in cutters:
+        if c.id == ent.id:
+            continue
+        crossings.extend(entity_intersections(ent, c))
+    if isinstance(ent, Line):
+        L = ent.length()
+        if L < EPS:
+            return [ent]
+        ts = sorted({round(G.closest_on_segment(p, ent.p1, ent.p2)[1], 12) for p in crossings})
+        t0 = G.closest_on_segment(click, ent.p1, ent.p2)[1]
+        lo = max([t for t in ts if t < t0 - EPS / L], default=0.0)
+        hi = min([t for t in ts if t > t0 + EPS / L], default=1.0)
+
+        def pt(t):
+            return (ent.p1[0] + t * (ent.p2[0] - ent.p1[0]), ent.p1[1] + t * (ent.p2[1] - ent.p1[1]))
+        return [Line(pt(lo), pt(hi))]
+    if isinstance(ent, Polyline):
+        pts, cum = _poly_cum(ent.points, ent.closed)
+        total = cum[-1]
+        if total < EPS:
+            return [ent]
+        ss = sorted({round(_poly_param(pts, cum, p), 10) for p in crossings})
+        s0 = _poly_param(pts, cum, click)
+        if not ent.closed:
+            lo = max([s for s in ss if s < s0 - EPS], default=0.0)
+            hi = min([s for s in ss if s > s0 + EPS], default=total)
+            return [Polyline(_poly_piece(pts, cum, lo, hi))]
+        ss = [s for s in ss if s < total - EPS] or ss
+        ss = sorted({0.0 if abs(s - total) < EPS else s for s in ss})
+        if len(ss) < 2:
+            return [ent]
+        lo = max([s for s in ss if s < s0 - EPS], default=ss[-1])
+        hi = min([s for s in ss if s > s0 + EPS], default=ss[0])
+        if lo < hi:
+            return [Polyline(_poly_piece(pts, cum, lo, hi))]
+        a = _poly_piece(pts, cum, lo, total)
+        b = _poly_piece(pts, cum, 0.0, hi)
+        return [Polyline(a + b[1:])]
+    if isinstance(ent, Circle):
+        angs = sorted({round(G.angle_of(ent.center, p), 9) % 360.0 for p in crossings})
+        if len(angs) < 2:
+            return [ent]
+        a0 = G.angle_of(ent.center, click)
+        after = min(angs, key=lambda a: (a - a0) % 360.0)
+        before = min(angs, key=lambda a: (a0 - a) % 360.0)
+        return [Arc(ent.center, ent.radius, before, after)]
+    if isinstance(ent, Arc):
+        sw, lo, hi, _tol = _arc_cut(ent, click, crossings)
+        lo = 0.0 if lo is None else lo
+        hi = sw if hi is None else hi
+        return [Arc(ent.center, ent.radius, ent.start + lo, ent.start + hi)]
     return None
 
 
