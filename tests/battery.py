@@ -983,8 +983,11 @@ def random_editing(log, out, ops, seed, drawing=None):
         # (0.16.5: a rectangle's side dragged by its middle grip: still a rectangle, that side
         # moved straight out or in by how far the grip went across it)
         rects = [e for e in s.entities.values() if type(e) is M.Polyline and e.closed and
-                 len(e.points) == 4 and all(abs(q[0] - r[0]) < 1e-9 or abs(q[1] - r[1]) < 1e-9
+                 len(e.points) == 4 and all((abs(q[0] - r[0]) < 1e-9 or abs(q[1] - r[1]) < 1e-9)
+                                            and G.dist(q, r) > 1e-6
                                             for q, r in zip(e.points, e.points[1:] + e.points[:1]))]
+        # (four sides of some length: a rectangle squashed flat, a side dragged onto the one
+        # across, has sides of none, and no way across them to move, seed 31)
         if not rects:
             return
         e = rnd.choice(rects)
