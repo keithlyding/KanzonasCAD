@@ -881,7 +881,12 @@ def random_editing(log, out, ops, seed, drawing=None):
             return
         before = set(s.entities)
         cmd = v.run(C.BusCmd)
-        v.input_text(fmt(rnd.choice(a)))
+        start = rnd.choice(a)
+        # (symbols overlapping can share a pin: the side the start takes is the one the bus
+        # leaves from, as at its end below; seed 5 and CI's long run, seeds 3121 and 3123: the
+        # other disconnect's side was taken, and its pins were counted as left without wires)
+        a = C.pin_side(s, start)[0]
+        v.input_text(fmt(start))
         if v.cmd is None:
             return
         click = rnd.choice(b)
