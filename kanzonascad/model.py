@@ -1999,6 +1999,29 @@ def attr_display(name, value):
     return value
 
 
+def project_block_name(project, name, kind):
+    """The name a library block of that kind goes by in project: its own, unless the project
+    already has a block of that name of the other kind (a symbol and a footprint both named
+    "VFD 10x15"): then "name (footprint)" or "name (symbol)" (the owner, 0.18: "I tried to
+    insert a footprint with the same name as a schematic and it changed the footprint to the
+    schematic in a panel drawing")."""
+    got = project.blocks.get(name)
+    if got is None or got.kind == kind:
+        return name
+    return "%s (%s)" % (name, kind)
+
+
+def library_block_name(name, kind):
+    """A project block's name in the library (project_block_name's other way)."""
+    tail = " (%s)" % kind
+    return name[:-len(tail)] if name.endswith(tail) else name
+
+
+def renamed_block(defn, name):
+    """A copy of a block definition under another name."""
+    return defn if defn.name == name else BlockDef.from_dict(dict(defn.to_dict(), name=name))
+
+
 # what a footprint's label shows (Footprint label): the attribute, or its block's name
 LABELS = {"tag": "TAG", "cat": "CAT", "desc": "DESC", "name": None}
 LABEL_NAMES = {"tag": "Tag", "cat": "Part number", "desc": "Description", "name": "Block name"}

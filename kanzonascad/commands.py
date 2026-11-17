@@ -1168,15 +1168,22 @@ class PasteCmd(Command):
         sheet = self.ctx.sheet()
         ids = set()
         with self.ctx.edit("Paste") as ed:
+            project = self.ctx.project
+            names = {}
             for e in self.ents:
-                if isinstance(e, M.Insert) and e.block not in self.ctx.project.blocks \
-                        and e.block in self.blocks:
-                    ed.block(self.blocks[e.block])
+                if isinstance(e, M.Insert) and e.block in self.blocks:
+                    # (a footprint pasted where a symbol has its name: kept apart, 0.18)
+                    d = self.blocks[e.block]
+                    pname = M.project_block_name(project, e.block, d.kind)
+                    names[e.block] = pname
+                    if pname not in project.blocks:
+                        ed.block(M.renamed_block(d, pname))
             from .tags import retag_copies
             placed = []
             for e in self.result(p):
                 if isinstance(e, M.Insert):
-                    e.defn = self.ctx.project.blocks.get(e.block, e.defn)
+                    e.block = names.get(e.block, e.block)
+                    e.defn = project.blocks.get(e.block, e.defn)
                     e._world = None
                 placed.append(e)
             for e in retag_copies(self.ctx.project, sheet, placed):
@@ -2645,7 +2652,7 @@ class InsertCmd(Command):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
         tag_h = self.ctx.project.settings.get("tag_height") * self.ctx.sheet().k() \
             if self.defn.kind == "symbol" else None
-        return M.Insert(self.defn.name, p, self.angle, 1.0,
+        return M.Insert(defn.name, p, self.angle, 1.0,
                         self.mirror if mirror is None else mirror, self.attrs, defn,
                         tag_h, layer=layer)
 
@@ -2722,11 +2729,13 @@ class InsertCmd(Command):
         project = self.ctx.project
         sheet = self.ctx.sheet()
         with self.ctx.edit("Insert %s" % self.defn.name) as ed:
-            if self.defn.name not in project.blocks:
-                # the project keeps its own copy (a block already in it stays as it was)
-                ed.block(self.defn)
+            # the project keeps its own copy (a block already in it stays as it was), under
+            # its name, or "name (footprint)" when a symbol already has that name (0.18)
+            pname = M.project_block_name(project, self.defn.name, self.defn.kind)
+            if pname not in project.blocks:
+                ed.block(M.renamed_block(self.defn, pname))
             from . import tags
-            defn = project.blocks[self.defn.name]
+            defn = project.blocks[pname]
             ins = self._make(p, defn, self.placed_mirror).copy(attrs=attrs)
             ins = ins.copy(attrs=tags.new_attrs(project, sheet, defn, ins.attrs))
             if defn.kind == "footprint":

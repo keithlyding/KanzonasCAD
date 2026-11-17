@@ -55,6 +55,11 @@ build fails without them.
   the circle whole. It now cuts it there.
 - Dragging a wire's end straight past its last corner, back along the wire, left a hidden
   corner where the wire ran back over itself. The wire now runs straight to where you drop it.
+- **Intersection** didn't snap where a line (or a dimension's point) crosses the edge of wire
+  duct or DIN rail, or where duct and rail cross. It does now.
+- Placing a footprint with the same name as a symbol already in the project gave the
+  footprint the symbol's drawing. The footprint now keeps its own (as "name (footprint)"), and
+  updating one from the library no longer changes the other.
 
 ## 0.17.5
 

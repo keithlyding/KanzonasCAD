@@ -61,12 +61,19 @@ GLOW_LIMIT = 6000           # path elements past which the hover glow is drawn p
 def _local_parts(e, rect):
     """The plain entities of e whose box touches rect: e itself, or, for a block reference,
     the lines, arcs and texts of its drawing that come into rect (its drawing in sheet
-    coordinates is kept on the reference)."""
-    if not isinstance(e, M.Insert):
+    coordinates is kept on the reference); for wire duct, DIN rail or a dimension, the lines
+    it is drawn with (Intersection where a line crosses a duct's edge: the owner, 0.18, "the
+    linear measurement not being able to select an intersection is killing me"; as one object
+    they had no pieces to cross)."""
+    if isinstance(e, M.Composite):
+        sub = [w for w in e.parts() if not isinstance(w, M.Text)]
+    elif isinstance(e, M.Insert):
+        sub = e.world_entities()
+    else:
         return [e]
     x0, y0, x1, y1 = rect
     out = []
-    for w in e.world_entities():
+    for w in sub:
         b = w.bbox()
         if b[0] <= x1 and b[2] >= x0 and b[1] <= y1 and b[3] >= y0:
             out.append(w)

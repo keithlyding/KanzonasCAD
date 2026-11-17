@@ -235,6 +235,11 @@ own from its maker's drawing (Make block), or Edit block one of these and save i
 own name. A footprint of yours with the same name replaces a built-in one.</li>
 <li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
 footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
+<li><b>A symbol and a footprint with the same name</b> stay apart in a project: the one
+placed second is kept as "name (footprint)" or "name (symbol)" (its tab in the Library still
+shows its own name), so a footprint never takes a symbol's drawing, or the other way round.
+Edit block..., Update blocks from library... and saving a changed block find each by its own
+name and kind.</li>
 </ul>
 <p>The <b>Library</b> opens as a popup window, as AutoCAD Electrical's icon menu does, so the
 drawing keeps the whole width: <b>Insert symbol...</b> (Schematic tab) opens it on its Symbols,
@@ -952,7 +957,9 @@ with ORTHO on, straight across or up and down).</li>
 a yellow marker in AutoCAD's shape and the snap's name show which. The snaps:
 <b>Endpoint</b> (END), <b>Midpoint</b> (MID), <b>Center</b> (CEN), <b>Geometric center</b>
 (GCE: the middle of a closed polyline), <b>Node</b> (NOD: symbol pins, dimension points),
-<b>Quadrant</b> (QUA), <b>Intersection</b> (INT), <b>Insertion</b> (INS: blocks and text),
+<b>Quadrant</b> (QUA), <b>Intersection</b> (INT: where two lines, arcs or edges cross, a
+footprint's lines and the edges of wire duct and DIN rail included), <b>Insertion</b> (INS:
+blocks and text),
 <b>Perpendicular</b> (PER: square to a line, or on a circle in line with its center, from the
 last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point) and
 <b>Nearest</b> (NEA: the closest point on any object). And three that follow what the cursor
