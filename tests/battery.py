@@ -615,6 +615,42 @@ def random_editing(log, out, ops, seed, drawing=None):
                                                                               new[0].layer)
                 BC.CHECKED["wire on the current layer"] += 1
 
+    def op_wire_around():
+        # (0.16.7: a wire to a pin on the far side of a symbol goes round it, not through it,
+        # and arrives straight out of the pin's side; off on its own, far from everything)
+        k = s.k()
+        o = (world["o"][0] + 400.0 * k + rnd.randint(0, 40) * k,
+             world["o"][1] + 400.0 * k + rnd.randint(0, 40) * k)
+        name = rnd.choice(["Drive control terminals", "Disconnect 3-pole", "Relay coil",
+                           "Fuses 3-pole"])
+        before = set(s.entities)
+        v.run(C.InsertCmd, lib.get("symbol", name), {})
+        for _i in range(rnd.randint(0, 3)):
+            v.input_text("R")
+        v.input_text(fmt(o))
+        finish()
+        got = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(got) != 1:
+            return
+        e = got[0]
+        bb = wires.body_box(e)
+        pin_name, pin = rnd.choice(e.pin_points())
+        # from beyond the side across from the pin, a fair way off
+        cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+        a = (2 * cx - pin[0] + (2.0 * k if pin[0] <= cx else -2.0 * k),
+             2 * cy - pin[1] + rnd.choice([-1, 1]) * 1.0 * k)
+        before = set(s.entities)
+        v.run(C.WireCmd)
+        type_in(v, fmt(a), fmt(pin))
+        finish()
+        new = [w for i, w in s.entities.items() if i not in before and isinstance(w, M.Wire)]
+        mine = [w for w in new if pin in (w.points[0], w.points[-1])]
+        assert mine, "the wire to %s's pin %s didn't end on it" % (name, pin_name)
+        w = mine[0]
+        assert not wires._crosses(w.points, [(e, bb)]), \
+            "a wire to %s's pin %s ran through it: %s" % (name, pin_name, w.points)
+        BC.CHECKED["wire goes around a symbol"] += 1
+
     def op_bus():
         # (0.16: started on a symbol's pins it takes them; S straight; L layers)
         sides = []
@@ -1652,7 +1688,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

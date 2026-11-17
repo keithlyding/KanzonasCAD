@@ -1134,7 +1134,12 @@ class WireCmd(Command):
         h = self.hfirst
         if h is None:
             h = abs(p[0] - a[0]) >= abs(p[1] - a[1])
-        return start + route(a, p, h)
+        plain = route(a, p, h)
+        if not start and self.ctx.project.settings.get("wire_around", True):
+            # (round the symbols in the way: the owner, 0.16, a wire run through a drive)
+            from .wires import route_around
+            return route_around(sheet, a, p, plain)
+        return start + plain
 
     def point(self, p):
         from .wires import connects_at

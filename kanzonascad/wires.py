@@ -244,6 +244,173 @@ def route(a, b, horizontal_first=True):
 
 
 
+# ---- going around symbols -----------------------------------------------------------------
+# (the owner, 0.16: "When inserting wires, they are not going around the object": a wire from
+# an overload's T3 to a drive's L3 on the drive's bottom edge ran straight through the drive)
+CLEAR = 0.125       # paper inches a wire keeps from a symbol's drawing
+BEND = 0.75         # what a corner costs, in inches of wire (fewer corners over a bit shorter)
+
+
+def body_box(e):
+    """The box of a placed symbol's drawing, its tag and attribute texts left out (kept per
+    copy: a copy is a value)."""
+    got = getattr(e, "_body", None)
+    if got is not None:
+        return got
+    bb = None
+    d = e.defn
+    if d is not None:
+        for x in d.entities:
+            bb = G.bbox_union(bb, x._map(e.to_world, rot=e.angle, factor=e.scale,
+                                         mirror=None).bbox())
+    e._body = bb
+    return bb
+
+
+def _boxes(sheet, region, k):
+    out = []
+    for e in sheet.query(region):
+        if isinstance(e, Insert) and e.defn is not None and e.defn.kind == "symbol":
+            bb = body_box(e)
+            if bb is not None and bb[2] - bb[0] > 1e-9 and bb[3] - bb[1] > 1e-9:
+                out.append((e, bb))
+    return out
+
+
+def _crosses(pts, boxes):
+    """Does the path run through the inside of any box?"""
+    for a, b in zip(pts, pts[1:]):
+        x0, x1 = sorted((a[0], b[0]))
+        y0, y1 = sorted((a[1], b[1]))
+        for _e, bb in boxes:
+            if x0 < bb[2] - TOL and x1 > bb[0] + TOL and y0 < bb[3] - TOL and \
+                    y1 > bb[1] + TOL:
+                return True
+    return False
+
+
+def _out_of(sheet, p, boxes):
+    """The way out of the symbol whose pin p is (dx, dy, a unit along x or y), or None."""
+    for e, bb in boxes:
+        if any(G.dist(q, p) <= TOL for _n, q in e.pin_points()):
+            cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+            dx, dy = p[0] - cx, p[1] - cy
+            # (the side it is on: nearest the box's edge)
+            near = min((abs(p[0] - bb[0]), (-1, 0)), (abs(p[0] - bb[2]), (1, 0)),
+                       (abs(p[1] - bb[1]), (0, -1)), (abs(p[1] - bb[3]), (0, 1)))
+            if near[0] <= TOL * 10 or not (bb[0] < p[0] < bb[2] and bb[1] < p[1] < bb[3]):
+                return near[1]
+            return (1 if dx >= 0 else -1, 0) if abs(dx) >= abs(dy) else (0, 1 if dy >= 0 else -1)
+    return None
+
+
+def route_around(sheet, a, b, plain):
+    """The corner points from a to b (plain: the usual one-corner path's) going around the
+    symbols in the way, straight across and up and down, leaving a pin (and arriving at one)
+    straight out of its side, the fewest corners and then the shortest; plain when nothing is in
+    the way or no way round is found."""
+    import heapq
+    k = sheet.k()
+    c = CLEAR * k
+    pad = 3.0 * k
+    region = (min(a[0], b[0]) - pad, min(a[1], b[1]) - pad, max(a[0], b[0]) + pad,
+              max(a[1], b[1]) + pad)
+    boxes = _boxes(sheet, region, k)
+    if not boxes or not _crosses([a] + plain, boxes):
+        return plain
+    g = 0.125 * k                               # (corners on the 1/8" grid)
+
+    def out_pt(p):
+        d = _out_of(sheet, p, boxes)
+        if d is None:
+            return p, None
+        return (p[0] + d[0] * (c + g), p[1] + d[1] * (c + g)), d
+    a2, _da = out_pt(a)
+    b2, _db = out_pt(b)
+    import math
+    grown = []
+    for e, bb in boxes:
+        grown.append((math.floor((bb[0] - c) / g) * g, math.floor((bb[1] - c) / g) * g,
+                      math.ceil((bb[2] + c) / g) * g, math.ceil((bb[3] + c) / g) * g))
+
+    def inside(q):
+        return any(x0 + TOL < q[0] < x1 - TOL and y0 + TOL < q[1] < y1 - TOL
+                   for x0, y0, x1, y1 in grown)
+
+    def blocked(p, q):
+        x0, x1 = sorted((p[0], q[0]))
+        y0, y1 = sorted((p[1], q[1]))
+        for bx0, by0, bx1, by1 in grown:
+            if x0 < bx1 - TOL and x1 > bx0 + TOL and y0 < by1 - TOL and y1 > by0 + TOL:
+                return True
+            if abs(y0 - y1) < TOL and by0 + TOL < y0 < by1 - TOL and x0 < bx1 - TOL and \
+                    x1 > bx0 + TOL:
+                return True
+            if abs(x0 - x1) < TOL and bx0 + TOL < x0 < bx1 - TOL and y0 < by1 - TOL and \
+                    y1 > by0 + TOL:
+                return True
+        return False
+    if inside(a2) or inside(b2):
+        return plain
+    xs = sorted({round(v, 9) for v in [a2[0], b2[0]] + [q for bx in grown for q in (bx[0], bx[2])]})
+    ys = sorted({round(v, 9) for v in [a2[1], b2[1]] + [q for bx in grown for q in (bx[1], bx[3])]})
+    xi, yi = {x: i for i, x in enumerate(xs)}, {y: i for i, y in enumerate(ys)}
+    start = (xi[round(a2[0], 9)], yi[round(a2[1], 9)])
+    goal = (xi[round(b2[0], 9)], yi[round(b2[1], 9)])
+    # (Dijkstra over the grid's crossings: the state is the crossing and the way it came)
+    best = {(start, None): 0.0}
+    heap = [(0.0, start, None)]
+    came = {}
+    end = None
+    while heap:
+        cost, node, way = heapq.heappop(heap)
+        if best.get((node, way), 1e300) < cost - 1e-12:
+            continue
+        if node == goal:
+            end = (node, way)
+            break
+        i, j = node
+        for di, dj, w in ((1, 0, "x"), (-1, 0, "x"), (0, 1, "y"), (0, -1, "y")):
+            ni, nj = i + di, j + dj
+            if not (0 <= ni < len(xs) and 0 <= nj < len(ys)):
+                continue
+            p, q = (xs[i], ys[j]), (xs[ni], ys[nj])
+            if inside(q) or blocked(p, q):
+                continue
+            nc = cost + G.dist(p, q) + (BEND * k if way is not None and way != w else 0.0)
+            if nc < best.get(((ni, nj), w), 1e300) - 1e-12:
+                best[((ni, nj), w)] = nc
+                came[((ni, nj), w)] = (node, way)
+                heapq.heappush(heap, (nc, (ni, nj), w))
+    if end is None:
+        return plain
+    pts = []
+    st = end
+    while st[0] != start or st[1] is not None:
+        pts.append((xs[st[0][0]], ys[st[0][1]]))
+        st = came.get(st)
+        if st is None:
+            break
+    pts.append((xs[start[0]], ys[start[1]]))
+    pts.reverse()
+    path = [a] + ([a2] if G.dist(a, a2) > TOL else []) + pts[1:]
+    if G.dist(pts[-1], b) > TOL:
+        path.append(b)
+    # (straight runs as one: no corner where it doesn't turn)
+    out = [path[0]]
+    for q in path[1:]:
+        if G.dist(q, out[-1]) < TOL:
+            continue
+        if len(out) >= 2:
+            p0, p1 = out[-2], out[-1]
+            if (abs(p0[0] - p1[0]) < TOL and abs(p1[0] - q[0]) < TOL) or \
+                    (abs(p0[1] - p1[1]) < TOL and abs(p1[1] - q[1]) < TOL):
+                out[-1] = q
+                continue
+        out.append(q)
+    return out[1:]
+
+
 # ---- trim, delete and clean up (Trim wire, Delete wire, Clean up wires) ---------------------
 def _hits(sheet, w):
     """Distances along w where it meets something: another wire (crossing it, ending on it,

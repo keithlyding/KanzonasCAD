@@ -106,7 +106,9 @@ class WireNumberTest(unittest.TestCase):
         self.v.show_sheet(self.s7.id)
         self.v.run(C.InsertCmd, self.link, {})
         by_base_point(self.v)
-        type_in(self.v, "1,7", "")                       # Enter: A, waiting for its other end
+        # (turned round: its arrow away from the wire leaving it; pointing along the wire, the
+        # wire would go round it since 0.16.7)
+        type_in(self.v, "R", "R", "1,7", "")             # Enter: A, waiting for its other end
         self.wire((1, 7), (6, 7))
         self.wire((1, 3), (6, 3))
         self.assertEqual(self.num_at(3, 7, self.s7), "6001")    # page 6's number goes on

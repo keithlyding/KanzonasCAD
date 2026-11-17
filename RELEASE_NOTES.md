@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.16.7
+
+**New**
+- Wires go around the symbols in their way instead of through them, and arrive at a pin
+  straight out of its side (a wire from above to a terminal on a drive's bottom edge goes
+  down beside the drive and comes up into it). Nothing in the way, a wire is as before.
+  Project properties, Schematic: "Wires go around the symbols in their way" turns it off.
+
 ## 0.16.6
 
 **New**

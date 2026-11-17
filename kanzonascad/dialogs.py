@@ -359,6 +359,12 @@ def project_properties(parent, project, tab=0):
                      "onto the pin.")
     wlead.setChecked(bool(st.get("wire_lead", False)))
     form.addRow("", wlead)
+    waround = QCheckBox("Wires go around the symbols in their way")
+    waround.setToolTip("Drawing a wire, a leg that would run through a symbol goes round it "
+                       "instead, arriving at a pin straight out of its side. Off: straight, "
+                       "one corner a click.")
+    waround.setChecked(bool(st.get("wire_around", True)))
+    form.addRow("", waround)
     xref_h = QDoubleSpinBox()
     xref_h.setDecimals(4)
     xref_h.setRange(0.01, 5)
@@ -440,6 +446,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
     settings["wire_lead"] = wlead.isChecked()
+    settings["wire_around"] = waround.isChecked()
     settings["wire_gauge_shown"] = wgauge.isChecked()
     settings["footprint_label"] = fp_show.currentData()
     settings["xref_height"] = xref_h.value()
