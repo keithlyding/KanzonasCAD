@@ -204,6 +204,19 @@ class WireLandingTest(unittest.TestCase):
         if self.v.cmd is not None:
             self.v.cancel()
 
+    def test_a_symbol_turned_at_a_slant_has_no_side_of_pins(self):
+        # (the battery, seed 3101: a bus started on a disconnect turned 60 degrees laid its
+        # wires square from the first pin, the other two on no pin)
+        s = self.v.sheet()
+        ds = self.insert("Disconnect 3-pole", (5.0, 5.0))
+        self.assertIsNotNone(C.pin_side(s, self.pins(ds)["T1"]))
+        for angle, side in ((60.0, False), (30.0, False), (90.0, True)):
+            with self.v.project.edit("turn") as ed:
+                ed.change(s, s.entities[ds.id].rotated(s.entities[ds.id].pos, angle))
+            got = C.pin_side(s, self.pins(ds)["T1"])
+            self.assertEqual(got is not None, side, (angle, got))
+            self.v.project.undo()
+
     def test_a_bus_doesnt_land_through_a_symbol(self):
         a = self.insert("Fuses 3-pole", (10.5, 8.0))
         b = self.insert("Fuses 3-pole", (4.0, 8.0))

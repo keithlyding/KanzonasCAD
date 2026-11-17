@@ -33,7 +33,7 @@ AutoCAD but want fewer commands, fewer settings and fewer surprises.
   with the cable, its type and the conductors' colors or numbers (CSV and PDF).
 - Project templates, title block position (corner, right-hand or bottom strip), Options, and
   reopening the files you had open last.
-- DXF in and out, DWG in (AutoCAD R13-2018), PDF out. Imported blocks stay blocks, AutoCAD
+- DXF in and out, DWG in (AutoCAD R13-2018), PDF out, and the lines and text of a PDF in. Imported blocks stay blocks, AutoCAD
   Electrical's attributes (P_TAG1, DESC1, MFG, CAT) become tags and parts, dimensions stay
   dimensions, and an imported title block can become the project's.
 

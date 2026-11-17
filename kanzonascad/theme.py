@@ -14,7 +14,7 @@ ICONS = {
     "new": "file-plus-outline", "open": "folder-open-outline", "save": "content-save-outline",
     "save_as": "content-save-edit-outline", "print": "printer-outline", "pdf": "file-pdf-box",
     "update_blocks": "update", "new_window": "open-in-new", "move_window": "dock-window", "close_window": "window-close",
-    "dxf_out": "file-export-outline", "dxf_in": "file-import-outline",
+    "dxf_out": "file-export-outline", "dxf_in": "file-import-outline", "pdf_in": "file-pdf-box",
     # edit
     "undo": "undo", "redo": "redo", "cut": "content-cut", "copy_clip": "content-copy",
     "paste": "content-paste", "select_all": "select-all", "delete": "delete-outline",

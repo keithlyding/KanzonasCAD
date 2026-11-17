@@ -148,6 +148,16 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
+- Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
+  only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a
+  drawing or schematic"; both kinds wanted, no preference which first). Lines and text only:
+  no symbols or wires recognized. Step 1, done in 0.17: PDFs that hold lines and text (made or
+  printed by a CAD program), with pdfminer.six (MIT; PyMuPDF stays ruled out, AGPL). Step 2,
+  next: pictures, screenshots, scans and photos: lines found in the pixels (OpenCV,
+  Apache-2.0) and text read (OCR: Tesseract or an ONNX model, Apache-2.0), the scale set by
+  two points and their real distance, a photo straightened by its four corners first; its
+  results reviewed by the user, as they won't be exact. Heavy libraries imported only when
+  used.
 - Printing and windows (owner, Nov 2026; 0.16): "I need to be able to print selected or all
   sheets": File > Print... prints this sheet, all sheets or those picked (several selected in
   the Sheets panel start ticked), on a printer or into a PDF file; Fit to paper by default

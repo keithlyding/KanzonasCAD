@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QListWidget
 from . import __version__
 from . import commands as C
 from . import dialogs
+from . import geometry as G
 from . import fileio
 from . import model as M
 from . import theme
@@ -316,6 +317,11 @@ class MainWindow(BlockEditing, QMainWindow):
         A("save_as", "Save &as...", self.save_as, "Ctrl+Shift+S", label="Save as")
         A("import_dxf", "&Import DXF or DWG into this sheet...", self.import_dxf, icon="dxf_in",
           label="Import DXF/DWG")
+        # (no argument: the menu's triggered(False) would come in as the path)
+        A("import_pdf", "Import PD&F into this sheet...", lambda: self.import_pdf(),
+          icon="pdf_in", label="Import PDF",
+          tip="Bring in the lines and text of a PDF page (one made by a CAD program, or "
+              "printed to PDF): drag a PDF onto the drawing to put it where you let go")
         A("export_dxf", "Export this sheet to &DXF...", self.export_dxf, icon="dxf_out",
           label="Sheet to DXF")
         A("export_dxf_all", "Export all sheets to DX&F...", self.export_dxf_all, icon="dxf_out",
@@ -567,7 +573,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("save", "save_as", "save_template"):
             m.addAction(a[k])
         m.addSeparator()
-        for k in ("import_dxf", "export_dxf", "export_dxf_all", "export_pdf"):
+        for k in ("import_dxf", "import_pdf", "export_dxf", "export_dxf_all", "export_pdf"):
             m.addAction(a[k])
         m.addSeparator()
         m.addAction(a["print"])
@@ -714,7 +720,7 @@ class MainWindow(BlockEditing, QMainWindow):
         r.add_tab("Output", [
             ("Print", "large", [a["print"]]),
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
-            ("Import", "large", [a["import_dxf"]]),
+            ("Import", "large", [a["import_dxf"], a["import_pdf"]]),
             ("Reports", "large", [a["bom"], a["cables"], a["materials"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
         ])
@@ -1194,7 +1200,6 @@ class MainWindow(BlockEditing, QMainWindow):
                 # (its coordinates are the other program's: put it on the page, worked out
                 # before it is added, so a big drawing's pieces are placed once)
                 from . import scalefit
-                from . import geometry as G
                 box = None
                 for e in ents:
                     box = G.bbox_union(box, e.bbox())
@@ -1413,8 +1418,63 @@ class MainWindow(BlockEditing, QMainWindow):
         self._dxf_report(rep)
         d.view.zoom("extents")
 
+    def ask_pdf_import(self, path, pages, k):
+        """The Import PDF window: {"page", "scale", "filled"} or None (a test replaces it)."""
+        from .dialogs import pdf_import_dialog
+        return pdf_import_dialog(self, os.path.basename(path), pages, k)
+
+    def import_pdf(self, path=None, at=None, anchor="center"):
+        """Import PDF into this sheet...: a page's lines and text (pdf_import.py), one
+        undoable step, selected. at: where its middle goes (a PDF dropped on the drawing);
+        None keeps the page's lower left corner at 0,0. Returns the ids added."""
+        from . import pdf_import
+        d = self.doc()
+        if d is None:
+            return []
+        if path is None:
+            path, _f = QFileDialog.getOpenFileName(self, "Import PDF", self._import_dir(),
+                                                   "PDF (*.pdf)")
+            if not path:
+                return []
+        try:
+            pages = pdf_import.page_count(path)
+        except (pdf_import.PdfError, OSError) as ex:
+            QMessageBox.warning(self, APP, "Couldn't read %s:\n%s" % (path, ex))
+            return []
+        s = d.view.sheet()
+        got = self.ask_pdf_import(path, pages, s.k())
+        if got is None:
+            return []
+        self.settings.setValue("import_dir", os.path.dirname(path))
+        try:
+            rep = fileio.import_pdf(d.project, s, path, got["page"], got["scale"],
+                                    got["filled"], at, anchor)
+        except (pdf_import.PdfError, OSError) as ex:
+            QMessageBox.warning(self, APP, "Couldn't read %s:\n%s" % (path, ex))
+            return []
+        self._pdf_report(rep)
+        if rep["ids"]:
+            d.view.set_selection(set(rep["ids"]))
+            if at is None:
+                d.view.zoom("extents")
+        d.view.update()
+        return rep["ids"]
+
+    def _pdf_report(self, rep):
+        msg = "Imported %s: %d line(s) and shape(s), %d circle(s), %d text(s)." % (
+            rep["units"], rep["lines"], rep["circles"], rep["texts"])
+        if rep["skipped"]:
+            msg += " Left out: " + ", ".join("%s (%d)" % kv for kv in sorted(rep["skipped"].items()))
+        if not rep["count"]:
+            msg += (" Nothing on it could be brought in: a scan or a picture saved as PDF has "
+                    "no lines or text in it, only dots.")
+        elif not rep["texts"]:
+            msg += " No text came in: its text may be drawn as letter shapes."
+        self.cmdline.add_history(msg)
+        self.statusBar().showMessage(msg, 8000)
+
     # ---- files dragged in (Explorer, a file manager) ----------------------------------------
-    DROP_TYPES = (".dxf", ".dwg", M.FILE_SUFFIX)
+    DROP_TYPES = (".dxf", ".dwg", ".pdf", M.FILE_SUFFIX)
 
     @classmethod
     def _dropped_paths(cls, mime):
@@ -1469,6 +1529,21 @@ class MainWindow(BlockEditing, QMainWindow):
         d = self.doc()
         imported = []
         for path in paths:
+            if path.lower().endswith(".pdf"):
+                # (a PDF goes into the drawing shown: where it was let go, or as the page was)
+                if d is not None:
+                    got = self.import_pdf(path, at, "left" if imported else "center")
+                    imported += got
+                    bb = None
+                    for i in got:
+                        bb = G.bbox_union(bb, d.view.sheet().entities[i].bbox())
+                    if at is not None and bb is not None:
+                        # (the next file beside this one, not on top of it)
+                        at = (bb[2] + max(bb[2] - bb[0], bb[3] - bb[1]) * 0.1, at[1])
+                else:
+                    QMessageBox.information(self, APP, "Open or start a project first: a PDF "
+                                            "is brought into a sheet (%s)" % path)
+                continue
             drawing = path.lower().endswith((".dxf", ".dwg"))
             if not drawing or d is None or at is None:
                 self.open_path(path)
@@ -1665,7 +1740,6 @@ class MainWindow(BlockEditing, QMainWindow):
         if not ents:
             return False
         bb = None
-        from . import geometry as G
         for e in ents:
             bb = G.bbox_union(bb, e.bbox())
         blocks = {e.block: e.defn.to_dict() for e in ents
@@ -2675,7 +2749,7 @@ class MainWindow(BlockEditing, QMainWindow):
         has = v is not None
         p = v.project if has else None
         a = self.acts
-        for k in ("save", "save_as", "import_dxf", "export_dxf", "export_dxf_all", "export_pdf",
+        for k in ("save", "save_as", "import_dxf", "import_pdf", "export_dxf", "export_dxf_all", "export_pdf",
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",

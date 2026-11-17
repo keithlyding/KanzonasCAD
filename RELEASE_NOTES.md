@@ -6,6 +6,32 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.17
+
+**New**
+- **Import PDF into this sheet...** (File menu, Output tab): brings in the lines and text of a
+  page of a PDF, one a CAD program made or printed, so there's less to draw. Lines, circles and
+  arcs come in as lines, circles and arcs, and real text as text you can edit, turned as it
+  was. Choose the page and the size (the sheet's scale to start, so it looks as it did
+  printed). You can also drag a PDF onto the drawing.
+- Text that the PDF draws as letter shapes (many CAD programs print it that way) can't come in
+  as text, and a scanned page has no lines in it at all: bringing in pictures and scans comes
+  next.
+
+**Fixed**
+- A bus started on the pins of a symbol turned at a slant laid its other wires on no pins; it
+  now starts there as an ordinary bus.
+
+**Also new since 0.16.6** (0.16.7 wasn't released on its own)
+- Wires go around the symbols in their way instead of through them, and arrive at a pin
+  straight out of its side. Project properties, Schematic: "Wires go around the symbols in
+  their way" turns it off.
+- A bus goes around symbols too, all its wires.
+- How far wires keep from symbols is a setting (Project properties, Schematic): 1/8 inch to
+  start, or 1/4 inch, or what you like.
+- Drag a run of wire sideways by the grip in its middle (or with Scoot): the wires on it
+  follow and stay connected.
+
 ## 0.16.8
 
 **New**
