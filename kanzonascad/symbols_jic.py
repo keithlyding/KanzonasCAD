@@ -398,15 +398,22 @@ def builtin_symbols():
                   [{"name": "T%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(POLES)],
                   tag=(cx, TAG3_Y), description="Three-phase motor",
                   attr_texts=_rating(cx, RATING3_Y)))
-    o = [_box(-0.125, -0.75, 1.125, 0.75), Text((0.5, -0.06), "VFD", 0.15, align="center")]
-    o += [Line((-PIN, y), (-0.125, y)) for y in POLES]
-    o += [Line((1.125, y), (1.25, y)) for y in POLES]
+    # a ground on each side (the owner, 0.17.4: "Vfd symbol needs to have a ground connection
+    # on both sides"): PE1 under L1-L3, PE2 under T1-T3, 3/4" past the last phase (not 1/2":
+    # the phases stay a side of three, a bus landing wire for wire on them)
+    pe = POLES[-1] - 0.75
+    o = [_box(-0.125, pe - 0.25, 1.125, 0.75), Text((0.5, -0.06), "VFD", 0.15, align="center")]
+    o += [Line((-PIN, y), (-0.125, y)) for y in POLES + (pe,)]
+    o += [Line((1.125, y), (1.25, y)) for y in POLES + (pe,)]
+    o += [Text((-0.1, pe - 0.035), "PE", 0.07), Text((1.1, pe - 0.035), "PE", 0.07,
+                                                      align="right")]
     S.append(_sym("Variable frequency drive", "JIC/Power", o, "device", "", "VFD",
                   [{"name": "L%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(POLES)] +
-                  [{"name": "T%d" % (i + 1), "pos": (1.25, y)} for i, y in enumerate(POLES)],
+                  [{"name": "T%d" % (i + 1), "pos": (1.25, y)} for i, y in enumerate(POLES)] +
+                  [{"name": "PE1", "pos": (-PIN, pe)}, {"name": "PE2", "pos": (1.25, pe)}],
                   tag=(0.5, 0.85), description="Variable frequency drive (VFD): L1-L3 in, "
-                                                "T1-T3 to the motor",
-                  attr_texts=_rating(0.5, -0.90)))
+                                                "T1-T3 to the motor, PE1 and PE2 its grounds",
+                  attr_texts=_rating(0.5, pe - 0.40)))
     o = [_box(-0.125, -0.375, 0.875, 0.375), Text((0.375, 0.04), "AC", 0.08, align="center"),
          Line((0.2, -0.02), (0.55, -0.02)), Text((0.375, -0.16), "DC", 0.08, align="center"),
          Line((-PIN, 0.25), (-0.125, 0.25)), Line((-PIN, -0.25), (-0.125, -0.25)),

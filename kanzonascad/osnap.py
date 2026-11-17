@@ -234,6 +234,60 @@ def alignment(points, base, p, r):
     return out
 
 
+def track_crossings(acquired, points, ents, p, r):
+    """[(point, from)] where a tracking line meets an object near p, within r of it (the
+    owner, 0.17.4: "when using extension, lines and wires needs to snap to points on a
+    crossing of a line or whatever"): the extensions past acquired ends [(end, direction)],
+    and the lines straight across and up and down through acquired points, against the
+    straight pieces, circles and arcs of ents."""
+    lines = [(q0, u, True) for q0, u in acquired]
+    for q0 in points:
+        lines += [(q0, (1.0, 0.0), False), (q0, (0.0, 1.0), False)]
+    # (only a tracking line passing within r of p can have a crossing there: the others, and
+    # the pieces of every object near p, aren't looked at; on a 60,000-line sheet zoomed out
+    # that was most of a mouse move, the Windows build of 0.17.4: 41 ms)
+    near = []
+    for q0, u, ray in lines:
+        L = math.hypot(u[0], u[1]) or 1.0
+        t = ((p[0] - q0[0]) * u[0] + (p[1] - q0[1]) * u[1]) / L
+        if ray and t < -r:
+            continue
+        if abs((p[0] - q0[0]) * u[1] - (p[1] - q0[1]) * u[0]) / L <= r:
+            near.append((q0, u, ray))
+    lines = near
+    if not lines:
+        return []
+    pieces = [pc for e in ents for pc in _segments_and_curves(e)]
+    out = []
+    for q0, u, ray in lines:
+        far = (q0[0] + u[0], q0[1] + u[1])
+        for pc in pieces:
+            if pc[0] == "seg":
+                got = _line_seg(q0, far, pc[1], pc[2])
+                got = [got] if got is not None else []
+            elif pc[0] in ("circle", "arc"):
+                got = G.line_circle_intersections(q0, far, pc[1], pc[2], segment=False)
+                if pc[0] == "arc":
+                    got = [q for q in got if _on_arc(pc[1], pc[3], pc[4], q)]
+            else:
+                continue
+            for q in got:
+                t = (q[0] - q0[0]) * u[0] + (q[1] - q0[1]) * u[1]
+                if ray and t <= 1e-9:
+                    continue            # (an extension runs on past its end only)
+                if G.dist(q, p) <= r and G.dist(q, q0) > 1e-9:
+                    out.append((q, q0))
+    return out
+
+
+def _line_seg(a, b, c, d):
+    """Where the line through a-b meets the segment c-d (not along it), or None."""
+    q = _line_line(a, b, c, d)
+    if q is None or G.dist_to_segment(q, c, d) > 1e-9:
+        return None
+    return q
+
+
 def parallel(base, dirs, p, r):
     """[point] on a line from base parallel to one of dirs, within r of p (and away from
     base)."""

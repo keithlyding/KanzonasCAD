@@ -577,11 +577,17 @@ Mirror, Scale, dragging it or its grip), staying straight across and up or down 
 where needed). Select the wires too and they move with it instead.</li>
 <li><b>Placing a symbol on a wire</b> cuts the wire between the symbol's pins, as AutoCAD
 Electrical does: drop a contact onto a rung and it is wired in.</li>
-<li><b>Scoot</b> (SCOOT, AESCOOT; Modify menu, Schematic tab), as AutoCAD Electrical's:
-select devices (a contact, a pushbutton, a terminal...), a base point, then where to. They
-slide only along their own wire, across a rung or up and down a vertical wire, however you
-move the mouse; the wires on their pins stretch on one side and shorten on the other, staying
-straight. They stop short of a wire's far end or corner.</li>
+<li><b>Scoot</b> (SCOOT, AESCOOT; Modify menu, Schematic tab): select devices (a motor, a
+drive, a contact...), a base point, then where to. They move <b>with everything attached to
+them</b>: the symbols wired to them, and theirs (a motor brings its drive and its contactor;
+the drive brings the motor), and the wires between, straight across or up and down, whichever
+way the mouse goes more. Where the branch meets a bus (its drops tapping the bus's wires), the
+drops slide along the bus when you scoot along it, and stretch or shorten when you scoot
+toward or away from it; the bus and the other branches stay. Type <b>O</b> (Only these) to
+slide just the selected devices along their own wire, as AutoCAD Electrical's Scoot does,
+across a rung or up and down a vertical wire, however you move the mouse: the wires on their
+pins stretch on one side and shorten on the other, staying straight, and they stop short of a
+wire's far end or corner (<b>A</b> goes back to everything attached).</li>
 <li><b>Align devices</b> (AEALIGN; Modify menu, Schematic tab), as AutoCAD Electrical's
 Align: click the device to line up with, then the devices to line up, and press Enter. Each
 slides along its own wire (as Scoot) into line: the same column on rungs across, the same row
@@ -626,7 +632,9 @@ as they're drawn</b> (Project properties, Schematic).</li>
 <li><b>Three-pole symbols</b> (breaker, disconnect, fuses, contactor power contacts, overload
 heaters) have their poles 1/2 inch apart, top to bottom L1/T1, L2/T2, L3/T3, the spacing
 <b>Bus</b> starts with: draw a 3-wire bus, then drop the breaker on it, and each pole cuts
-its wire. The motor and the drive (VFD: L1-L3 in, T1-T3 out) line up the same way.</li>
+its wire. The motor and the drive (VFD: L1-L3 in, T1-T3 out) line up the same way; the drive has a
+ground on each side, PE1 under L1-L3 and PE2 under T1-T3 (3/4 inch below L3 and T3, so a bus
+still lands on the three phases).</li>
 <li><b>Contactor power contacts</b> belong to the contactor's coil like any contact (M601)
 and list under it.</li>
 <li>Two devices in one symbol, as they're bought and wired: the <b>Fused disconnect 3-pole</b>
@@ -850,7 +858,8 @@ has hovered over, as AutoCAD's tracking (a small green cross marks what was pick
 follows it out; and, as AutoCAD's object snap tracking, hover over a wire's end, a pin or an
 intersection and the points straight across and straight up or down from it snap, first where
 that line meets the one you are drawing: draw a wire across, hover over another wire's end
-above, and the wire stops exactly under it), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the
+above, and the wire stops exactly under it; where such a line, or a line's extension, crosses
+a line, a wire or a circle, that crossing snaps too), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the
 last point: the new line runs parallel to it) and <b>Apparent intersection</b> (APP: hover
 over two lines, then near where they would meet if they were longer; or a line and a circle or
 arc, where the line extended would meet it; with <b>Ortho</b> on, the line straight across or
@@ -876,7 +885,8 @@ uses that snap only, ticked or not, even with F3 off. NON gives the next point n
 <li><b>Ortho mode</b> (F8, ORTHO): lines straight across or up and down. The crosshair stays
 on that line, and object snaps are looked for around it (not around where the mouse really
 is), so an end or pin on the line snaps and one off to the side doesn't pull the line to
-it. (A dimension's two measured points aren't bent by Ortho.)</li>
+it. A dimension's points follow Ortho too, but an object snap right at the mouse (the
+corner you are measuring to) still wins over the Ortho line.</li>
 <li><b>Polar tracking</b> (F10, POLAR): near one of the set angles (from the last point), the
 cursor locks onto that direction: a green dashed line and a tip show the distance and angle
 (<i>Polar: 2.5 &lt; 45&deg;</i>). Typing a number then goes that far along it. The angles are
@@ -1023,10 +1033,11 @@ the pieces and their cut lengths, the total length, and how many stock lengths t
 (the cuts packed into stock lengths, longest first; saw cuts take no width). <b>Save as
 CSV...</b> writes it for a spreadsheet or a purchase order. The bill of materials takes it
 in.</li>
-<li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Panel
-tab, measure the true distance, so they're right at any scale; they show inches with two
-decimals (12.50"). The two points they measure go where you pick them (the snap): Ortho and
-Polar don't bend them, only the dimension line's place. Their grips move the measured points
+<li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Home,
+Schematic and Panel tabs (Dimensions), measure the true distance, so they're right at any scale; they show inches with two
+decimals (12.50"). The second point follows Ortho and Polar from the first, as any point
+does, except that an object snap at the mouse is taken first (so a corner off the Ortho line
+still snaps). Their grips move the measured points
 and the line; they go on layer DIMENSIONS (its color: Project properties, Panel). Dimension
 text height: Project properties.</li>
 <li><b>Hatch</b> (H; Draw menu, Home tab) fills an area: click inside a closed shape (a closed
@@ -1042,7 +1053,7 @@ lines starts a selection window there, as in AutoCAD. On screen a fill is under 
 so the lines and texts on them stay readable. DXF and DWG hatches come in as hatches (their
 pattern: ANSI31 and ANSI37 by name, any other as its lines), and go out as HATCH
 entities.</li>
-<li><b>Leader</b> (LE; Draw menu and the Panel tab, Dimensions) points at a part with an arrow
+<li><b>Leader</b> (LE; Draw menu and the Home, Schematic and Panel tabs, Dimensions) points at a part with an arrow
 and says something about it: AutoCAD's leader and multileader in one. Pick the arrow's point
 (on the part), then one or more points where the line goes, and press Enter. Then type the
 <b>note</b> and press Enter (or Enter alone for no text), or type <b>B</b> for a

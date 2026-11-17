@@ -47,6 +47,7 @@ class ScootTest(unittest.TestCase):
         c = self.rung(5, 4)
         self.v.set_selection({c.id})
         self.v.run(C.ScootCmd)
+        type_in(self.v, "O")                        # (only it, along its wire: since 0.17.3)
         type_in(self.v, "4,5", "7,6.5")             # pulled up too: only the across part counts
         now = self.s.entities[c.id]
         self.assertEqual(now.pos, (7.0, 5.0))
@@ -55,7 +56,7 @@ class ScootTest(unittest.TestCase):
         # too far: it stops short of the wire's end
         self.v.set_selection({c.id})
         self.v.run(C.ScootCmd)
-        type_in(self.v, "7,5", "30,5")
+        type_in(self.v, "O", "7,5", "30,5")
         self.assertAlmostEqual(self.s.entities[c.id].pos[0], 11 - 0.25 - scoot.MARGIN)
         self.p.undo()
         self.assertEqual(self.s.entities[c.id].pos, (7.0, 5.0))

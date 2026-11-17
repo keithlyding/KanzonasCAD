@@ -1365,6 +1365,23 @@ def pin_side(sheet, p, tol=1e-6):
             line = [(n, q) for n, q in pins if abs(q[axis] - at[axis]) <= 1e-6]
             if len(line) < 2:
                 continue
+            # (the evenly spaced run the pin is in, the longest when it is in two: a drive's
+            # L1-L3 with its ground PE1 farther on are a side of three, 0.17.4)
+            line.sort(key=lambda t: t[1][1 - axis])
+            runs, cur = [], [line[0]]
+            for prev, nxt in zip(line, line[1:]):
+                gap = nxt[1][1 - axis] - prev[1][1 - axis]
+                if len(cur) >= 2 and abs(gap - (cur[1][1][1 - axis] - cur[0][1][1 - axis])) > \
+                        1e-6:
+                    runs.append(cur)
+                    cur = [prev]
+                cur.append(nxt)
+            runs.append(cur)
+            mine = [r for r in runs if any(n == hit[0] for n, _q in r) and len(r) >= 2]
+            if not mine:
+                continue
+            line = max(mine, key=len)
+            line.sort(key=lambda t: [n for n, _q in pins].index(t[0]))  # (the block's order)
             along = sorted(q[1 - axis] for _n, q in line)
             gaps = [b - a for a, b in zip(along, along[1:])]
             if min(gaps) <= 1e-9 or max(gaps) - min(gaps) > 1e-6:
@@ -3115,11 +3132,10 @@ class DimLinearCmd(Command):
     def _height(self):
         return float(self.ctx.project.settings.get("dim_height", 0.1)) * self.ctx.sheet().k()
 
-    @property
-    def free_point(self):
-        """The two points measured go where they are picked (the snap): Ortho and Polar
-        don't bend them (the dimension line's place is still Ortho's)."""
-        return len(self.pts) < 2
+    # (its two points follow Ortho and Polar as any point does, an object snap near the mouse
+    # first: the owner, 0.17.4, "Linear measurement is not following polar or ortho"; until
+    # then they went where picked)
+    snap_at_mouse = True
 
     def point(self, p):
         self.pts.append(p)
@@ -3572,11 +3588,16 @@ class DuctCmd(_RunCmd):
 
 
 class ScootCmd(_TwoPoint):
-    """SCOOT (AutoCAD Electrical's): slide devices along their own wire. Select them, a base
-    point, then where to: they move only along their wire (across a rung, or up and down a
-    vertical wire), and the wires on their pins stretch and shorten with them, staying
-    straight. They stop short of a wire's far end or corner."""
+    """SCOOT (AutoCAD Electrical's): select devices, a base point, then where to. They move
+    with everything attached to them (the owner, 0.17.3: "I need to be able to scoot a motor
+    and everything attached to it gets scooted with it. Same thing if I scoot a vfd"): the
+    symbols wired to them and the wires between, straight across or up and down; a wire
+    leaving that branch onto a bus slides along it, or stretches when the move isn't along
+    it (scoot.branch_moved). O: only these devices, sliding along their own wire as before
+    (across a rung, or up and down a vertical wire), the wires on their pins stretching and
+    shortening, stopping short of a wire's far end or corner."""
     name, title = "SCOOT", "Scoot"
+    only = False
 
     def begin(self):
         from . import scoot
@@ -3596,7 +3617,27 @@ class ScootCmd(_TwoPoint):
         self.ax = scoot.axis(self.devs[0])
         self.ents = self.devs
         self.from_pt = None
-        self.ctx.prompt("Specify base point")
+        self._ask_base()
+
+    def _ask_base(self):
+        self.ctx.prompt("Specify base point (%s)" % (
+            "only these, along their wire" if self.only else
+            "with everything attached to them"),
+            [("Everything attached", "A") if self.only else ("Only these", "O")])
+
+    def text(self, s):
+        k = s.strip().upper()
+        if self.devs and k in ("O", "A"):
+            self.only = k == "O"
+            if self.from_pt is None:
+                self._ask_base()
+            return True
+        return False
+
+    def _branch_delta(self, p):
+        """Straight across or up and down, whichever the cursor is more."""
+        dx, dy = p[0] - self.from_pt[0], p[1] - self.from_pt[1]
+        return (dx, 0.0) if abs(dx) >= abs(dy) else (0.0, dy)
 
     def _slide(self, p):
         from . import scoot
@@ -3609,17 +3650,33 @@ class ScootCmd(_TwoPoint):
 
     def result(self, p):
         from . import scoot
+        if not self.only:
+            dx, dy = self._branch_delta(p)
+            return scoot.branch_moved(self.ctx.sheet(), self.devs, dx, dy)
         d = self._slide(p)
         return [e.moved(self.ax[0] * d, self.ax[1] * d) if scoot.axis(e) == self.ax else e
                 for e in self.devs]
 
     def apply(self, p):
-        d = self._slide(p)
+        if self.only:
+            d = self._slide(p)
+        else:
+            dx, dy = self._branch_delta(p)
+            d = abs(dx) + abs(dy)
         sheet = self.ctx.sheet()
+        got = self.result(p)
+        if got is None:
+            self.ctx.message("A wire runs through a pin of what would move, across the way it "
+                             "goes: scoot along that wire, or cut it at the pin first (Trim "
+                             "wire)")
+            self.finish()
+            return
         with self.ctx.edit(self.title) as ed:
-            for e in self.result(p):
+            for e in got:
                 ed.change(sheet, e)
-        self.ctx.message("Scooted %s" % M.fmt_inches(abs(d)))
+        self.ctx.message("Scooted %s%s" % (M.fmt_inches(abs(d)), "" if self.only else
+                                           " with everything attached (%d objects)"
+                                           % len(got)))
         self.finish()
 
     # ---- a wire's run ----------------------------------------------------------------------
@@ -3660,7 +3717,9 @@ class ScootCmd(_TwoPoint):
 
     def preview(self, p):
         if self.run is None:
-            return _TwoPoint.preview(self, p) if self.devs else []
+            if not self.devs or self.from_pt is None:
+                return []
+            return (self.result(p) or []) + [M.Line(self.from_pt, p)]
         return list(self._run_moved(p).values())
 
 
