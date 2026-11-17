@@ -861,8 +861,8 @@ def random_editing(log, out, ops, seed, drawing=None):
                 q = next(iter(got.values())) if got else dev[1].pos
                 hit = v.pick_entity(q, M.Insert)
                 if hit is None or not tags.is_device(hit):
-                    # (another symbol over that pin is what a click there picks, seed 23: the
-                    # program says it isn't a device and waits; Esc stops, and no box)
+                    # (another symbol over that pin is what a click there picks, seeds 23 and
+                    # 292: the program says it isn't a device and waits; Esc stops, no box)
                     v.escape()
                     how = "esc"
                 else:
