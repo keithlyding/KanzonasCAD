@@ -34,6 +34,11 @@ build fails without them.
   that click, and **Clean up wires** straightens such wires in drawings you already have.
 - A bus clicked onto a 3-pole device whose pins line up with another device's (stacked half an
   inch apart) could land one pin over, on the other device. It lands on the pins you click.
+- A bus fanned onto a device's pins could leave a wire jogging over and straight back along
+  itself.
+- Scoot with everything attached could leave a pin off its wire: a pin on a wire's corner, or
+  a device whose pin sits on the middle of a wire that moves along. That device now comes
+  along, or Scoot refuses the move.
 
 ## 0.17.4
 

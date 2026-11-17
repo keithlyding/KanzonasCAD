@@ -36,6 +36,32 @@ class BusFanNoFoldTest(unittest.TestCase):
             win.close()
 
 
+    def test_a_wider_bus_onto_closer_poles_has_no_dead_end_jog(self):
+        # (a 3/4" bus onto a fuse block's 1/2" poles: a wire jogged over and straight back
+        # along the same line before it went on to its pin)
+        win, v = window()
+        try:
+            v.osnap_on = v.snap_on = v.ortho_on = v.polar_on = False
+            s, p = v.sheet(), v.project
+            d = win.library.get("symbol", "Fuses 3-pole")
+            with p.edit("x") as ed:
+                ed.block(d)
+                fu = ed.add(s, M.Insert(d.name, (12.0, 4.0), defn=p.blocks[d.name]))
+            v.run(C.BusCmd)
+            v.input_text("D")
+            v.input_text("0.75")
+            type_in(v, "9.0,4.0", "%r,%r" % dict(fu.pin_points())["L1"])
+            while v.cmd is not None:
+                v.cmd.enter()
+            ends = {tuple(q) for w in s.wires() for q in (w.points[0], w.points[-1])}
+            self.assertTrue(all(tuple(q) in ends for n, q in fu.pin_points()
+                                if n.startswith("L")))
+            self.assertEqual([w.points for w in s.wires() if wires.doubles_back(w.points)], [])
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            win.close()
+
+
 class ScootPinOnWireTest(unittest.TestCase):
     """Found by the battery (0.17.5, seed 12): a wire from a device's pin to a loose end with a
     pushbutton's pin on its middle (not cut there); scooting the device with what's attached
