@@ -103,6 +103,40 @@ class NumberAlongWiresTest(unittest.TestCase):
         for a, b in zip(order, order[1:]):
             self.assertLess(counts[a][1], counts[b][0], (a, counts[a], b, counts[b]))
 
+    def t_counts(self):
+        s = self.s
+        out = {}
+        for row, x, i in self.cbs:
+            q = dict(s.entities[i].pin_points())
+            out[(row, x)] = min(wirenums.split(w.num)[1] for w in s.wires()
+                                for n in ("T1", "T2", "T3") if w.touches(q[n]) and w.num)
+        return out
+
+    def test_wire_order_a_project_and_a_sheet_setting(self):
+        # (the owner, 0.18: "for wire numberings following the same order as tags, it should
+        # be both a sheet and project setting")
+        with self.p.edit("off") as ed:
+            ed.project_settings({"wire_order_tags": False})
+        self.order_along()
+        got = self.t_counts()
+        # the tags still along the bus...
+        tag = tags.split(self.s.entities[self.cbs[3][2]].attrs["TAG"], "CB")[1]
+        self.assertEqual(tag, 6)                    # (bottom row, left: the last along it)
+        # ...the wires across and down: the bottom row left to right
+        bottom = [got[("bottom", x)] for x in (3.5, 7.0, 10.5)]
+        self.assertEqual(bottom, sorted(bottom))
+        # the sheet says otherwise: along the bus again (right to left at the bottom)
+        with self.p.edit("sheet") as ed:
+            ed.sheet_meta(self.s, wire_order_tags=True)
+            wirenums.sync(ed, self.p, renumber=self.s)
+        got = self.t_counts()
+        bottom = [got[("bottom", x)] for x in (10.5, 7.0, 3.5)]
+        self.assertEqual(bottom, sorted(bottom))
+        # saved and opened
+        q = M.Project.from_dict(self.p.to_dict())
+        self.assertIs(q.sheets[0].wire_order_tags, True)
+        self.assertIs(q.settings["wire_order_tags"], False)
+
     def test_without_a_source_as_before(self):
         with self.p.edit("order") as ed:
             ed.sheet_meta(self.s, number_order="wires", number_from=None)

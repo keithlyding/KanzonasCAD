@@ -177,24 +177,36 @@ def _pin_wires(sheet, ins, roots):
     return out
 
 
-def _summary(sheet):
+def wire_order(project, sheet):
+    """The numbering order wire numbers take on a sheet: the tags' (Sheet.number_order), or
+    across and down when the sheet (or, as it says, the project) has them not follow it."""
+    follow = sheet.wire_order_tags
+    if follow is None:
+        follow = bool(project.settings.get("wire_order_tags", True))
+    if follow or sheet.number_order != "wires":
+        return sheet.number_order
+    return "across"
+
+
+def _summary(sheet, how=None):
     """What numbering needs to know of one sheet, kept until the sheet changes: its local
     groups {root: (sort key, [wires], [numbers], locked number or None)}, its off-sheet
     connectors' groups [(name, root)] and its distribution blocks [(input root, [output
     roots])]."""
-    sig = (sheet.version, sheet.number_order, sheet.size, sheet.cols, sheet.rows,
+    how = how or sheet.number_order
+    sig = (sheet.version, how, sheet.size, sheet.cols, sheet.rows,
            sheet.col_start, sheet.row_start, sheet.number_from)
     got = getattr(sheet, "_num_summary", None)
     if got is not None and got[0] == sig:
         return got[1]
     roots = _sheet_groups(sheet)
     zsig = sig[1:] + (sheet.scale, sheet.reserve) + (
-        (sheet.version,) if sheet.number_order == "wires" else ())
+        (sheet.version,) if how == "wires" else ())
     cache = getattr(sheet, "_num_keys", None)
     if cache is None or cache[0] != zsig:
         cache = sheet._num_keys = (zsig, {})
     known = cache[1]
-    key = tags.order_key(sheet, sheet.number_order)
+    key = tags.order_key(sheet, how)
     local = {}
     for w in sheet.wires():
         r = roots[w.id]
@@ -252,7 +264,7 @@ def _assemble(project):
     names = {}
     sums = []
     for i, s in enumerate(project.sheets):
-        local, links, dists = _summary(s)
+        local, links, dists = _summary(s, wire_order(project, s))
         sums.append((i, s, local, dists))
         for name, r in links:
             names.setdefault(name, []).append((s.id, r))

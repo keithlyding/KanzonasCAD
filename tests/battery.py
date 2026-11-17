@@ -1448,6 +1448,19 @@ def random_editing(log, out, ops, seed, drawing=None):
             nb = [w.num for w in s.wires() if w.touches(qb)]
             assert nb and nb[0] == num, "the destination took %r, not the source's %s" % (
                 nb, num)
+        # (0.18: their text outside them, off their wires)
+        from kanzonascad import xrefs as X
+        texts = X.texts(p, s)
+        for e in new:
+            pin = e.pin_points()[0][1]
+            ws = [w for w in s.wires() if w.touches(pin)]
+            t = min(texts, key=lambda t: G.dist(t.pos, pin), default=None)
+            if t is None or not ws:
+                continue
+            box = t.bbox()
+            for a, b in zip(ws[0].points, ws[0].points[1:]):
+                assert not G.segment_hits_rect(a, b, box), \
+                    "the text %r of a %s lies on its wire" % (t.text, e.block)
         BC.CHECKED["source and destination arrows"] += 1
 
     def op_update_numbers():

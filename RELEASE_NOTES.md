@@ -28,6 +28,12 @@ build fails without them.
 - Numbering can **follow your bus**: **Numbering source** (Schematic tab, Numbering): click
   the disconnect the wires start from, and Renumber numbers each branch in the order it leaves
   the bus, however the bus winds round the sheet, with the branch's wires numbered together.
+- Whether wire numbers follow the tags' order is a project setting (Project properties,
+  Schematic) and a sheet setting (Sheet properties) that can override it.
+- **Wire duct** is drawn from a corner: click one corner and the other end of that edge; the
+  duct goes on the side the cursor is (F for the other side).
+- A connector's cross-reference text is always outside it, on the side away from its wire,
+  however the connector is turned.
 - Cross-reference text is on a layer of its own, **XREFS**, in cyan, and a little smaller.
   Projects made earlier get the layer and the new size when opened.
 

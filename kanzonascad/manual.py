@@ -443,7 +443,11 @@ and motor) with the same count, M209, VFD209 and MTR209. Wire numbers follow too
 own wires get their numbers before the next branch's (a drop off the bus is the bus's wire and
 has its number). Devices the wires don't reach from the source come after, across then down.
 Renumber sheet or Update numbers then numbers it so. A bus wire that doubles back on itself
-(Clean up wires straightens it) can upset the order.</li>
+(Clean up wires straightens it) can upset the order. Whether wire numbers follow the tags'
+order or go across and down is a project setting (Project properties, Schematic: <b>Wire
+numbers follow the tags' numbering order</b>, on to start) that a sheet can override (Sheet
+properties: <b>Wire numbers in</b>: as the project, the tags' order, or across, then
+down).</li>
 <li><b>Update numbers and cross-references...</b> (Schematic tab: Numbering, Sheets menu) does
 it for more at once. Tick what to update: <b>Device tags</b>, <b>Wire numbers</b>,
 <b>Cross-references</b> (any of them, or all). Choose how: <b>Renumber in order</b> (01, 02...
@@ -763,8 +767,9 @@ of the wire on its input with A, B, C... added (6001A, 6001B; after Z come AA, A
 <li><b>Off-sheet connector</b> (Library, JIC/Wiring): place one where a wire leaves the sheet
 and one where it comes back on another sheet, with the same name. Placing one asks its name:
 Enter takes the one offered (a connector still waiting for its other end, else the next free
-letter). The wire keeps the number of the sheet it starts on, and under each connector its
-other end's place shows (<b>7-A2</b>). <b>Source arrow</b> and <b>Destination arrow</b>
+letter). The wire keeps the number of the sheet it starts on, and beside each connector its
+other end's place shows (<b>7-A2</b>), outside the connector on the side away from its wire,
+whichever way the connector is turned. <b>Source arrow</b> and <b>Destination arrow</b>
 (Library, JIC/Wiring) are the same, drawn as arrows on the wire's end: a source arrow points
 away from the line where the wire leaves, a destination arrow's tip is on the line, pointing
 into it, where the wire arrives. Past each arrow's far end (not over the wire), the wire's
@@ -902,9 +907,11 @@ the next item number).</td></tr>
 <tr><td>DIN rail</td><td>DINRAIL, RAIL, DR</td><td>Real-size DIN rail from its start to its end
 (or type the length toward the cursor). Before the first click: <b>7.5</b> (TS35 x 7.5 mm, to
 start), <b>15</b> (TS35 x 15 mm) or <b>MINI</b> (TS15).</td></tr>
-<tr><td>Wire duct</td><td>DUCT, WIREWAY, WD, PANDUIT</td><td>Real-size wire duct, the same way. Before
-the first click, click a standard size on the command line or type one, width x depth:
-<code>2x3</code> (inches) or <code>50x75mm</code>.</td></tr>
+<tr><td>Wire duct</td><td>DUCT, WIREWAY, WD, PANDUIT</td><td>Real-size wire duct, from a corner:
+click one corner and then the other end of that edge (or type the length); the duct goes on the
+side of that edge the cursor is on, F puts it on the other side. Before the first click, click a
+standard size on the command line or type one, width x depth: <code>2x3</code> (inches) or
+<code>50x75mm</code>.</td></tr>
 </table>
 <p>Typed <b>Undo</b> (U) and <b>Redo</b> work on the command line too.</p>
 
@@ -1053,7 +1060,7 @@ so the gaps between them are equal. With Snap on, each move is rounded to the sn
 symbols' pins stay on the grid and wires still meet them (the gaps can then differ by up to
 one snap step); wires on a moved symbol's pins follow. One Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
-one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
+one end to the other (a rail along its middle, a duct along one edge, from a corner): the rail's outline, lips and mounting slots, the duct's walls and finger
 slots. They always go straight across or straight up and down (a snap off that line only sets
 the length), and their end grips stretch them along their own line. Stretch one
 with its end grips (or double-click it and type its length), move it with its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its

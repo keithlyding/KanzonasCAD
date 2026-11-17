@@ -56,6 +56,7 @@ DEFAULT_SETTINGS = {
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
+    "wire_order_tags": True,    # wire numbers in the tags' numbering order (else across/down)
     "xref_height": 0.065,       # cross-reference text (0.08 before 0.18: "slightly smaller")
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
     "wire_number_height": 0.08,
@@ -2547,6 +2548,10 @@ class Sheet:
         # ("wires": along the wires from this symbol, its id: the owner, 0.18, "Can it track my
         # bus?"; tags.wire_walk)
         self.number_from = None
+        # wire numbers in the tags' order (True), across and down (False), or as the project
+        # says (None: Project properties' "Wire numbers follow the tags' order"; the owner,
+        # 0.18: "both a sheet and project setting")
+        self.wire_order_tags = None
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
@@ -2766,6 +2771,7 @@ class Sheet:
              "location": self.location,
              "number_order": self.number_order,
              "number_from": self.number_from,
+             "wire_order_tags": self.wire_order_tags,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
              "rotation": self.rotation,
@@ -2798,6 +2804,7 @@ class Sheet:
         self.number_order = d.get("number_order") if d.get("number_order") in (
             "down", "wires") else "across"
         self.number_from = d.get("number_from")
+        self.wire_order_tags = d.get("wire_order_tags")
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         try:

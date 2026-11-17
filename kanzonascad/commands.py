@@ -3631,12 +3631,12 @@ class _RunCmd(Command):
     def point(self, p):
         if self.p1 is None:
             self.p1 = self.base = self.last = p
-            self.ctx.prompt("Specify end point, or type the length (toward the cursor)")
+            self.end_prompt()
             return
         p = self._straight(p)
         if G.dist(self.p1, p) < 1e-6:
             return
-        e = self.make(self.p1, p)
+        e = self.place(self.p1, p)
         with self.ctx.edit(self.title) as ed:
             if e.layer not in self.ctx.project.layers:
                 ed.layer(e.layer, None, M.Layer(e.layer).to_dict())
@@ -3647,10 +3647,21 @@ class _RunCmd(Command):
     def preview(self, p):
         if self.p1 is None:
             return []
+        raw = p
         p = self._straight(p)
         if G.dist(self.p1, p) < 1e-6:
             return []
-        return [self.make(self.p1, p)]
+        self.side_from(raw, p)
+        return [self.place(self.p1, p)]
+
+    def end_prompt(self):
+        self.ctx.prompt("Specify end point, or type the length (toward the cursor)")
+
+    def side_from(self, raw, p):
+        """(where the cursor is off the line: a duct's side)"""
+
+    def place(self, a, b):
+        return self.make(a, b)
 
 
 class RailCmd(_RunCmd):
@@ -3693,11 +3704,14 @@ class DuctCmd(_RunCmd):
 
     def _prompt_start(self):
         # (the standard sizes as buttons too: width x depth, inches)
-        self.ctx.prompt("Specify start point (%s; or a size: width x depth, 2x3, 1.5x3, "
+        self.ctx.prompt("Specify start corner (%s; or a size: width x depth, 2x3, 1.5x3, "
                         "50x75mm)" % M.size_text(*self._size()),
                         [(M.size_text(w, d), "%gx%g" % (w, d)) for w, d in M.DUCT_SIZES])
 
     def text(self, s):
+        if s.strip().upper() == "F" and self.p1 is not None:
+            self.side = -self.side
+            return True
         got = parse_duct_size(s)
         if got is None or self.p1 is not None:
             return False
@@ -3708,6 +3722,33 @@ class DuctCmd(_RunCmd):
     def make(self, a, b):
         w, d = self._size()
         return M.Duct(a, b, "", w, d)
+
+    # (from a corner, not its middle: the owner, 0.18, "For adding wire duct, the start point
+    # needs to be at the corner, not the middle": the two points are one edge, corner to
+    # corner, the duct on the side of it the cursor is on, F the other side)
+    side = 1.0
+
+    def end_prompt(self):
+        self.ctx.prompt("Specify the other corner along this edge, or type the length (the "
+                        "duct goes on the side the cursor is; F: the other side)",
+                        [("Other side", "F")])
+
+    def side_from(self, raw, p):
+        a = self.p1
+        L = G.dist(a, p)
+        if L <= 1e-9:
+            return
+        n = (-(p[1] - a[1]) / L, (p[0] - a[0]) / L)          # (left of the way it goes)
+        off = (raw[0] - a[0]) * n[0] + (raw[1] - a[1]) * n[1]
+        if abs(off) > 1e-9:
+            self.side = 1.0 if off > 0 else -1.0
+
+    def place(self, a, b):
+        w, _d = self._size()
+        L = G.dist(a, b)
+        n = (-(b[1] - a[1]) / L, (b[0] - a[0]) / L)
+        k = self.side * w / 2.0
+        return self.make((a[0] + n[0] * k, a[1] + n[1] * k), (b[0] + n[0] * k, b[1] + n[1] * k))
 
 
 class ScootCmd(_TwoPoint):

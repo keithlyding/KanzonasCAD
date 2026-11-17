@@ -148,6 +148,17 @@ def sheet_properties(parent, project, sheet):
     form.addRow("Scale", scale)
     form.addRow("Rotation", orient)
     form.addRow("Numbering order", order)
+    worder = QComboBox()
+    worder.setObjectName("wire_order")
+    follow = bool(project.settings.get("wire_order_tags", True))
+    worder.addItem("As the project (%s)" % ("the tags' order" if follow else
+                                            "across, then down"), None)
+    worder.addItem("The tags' order (above)", True)
+    worder.addItem("Across, then down", False)
+    worder.setCurrentIndex(max(worder.findData(sheet.wire_order_tags), 0))
+    worder.setToolTip("The order wire numbers go in on this sheet: the tags' numbering order "
+                      "(along the wires too), or across and down")
+    form.addRow("Wire numbers in", worder)
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
     form.addRow(_gray("The page number starts each wire number (page 6: 6001, 6002 ...) and "
@@ -184,7 +195,8 @@ def sheet_properties(parent, project, sheet):
         fields.pop("Revision", None)
     changes = dict(title=title.text().strip(), number=number.text().strip() or None,
                    own_layout=own.isChecked(), fields=fields, kind=kind.currentData(),
-                   number_order=order.currentData(), location=loc.text().strip())
+                   number_order=order.currentData(), location=loc.text().strip(),
+                   wire_order_tags=worder.currentData())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     new_scale = picked != (sheet.scale_name, sheet.scale)
@@ -341,6 +353,12 @@ def project_properties(parent, project, tab=0):
                     "one number per wire, on its longest run")
     ends.setObjectName("wire_label_ends")
     form.addRow("Number near both ends of wires longer than", ends)
+    worder = QCheckBox("Wire numbers follow the tags' numbering order (along the wires too)")
+    worder.setObjectName("wire_order_tags")
+    worder.setChecked(bool(st.get("wire_order_tags", True)))
+    worder.setToolTip("Unticked, wire numbers go across and down even on a sheet numbered along "
+                      "the wires; a sheet can choose otherwise in its Sheet properties")
+    form.addRow("", worder)
     cross = QComboBox()
     for key, label in (("plain", "Plain: the wires just cross"),
                        ("gap", "Gap: one wire is broken where it crosses"),
@@ -466,6 +484,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_number_height"] = num_h.value()
     settings["wire_label_ends"] = ends.value()
+    settings["wire_order_tags"] = worder.isChecked()
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
