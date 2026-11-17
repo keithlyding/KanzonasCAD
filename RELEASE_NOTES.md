@@ -6,6 +6,17 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.17.2
+
+**New**
+- Drawing a wire off the middle of another asks: Enter keeps that wire's number, N gives the
+  new wire a number of its own. Double-click it to change your mind later.
+- A wire longer than 6 inches shows its number near both ends (Project properties,
+  Schematic, to change the length or turn it off).
+- **Wire number label** (Modify menu, Schematic tab): click a wire wherever you want its
+  number shown again. It always shows the wire's current number, and moves, copies and is
+  saved with the wire.
+
 ## 0.17.1
 
 **New**

@@ -64,6 +64,8 @@ DEFAULT_SETTINGS = {
     "wire_clear": 0.125,        # ...that far from them, paper inches
     "wire_lead": False,         # a second wire on a pin leaves it on a 45-degree lead (the
                                 # owner, 0.16: "a little bend... That needs to go away": off)
+    "wire_label_ends": 6.0,     # a wire longer than this (paper inches) shows its number
+                                # near both ends (wirenums.labels; 0: off; the owner, 0.17.2)
     "wire_crossing": "loop",    # wires crossing: plain, gap or loop (crossings.py; a loop to
                                 # start since 0.17.1, the owner: "wire crossings are still not
                                 # being created automatically"; projects saved keep theirs)
@@ -357,15 +359,23 @@ class Wire(Polyline):
     wires. What it connects is worked out from where its ends are (wires.py), never stored, so
     it can't go stale; moving a symbol drags the ends that sat on its pins."""
     kind = "wire"
-    __slots__ = ("num", "num_lock")
+    __slots__ = ("num", "num_lock", "own_num", "labels")
 
-    def __init__(self, points, closed=False, num=None, num_lock=False, **kw):
+    def __init__(self, points, closed=False, num=None, num_lock=False, own_num=False,
+                 labels=(), **kw):
         kw.setdefault("layer", "WIRES")
         super().__init__(points, False, **kw)
         # its wire number (every wire of a connected group has the same: wirenums.py) and
         # whether it was typed (locked: numbering leaves it alone)
         self.num = str(num) if num else None
         self.num_lock = bool(num_lock) and bool(num)
+        # a wire tapped off another (its end on the other's middle) with a number of its own:
+        # not one group with it for numbering (the owner, 0.17.2: "when I tap off a wire, I
+        # can either change the wire number or leave as is")
+        self.own_num = bool(own_num)
+        # its number shown again at these distances along it from its first point (Wire
+        # number label: placed by hand; the number they show is never stored, so never stale)
+        self.labels = sorted(round(float(t), 6) for t in (labels or ()) if float(t) >= 0)
 
     def _data(self):
         d = super()._data()
@@ -373,12 +383,43 @@ class Wire(Polyline):
             d["num"] = self.num
             if self.num_lock:
                 d["num_lock"] = True
+        if self.own_num:
+            d["own_num"] = True
+        if self.labels:
+            d["labels"] = list(self.labels)
         return d
 
     @classmethod
     def _from(cls, d):
         return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
+                   d.get("own_num", False), d.get("labels") or (),
                    layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
+
+    def length(self):
+        return sum(G.dist(a, b) for a, b in zip(self.points, self.points[1:]))
+
+    def at_length(self, t):
+        """(point, piece index) at distance t along it from its first point (held to its
+        ends)."""
+        t = max(0.0, t)
+        for k, (a, b) in enumerate(zip(self.points, self.points[1:])):
+            L = G.dist(a, b)
+            if t <= L or k == len(self.points) - 2:
+                f = min(1.0, t / L) if L > 0 else 0.0
+                return (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f), k
+            t -= L
+        return self.points[0], 0
+
+    def length_at(self, p):
+        """The distance along it from its first point to the point of it nearest p."""
+        best, run = None, 0.0
+        for a, b in zip(self.points, self.points[1:]):
+            q, _t = G.closest_on_segment(p, a, b)
+            d = G.dist(p, q)
+            if best is None or d < best[0]:
+                best = (d, run + G.dist(a, q))
+            run += G.dist(a, b)
+        return best[1] if best else 0.0
 
     def touches(self, p, tol=1e-6):
         """Does the wire pass within tol of p (an end, a corner or the middle of a piece)?

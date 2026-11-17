@@ -1163,6 +1163,9 @@ class WireCmd(Command):
         return start + plain
 
     def point(self, p):
+        if self.tapped is not None:
+            self.ctx.message("Enter keeps the wire's number, or N for a new one")
+            return
         from .wires import connects_at
         if not self.points:
             self.points = [p]
@@ -1179,6 +1182,17 @@ class WireCmd(Command):
 
     def text(self, s):
         k = s.strip().upper()
+        if self.tapped is not None:
+            if k in ("N", "S"):
+                sheet = self.ctx.sheet()
+                w = sheet.entities.get(self.tapped)
+                if k == "N" and w is not None:
+                    with self.ctx.edit("Wire number of its own") as ed:
+                        ed.change(sheet, w.copy(own_num=True))
+                    self.ctx.message("The tap takes a number of its own")
+                self.finish()
+                return True
+            return False
         if k == "F" and self.points:
             last = self.ctx.cursor_point() if hasattr(self.ctx, "cursor_point") else None
             if self.hfirst is None and last is not None:
@@ -1193,6 +1207,8 @@ class WireCmd(Command):
             return True
         return False
 
+    tapped = None           # (the wire just drawn, when it taps off another: asking)
+
     def _make(self):
         pts = M._tidy(self.points)
         if len(pts) >= 2:
@@ -1204,13 +1220,41 @@ class WireCmd(Command):
                     if tidy_new(ed, sheet, w) == "duplicate":
                         self.ctx.message("That wire is already there: not drawn twice")
             _flag_misses(self.ctx, [pts[0], pts[-1]])
+            if self._ask_tap(sheet, pts):
+                return
         self.finish()
 
+    def _ask_tap(self, sheet, pts):
+        """Drawn off the middle of another wire (a tap) with wire numbers on: ask whether it
+        keeps that wire's number (Enter) or takes a new one (N) (the owner, 0.17.2: "when I tap
+        off a wire, I can either change the wire number or leave as is"). True when asking."""
+        from . import wirenums
+        if not wirenums.enabled(self.ctx.project):
+            return False
+        ends = [tuple(pts[0]), tuple(pts[-1])]
+        for e in sheet.wires():
+            if any(G.dist(q, r) <= 1e-9 for q in (e.points[0], e.points[-1]) for r in ends):
+                other = wirenums.taps(sheet, e)
+                if other is not None:
+                    self.tapped = e.id
+                    self.points = []
+                    self.ctx.prompt("Tapped off wire %s: Enter keeps its number, or N for a new "
+                                    "number" % (other.num or "?"),
+                                    [("Same number", "S"), ("New number", "N")])
+                    return True
+        return False
+
     def enter(self):
+        if self.tapped is not None:
+            self.finish()
+            return
         self._make()
 
     def cancel(self):
         # Esc, or starting another command, keeps what is drawn so far (as AutoCAD's PLINE)
+        if self.tapped is not None:
+            self.finish()
+            return
         self._make()
 
     def preview(self, p):
@@ -3844,6 +3888,62 @@ class DeleteDotCmd(Command):
             self.ctx.message("No junction dot there")
 
 
+class WireLabelCmd(Command):
+    """WIRELABEL (Wire number label): click a wire where its number shows again, as many as
+    you like (the owner, 0.17.2: "On long stretches of wire, I need to be able to insert wire
+    labels in multiple places ... also manually. But don't freeze the wire number"). Each
+    shows the wire's own number, whatever it becomes (kept as a place along the wire, not as
+    text); R then a click takes the nearest one off; U undoes the last."""
+    name, title = "WIRELABEL", "Wire number label"
+
+    def begin(self):
+        self.picking = True
+        self.removing = False
+        self.done = 0
+        self.ctx.set_selection(set())
+        self._ask()
+
+    def _ask(self):
+        self.ctx.prompt("Click a wire where its number %s (Enter to finish)" %
+                        ("label goes off" if self.removing else "shows again"),
+                        [("Remove", "R"), ("Undo", "U")])
+
+    def pick(self, p):
+        sheet = self.ctx.sheet()
+        w = _pick_wire(self.ctx, p)
+        if w is None:
+            self.ctx.message("Click a wire")
+            return
+        t = w.length_at(p)
+        if self.removing:
+            if not w.labels:
+                self.ctx.message("That wire has no label placed by hand")
+                return
+            near = min(w.labels, key=lambda x: abs(x - t))
+            new = [x for x in w.labels if x != near]
+        else:
+            new = w.labels + [t]
+        with self.ctx.edit(self.title) as ed:
+            ed.change(sheet, w.copy(labels=new))
+        self.done += 1
+
+    def text(self, s):
+        k = s.strip().upper()
+        if k == "R":
+            self.removing = not self.removing
+            self._ask()
+            return True
+        if k == "U":
+            if self.done:
+                self.ctx.project.undo()
+                self.done -= 1
+            return True
+        return False
+
+    def enter(self):
+        self.finish()
+
+
 class TrimWireCmd(Command):
     """TRIMWIRE (AutoCAD Electrical's Trim Wire): click a wire and the piece clicked goes, up
     to the nearest wire or pin on either side (to its end when there is none). No cutting
@@ -4223,6 +4323,7 @@ COMMANDS = {
     "LAYULK": (LayerUnlockAllCmd, []),
     "WIRECROSS": (WireCrossCmd, ["WX"]),
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
+    "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
     "DELWIRE": (DeleteWireCmd, ["DW"]),
     "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),
     "DELCOMP": (DeleteComponentCmd, ["AEERASECOMP"]),

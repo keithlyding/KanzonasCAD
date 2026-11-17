@@ -331,6 +331,16 @@ def project_properties(parent, project, tab=0):
     num_h.setSuffix(" in")
     num_h.setValue(float(st.get("wire_number_height", 0.08)))
     form.addRow("Wire number height", num_h)
+    ends = QDoubleSpinBox()
+    ends.setDecimals(2)
+    ends.setRange(0.0, 100.0)
+    ends.setSuffix(" in")
+    ends.setSpecialValueText("Off")
+    ends.setValue(float(st.get("wire_label_ends", 6.0) or 0.0))
+    ends.setToolTip("A wire longer than this (on paper) shows its number near both ends; 0: "
+                    "one number per wire, on its longest run")
+    ends.setObjectName("wire_label_ends")
+    form.addRow("Number near both ends of wires longer than", ends)
     cross = QComboBox()
     for key, label in (("plain", "Plain: the wires just cross"),
                        ("gap", "Gap: one wire is broken where it crosses"),
@@ -455,6 +465,7 @@ def project_properties(parent, project, tab=0):
     settings["tag_height"] = tag_h.value()
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_number_height"] = num_h.value()
+    settings["wire_label_ends"] = ends.value()
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
@@ -1941,3 +1952,27 @@ def pdf_import_dialog(parent, name, pages, k):
     if dlg.exec() != QDialog.Accepted:
         return None
     return {"page": page.value(), "scale": scale.value(), "filled": filled.isChecked()}
+
+
+def wire_number_dialog(parent, num, tap_of=None, own=False):
+    """A wire's number (typed: locked; empty: numbering gives one) and, for a wire tapped off
+    another (tap_of: that wire's number), whether it has a number of its own. Returns (number,
+    own) or None."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Wire number")
+    form = QFormLayout(dlg)
+    form.addRow(QLabel("The number of this wire and every wire joined to it. A number you type "
+                       "is locked: numbering leaves it alone. Leave it empty to let numbering "
+                       "give it one."))
+    edit = QLineEdit(num or "")
+    form.addRow("Wire number", edit)
+    box = None
+    if tap_of is not None:
+        box = QCheckBox("A number of its own (not %s, the wire it taps off)" % (tap_of or "?"))
+        box.setChecked(own)
+        box.setObjectName("own_num")
+        form.addRow("", box)
+    form.addRow(_buttons(dlg))
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return edit.text().strip().upper(), (box.isChecked() if box is not None else own)

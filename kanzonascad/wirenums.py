@@ -81,17 +81,37 @@ def _touching(sheet, p):
 def _adjacent(sheet, w):
     """Ids of the wires w connects with: one whose middle or end w ends on, or one that ends
     on w (its middle or end)."""
+    def tapped(a, p, b):
+        # (a's end p on b's middle, a with a number of its own: not one group for numbering,
+        # the owner, 0.17.2)
+        return a.own_num and not any(abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
+                                     for q in (b.points[0], b.points[-1]))
     out = set()
     for p in (w.points[0], w.points[-1]):
         for o in _touching(sheet, p):
-            if o is not w and o.kind == "wire" and o.touches(p, TOL):
+            if o is not w and o.kind == "wire" and o.touches(p, TOL) and not tapped(w, p, o):
                 out.add(o.id)
     x0, y0, x1, y1 = w.bbox()
     for o in sheet.query((x0 - TOL, y0 - TOL, x1 + TOL, y1 + TOL)):
-        if o is not w and o.kind == "wire" and o.id not in out and \
-                (w.touches(o.points[0], TOL) or w.touches(o.points[-1], TOL)):
-            out.add(o.id)
+        if o is w or o.kind != "wire" or o.id in out:
+            continue
+        for p in (o.points[0], o.points[-1]):
+            if w.touches(p, TOL) and not tapped(o, p, w):
+                out.add(o.id)
+                break
     return out
+
+
+def taps(sheet, w):
+    """The wire w taps off (one of w's ends on the middle of it, not its end), or None."""
+    for p in (w.points[0], w.points[-1]):
+        for o in _touching(sheet, p):
+            if o is w or o.kind != "wire" or o.id == w.id or not o.touches(p, TOL):
+                continue
+            if not any(abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
+                       for q in (o.points[0], o.points[-1])):
+                return o
+    return None
 
 
 def _sheet_groups(sheet):
@@ -110,7 +130,8 @@ def _sheet_groups(sheet):
         old, adj = st
         # (a wire whose points are the same, its number changed say, connects the same)
         stale = [i for i, w in cur.items() if old.get(i) is not w and
-                 (old.get(i) is None or old[i].points != w.points)]
+                 (old.get(i) is None or old[i].points != w.points or
+                  old[i].own_num != w.own_num)]
         stale += [i for i in old if i not in cur]
         for i in stale:
             for n in adj.pop(i, ()):
@@ -351,14 +372,22 @@ def set_number(ed, project, sheet, wire, num):
 # ---- showing ---------------------------------------------------------------------------------
 def labels(project, sheet):
     """The wire numbers shown on a sheet: one per group part, above (or left of, when
-    upright) its longest straight piece."""
+    upright) its longest straight piece; a wire of it longer than the project's
+    "wire_label_ends" (paper inches; 0: off) shows it near both its ends instead (the owner,
+    0.17.2: "On long stretches of wire, I need to be able to insert wire labels in multiple
+    places, preferably automatically but also manually"); and each wire again where Wire
+    number label put one (Wire.labels). Worked out, never stored: the number is always the
+    wire's own."""
     if not enabled(project) or sheet is project.title_block:
         return []
     got = getattr(sheet, "_num_labels", None)
-    sig = (sheet.version, sheet.scale, project.settings.get("wire_number_height", 0.08))
+    ends_at = float(project.settings.get("wire_label_ends", 6.0) or 0.0)
+    sig = (sheet.version, sheet.scale, project.settings.get("wire_number_height", 0.08),
+           ends_at)
     if got is not None and got[0] == sig:
         return got[1]
-    h = float(project.settings.get("wire_number_height", 0.08)) * sheet.k()
+    k = sheet.k()
+    h = float(project.settings.get("wire_number_height", 0.08)) * k
     roots = _sheet_groups(sheet)
     parts = {}
     for w in sheet.wires():
@@ -366,7 +395,32 @@ def labels(project, sheet):
             parts.setdefault((roots[w.id], w.num), []).append(w)
     out = []
     busy = _busy_points(sheet)
+
+    def put(num, q, a, b):
+        if abs(a[1] - b[1]) > abs(a[0] - b[0]):
+            out.append(Text((q[0] - h * 0.4, q[1]), num, h, 90.0, "center"))
+        else:
+            out.append(Text((q[0], q[1] + h * 0.4), num, h, 0.0, "center"))
     for (_r, num), ws in parts.items():
+        ended = False
+        if ends_at > 0:
+            for w in ws:
+                L = w.length()
+                if L <= ends_at * k:
+                    continue
+                # (near each end: an inch in on paper, or a quarter of a shorter run's way)
+                d = min(1.0 * k, L / 4.0)
+                for t in (d, L - d):
+                    q, i = w.at_length(t)
+                    put(num, q, w.points[i], w.points[i + 1])
+                ended = True
+        for w in ws:
+            for t in w.labels:
+                if t <= w.length() + 1e-9:
+                    q, i = w.at_length(t)
+                    put(num, q, w.points[i], w.points[i + 1])
+        if ended:
+            continue
         best = None
         for w in ws:
             for a, b in zip(w.points, w.points[1:]):
@@ -376,11 +430,7 @@ def labels(project, sheet):
         if best is None:
             continue
         _d, a, b = best
-        mx, my = _clear_spot(a, b, busy)
-        if abs(a[1] - b[1]) > abs(a[0] - b[0]):
-            out.append(Text((mx - h * 0.4, my), num, h, 90.0, "center"))
-        else:
-            out.append(Text((mx, my + h * 0.4), num, h, 0.0, "center"))
+        put(num, _clear_spot(a, b, busy), a, b)
     sheet._num_labels = (sig, out)
     return out
 
