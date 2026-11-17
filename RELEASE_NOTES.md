@@ -58,8 +58,8 @@ build fails without them.
   corner where the wire ran back over itself. The wire now runs straight to where you drop it.
 - **Intersection** didn't snap where a line (or a dimension's point, or a Copy or Move point)
   crosses the edge of wire duct or DIN rail, or where duct and rail cross. It does now.
-- Scooting a breaker with everything attached could squeeze a short wire between the bus and
-  a wire that stayed down to nothing and leave it broken. That wire is now removed.
+- Scooting a breaker with everything attached, or stretching a wire's end onto its other end,
+  could squeeze a wire down to nothing and leave it broken. That wire is now removed.
 - Copying or moving a footprint to a point you snapped to near DIN rail pulled it onto the
   rail, away from the point you picked it up by. A snapped point now wins.
 - Placing a footprint with the same name as a symbol already in the project gave the

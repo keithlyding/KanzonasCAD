@@ -1054,6 +1054,17 @@ class GripCmd(Command):
         return list(self._dragged(p).values())
 
 
+def put_changed(ed, sheet, got):
+    """Write changed copies; a wire squeezed to nothing (fewer than two points: an end moved
+    onto its other end) goes instead, as Clean up wires takes wires of no length (the long
+    battery: Scoot, seed 4101; Stretch, seed 3252)."""
+    for e in got:
+        if isinstance(e, M.Wire) and len(e.points) < 2:
+            ed.remove(sheet, e.id)
+        else:
+            ed.change(sheet, e)
+
+
 def stretched(sheet, rect, dx, dy):
     """STRETCH (as AutoCAD's): what a crossing window rect (x0, y0, x1, y1) moved by dx, dy
     does: an object wholly inside moves; a wire's ends inside move, its next corner sliding
@@ -1129,8 +1140,7 @@ class StretchCmd(Command):
                             p[1] - self.base[1])
             if got:
                 with self.ctx.edit(self.title) as ed:
-                    for e in got:
-                        ed.change(self.ctx.sheet(), e)
+                    put_changed(ed, self.ctx.sheet(), got)
             self.finish()
 
     def preview(self, p):
@@ -3846,13 +3856,8 @@ class ScootCmd(_TwoPoint):
             self.finish()
             return
         with self.ctx.edit(self.title) as ed:
-            for e in got:
-                if isinstance(e, M.Wire) and len(e.points) < 2:
-                    # (a wire squeezed to nothing between what moves and what stays: it goes,
-                    # as Clean up wires takes wires of no length; the battery, seed 4101)
-                    ed.remove(sheet, e.id)
-                else:
-                    ed.change(sheet, e)
+            # (a wire squeezed to nothing between what moves and what stays goes)
+            put_changed(ed, sheet, got)
         self.ctx.message("Scooted %s%s" % (M.fmt_inches(abs(d)), "" if self.only else
                                            " with everything attached (%d objects)"
                                            % len(got)))
