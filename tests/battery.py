@@ -1548,6 +1548,62 @@ def random_editing(log, out, ops, seed, drawing=None):
                     got.num, "" if got.num_lock else "un", "Lock" if o["lock"] else "Unlock")
         BC.CHECKED["Lock numbers as asked"] += 1
 
+    def op_number_bus():
+        # (0.18) numbering along the wires: a disconnect and a bus off on its own, three
+        # breakers dropped off it, the bus running right or left from the disconnect; Numbering
+        # source on the disconnect, Renumber sheet: the breakers count away from it along the
+        # bus, whichever way it runs
+        o = clear_of_drawing(s.k())
+        if o is None:
+            return
+        lib_ds, lib_cb = lib.get("symbol", "Disconnect 3-pole"), lib.get("symbol",
+                                                                        "Circuit breaker 3-pole")
+        way = rnd.choice([1, -1])
+        with p.edit("a bus to number") as ed:
+            for d in (lib_ds, lib_cb):
+                if d.name not in p.blocks:
+                    ed.block(d)
+            ds = M.Insert(lib_ds.name, o, 0.0 if way > 0 else 180.0, defn=p.blocks[lib_ds.name])
+            ds = ed.add(s, ds.copy(attrs=tags_mod.new_attrs(p, s, ds.defn, {})))
+            ends = sorted((q for n, q in ds.pin_points() if n.startswith("T")),
+                          key=lambda q: -q[1])
+            for q in ends:
+                ed.add(s, M.Wire([q, (q[0] + way * 9.0, q[1])]))
+            cbs = []
+            for j in range(3):
+                x = ends[0][0] + way * (2.0 + 2.5 * j)
+                e = M.Insert(lib_cb.name, (0.0, 0.0), 270.0, defn=p.blocks[lib_cb.name])
+                q = dict(e.pin_points())
+                e = e.moved(x - q["L1"][0], ends[-1][1] - 2.0 - q["L1"][1])
+                # (tagged as Insert tags a device: CB? of this page, its own id)
+                e = ed.add(s, e.copy(attrs=tags_mod.new_attrs(p, s, e.defn, {})))
+                q = dict(e.pin_points())
+                for i in range(3):
+                    lq = q["L%d" % (i + 1)]
+                    ed.add(s, M.Wire([(lq[0], ends[i][1]), lq]))      # (a drop)
+                cbs.append(e)
+        if any(len(dict(e.pin_points())) < 6 for e in cbs):
+            return
+        v.center, v.scale = ds.pos, max(v.scale, 40.0 / s.k())
+        v.run(C.NumberSourceCmd)
+        if v.cmd is not None:
+            v.cmd.pick(ds.pos)
+        finish()
+        if s.number_from != ds.id:
+            return                      # (a pick there took another symbol: not checked)
+        with p.edit("Renumber sheet") as ed:
+            tags_mod.renumber_sheet(ed, p, s)
+        got = [tags_mod.split(s.entities[e.id].attrs.get("TAG", ""), "CB") for e in cbs]
+        if all(g is not None for g in got) and all(not tags_mod.locked(s.entities[e.id])
+                                                   for e in cbs):
+            counts = [g[1] for g in got]
+            assert counts == sorted(counts), \
+                "along the bus (running %s) the breakers got %s" % (
+                    "right" if way > 0 else "left", [s.entities[e.id].attrs["TAG"] for e in cbs])
+            BC.CHECKED["numbering follows the bus"] += 1
+        with p.edit("order back") as ed:
+            ed.sheet_meta(s, number_order="across", number_from=None)
+
     def op_tap():
         # (0.17.2: a wire drawn off the middle of another asks; Enter: its number, N: one of
         # its own; worked out from the numbers after. On a wire of its own, just past the
@@ -2374,7 +2430,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2), (op_stretch, 2), (op_grips, 2), (op_lock_numbers, 2),
+             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2), (op_stretch, 2), (op_grips, 2), (op_lock_numbers, 2), (op_number_bus, 2),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),

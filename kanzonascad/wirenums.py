@@ -183,12 +183,13 @@ def _summary(sheet):
     connectors' groups [(name, root)] and its distribution blocks [(input root, [output
     roots])]."""
     sig = (sheet.version, sheet.number_order, sheet.size, sheet.cols, sheet.rows,
-           sheet.col_start, sheet.row_start)
+           sheet.col_start, sheet.row_start, sheet.number_from)
     got = getattr(sheet, "_num_summary", None)
     if got is not None and got[0] == sig:
         return got[1]
     roots = _sheet_groups(sheet)
-    zsig = sig[1:] + (sheet.scale, sheet.reserve)
+    zsig = sig[1:] + (sheet.scale, sheet.reserve) + (
+        (sheet.version,) if sheet.number_order == "wires" else ())
     cache = getattr(sheet, "_num_keys", None)
     if cache is None or cache[0] != zsig:
         cache = sheet._num_keys = (zsig, {})

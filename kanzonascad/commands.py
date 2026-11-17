@@ -4213,6 +4213,29 @@ class SignalArrowsCmd(Command):
         self.finish()
 
 
+class NumberSourceCmd(Command):
+    """NUMSOURCE (Numbering source): click the symbol the sheet's wires start from (a
+    disconnect, say): numbering on this sheet then follows the wires from it (Sheet properties:
+    Along the wires; tags.wire_walk), as the owner asked, 0.18: "Can it track my bus?". One
+    step; Renumber sheet or Update numbers then numbers it that way."""
+    name, title = "NUMSOURCE", "Numbering source"
+
+    def begin(self):
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click the symbol the wires start from (a disconnect, say)")
+
+    def pick(self, p):
+        e = self.ctx.pick_entity(p, M.Insert)
+        if e is None or not e.pin_points():
+            self.ctx.message("Click a symbol with pins")
+            return
+        with self.ctx.edit(self.title) as ed:
+            ed.sheet_meta(self.ctx.sheet(), number_order="wires", number_from=e.id)
+        self.ctx.message("Numbering on this sheet follows the wires from %s: Renumber sheet or "
+                         "Update numbers numbers it so" % (e.attrs.get("TAG") or e.block))
+        self.finish()
+
+
 class TrimWireCmd(Command):
     """TRIMWIRE (AutoCAD Electrical's Trim Wire): click a wire and the piece clicked goes, up
     to the nearest wire or pin on either side (to its end when there is none). No cutting
@@ -4594,6 +4617,7 @@ COMMANDS = {
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
     "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
     "STRETCH": (StretchCmd, ["S"]),
+    "NUMSOURCE": (NumberSourceCmd, ["NSRC"]),
     "SIGARROW": (SignalArrowsCmd, ["SDA", "SOURCEARROW", "XARROW"]),
     "DELWIRE": (DeleteWireCmd, ["DW"]),
     "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),

@@ -432,7 +432,18 @@ around), its tags follow: CR601 becomes CR701.</li>
 changes it. Untick "Lock this tag" there to give it back.</li>
 <li><b>Renumber sheet</b> (Schematic tab, Sheets menu) numbers the sheet's unlocked devices
 01, 02... per prefix in the sheet's <b>numbering order</b> (Sheet properties): across then
-down, or down then across. Locked tags stay and their numbers are skipped.</li>
+down, or down then across, or <b>along the wires</b>. Locked tags stay and their numbers are
+skipped.</li>
+<li><b>Along the wires</b> follows a bus however it winds round the sheet (right along the top
+row, down the side and back left along the next, say). <b>Numbering source</b> (NUMSOURCE;
+Schematic tab: Numbering, Sheets menu): click the symbol the wires start from (the disconnect)
+and the sheet is numbered along the wires from it, as you would trace them: each branch off the
+bus in the order its drop leaves the bus, and everything down that branch (its contactor, drive
+and motor) with the same count, M209, VFD209 and MTR209. Wire numbers follow too: a branch's
+own wires get their numbers before the next branch's (a drop off the bus is the bus's wire and
+has its number). Devices the wires don't reach from the source come after, across then down.
+Renumber sheet or Update numbers then numbers it so. A bus wire that doubles back on itself
+(Clean up wires straightens it) can upset the order.</li>
 <li><b>Update numbers and cross-references...</b> (Schematic tab: Numbering, Sheets menu) does
 it for more at once. Tick what to update: <b>Device tags</b>, <b>Wire numbers</b>,
 <b>Cross-references</b> (any of them, or all). Choose how: <b>Renumber in order</b> (01, 02...

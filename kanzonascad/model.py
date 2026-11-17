@@ -2544,6 +2544,9 @@ class Sheet:
         self.location = ""                  # where what's drawn on it is: a panel or box (MCP,
                                             # JB-1, FIELD); a device's LOC wins (pull.py)
         self.number_order = "across"        # tags (and wire numbers): across/down then the other
+        # ("wires": along the wires from this symbol, its id: the owner, 0.18, "Can it track my
+        # bus?"; tags.wire_walk)
+        self.number_from = None
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
@@ -2762,6 +2765,7 @@ class Sheet:
              "own_layout": self.own_layout, "kind": self.kind,
              "location": self.location,
              "number_order": self.number_order,
+             "number_from": self.number_from,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
              "rotation": self.rotation,
@@ -2791,7 +2795,9 @@ class Sheet:
         self.own_layout = bool(d.get("own_layout", False))
         self.kind = d.get("kind", "schematic") if d.get("kind") in SHEET_KINDS else "schematic"
         self.location = str(d.get("location", "") or "").strip()
-        self.number_order = "down" if d.get("number_order") == "down" else "across"
+        self.number_order = d.get("number_order") if d.get("number_order") in (
+            "down", "wires") else "across"
+        self.number_from = d.get("number_from")
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         try:

@@ -25,6 +25,9 @@ build fails without them.
 - **Stretch** (S; Modify menu, Home and Schematic tabs): drag a window over the ends of a bus's
   wires and move them all at once; the wires stay square. Or Shift+click several grips (they
   turn red) and drag one: they all move together.
+- Numbering can **follow your bus**: **Numbering source** (Schematic tab, Numbering): click
+  the disconnect the wires start from, and Renumber numbers each branch in the order it leaves
+  the bus, however the bus winds round the sheet, with the branch's wires numbered together.
 - Cross-reference text is on a layer of its own, **XREFS**, in cyan, and a little smaller.
   Projects made earlier get the layer and the new size when opened.
 
