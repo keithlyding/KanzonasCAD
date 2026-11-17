@@ -442,13 +442,29 @@ and up or down, with one corner per click; the corner follows the cursor, and F 
 other way. The wire <b>ends by itself</b> when you click a pin or another wire; Enter ends it
 anywhere; so does Esc or starting another command (what is drawn is kept). U takes back
 the last click.</p>
+<p>Drawing a wire or a bus, <b>pins and wire ends always pull the point onto them</b> (the
+green snap marker shows it), even with Object snap (F3) off, so a wire lands exactly on the
+pin you click near; a symbol's insertion point (its middle, which is not a pin) is never a
+target then, nor the lines of a symbol's drawing. If a wire end still stops just short of a
+pin or another wire without joining it (within 1/32 inch on paper: typed coordinates, or a
+point picked with the snaps off), a <b>red ring</b> marks it and the command line says how far
+and from what ("A wire end stops 0.01" short of pin 2 of CR101 without joining it"); the ring
+goes with the next change. Move the end onto the pin (its grip, with the snap) to join it.</p>
 <p><b>Bus</b> (BU; Draw menu and the Schematic tab) draws several wires side by side, three
 phases say. <b>Start it on a symbol's pin</b> (a disconnect's L1, L2 or L3, a breaker's T1...)
 and it takes that side of the symbol: as many wires as it has pins there, as far apart as they
 are, the first from its first pin and the others from the others, whichever way you head off
 (the first leg leaves the pins square); whichever pin you start on, the next clicks are where
 that pin's wire goes. Click a pin of a symbol with as many pins as far apart (any of a fuse
-block's L1, L2, L3) and the bus lands wire for wire (T1 on L1, T2 on L2...) and is done.
+block's L1, L2, L3) and the bus lands wire for wire (T1 on L1, T2 on L2...) and is done,
+arriving square onto its pins: when it can't with the corners you have, it takes one more (a
+Z: across, up or down, across again), each wire on its own pin and none crossing another. When
+it can't land wire for wire, it doesn't pretend to: it goes on drawing and the command line
+says why: that side has 2 pins and the bus 3 wires; its pins are 0.75" apart and the bus's
+wires 0.5" (N and D change the bus's); its poles run the other way from the bus's wires (a
+symbol turned round: wire 1 would land on L1 and the others on nothing; turn or flip it, or
+come at it from its other end); or that side faces away from the bus (the wires would run
+through the symbol).
 <b>Start it on a bus's open end</b> (the free ends of wires side by side, as far apart) and it
 carries that bus on: each wire joins its own, keeping its layer. <b>Start it on wires side by
 side</b> (on the middle of one of three phases running across the sheet) and it drops one wire

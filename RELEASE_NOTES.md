@@ -6,6 +6,23 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.16.3
+
+**New**
+- Drawing a wire or bus, pins and wire ends always pull the point onto them, even with Object
+  snap (F3) off, and a symbol's middle is never a target, so wires land exactly on pins.
+- A wire end that stops just short of a pin or another wire without joining it gets a red
+  ring, and the command line says how far and from what.
+- A bus that can't land wire for wire on a symbol says why (pin count, spacing, poles the
+  other way, or that side facing away) and keeps drawing.
+
+**Fixed**
+- A bus ended on a 3-pole symbol below or above where it started now lands wire for wire,
+  taking an extra corner when it needs one. Before, it ended there with only its first wire
+  on a pin and the others beside the symbol.
+- A bus ended on a 3-pole symbol turned the other way no longer claims to land with only its
+  first wire connected.
+
 ## 0.16.2
 
 **New**

@@ -489,7 +489,16 @@ class CadView(QWidget):
         Object snap, F3, is on), else none."""
         if self.osnap_once is not None:
             return set() if self.osnap_once == "none" else {self.osnap_once}
-        return set(self.osnap_modes) if self.osnap_on else set()
+        modes = set(self.osnap_modes) if self.osnap_on else set()
+        if self._wiring():
+            # drawing a wire or bus: pins and wire ends always pull the point onto them, even
+            # with Object snap off, and a symbol's insertion point (its middle, not a pin) never
+            # does (the owner, 0.16: a wire ending a hair off a pin looks joined and isn't)
+            modes = (modes - {"insert"}) | {"node", "end"}
+        return modes
+
+    def _wiring(self):
+        return bool(getattr(self.cmd, "wire_snaps", False))
 
     def _frame_index(self):
         """(entities by id, SpatialIndex) of the sheet's border, zone strips and filled-in
@@ -539,7 +548,7 @@ class CadView(QWidget):
             for kind, q in e.snap_points():
                 if kind in modes:
                     offer(kind, q)
-            if isinstance(e, M.Insert):
+            if isinstance(e, M.Insert) and not self._wiring():
                 # a block's own drawing snaps too (a footprint's corners, ends and middles,
                 # as in AutoCAD), after its pins and other objects' points of the same kind,
                 # so a wire still lands on a pin
@@ -1350,11 +1359,43 @@ class CadView(QWidget):
             self._paint_snap(p)
             self._paint_rail(p)
             self._paint_polar(p)
+            self._paint_misses(p)
             self._paint_crosshair(p, pal)
         finally:
             # (an error while painting must not leave the painter open: the
             # picture would be destroyed while painted on, and Qt may crash)
             p.end()
+
+    # ---- wire ends that stop just short (wires.near_misses) -----------------------------------
+    def flag_near_misses(self, points):
+        """After a wire or bus is drawn: its ends that stop just short of a pin or another
+        wire without joining it are marked (a red ring, until the next change to the sheet)
+        and named on the command line. Returns them."""
+        from .wires import near_misses
+        s = self.sheet()
+        got = near_misses(s, points)
+        self.miss_marks = (s.id, s.version, [q for q, _w, _d in got])
+        if got:
+            q, what, d = got[0]
+            more = " (and %d more, marked)" % (len(got) - 1) if len(got) > 1 else " (marked)"
+            self.messaged.emit("A wire end stops %s short of %s without joining it%s: move it "
+                               "onto it, or draw it with the snaps" % (
+                                   ("%.4f" % d).rstrip("0").rstrip(".") + '"', what, more))
+            self.update()
+        return got
+
+    def _paint_misses(self, p):
+        got = getattr(self, "miss_marks", None)
+        s = self.sheet()
+        if not got or got[0] != s.id or got[1] != s.version or not got[2]:
+            return
+        pen = QPen(QColor("#ff3030"), 2)
+        pen.setCosmetic(True)
+        p.setPen(pen)
+        p.setBrush(Qt.NoBrush)
+        for q in got[2]:
+            c = self.to_screen(q)
+            p.drawEllipse(c, 9, 9)
 
     def _paint_grid(self, p, pal, margin=(0, 0)):
         """The grid's dots over the view (and margin pixels more round it: the wide

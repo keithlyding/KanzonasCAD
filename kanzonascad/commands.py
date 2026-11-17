@@ -1022,6 +1022,7 @@ class WireCmd(Command):
     straight across and up or down, turning one corner per click (F flips which way the
     corner goes). It ends by itself on a pin or another wire; Enter ends it anywhere."""
     name, title = "WIRE", "Wire"
+    wire_snaps = True       # (pins and wire ends always pull the point: CadView.snap_modes)
 
     def begin(self):
         self.points = []
@@ -1098,6 +1099,7 @@ class WireCmd(Command):
                     from .wires import tidy_new
                     if tidy_new(ed, sheet, w) == "duplicate":
                         self.ctx.message("That wire is already there: not drawn twice")
+            _flag_misses(self.ctx, [pts[0], pts[-1]])
         self.finish()
 
     def enter(self):
@@ -1111,6 +1113,13 @@ class WireCmd(Command):
         if not self.points:
             return []
         return [M.Wire(self.points + self._route(p), layer=wire_layer(self.ctx))]
+
+
+def _flag_misses(ctx, points):
+    """Mark the wire ends just drawn that stop short of a pin or wire (CadView)."""
+    flag = getattr(ctx, "flag_near_misses", None)
+    if flag is not None:
+        flag(points)
 
 
 def bus_paths(points, count, spacing, flip=False):
@@ -1327,6 +1336,7 @@ class BusCmd(Command):
     wire's layer (brown, orange, yellow...). F puts the other wires on the other side; Enter
     (or Esc) ends it."""
     name, title = "BUS", "Bus"
+    wire_snaps = True       # (pins and wire ends always pull the point: CadView.snap_modes)
 
     def begin(self):
         self.count = int(getattr(self.ctx, "_bus_count", 3))
@@ -1493,6 +1503,9 @@ class BusCmd(Command):
             return
         sheet = self.ctx.sheet()
         land = self._landing(sheet, p)
+        why = self._why_not_landed(sheet, p)
+        if why:
+            self.ctx.message(why)
         tap = tap_lines(sheet, p) if land is None and (self.tap_start is None or
                                                        len(self.points) > 1) else None
         p = land if land is not None else (p[0] + self.offset[0], p[1] + self.offset[1])
@@ -1521,11 +1534,15 @@ class BusCmd(Command):
                 self._make()
                 return
         new = self._route(p)
-        if new and land is not None:
+        if land is not None:
             # (onto a symbol's pins as many and as far apart: wire for wire, then done)
-            self.points += new
-            self._make()
-            return
+            got = pin_side(sheet, land)
+            new = self._land_route(sheet, land, got[0]) if got is not None else None
+            if new:
+                self.points += new
+                self._make()
+                return
+            new = self._route(p)
         if not new:
             if self.toward is not None and len(self.points) == 1:
                 self.ctx.message("Click off the line of the symbol's pins: the bus leaves them "
@@ -1587,7 +1604,112 @@ class BusCmd(Command):
         got = pin_side(sheet, p)
         if got is None or len(got[0]) != self.count or abs(got[1] - self.spacing) > 1e-6:
             return None
+        if self._land_route(sheet, p, got[0]) is None:
+            return None
         return got[0][0]
+
+    def _land_route(self, sheet, p, pins):
+        """The points that take the bus onto a side of pins wire for wire (each wire on its
+        own pin, arriving square from outside the symbol): the usual route, else one with a
+        corner more (a Z: leaving square and arriving square, the owner, 0.16: "will wires
+        automatically snap to the correct location?"), or None."""
+        for new, fault in self._land_tries(sheet, p, pins):
+            if fault is None:
+                return new
+        return None
+
+    def _land_tries(self, sheet, p, pins):
+        """[(route, why it doesn't land or None)] for the routes onto a side of pins: the usual
+        one, then the Zs. Every one that doesn't land says why (_why_not_landed shows the
+        first: a bus that neither landed nor said why, seed 289 on CI)."""
+        if not self.points:
+            return []
+        a, b = self.points[-1], pins[0]
+        first = self._route(b)
+        cands = [first]
+        for across in (True, False):
+            m = (a[0] + b[0]) / 2 if across else (a[1] + b[1]) / 2
+            k = 0.125 * sheet.k()
+            if k > 0 and abs(round(m / k) * k - m) < abs((b[0] - a[0]) if across
+                                                         else (b[1] - a[1])) / 2:
+                m = round(m / k) * k
+            z = [(m, a[1]), (m, b[1]), b] if across else [(a[0], m), (b[0], m), b]
+            z = [q for i, q in enumerate(z) if G.dist(q, ([a] + z)[i]) > 1e-9]
+            cands.append(z)
+        out = []
+        square = "leaving its pins square, the bus can't come at that side square: click a " \
+            "point on the way first"
+        for new in cands:
+            if not new:
+                out.append((new, square))
+                continue
+            if len(self.points) == 1 and (self.toward is not None or
+                                          self.tap_start is not None):
+                # (still leaving its pins or wires square: the first leg as the usual one)
+                if not first or (abs(new[0][1] - a[1]) < 1e-9) != \
+                        (abs(first[0][1] - a[1]) < 1e-9):
+                    out.append((new, square))
+                    continue
+            out.append((new, self._landing_fault(sheet, p, pins, new)))
+        return out
+
+    def _landing_fault(self, sheet, p, pins, new=None):
+        """Why the bus, ended on a side of pins as many and as far apart as its wires, would
+        still not land wire for wire, or None: its wires arrive in the other order (the symbol
+        turned the other way: only the first would land, the others on nothing), or it comes
+        at that side through the symbol (the side faces away). Found by hand on a 3-pole fuse
+        block turned round (0.16.3)."""
+        if not self.points:
+            return None
+        main = self.points + (self._route(pins[0]) if new is None else new)
+        if len(main) < 2:
+            return None
+        ends = [q[-1] for q in self._paths(main)]
+        if len(ends) != len(pins) or any(G.dist(a, b) > 1e-6 for a, b in zip(ends, pins)):
+            return "its poles run the other way from the bus's wires (wire 1 would land on " \
+                "its first pin, the others on nothing): turn or flip it (Rotate, Mirror) or " \
+                "come at it from its other end"
+        a, b = main[-2], main[-1]
+        travel = (b[0] - a[0], b[1] - a[1])
+        for e in sheet.query_point(p, 1e-6):
+            if isinstance(e, M.Insert) and e.defn is not None and \
+                    any(G.dist(q, p) <= 1e-6 for _n, q in e.pin_points()):
+                bb = None
+                for x in e.defn.entities:
+                    bb = G.bbox_union(bb, x._map(e.to_world, rot=e.angle, factor=e.scale,
+                                                 mirror=None).bbox())
+                if bb is None:
+                    break
+                c = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
+                inward = (c[0] - pins[0][0], c[1] - pins[0][1])
+                if inward[0] * travel[0] + inward[1] * travel[1] < -1e-9:
+                    return "that side of it faces away from the bus (the wires would run " \
+                        "through it): come at it from the other side"
+                break
+        return None
+
+    def _why_not_landed(self, sheet, p):
+        """A click on a symbol's side of pins that the bus can't land on wire for wire: why
+        (the owner, 0.16: "the bus says why it can't land"), or None."""
+        got = pin_side(sheet, p)
+        if got is None or self._landing(sheet, p) is not None:
+            return None
+        pins, gap = got
+        if len(pins) == self.count and abs(gap - self.spacing) <= 1e-6:
+            tries = self._land_tries(sheet, p, pins)
+            # (the usual route's reason first, else a Z's)
+            faults = [f for _r, f in tries if f]
+            if not faults:
+                return None
+            return "Not landed wire for wire: %s" % faults[0]
+        what = []
+        if len(pins) != self.count:
+            what.append("that side has %d pins, the bus %d wires" % (len(pins), self.count))
+        if abs(gap - self.spacing) > 1e-6:
+            what.append("its pins are %s\" apart, the bus's wires %s\"" % (
+                _fmt(gap), _fmt(self.spacing)))
+        return "Not landed wire for wire: %s (N and D change the bus's count and spacing)" % \
+            " and ".join(what)
 
     @staticmethod
     def _onto(paths, tap, at_start, main):
@@ -1644,6 +1766,7 @@ class BusCmd(Command):
                         tidy_new(ed, sheet, w)
         if made:
             self.ctx.message("Bus of %d wires" % made)
+            _flag_misses(self.ctx, [q for pts in paths for q in (pts[0], pts[-1])])
         self.finish()
 
     def preview(self, p):
@@ -1655,7 +1778,13 @@ class BusCmd(Command):
                 return [M.Wire([q, (q[0] - 0.25, q[1])]) for q in got[0]]
             return [M.Wire(q) for q in bus_paths([p, (p[0] + 0.25, p[1])], self.count,
                                                  self.spacing, self.flip)]
-        land = self._landing(self.ctx.sheet(), p)
+        sheet = self.ctx.sheet()
+        land = self._landing(sheet, p)
+        if land is not None:
+            got = pin_side(sheet, land)
+            new = self._land_route(sheet, land, got[0]) if got is not None else None
+            if new:
+                return [M.Wire(q) for q in self._paths(self.points + new)]
         p = land if land is not None else (p[0] + self.offset[0], p[1] + self.offset[1])
         pts = self.points + self._route(p)
         return [M.Wire(q) for q in self._paths(pts)]
