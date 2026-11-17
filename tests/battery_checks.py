@@ -224,9 +224,16 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
     a quarter inch apart or more, so anything closer is rounding, not a design) of another
     wire or a symbol's pin, yet farther than the program's own tolerance lo (wires.TOL):
     [(wire id, end, what it nearly meets, distance)]."""
+    def slanted(a, b):
+        return abs(a[0] - b[0]) >= 1e-9 and abs(a[1] - b[1]) >= 1e-9
+
+    def straight_ends(o):
+        # (an end at the end of a slanted run is wherever that run happened to be cut: chance)
+        return [q for q, r in ((o.points[0], o.points[1]), (o.points[-1], o.points[-2]))
+                if not slanted(q, r)]
     out = []
     for w in sheet.wires():
-        for p in (w.points[0], w.points[-1]):
+        for p in straight_ends(w):
             box = (p[0] - hi, p[1] - hi, p[0] + hi, p[1] + hi)
             near = list(sheet.query(box))
             if any(isinstance(o, M.Wire) and o.id != w.id and any(
@@ -244,7 +251,7 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
                     # (its ends, and its runs straight across or up and down: a slanted run, a
                     # wire stretched far by a device moved on its pin, passes as near to grid
                     # points as chance has it, 0.0022" in seed 160: not rounding)
-                    d = min(G.dist(p, o.points[0]), G.dist(p, o.points[-1]))
+                    d = min([G.dist(p, q) for q in straight_ends(o)] or [hi * 2])
                     for a, b in zip(o.points, o.points[1:]):
                         if abs(a[0] - b[0]) < 1e-9 or abs(a[1] - b[1]) < 1e-9:
                             d = min(d, G.dist_to_segment(p, a, b))
