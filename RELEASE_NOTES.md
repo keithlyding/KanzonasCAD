@@ -19,6 +19,12 @@ build fails without them.
 - Placing a contact no longer links it to a device unless you choose one: the nearest device
   is offered as a button, and Enter places it on its own.
 - The Starter 3-pole is a device with its own tag, not a contact of a coil.
+- A bus ended on or near a device lands on its nearest pins, as many as it has wires, on a
+  side facing it, jogging in when the pins are closer together or farther apart than its
+  wires. Before, it ended where you clicked without connecting.
+- A wire clicked on a symbol's drawing goes to its nearest pin.
+- Wire crossings are drawn as a loop in new projects (they were drawn plain, so they didn't
+  show). Change it in Project properties, Schematic.
 
 ## 0.17
 

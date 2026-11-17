@@ -502,6 +502,24 @@ class CadView(QWidget):
             modes = (modes - {"insert"}) | {"node", "end"}
         return modes
 
+    def _pin_inside(self, p):
+        """The nearest pin of a placed symbol whose drawing p is on (inside its box), or
+        None."""
+        from .wires import body_box
+        best = None
+        for e in self.snap_query((p[0], p[1], p[0], p[1])):
+            if not isinstance(e, M.Insert) or e.defn is None or e.defn.kind != "symbol" or \
+                    not e.defn.pins or not self.layer_visible(e.layer):
+                continue
+            bb = body_box(e)
+            if bb is None or not (bb[0] < p[0] < bb[2] and bb[1] < p[1] < bb[3]):
+                continue
+            for _n, q in e.pin_points():
+                d = G.dist(p, q)
+                if best is None or d < best[0]:
+                    best = (d, q)
+        return best[1] if best else None
+
     def _wiring(self):
         return bool(getattr(self.cmd, "wire_snaps", False))
 
@@ -722,6 +740,13 @@ class CadView(QWidget):
         if s is not None:
             self.snap = s
             return s[1]
+        if self._wiring():
+            # (a wire or bus clicked on a symbol's drawing: its nearest pin, where a wire
+            # joins it, the owner, 0.17.1: "connect to the nearest ... points on the device")
+            q = self._pin_inside(probe)
+            if q is not None:
+                self.snap = ("node", q)
+                return q
         if free:
             if self.snap_on:
                 k = self.snap_spacing

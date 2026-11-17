@@ -512,13 +512,16 @@ are, the first from its first pin and the others from the others, whichever way 
 that pin's wire goes. Click a pin of a symbol with as many pins as far apart (any of a fuse
 block's L1, L2, L3) and the bus lands wire for wire (T1 on L1, T2 on L2...) and is done,
 arriving square onto its pins: when it can't with the corners you have, it takes one more (a
-Z: across, up or down, across again), each wire on its own pin and none crossing another. When
-it can't land wire for wire, it doesn't pretend to: it goes on drawing and the command line
-says why: that side has 2 pins and the bus 3 wires; its pins are 0.75" apart and the bus's
-wires 0.5" (N and D change the bus's); its poles run the other way from the bus's wires (a
-symbol turned round: wire 1 would land on L1 and the others on nothing; turn or flip it, or
-come at it from its other end); or that side faces away from the bus (the wires would run
-through the symbol).
+Z: across, up or down, across again), each wire on its own pin and none crossing another.
+<b>Click on or near a device</b> (on its drawing, near a pin, or a pin of a side the bus can't
+land on as it is) and the bus lands on the device's <b>nearest pins</b>: as many as it has wires,
+the ones nearest where you clicked, on a side that faces the bus (a fuse block turned with its L
+side away: its T side). The bus comes square at the side, and when the pins are closer
+together or farther apart than its wires (a drive's control terminals, 1/4" apart, from a bus
+1/2" apart), each wire jogs over onto its own pin near the end, none crossing another, the
+wires and the pins in the same order across (a symbol turned round: wire 1 lands on the pin
+across from it, not L1). When no way there lands (a side with fewer pins than the bus has
+wires, or no way round what's in between), it goes on drawing and the command line says why.
 <b>Start it on a bus's open end</b> (the free ends of wires side by side, as far apart) and it
 carries that bus on: each wire joins its own, keeping its layer. <b>Start it on wires side by
 side</b> (on the middle of one of three phases running across the sheet) and it drops one wire
@@ -540,12 +543,14 @@ area), and the next bus remembers the choice. Enter or Esc ends it; each wire of
 ordinary wire, connecting wherever its ends land, whatever its layer.</p>
 <ul>
 <li><b>Connections</b> are worked out from where wire ends are, never stored: a wire end on a
-pin, on another wire's end, or on the middle of another wire connects there. A wire ending on
+pin, on another wire's end, or on the middle of another wire connects there; clicked on a
+symbol's drawing (not on a pin), it goes to that symbol's nearest pin. A wire ending on
 the middle of another (a T), or three or more wire ends at one point, get a <b>dot</b>.</li>
 <li><b>Crossings</b>: wires that pass through each other don't connect. Project properties,
-Schematic, <b>Wire crossings</b> says how that is drawn: <b>Plain</b> (they just cross: no
-dot means not connected, to start), <b>Gap</b> (one wire is broken briefly) or <b>Loop</b> (one
-wire hops over the other); <b>Which wire jumps</b>: the up-and-down one (to start) or the
+Schematic, <b>Wire crossings</b> says how that is drawn: <b>Loop</b> (one wire hops over the
+other, to start in a new project), <b>Gap</b> (one wire is broken briefly) or <b>Plain</b>
+(they just cross: no dot means not connected; projects started before 0.17.1 keep theirs, plain
+unless changed); <b>Which wire jumps</b>: the up-and-down one (to start) or the
 across one. Crossings are found by themselves and follow the wires as they move; they print
 and export to DXF (the jumping wire cut, the loop as a half circle).</li>
 <li><b>Wire crossing</b> (WX; Draw menu, Schematic tab) places one by hand: click a wire where

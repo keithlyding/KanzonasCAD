@@ -38,10 +38,12 @@ class CrossingTest(unittest.TestCase):
         self.assertEqual(got[0][1], ((1.0, 5.0), (9.0, 5.0)))
 
     def test_style_setting(self):
-        self.assertEqual(crossings.jumps(self.p, self.s), [])          # plain to start
-        self.setting(wire_crossing="loop")
+        # a loop to start (since 0.17.1, the owner: "wire crossings are still not being
+        # created automatically"; plain drew none)
         j = crossings.jumps(self.p, self.s)
         self.assertEqual([(q, st) for q, _u, _c, st in j], [((5.0, 5.0), "loop")])
+        self.setting(wire_crossing="plain")
+        self.assertEqual(crossings.jumps(self.p, self.s), [])
         self.setting(wire_crossing="gap")
         self.assertEqual(crossings.jumps(self.p, self.s)[0][3], "gap")
         self.v.repaint()                                               # (draws them)

@@ -64,7 +64,9 @@ DEFAULT_SETTINGS = {
     "wire_clear": 0.125,        # ...that far from them, paper inches
     "wire_lead": False,         # a second wire on a pin leaves it on a 45-degree lead (the
                                 # owner, 0.16: "a little bend... That needs to go away": off)
-    "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)
+    "wire_crossing": "loop",    # wires crossing: plain, gap or loop (crossings.py; a loop to
+                                # start since 0.17.1, the owner: "wire crossings are still not
+                                # being created automatically"; projects saved keep theirs)
     "wire_jump": "vertical",    # which one jumps: vertical or horizontal
     "rail_profile": "TS35x7.5",             # DIN rail and wire duct drawn next
     "duct_size": [2.0, 3.0],
