@@ -890,6 +890,16 @@ def import_dxf(project, sheet, path, at=None, anchor="center"):
     return add_drawing(project, sheet, ents, rep, path, at, anchor)
 
 
+def import_pdf(project, sheet, path, page=1, scale=1.0, filled=False, at=None,
+               anchor="center"):
+    """Add a PDF page's lines and text to a sheet (pdf_import.read_pdf), one undoable step;
+    the report as import_dxf's. at and anchor: as import_dxf's; None: the page's lower left
+    corner at 0,0."""
+    from . import pdf_import
+    ents, rep = pdf_import.read_pdf(path, page, scale, filled)
+    return add_drawing(project, sheet, ents, rep, path, at, anchor)
+
+
 def _own_blocks(ed, project, ents):
     """The imported blocks put in the project (its own copies, as a placed library block's);
     one of the same name already there and different keeps its place: the imported one is
@@ -935,7 +945,8 @@ def add_drawing(project, sheet, ents, rep, path, at=None, anchor="center"):
         ents = [e.moved(dx, dy) for e in ents]
         bb = (bb[0] + dx, bb[1] + dy, bb[2] + dx, bb[3] + dy)
     ids = []
-    with project.edit("Import DWG" if path.lower().endswith(".dwg") else "Import DXF") as ed:
+    kind = os.path.splitext(path)[1].lower()
+    with project.edit({".dwg": "Import DWG", ".pdf": "Import PDF"}.get(kind, "Import DXF")) as ed:
         for name, color in rep["layers"].items():
             if name not in project.layers:
                 ed.layer(name, None, M.Layer(name, color).to_dict())

@@ -1910,3 +1910,34 @@ class PinsDialog(QDialog):
 
 def _num(v):
     return ("%.6f" % v).rstrip("0").rstrip(".") if v != 0 else "0"
+
+
+def pdf_import_dialog(parent, name, pages, k):
+    """Import PDF into this sheet...: which page, how big, and whether filled shapes come
+    too. Returns {"page", "scale", "filled"} or None."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Import PDF")
+    form = QFormLayout(dlg)
+    form.addRow(QLabel("Brings in the lines and text of a page of %s. Text drawn as letter "
+                       "shapes (as many CAD programs print it) can't be read back as text."
+                       % name))
+    page = QSpinBox()
+    page.setRange(1, max(1, pages))
+    page.setEnabled(pages > 1)
+    form.addRow("Page (of %d)" % pages, page)
+    scale = QDoubleSpinBox()
+    scale.setDecimals(4)
+    scale.setRange(0.0001, 100000.0)
+    scale.setValue(k)
+    scale.setToolTip("Drawing inches for each inch of the printed page. The sheet's scale "
+                     "(%g) makes the page look on this sheet as it did printed; for a panel "
+                     "drawn at 1:4, 4 brings it in at real size." % k)
+    form.addRow("Drawing inches per page inch", scale)
+    filled = QCheckBox("Bring in filled shapes too (letters drawn as shapes, solid arrowheads)")
+    filled.setToolTip("Left out, filled shapes are counted. A filled circle (a junction dot) "
+                      "always comes in.")
+    form.addRow("", filled)
+    form.addRow(_buttons(dlg))
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return {"page": page.value(), "scale": scale.value(), "filled": filled.isChecked()}

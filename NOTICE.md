@@ -7,6 +7,9 @@ KanzonasCAD is MIT licensed (see LICENSE). It is built on:
 - QtAwesome, MIT, for its copy of the Material Design Icons font (Apache-2.0) -
   https://github.com/spyder-ide/qtawesome
 - ezdwg, MIT - DWG reading - https://pypi.org/project/ezdwg/
+- pdfminer.six, MIT - Import PDF - https://github.com/pdfminer/pdfminer.six; with
+  charset-normalizer (MIT), cryptography (Apache-2.0 or BSD-3-Clause), cffi (MIT) and
+  pycparser (BSD-3-Clause), which it asks for
 
 Artwork and type: the app icon, logo and their cactus and sunflower are the owner's artwork
 (`assets/`). The logo's lettering is set in Roboto Condensed ("Kanzonas"), Saira Condensed

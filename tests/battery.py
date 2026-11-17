@@ -1779,6 +1779,60 @@ def random_editing(log, out, ops, seed, drawing=None):
         assert now == keep, "updating %s moved or retagged its copies" % name
         BC.CHECKED["update blocks"] += 1
 
+    def op_pdf_import():
+        # (0.17: Import PDF into this sheet... on a page written at random: lines, circles
+        # and real text, turned any of four ways, at the sheet's scale or 1:1; every line,
+        # circle and text comes in where the page put it, one undoable step, and goes on to
+        # be moved, copied, undone and saved with everything else)
+        from kanzonascad.pdf_samples import Page, write_pdf
+        k = rnd.choice([1.0, s.k()])
+        pg = Page(rnd.choice([8.5, 11.0, 17.0]) * 72, rnd.choice([8.5, 11.0]) * 72)
+        lines, circles, texts = [], [], []
+        for _i in range(rnd.randint(1, 12)):
+            x, y = rnd.randint(1, 100) * 4.5, rnd.randint(1, 100) * 4.5
+            q = (x + rnd.choice([0, 9, 18, 36]), y + rnd.choice([9, 18, 27]))
+            pg.line((x, y), q)
+            lines.append(((x, y), q))
+        for _i in range(rnd.randint(0, 3)):
+            c, r = (rnd.randint(10, 80) * 6.0, rnd.randint(10, 80) * 6.0), rnd.choice([3, 9, 18])
+            pg.circle(c, r, fill=r == 3)
+            circles.append((c, r))
+        for i in range(rnd.randint(0, 4)):
+            at, a = (rnd.randint(2, 50) * 9.0, 500 + i * 30.0), rnd.choice([0, 90, 180, 270])
+            word = rnd.choice(["CR", "M", "PB", "LT"]) + str(rnd.randint(1, 999))
+            pg.text(at, word, 8, angle=a)
+            texts.append((at, word, a))
+        path = write_pdf(os.path.join(out, "page.pdf"), [pg])
+        saved = win.__dict__.get("ask_pdf_import")
+        win.ask_pdf_import = lambda *a: {"page": 1, "scale": k, "filled": False}
+        try:
+            steps = len(p.undo_stack)
+            ids = win.import_pdf(path)
+        finally:
+            if saved is None:
+                win.__dict__.pop("ask_pdf_import", None)
+        assert len(p.undo_stack) == steps + 1, "Import PDF wasn't one step"
+        got = [s.entities[i] for i in ids]
+
+        def pt(q):
+            return (round(q[0] / 72.0 * k, 6), round(q[1] / 72.0 * k, 6))
+
+        def near(a, b):
+            return abs(a[0] - b[0]) <= 1e-5 * max(1.0, k) and abs(a[1] - b[1]) <= 1e-5 * max(1.0, k)
+        segs = [(e.p1, e.p2) for e in got if isinstance(e, M.Line)]
+        for a, b in lines:
+            assert any((near(pt(a), u) and near(pt(b), w)) or (near(pt(a), w) and near(pt(b), u))
+                       for u, w in segs), "PDF line %s-%s didn't come in" % (a, b)
+        rounds = [(e.center, e.radius) for e in got if isinstance(e, M.Circle)]
+        for c, r in circles:
+            assert any(near(pt(c), cc) and abs(rr - r / 72.0 * k) <= 1e-5 * max(1.0, k)
+                       for cc, rr in rounds), "PDF circle at %s didn't come in" % (c,)
+        words = [(e.text, e.pos, e.angle) for e in got if isinstance(e, M.Text)]
+        for at, word, a in texts:
+            assert any(w == word and near(pt(at), q) and abs(ang - a % 360) < 1e-6
+                       for w, q, ang in words), "PDF text %s didn't come in: %s" % (word, words)
+        BC.CHECKED["PDF import"] += 1
+
     def op_block_pins():
         # in a block's tab (Edit block...): pins added with Add pin, then renamed, moved,
         # reordered and deleted in Pins...; what Save block would make has exactly those pins
@@ -1851,7 +1905,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

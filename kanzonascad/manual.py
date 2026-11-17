@@ -1125,6 +1125,33 @@ objects) but whose layouts (paper space) hold more is read from its layouts inst
 manufacturers' and older drawings keep their geometry there; the command line says so.
 Opening a DXF or DWG reads it the same way. It opens in the folder you last imported from
 (manufacturers' drawings usually sit together).</li>
+<li><b>Import PDF into this sheet...</b> (File menu, Output tab) brings in the lines and text
+of a page of a PDF: one a CAD program made or printed, or a schematic or drawing someone sent
+you as PDF, so there is less to draw by hand. A window asks which page, and how big:
+<b>Drawing inches per page inch</b> starts at the sheet's scale, so the page looks on the sheet
+as it did printed (on a panel sheet at 1:4 it starts at 4, which brings a 1:4 panel drawing in
+at real size); 1 brings it in at its paper size. The page's lower left corner goes at 0,0 of the
+sheet, and what comes in is selected (to move it right away); one Undo takes it out. What comes
+in:
+<ul>
+<li>every line the PDF draws: a straight piece as a line, more as a polyline (closed when the
+PDF closes it), curves followed closely; a curve that is a circle comes in as a circle, part of
+one as an arc; all on layer <b>PDF LINES</b>;</li>
+<li>its text, as texts on layer <b>PDF TEXT</b>: the letters on one line, of one size and turn,
+as one text (turned as it was: a wire number up the page stays up the page), its height that
+of capital letters;</li>
+<li>a filled circle (a junction dot) as a circle. Other filled shapes are left out and counted:
+most are letters drawn as shapes, which can't be read back as text, and solid arrowheads. Tick
+<b>Bring in filled shapes too</b> to bring them in as closed polylines.</li>
+</ul>
+What can't come in: <b>text drawn as letter shapes</b> (many CAD programs print their fonts
+that way, AutoCAD's SHX fonts among them, and KanzonasCAD's own PDFs do too) comes in as those
+shapes (or is left out, when filled), not as text you can edit; and a <b>scanned page</b> or a
+picture saved as PDF has no lines or text in it at all, only dots, so nothing comes in (the
+command line says so). Lines come in as plain lines, not wires, and symbols as their lines, not
+symbols. Drag a PDF from Explorer onto the drawing to bring it in where you let go (the same
+window asks for the page and size first). A PDF that asks for a password to open can't be
+read.</li>
 <li><b>Blocks stay blocks.</b> Opening or importing a DXF or DWG keeps each named block as a
 block of the project: every copy (a terminal, an I/O module, a drive, the border) is one
 object you click, move, copy, label (Footprint label) and list, placed where the other program
@@ -1161,8 +1188,9 @@ the drawing: it is imported into the sheet shown, at real size, with its middle 
 go, and selected (to move it right away); one Undo takes it out. Several dropped at once go
 side by side. Drop it anywhere else in the window (the tab bar, the ribbon, the command line,
 or a window with no project open) and it opens as a project of its own, as Open... does. A
-dropped <b>.kzcad</b> project opens. (Import DXF or DWG into this sheet... keeps the drawing's
-own coordinates instead.)</li>
+dropped <b>.kzcad</b> project opens; a dropped <b>PDF</b> is brought into the sheet shown (see
+Import PDF into this sheet...). (Import DXF or DWG into this sheet... keeps the drawing's own
+coordinates instead.)</li>
 <li><b>AutoCAD DWG files</b> (AutoCAD R13 to 2018 format, which covers every AutoCAD version
 since 2018 too) open and import directly, with nothing to install. KanzonasCAD reads them
 object by object (with ezdwg, free and open source, decoding the file): every block keeps its

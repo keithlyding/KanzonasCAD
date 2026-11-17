@@ -12,3 +12,8 @@ ezdxf==1.4.5                  # MIT
 ezdwg==0.20.0                 # MIT (DWG reading; Rust core, prebuilt wheels)
 QtAwesome==1.4.2              # MIT (only its Material Design Icons font is used: Apache-2.0)
 QtPy==2.4.3                   # MIT (QtAwesome asks for it)
+pdfminer.six==20260107        # MIT (Import PDF: a page's lines and text)
+charset-normalizer==3.5.1     # MIT (pdfminer.six asks for it)
+cryptography==50.0.1          # Apache-2.0 OR BSD-3-Clause (pdfminer.six: password-protected PDFs)
+cffi==2.1.1                   # MIT (cryptography asks for it)
+pycparser==3.0                # BSD-3-Clause (cffi asks for it)

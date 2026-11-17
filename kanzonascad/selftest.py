@@ -35,6 +35,7 @@ BUDGET = {
     "import_blocks": 4.0,       # a DXF of 1,000 block references (attributes), 200 dimensions
                                 # and 500 hatches imported
     "bom": 0.5,                 # the bill of materials of 2,000 parts
+    "pdf_in": 4.0,              # a PDF page of 6,000 lines and 2,000 texts read (Import PDF)
     "lasso_move": 0.03,         # a mouse move dragging a lasso around half that sheet (average)
     "lasso_pick": 1.0,          # what the lasso caught, worked out when the button is let go
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
@@ -160,7 +161,7 @@ def run(log_path):
         state["win"], state["view"] = w, d.view
         dt = time.perf_counter() - t
         assert dt < BUDGET["start"], "start-up took %.2f s" % dt
-        heavy = [m for m in ("ezdxf", "ezdwg", "openpyxl") if m in sys.modules]
+        heavy = [m for m in ("ezdxf", "ezdwg", "openpyxl", "pdfminer") if m in sys.modules]
         assert not heavy, "start-up imported %s (import them where they're used)" % heavy
         return "%.2f s" % dt
     log.check("start-up", start)
@@ -225,6 +226,39 @@ def run(log_path):
         assert abs(line.length() - 4.0) < 1e-6, line.length()      # units kept (not meters)
         return "read with %s: %s" % (rep["reader"], ", ".join(kinds))
     log.check("DWG import", dwg)
+
+    def pdf_in():
+        # (a page of a CAD program's PDF: lines, a circle and real text, read back where they
+        # were; and a big page, in time. Inside the built program, this is what proves
+        # pdfminer and its data came along)
+        import random
+        from . import pdf_import
+        from .pdf_samples import Page, write_pdf
+        pg = Page(17 * 72, 11 * 72)
+        pg.line((72, 72), (360, 72))
+        pg.circle((432, 432), 18)
+        pg.text((144, 288), "CR101", 9, angle=90)
+        path = write_pdf(os.path.join(tmp, "in.pdf"), [pg])
+        ents, rep = pdf_import.read_pdf(path)
+        got = sorted((e.kind, e.text if e.kind == "text" else "") for e in ents)
+        assert got == [("circle", ""), ("line", ""), ("text", "CR101")], got
+        t = [e for e in ents if e.kind == "text"][0]
+        assert t.pos == (2.0, 4.0) and t.angle == 90.0, (t.pos, t.angle)
+        r = random.Random(7)
+        big = Page(34 * 72, 22 * 72)
+        for _i in range(6000):
+            x, y = r.uniform(36, 2400), r.uniform(36, 1500)
+            big.line((x, y), (x + 36, y))
+        for i in range(2000):
+            big.text((r.uniform(36, 2400), r.uniform(36, 1500)), "CR%d" % i, 8)
+        write_pdf(os.path.join(tmp, "big.pdf"), [big])
+        t0 = time.perf_counter()
+        ents, rep = pdf_import.read_pdf(os.path.join(tmp, "big.pdf"))
+        dt = time.perf_counter() - t0
+        assert rep["lines"] == 6000, rep["lines"]
+        assert dt < BUDGET["pdf_in"], "a page of 6,000 lines and 2,000 texts took %.2f s" % dt
+        return "lines, circle and text back where they were; 8,000 objects read in %.2f s" % dt
+    log.check("PDF import", pdf_in)
 
     def panel():
         from . import sheetframe
