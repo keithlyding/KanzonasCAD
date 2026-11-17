@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QT
                                QTreeWidgetItem, QLineEdit, QPushButton, QLabel, QDialog,
                                QFormLayout, QComboBox, QDialogButtonBox, QCheckBox,
                                QMessageBox, QListWidget, QListWidgetItem, QPlainTextEdit,
-                               QToolButton, QMenu, QGroupBox)
+                               QToolButton, QMenu, QGroupBox, QGridLayout,
+                               QDoubleSpinBox)
 
 from . import model as M
 from .library import Library, Part
@@ -695,13 +696,17 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         if k in edits:
             continue
         e = QLineEdit(ins.attrs.get(k, ""))
+        e.setObjectName("attr_" + k)
         if k == "TERM":
             e.setPlaceholderText("Numbered by itself on its strip; type one to set it")
         edits[k] = e
         if k == "RATING":
             e.setPlaceholderText("30A, 5HP, 500VA... (shown under the symbol)")
+        unit = M.RATING_FIELDS.get(k)
+        if unit is not None:
+            e.setPlaceholderText("a number shows as %s" % M.attr_display(k, "5"))
         form.addRow({"TERM": "Terminal number", "ADDR": "Address (I:0/3, %I0.3...)",
-                     "RATING": "Rating"}.get(k, k), e)
+                     "RATING": "Rating"}.get(k, unit[0] if unit else k), e)
     if kind_of(ins) == "symbol":
         e = QLineEdit(ins.attrs.get("LOC", ""))
         e.setObjectName("location")
@@ -730,19 +735,36 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
     v.addLayout(form)
     # which of them show on the drawing, on this copy (the owner: "add the ability to hide and
     # show attributes"); the values are kept either way
-    show_boxes = {}
+    # and the angle each is drawn at (the owner, 0.17.5: "I need to be able to rotate
+    # attributes"), on the drawing; turned, it turns with the symbol afterward
+    show_boxes, angle_boxes = {}, {}
     names = ins.shown_names()
     if names:
         box = QGroupBox("Shown on the drawing")
-        bl = QVBoxLayout(box)
-        for n in names:
+        bl = QGridLayout(box)
+        for i, n in enumerate(names):
             val = ins.attrs.get(n, "")
             c = QCheckBox("Pin names" if n == "PINS" else
                           "%s%s" % (n, ("   (%s)" % val) if val else "   (empty)"))
             c.setObjectName("show_" + n)
             c.setChecked(n not in ins.hidden)
-            bl.addWidget(c)
+            bl.addWidget(c, i, 0)
             show_boxes[n] = c
+            if n == "PINS":
+                continue
+            a = QDoubleSpinBox()
+            a.setObjectName("angle_" + n)
+            a.setRange(0.0, 359.99)
+            a.setDecimals(2)
+            a.setWrapping(True)
+            a.setSingleStep(90.0)
+            a.setSuffix(" deg")
+            a.setValue(round(ins.attr_angle(n), 2) % 360.0)
+            a.setToolTip("The angle %s is drawn at on the drawing (the arrows turn it 90 "
+                         "degrees); once turned, it turns with the symbol" % n)
+            bl.addWidget(QLabel("Angle"), i, 1)
+            bl.addWidget(a, i, 2)
+            angle_boxes[n] = a
         v.addWidget(box)
     kind = ins.defn.kind if ins.defn is not None else "symbol"
     parts = []
@@ -787,6 +809,8 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
     if shown is not None:
         shown["hidden"] = frozenset(n for n, c in show_boxes.items() if not c.isChecked()) | \
             frozenset(h for h in ins.hidden if h not in show_boxes)
+        shown["angles"] = {n: a.value() for n, a in angle_boxes.items()
+                           if abs(a.value() - round(ins.attr_angle(n), 2) % 360.0) > 1e-9}
     if owner is not None:
         dev = owner.currentData() if owner.currentText() == owner.itemText(
             owner.currentIndex()) else None

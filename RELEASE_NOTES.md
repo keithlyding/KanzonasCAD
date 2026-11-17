@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.17.5
+
+**New**
+- Motors, drives, starters, breakers, disconnects, fuses, overloads, the control transformer
+  and the power supply have fields for their ratings: horsepower, volts, amps (full-load amps
+  for a motor), VA and primary/secondary volts, as applies. Type a number (5) and it shows with
+  its unit (5HP), each on its own line under the symbol. The bill of materials lists them.
+- Double-click a symbol: each attribute in **Shown on the drawing** has an **Angle**, to turn
+  its text (the tag too). Hide or show any of them there, or for many symbols at once with
+  Modify > Show or hide attributes...
+- Projects started earlier get the new fields with **Update blocks from library...**.
+
 ## 0.17.4
 
 **New**

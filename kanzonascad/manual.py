@@ -285,10 +285,22 @@ have a <b>Rating</b> (30A, 5HP, 500VA...): typed there, it shows <b>in a fuse's 
 each of a three-pole fuse block's), and under the other symbols (at one height for every
 one-line symbol and another for every three-pole one, so a row's ratings line up), and on the bill of materials it is added to the description (two fuses without a catalog
 number but with different ratings are different lines). A project started before 0.16 gets the
-Rating with <b>Update blocks from library...</b>. Its <b>Shown on the drawing</b>
+Rating with <b>Update blocks from library...</b>. They also have a field for each of their
+ratings, as applies: a motor <b>Horsepower</b>, <b>Volts</b> and <b>Full-load amps</b>; a drive
+and a starter Horsepower, Volts and <b>Amps</b>; breakers and disconnects Amps and Volts; fuses
+Volts (their amps are the Rating in the box); overload heaters Amps; the control transformer
+<b>VA</b>, <b>Primary volts</b> and <b>Secondary volts</b>; the power supply Volts and Amps. A
+plain number gets its unit on the drawing (5 shows as 5HP, 460 as 460V, 7.6 as 7.6A FLA);
+anything else (1/2 HP, 480V 3PH) shows as typed. They show under the Rating, each on a line of
+its own; an empty or hidden one leaves no gap. The bill of materials adds them to the
+description (a 5HP motor and a 10HP one are different lines). A project started before 0.17.5
+gets them with <b>Update blocks from library...</b>. Its <b>Shown on the drawing</b>
 boxes choose which of its attributes (its tag, a terminal's number, an imported block's
 location, rating...) show on this copy; a hidden one keeps its value, and reports still use
-it. <b>Show or hide attributes...</b> (Modify menu; Schematic tab: Symbols, Panel tab:
+it. Beside each is its <b>Angle</b>, the angle its text is drawn at on the drawing (the arrows
+turn it 90 degrees at a time): turned, it turns with the symbol when the symbol is turned
+afterward, as in AutoCAD; set back to the symbol's own angle, it is drawn as the symbol draws
+it again (the tag read across). <b>Show or hide attributes...</b> (Modify menu; Schematic tab: Symbols, Panel tab:
 Footprints) does the same for every selected symbol and block at once: each attribute any of
 them shows is ticked when shown on all of them, unticked when hidden on all, partly ticked when
 it differs (left so); one undoable step. <b>Explode</b> (X) turns placed

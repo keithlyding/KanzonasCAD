@@ -10,7 +10,7 @@ materials).
 """
 
 from . import materials, tags
-from .model import Insert
+from .model import Insert, RATING_FIELDS, attr_display
 
 
 def _sheet_key(n):
@@ -41,6 +41,11 @@ def parts(project, unnumbered=True):
                 # (a 30A fuse and a 10A one are different parts: without a catalog number they
                 # are told apart by it)
                 desc = "%s, %s" % (desc, rating) if desc else rating
+            for k in RATING_FIELDS:
+                # (its horsepower, volts, amps... too: a 5HP motor isn't a 10HP one)
+                got = attr_display(k, a.get(k, "").strip())
+                if got and got.upper() not in desc.upper():
+                    desc = "%s, %s" % (desc, got) if desc else got
             rec = {"tag": a.get("TAG", "").strip(), "mfr": a.get("MFR", "").strip() or
                    d.manufacturer, "cat": a.get("CAT", "").strip() or d.catalog,
                    "desc": desc, "block": d.name, "sheets": {num}}

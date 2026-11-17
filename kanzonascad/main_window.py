@@ -2443,9 +2443,14 @@ class MainWindow(BlockEditing, QMainWindow):
             got = tags.find_tag(v.project, attrs.get("TAG", ""))
             attrs = tags.link_footprint(attrs, got[1]) if got is not None else \
                 {k: x for k, x in attrs.items() if k != "PARENT"}
-        if attrs is not None and (attrs != ins.attrs or hidden != ins.hidden):
+        if attrs is None:
+            return
+        new = ins.copy(attrs=attrs, hidden=sorted(hidden))
+        for n, ang in shown.get("angles", {}).items():
+            new = new.with_attr_angle(n, ang)
+        if new.to_dict() != ins.to_dict():
             with v.project.edit("Attributes") as ed:
-                ed.change(v.sheet(), ins.copy(attrs=attrs, hidden=sorted(hidden)))
+                ed.change(v.sheet(), new)
 
     # ---- cross-references -----------------------------------------------------------------
     def update_xrefs(self):

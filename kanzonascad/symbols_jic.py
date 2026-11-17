@@ -24,8 +24,16 @@ RATING_Y = -0.22    # one-line symbols: under the fuse's body (-0.0625)
 RATING3_Y = -0.72   # three-pole symbols: under L3's (-0.5) poles (the fuses', -0.5625)
 
 
-def _rating(x=0.0, y=RATING_Y):
-    return [{"attr": "RATING", "pos": (x, y), "height": 0.08}]
+RATING_STEP = 0.12  # a rating's lines, one under the other
+
+
+def _rating(x=0.0, y=RATING_Y, fields=(), rating=True):
+    """The rating, then each of fields (model.RATING_FIELDS: the owner, 0.17.5, "voltage,
+    amps, hp, etc (as applicable)"), one under the other from (x, y); those with a value take
+    the lines in order (model.Insert.attr_spots), so an empty one leaves no gap."""
+    names = (["RATING"] if rating else []) + list(fields)
+    return [{"attr": n, "pos": (x, y - RATING_STEP * i), "height": 0.08, "stack": True}
+            for i, n in enumerate(names)]
 
 
 FUSE_TEXT = 0.07    # a rating in a fuse's box (1/8" tall): centered, its baseline this low
@@ -269,20 +277,24 @@ def builtin_symbols():
     o = [Line((-PIN, 0), (-0.125, 0)), Line((0.125, 0), (PIN, 0)),
          Polyline([(-0.125, -0.0625), (0.125, -0.0625), (0.125, 0.0625), (-0.125, 0.0625)], True)]
     S.append(_sym("Fuse", "JIC/Protection", o, "device", "", "FU", tag=TAG,
-                  description="Fuse", attr_texts=_in_fuse()))
+                  description="Fuse",
+                  attr_texts=_in_fuse() + _rating(fields=("VOLTS",), rating=False)))
     o = []
     _pb_terminals(o)
     o.append(Arc((0, -0.05), 0.16, 30, 150))
     S.append(_sym("Circuit breaker 1-pole", "JIC/Protection", o, "device", "", "CB",
-                  tag=TAG, description="Circuit breaker, one pole", attr_texts=_rating()))
+                  tag=TAG, description="Circuit breaker, one pole",
+                  attr_texts=_rating(fields=("AMPS", "VOLTS"))))
     o = []
     _pb_terminals(o)
     o += [Line((-0.125, 0.03125), (0.125, 0.125))]
     S.append(_sym("Disconnect 1-pole", "JIC/Protection", o, "device", "", "DS",
-                  tag=TAG, description="Disconnect switch, one pole", attr_texts=_rating()))
+                  tag=TAG, description="Disconnect switch, one pole",
+                  attr_texts=_rating(fields=("AMPS", "VOLTS"))))
     o = _heater()
     S.append(_sym("Overload heater", "JIC/Motor control", o, "parent", "", "OL",
-                  tag=TAG, description="Thermal overload heater", attr_texts=_rating()))
+                  tag=TAG, description="Thermal overload heater",
+                  attr_texts=_rating(fields=("AMPS",))))
     o = _contact(True)
     S.append(_sym("Overload contact NC", "JIC/Motor control", o, "child", "NC", "OL",
                   description="Overload relay contact, normally closed"))
@@ -300,7 +312,8 @@ def builtin_symbols():
     _leads(0.1875, o)
     o += [Circle((0, 0), 0.1875), Text((0, -0.04), "MTR", 0.08, align="center")]
     S.append(_sym("Motor", "JIC/Indicators and loads", o, "device", "", "MTR", tag=TAG,
-                  description="Motor", attr_texts=_rating(y=-0.33)))
+                  description="Motor",
+                  attr_texts=_rating(y=-0.33, fields=("HP", "VOLTS", "FLA"))))
     o = [Line((-PIN, 0), (-0.125, 0)), Line((0.125, 0), (PIN, 0)),
          Polyline([(-0.125, -0.0625), (0.125, -0.0625), (0.125, 0.0625), (-0.125, 0.0625)], True),
          Line((-0.125, -0.0625), (0.125, 0.0625))]
@@ -317,7 +330,7 @@ def builtin_symbols():
                   pins=[{"name": "H1", "pos": (-0.25, 0.0625)}, {"name": "H2", "pos": (0.25, 0.0625)},
                         {"name": "X1", "pos": (-0.25, -0.0625)}, {"name": "X2", "pos": (0.25, -0.0625)}],
                   tag=(0.0, 0.18), description="Control power transformer",
-                  attr_texts=_rating(y=-0.24)))
+                  attr_texts=_rating(y=-0.24, fields=("VA", "PRI", "SEC"))))
     # ---- three-phase power ------------------------------------------------------------------
     def cb_pole():
         o = []
@@ -340,13 +353,16 @@ def builtin_symbols():
 
     S.append(_sym("Circuit breaker 3-pole", "JIC/Power", _three(cb_pole) + _link(0, 0.6, -0.4),
                   "device", "", "CB", _three_pins(), tag=(0.0, TAG3_Y),
-                  description="Circuit breaker, three poles", attr_texts=_rating(y=RATING3_Y)))
+                  description="Circuit breaker, three poles",
+                  attr_texts=_rating(y=RATING3_Y, fields=("AMPS", "VOLTS"))))
     S.append(_sym("Disconnect 3-pole", "JIC/Power", _three(ds_pole) + _link(0.0, 0.58, -0.42),
                   "device", "", "DS", _three_pins(), tag=(0.0, TAG3_Y),
-                  description="Disconnect switch, three poles", attr_texts=_rating(y=RATING3_Y)))
+                  description="Disconnect switch, three poles",
+                  attr_texts=_rating(y=RATING3_Y, fields=("AMPS", "VOLTS"))))
     S.append(_sym("Fuses 3-pole", "JIC/Power", _three(fu_pole), "device", "", "FU",
                   _three_pins(), tag=(0.0, TAG3_Y), description="Fuses, three poles",
-                  attr_texts=_in_fuse(POLES)))
+                  attr_texts=_in_fuse(POLES) + _rating(y=RATING3_Y, fields=("VOLTS",),
+                                                        rating=False)))
     S.append(_sym("Contactor power contacts 3-pole", "JIC/Motor control",
                   _three(lambda: _contact(False)) + _link(0.0, 0.4, -0.4), "child", "NO", "M",
                   _three_pins(), tag=(0.0, TAG3_Y),
@@ -355,7 +371,7 @@ def builtin_symbols():
                   _three(heater_pole) + _heater_link(), "parent", "", "OL",
                   _three_pins(), tag=(0.0, TAG3_Y),
                   description="Thermal overload heaters, three poles",
-                  attr_texts=_rating(y=RATING3_Y)))
+                  attr_texts=_rating(y=RATING3_Y, fields=("AMPS",))))
     # two devices in one symbol, as they're bought and wired (the owner, 0.16.2: "Please add
     # 3ph disconnect with fuses and 3phase starter with overloads as symbols"): the second
     # half drawn 1/2" on, L1-L3 in on the left, T1-T3 out 1" away
@@ -368,7 +384,8 @@ def builtin_symbols():
                   [{"name": "T%d" % (i + 1), "pos": (3 * PIN, y)} for i, y in enumerate(POLES)],
                   tag=(PIN, TAG3_Y), description="Fused disconnect switch, three poles",
                   attr_texts=[dict(a, pos=(a["pos"][0] + 2 * PIN, a["pos"][1]))
-                              for a in _in_fuse(POLES)]))
+                              for a in _in_fuse(POLES)] +
+                  _rating(PIN, RATING3_Y, fields=("AMPS", "VOLTS"), rating=False)))
     # a contactor's power contacts and its overload heaters: a device of its own (the owner,
     # 0.17: parents shouldn't try to be children), with its own tag; its auxiliary contacts
     # and overload contact belong to it
@@ -381,7 +398,7 @@ def builtin_symbols():
                   description="Motor starter: contactor power contacts and overload heaters, "
                               "three poles (a device with its own tag; its contacts belong to "
                               "it)",
-                  attr_texts=_rating(2 * PIN, RATING3_Y)))
+                  attr_texts=_rating(2 * PIN, RATING3_Y, fields=("HP", "VOLTS", "AMPS"))))
     # a drive's control terminals (the owner, 0.16: "Add the drive terminal symbol"): a
     # contact of its Variable frequency drive (its tag, listed under it), one terminal a row
     # 1/4" apart, wires landing on the left, each terminal's number in its box and what it
@@ -397,7 +414,7 @@ def builtin_symbols():
     S.append(_sym("Motor 3-phase", "JIC/Power", o, "device", "", "MTR",
                   [{"name": "T%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(POLES)],
                   tag=(cx, TAG3_Y), description="Three-phase motor",
-                  attr_texts=_rating(cx, RATING3_Y)))
+                  attr_texts=_rating(cx, RATING3_Y, fields=("HP", "VOLTS", "FLA"))))
     # a ground on each side (the owner, 0.17.4: "Vfd symbol needs to have a ground connection
     # on both sides"): PE1 under L1-L3, PE2 under T1-T3, 3/4" past the last phase (not 1/2":
     # the phases stay a side of three, a bus landing wire for wire on them)
@@ -413,7 +430,7 @@ def builtin_symbols():
                   [{"name": "PE1", "pos": (-PIN, pe)}, {"name": "PE2", "pos": (1.25, pe)}],
                   tag=(0.5, 0.85), description="Variable frequency drive (VFD): L1-L3 in, "
                                                 "T1-T3 to the motor, PE1 and PE2 its grounds",
-                  attr_texts=_rating(0.5, pe - 0.40)))
+                  attr_texts=_rating(0.5, pe - 0.40, fields=("HP", "VOLTS", "AMPS"))))
     o = [_box(-0.125, -0.375, 0.875, 0.375), Text((0.375, 0.04), "AC", 0.08, align="center"),
          Line((0.2, -0.02), (0.55, -0.02)), Text((0.375, -0.16), "DC", 0.08, align="center"),
          Line((-PIN, 0.25), (-0.125, 0.25)), Line((-PIN, -0.25), (-0.125, -0.25)),
@@ -426,7 +443,7 @@ def builtin_symbols():
                   [{"name": "L", "pos": (-PIN, 0.25)}, {"name": "N", "pos": (-PIN, -0.25)},
                    {"name": "+", "pos": (1.0, 0.25)}, {"name": "-", "pos": (1.0, -0.25)}],
                   tag=(0.375, 0.47), description="Power supply, AC in, DC out (24 V say)",
-                  attr_texts=_rating(0.375, -0.52)))
+                  attr_texts=_rating(0.375, -0.52, fields=("VOLTS", "AMPS"))))
     # ---- PLC: a card, and its input and output points (linked to it as contacts to a coil) --
     o = [_box(-0.375, -0.25, 0.375, 0.25), Text((0, -0.04), "PLC I/O", 0.09, align="center")]
     S.append(_sym("PLC I/O card", "JIC/PLC", o, "parent", "", "PLC", pins=[],

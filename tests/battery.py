@@ -1669,6 +1669,54 @@ def random_editing(log, out, ops, seed, drawing=None):
                     (h.add if hide else h.discard)(name)
                     ed.change(s, e.copy(hidden=sorted(h)))
 
+    def op_ratings():
+        # (0.17.5) a symbol's attributes window, as a double-click opens it: its ratings typed
+        # (a plain number or words), one hidden or shown, one turned; the drawing shows each
+        # shown value (a plain number with its unit) at the angle asked, one step
+        from PySide6.QtWidgets import QDialog, QDoubleSpinBox, QLineEdit, QCheckBox
+        from kanzonascad import library_panel
+        ins = [e for e in s.entities.values() if isinstance(e, M.Insert) and e.defn is not None
+               and any(a["attr"] in M.RATING_FIELDS for a in e.defn.attr_texts)]
+        if not ins:
+            return
+        e = rnd.choice(ins)
+        fields = [a["attr"] for a in e.defn.attr_texts if a["attr"] in M.RATING_FIELDS]
+        typed = {f: rnd.choice(["", "5", "460", "7.6", "1/2", "3 PH"]) for f in fields}
+        turn = rnd.choice([n for n in e.shown_names() if n != "PINS"])
+        ang = rnd.choice([0.0, 90.0, 270.0, 45.0])
+        hide = rnd.choice(fields)
+        hidden = rnd.random() < 0.3
+
+        def answer(dlg):
+            for f, t in typed.items():
+                dlg.findChild(QLineEdit, "attr_" + f).setText(t)
+            dlg.findChild(QDoubleSpinBox, "angle_" + turn).setValue(ang)
+            dlg.findChild(QCheckBox, "show_" + hide).setChecked(not hidden)
+            return QDialog.Accepted
+        real = library_panel.QDialog.exec
+        library_panel.QDialog.exec = answer
+        try:
+            win.edit_attributes(e)
+        finally:
+            library_panel.QDialog.exec = real
+        got = s.entities[e.id]
+        texts = [t for t in got.world_entities() if isinstance(t, M.Text)]
+        for f, t in typed.items():
+            want = M.attr_display(f, t)
+            shown = [x for x in texts if x.text == want]
+            if t and f not in got.hidden:
+                assert shown, "%s typed %r: not shown on %s" % (f, t, got.block)
+                if f == turn:
+                    assert any(abs((x.angle - ang + 180.0) % 360.0 - 180.0) < 1e-6
+                               for x in shown), "%s turned to %r: drawn at %r" % (
+                        f, ang, [x.angle for x in shown])
+                    BC.CHECKED["attribute turned"] += 1
+            BC.CHECKED["rating shown as typed"] += 1
+        assert (hide in got.hidden) == hidden, "%s %s, asked %s" % (
+            hide, "hidden" if hide in got.hidden else "shown", "hidden" if hidden else "shown")
+        assert abs((got.attr_angle(turn) - ang + 180.0) % 360.0 - 180.0) < 1e-6, \
+            "%s's angle %r, asked %r" % (turn, got.attr_angle(turn), ang)
+
     def op_run_props():
         # a DIN rail's or wire duct's Properties window, as a double-click opens it (with other
         # pieces of its kind selected, all of them can take the size): a random width, depth,
@@ -2060,7 +2108,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2),
+             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
@@ -2281,6 +2329,16 @@ def mixed_project(win):
             v.input_text("")
     v.run(C.InsertCmd, lib.get("symbol", "Circuit breaker 3-pole"), {"TAG": "CB1"})
     type_in(v, "3,2")
+    # (0.17.5) a motor with its ratings, one hidden, one and its tag turned
+    v.run(C.InsertCmd, lib.get("symbol", "Motor 3-phase"), {"TAG": "MTR1"})
+    type_in(v, "6,2")
+    while v.cmd is not None:
+        v.cmd.enter()
+    mtr = [e for e in v.sheet().inserts() if e.block == "Motor 3-phase"][-1]
+    with p.edit("ratings") as ed:
+        ed.change(v.sheet(), mtr.copy(attrs=dict(mtr.attrs, HP="5", VOLTS="460", FLA="7.6"),
+                                      hidden=["FLA"]).with_attr_angle("HP", 90.0)
+                  .with_attr_angle("TAG", 30.0))
     coil = [e for e in v.sheet().inserts() if e.attrs.get("TAG", "").startswith("CR")][0]
     pin = max((q for _n, q in coil.pin_points()), key=lambda q: q[0])
     v.run(C.WireCmd)
