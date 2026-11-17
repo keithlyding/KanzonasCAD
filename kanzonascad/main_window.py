@@ -403,6 +403,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("align_obj", "Align ob&jects", C.AlignObjectsCmd, "Align")
         self._cmd_act("distribute", "Dis&tribute objects", C.DistributeCmd, "Distribute")
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
+        self._cmd_act("wire_label", "Wire number &label", C.WireLabelCmd, "Wire label")
         self._cmd_act("del_wire", "&Delete wire", C.DeleteWireCmd, "Delete wire")
         self._cmd_act("del_dot", "Delete d&ot", C.DeleteDotCmd, "Delete dot")
         self._cmd_act("clean_wires", "Clea&n up wires", C.CleanWiresCmd, "Clean up")
@@ -610,7 +611,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "array", "offset", "erase",
                   "trim", "number", None,
-                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "del_wire", "del_dot", "clean_wires", "del_comp", None,
+                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             if k == "FPLABEL":
@@ -685,7 +686,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                  a["dup_block"], a["save_block_as"], a["add_pin"],
                                  a["pins"]]),
             ("Parts", "large", [a["new_part"]]),
-            ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["del_dot"],
+            ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["del_wire"], a["del_dot"],
                                      a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Tags", "large", [a["renumber"]]),
@@ -2600,17 +2601,31 @@ class MainWindow(BlockEditing, QMainWindow):
                                          5000)
             return
         cur = v.sheet().entities.get(wire.id, wire)
-        text, ok = QInputDialog.getText(
-            self, "Wire number", "Wire number for this wire and every wire joined to it.\n"
-            "A number you type is locked: numbering leaves it alone. Leave it empty to let "
-            "numbering give it one.", text=cur.num or "")
-        if not ok:
+        other = wirenums.taps(v.sheet(), cur)
+        got = self.ask_wire_number(cur.num, other.num if other is not None else None,
+                                   cur.own_num) if other is not None or cur.own_num else \
+            self.ask_wire_number(cur.num)
+        if got is None:
             return
-        num = text.strip().upper()
-        if num == (cur.num or "") and (cur.num_lock or not num):
+        num, own = got
+        same = num == (cur.num or "") and (cur.num_lock or not num or own != cur.own_num)
+        if same and own == cur.own_num:
             return
         with v.project.edit("Wire number") as ed:
-            wirenums.set_number(ed, v.project, v.sheet(), cur, num)
+            if own != cur.own_num:
+                # (its own number where it taps another, or back to that wire's: numbering
+                # gives it one first, then a number typed takes over)
+                cur = cur.copy(own_num=own, num=None, num_lock=False)
+                ed.change(v.sheet(), cur)
+                wirenums.sync(ed, v.project)
+                cur = v.sheet().entities[cur.id]
+            if not same:
+                wirenums.set_number(ed, v.project, v.sheet(), cur, num)
+
+    def ask_wire_number(self, num, tap_of=None, own=False):
+        """The Wire number window: (number, own) or None (a test replaces it)."""
+        from .dialogs import wire_number_dialog
+        return wire_number_dialog(self, num, tap_of, own)
 
     def _toggle_title_block(self, on):
         v = self.view()
@@ -2760,7 +2775,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "array", "offset", "dash_box", "number", "erase", "trim",
                   "paste",
-                  "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "del_wire", "del_dot", "clean_wires",
+                  "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "del_wire", "del_dot", "clean_wires",
                   "del_comp"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())

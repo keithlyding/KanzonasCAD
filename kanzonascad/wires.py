@@ -180,12 +180,15 @@ def break_under(ed, sheet, ins):
         lo, hi = min(on), max(on)
         total = cum[-1]
         # (both pieces keep its number to start: numbering gives the second its own)
-        keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock)
+        keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
+                    own_num=w.own_num)
         ed.remove(sheet, w.id)
         if lo > TOL:
-            ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, lo), **keep))
+            ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, lo),
+                               labels=_labels_between(w, 0.0, lo), **keep))
         if total - hi > TOL:
-            ed.add(sheet, Wire(_poly_piece(pts, cum, hi, total), **keep))
+            ed.add(sheet, Wire(_poly_piece(pts, cum, hi, total),
+                               labels=_labels_between(w, hi, total), **keep))
         cut += 1
     return cut
 
@@ -603,17 +606,18 @@ def trim_wire(sheet, w, click):
     s0 = _poly_param(pts, cum, click)
     lo = max([s for s in cuts if TOL < s < s0 - TOL], default=0.0)
     hi = min([s for s in cuts if s0 + TOL < s < total - TOL], default=total)
-    keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock)
+    keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
+                own_num=w.own_num)
     out, ends = [], []
     if lo > TOL:
         piece = _poly_piece(pts, cum, 0.0, lo)
-        out.append(Wire(piece, **keep))
+        out.append(Wire(piece, labels=_labels_between(w, 0.0, lo), **keep))
         ends.append(tuple(piece[-1]))
     else:
         ends.append(tuple(pts[0]))
     if total - hi > TOL:
         piece = _poly_piece(pts, cum, hi, total)
-        out.append(Wire(piece, **keep))
+        out.append(Wire(piece, labels=_labels_between(w, hi, total), **keep))
         ends.append(tuple(piece[0]))
     else:
         ends.append(tuple(pts[-1]))
@@ -645,6 +649,22 @@ def _drop_if_covered(ed, sheet, w):
 
 def _order(eid):
     return eid if isinstance(eid, (int, float)) else 0
+
+
+def _labels_between(w, lo, hi):
+    """The labels (Wire number label) of w between lo and hi along it, measured from lo: what
+    a piece of it cut from lo to hi keeps."""
+    return [t - lo for t in w.labels if lo - TOL <= t <= hi + TOL]
+
+
+def _joined_labels(a, a_reversed, b, b_reversed, gap=0.0):
+    """The labels of a and b on the wire made of a then b (a reversed when its first point is
+    where they meet, b reversed when its last is; gap: the piece between them, when they
+    don't meet), measured along it."""
+    la, lb = a.length(), b.length()
+    out = [(la - t) if a_reversed else t for t in a.labels]
+    out += [la + gap + ((lb - t) if b_reversed else t) for t in b.labels]
+    return out
 
 
 def join_at(ed, sheet, points):
@@ -680,7 +700,8 @@ def join_at(ed, sheet, points):
         if len(merged) < 2:
             continue
         ed.remove(sheet, b.id)
-        ed.change(sheet, a.copy(points=merged))
+        ed.change(sheet, a.copy(points=merged,
+                                labels=_joined_labels(a, ia != -1, b, ib != 0)))
         n += 1
     return n
 
@@ -787,11 +808,14 @@ def heal(ed, sheet, ins):
         merged = _tidy(pa + pb)
         if len(merged) < 2:
             continue
+        labels = _joined_labels(wa, ia != -1, wb, ib != 0, G.dist(a, b))
         if wb.num_lock and not wa.num_lock:
             wa, wb = wb, wa
             merged = merged[::-1]
+            total = sum(G.dist(x, y) for x, y in zip(merged, merged[1:]))
+            labels = [total - t for t in labels]
         ed.remove(sheet, wb.id)
-        ed.change(sheet, wa.copy(points=merged))
+        ed.change(sheet, wa.copy(points=merged, labels=labels))
         used.update((a, b))
         n += 1
     return n

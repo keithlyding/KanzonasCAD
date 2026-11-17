@@ -657,17 +657,29 @@ shown under it.</li>
 <p>Every wire gets its number by itself: the page number and three digits, <b>6001</b>, 6002...
 on page 6. The number shows above the wire (beside it when it runs up and down), on its
 longest straight piece, in the middle of the longest stretch clear of crossings and
-junctions.</p>
+junctions. A wire longer than 6 inches on paper shows it near <b>both ends</b> instead (Project
+properties, Schematic: <b>Number near both ends of wires longer than</b>; Off for one).</p>
 <ul>
 <li><b>One number per connected wire</b>: wires joined end to end or in a T share it. A
 symbol's pins don't join wires, so the number changes through a device or a terminal.</li>
+<li><b>Tapping off a wire</b>: draw a wire from (or to) the middle of another and the command line
+asks: <b>Enter</b> keeps that wire's number (they are one wire), <b>N</b> gives the tap a number
+of its own (it stays connected, with its dot; only the numbers differ). Double-click the tap
+to change it later: <b>A number of its own</b>.</li>
+<li><b>Wire number label</b> (WIRELABEL, WL; Modify menu, Schematic tab: Edit wires): click a
+wire anywhere along it and its number shows there too, as many places as you like. It always
+shows the wire's number as it is now, never a copy typed in, so renumbering changes every one.
+It goes with the wire: moved, copied, joined, cut (each piece keeps the labels on it), undone
+and saved with it. Type <b>R</b> then click near one to take it off; <b>U</b> undoes the
+last.</li>
 <li>Numbers are given in the sheet's <b>numbering order</b> (Sheet properties: across then down,
 or down then across) and then <b>kept</b>: drawing more doesn't renumber what's there. A new
 wire takes the lowest free number of its page, so a deleted number comes back.</li>
 <li>When two wires are joined, the lower number stays; when one is cut in two (a symbol placed
 on it, Trim), the part later in order takes a new number.</li>
 <li><b>Double-click a wire</b> to type its number (for it and every wire joined to it). A typed
-number is locked: numbering leaves it alone. Clear it to let numbering give one back.</li>
+number is locked: numbering leaves it alone. Clear it to let numbering give one back. For a
+tap, the same window has <b>A number of its own</b>.</li>
 <li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
 as device tags do.</li>
 <li><b>Renumber sheet</b> also numbers the sheet's unlocked wires again, 001, 002... in

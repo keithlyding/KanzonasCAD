@@ -1328,6 +1328,79 @@ def random_editing(log, out, ops, seed, drawing=None):
                 "Trim lit %.6g of %.6g and left %.6g" % (cut, whole, kept)
             BC.CHECKED["trim lights what it cuts"] += 1
 
+    def op_tap():
+        # (0.17.2: a wire drawn off the middle of another asks; Enter: its number, N: one of
+        # its own; worked out from the numbers after. On a wire of its own, just past the
+        # drawing: what the tap means is then known)
+        if not wirenums.enabled(p):
+            return
+        k = s.k()
+        o = clear_of_drawing(k)
+        a, b = o, (o[0] + 4.0 * k, o[1])
+        with p.edit("a wire to tap") as ed:
+            w = ed.add(s, M.Wire([a, b]))
+        m = (o[0] + 2.0 * k, o[1])
+        to = (m[0], m[1] + rnd.choice([-1, 1]) * 1.5 * k)
+        v.run(C.WireCmd)
+        v.input_text(fmt(m))
+        if v.cmd is not None:
+            v.input_text(fmt(to))
+        if v.cmd is not None and v.cmd.tapped is None:
+            v.cmd.enter()
+        asked = v.cmd is not None and v.cmd.tapped is not None
+        assert asked, "a wire drawn off another's middle didn't ask about its number"
+        own = rnd.random() < 0.5
+        v.input_text("N" if own else "S")
+        finish()
+        tap = [x for x in s.wires() if x.touches(to) and x.touches(m)]
+        main = s.entities.get(w.id)
+        assert len(tap) == 1 and main is not None, "the tap or the wire it taps is gone"
+        if main.num and tap[0].num:
+            assert (tap[0].num != main.num) == own, "a tap %s: %s, %s" % (
+                "with its own number" if own else "keeping the number", tap[0].num, main.num)
+            BC.CHECKED["tap numbered as asked"] += 1
+
+    def op_wire_label():
+        # (0.17.2: Wire number label: a click on a wire shows its number there too, its
+        # current number; R takes the nearest off)
+        ws = [w for w in s.wires() if w.length() > 0.5]
+        if not ws:
+            return
+        w = rnd.choice(ws)
+        t = rnd.uniform(0.1, w.length() - 0.1)
+        q, _i = w.at_length(t)
+        v.run(C.WireLabelCmd)
+        removing = bool(w.labels) and rnd.random() < 0.3
+        if removing:
+            v.input_text("R")
+        if v.cmd is None:
+            return
+        under = C._pick_wire(v, q)
+        if under is None or under.id != w.id:
+            v.cancel()
+            return                      # (another wire there first: not this one)
+        v.cmd.pick(q)
+        finish()
+        now = s.entities.get(w.id)
+        if now is None:
+            return
+        if removing:
+            assert len(now.labels) == len(w.labels) - 1, (w.labels, now.labels)
+        else:
+            assert len(now.labels) == len(w.labels) + 1, (w.labels, now.labels)
+            assert any(abs(x - t) < 1e-6 for x in now.labels), (t, now.labels)
+        if wirenums.enabled(p) and now.num:
+            shown = {(round(x.pos[0], 6), round(x.pos[1], 6)): x.text
+                     for x in wirenums.labels(p, s)}
+            h = float(p.settings.get("wire_number_height", 0.08)) * s.k()
+            for x in now.labels:
+                spot, _k = now.at_length(x)
+                near = [txt for (px, py), txt in shown.items()
+                        if abs(px - spot[0]) <= h and abs(py - spot[1]) <= h]
+                assert now.num in near, "a label at %s doesn't show %s: %s" % (
+                    spot, now.num, near)
+        BC.CHECKED["wire label placed by hand"] += 1
+
     def op_delwire():
         ws = s.wires()
         if ws:
@@ -1948,7 +2021,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
