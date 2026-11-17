@@ -707,7 +707,7 @@ two points of a length as drawn (or type it), then type the length it should be:
 manufacturer's drawing to its real size. Lengths can be typed in millimeters:
 <code>45mm</code>. On a panel sheet, footprints are left out (they're real size).</td></tr>
 <tr><td>Mirror</td><td>MIRROR, MI</td><td>Select, two points of the mirror line, keep or erase
-the originals. Text stays readable.</td></tr>
+the originals (the mirrored objects show while it asks). Text stays readable.</td></tr>
 <tr><td>Array</td><td>ARRAY, AR</td><td>Copies of the selected objects in rows and columns
 (R, to start: how many rows, how many columns, the distance between rows (up; negative: down)
 and between columns (across; negative: left)) or round a center (P: the center, how many in
@@ -722,7 +722,8 @@ offset (draw a bus).</td></tr>
 <tr><td>Erase</td><td>ERASE, E, or Delete</td><td>Removes the selected objects.</td></tr>
 <tr><td>Trim</td><td>TRIM, TR</td><td>Click the part of an object to cut away: it is trimmed
 back to the nearest crossing objects on either side (every object is a cutting edge, as in
-AutoCAD's quick mode). An object nothing crosses is erased. U undoes the last trim.</td></tr>
+AutoCAD's quick mode). An object nothing crosses is erased. As the cursor goes over an
+object, only the piece a click there would cut away lights up. U undoes the last trim.</td></tr>
 <tr><td>Zoom</td><td>ZOOM, Z</td><td>Extents (E), Sheet (S), In (I), Out (O).</td></tr>
 <tr><td>Linear dimension</td><td>DIMLINEAR, DLI, DIM</td><td>Pick the two points to measure,
 then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>

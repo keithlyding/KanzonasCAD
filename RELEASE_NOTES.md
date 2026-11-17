@@ -16,11 +16,13 @@ build fails without them.
 - Rectangles and polylines have a grip in the middle of each side: drag it to make it longer
   or shorter.
 - Rectangle: D asks the length and the width.
+- Trim lights up only the piece a click would cut away, not the whole object.
 
 **Fixed**
 - A rectangle's size typed after its first corner (0.19,0.15) is now its size, as in AutoCAD.
   It used to be taken as a point on the sheet, giving a much bigger rectangle. Type #x,y for
   a point.
+- Mirror shows the mirrored objects while it asks whether to erase the originals.
 
 ## 0.16.4
 

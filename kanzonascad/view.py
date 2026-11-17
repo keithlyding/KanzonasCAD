@@ -154,6 +154,7 @@ class CadView(QWidget):
         self._drag = None
         self._rail_hit = None        # (the rail magnet's last catch: railsnap.magnet)
         self._hover = None
+        self._hover_parts = None         # (what a picking command would act on: Trim)
         self._hot_grip = None
         self._picture = None            # (key, QPixmap): the drawing as last drawn
         self._lit = None                # (key, QPixmap): that, with the selection lit
@@ -927,8 +928,15 @@ class CadView(QWidget):
         if self.cmd is None or self.cmd.selecting() or self.cmd.picking:
             self._hover = self.pick_entity(self.cursor) if self._window is None else None
             self._hot_grip = self.grip_at(pos) if self.cmd is None else None
+            # (a command picking objects may light only the part a click would act on: Trim,
+            # the piece it would cut away)
+            parts = getattr(self.cmd, "hover_parts", None) if self.cmd is not None and \
+                self.cmd.picking else None
+            self._hover_parts = parts(self._hover, self.cursor) \
+                if parts is not None and self._hover is not None else None
         else:
             self._hover = None
+            self._hover_parts = None
         zone = self.project.zone_text(self.sheet(), pt[0], pt[1])
         self.cursorMoved.emit(pt[0], pt[1], zone)
         self.update()
@@ -1260,6 +1268,9 @@ class CadView(QWidget):
         s = self.sheet()
         h = self._hover
         hover = h.id if h is not None and h.id in s.entities and self._window is None else None
+        parts = getattr(self, "_hover_parts", None)
+        if hover is not None and parts is not None:
+            hover = (hover, tuple(tuple(round(c, 9) for c in e.bbox() or ()) for e in parts))
         key = (self._picture[0], frozenset(self.sel), frozenset(self._preview), hover)
         got = self._lit
         if got is not None and got[0] == key:
@@ -1471,7 +1482,11 @@ class CadView(QWidget):
         lit = [s.entities[i] for i in self._preview if i in s.entities]
         h = self._hover
         if h is not None and h.id in s.entities and self._window is None:
-            lit.append(s.entities[h.id])
+            parts = getattr(self, "_hover_parts", None)
+            if parts is not None:
+                lit.extend(parts)               # (only what a click there acts on)
+            else:
+                lit.append(s.entities[h.id])
         if lit:
             self._paint_glow(p, lit)
 

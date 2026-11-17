@@ -1063,15 +1063,44 @@ def random_editing(log, out, ops, seed, drawing=None):
         v.cmd.pick(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2))
         finish()
 
+    def length(e):
+        import math
+        if isinstance(e, M.Line):
+            return G.dist(e.p1, e.p2)
+        if isinstance(e, M.Polyline):
+            return sum(G.dist(a, b) for a, b in e.segments())
+        if isinstance(e, M.Arc):
+            return math.radians(G.sweep(e.start, e.end)) * e.radius
+        if isinstance(e, M.Circle):
+            return 2 * math.pi * e.radius
+        return 0.0
+
     def op_trim_plain():
         ents = list(s.entities.values())
         if not ents:
             return
         e = rnd.choice(ents)
         x0, y0, x1, y1 = e.bbox()
+        q = ((x0 + x1) / 2, (y0 + y1) / 2)
+        if isinstance(e, (M.Line, M.Polyline)) and not isinstance(e, M.Wire):
+            # (on it: the middle of one of its pieces)
+            a, b = e.segments()[0] if isinstance(e, M.Polyline) else (e.p1, e.p2)
+            q = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
         v.run(C.TrimCmd)
-        v.cmd.pick(((x0 + x1) / 2, (y0 + y1) / 2))
+        hit = v.pick_entity(q)
+        lit = v.cmd.hover_parts(hit, q) if hit is not None else None
+        before = set(s.entities)
+        v.cmd.pick(q)
         finish()
+        if hit is not None and lit and isinstance(hit, (M.Line, M.Polyline, M.Arc, M.Circle)) \
+                and hit.id not in s.entities:
+            # (0.16.5: what lights up as the cursor goes over it is what is cut away: the rest
+            # is what is left)
+            kept = sum(length(x) for i, x in s.entities.items() if i not in before)
+            whole, cut = length(hit), sum(length(x) for x in lit)
+            assert abs(kept + cut - whole) <= 1e-6 * max(1.0, whole), \
+                "Trim lit %.6g of %.6g and left %.6g" % (cut, whole, kept)
+            BC.CHECKED["trim lights what it cuts"] += 1
 
     def op_delwire():
         ws = s.wires()

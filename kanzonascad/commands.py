@@ -930,8 +930,12 @@ class MirrorCmd(_TwoPoint):
             _TwoPoint.enter(self)
 
     def preview(self, p):
-        if self.from_pt is None or self.to_pt is not None:
+        if self.from_pt is None:
             return []
+        if self.to_pt is not None:
+            # (asked whether to erase the originals: the mirrored objects shown where they'll
+            # be meanwhile; the owner, 0.16: they didn't show until the question was answered)
+            return self.result(self.to_pt) + [M.Line(self.from_pt, self.to_pt)]
         return self.result(p) + [M.Line(self.from_pt, p)]
 
 
@@ -959,14 +963,23 @@ class TrimCmd(Command):
         self.ctx.prompt("Select object to trim (Enter to finish)", [("Undo", "U")])
         self.done = 0
 
+    def _cutters(self, ent):
+        sheet = self.ctx.sheet()
+        return [c for c in sheet.query(ent.bbox()) if c.id != ent.id
+                and self.ctx.layer_visible(c.layer)]
+
+    def hover_parts(self, ent, p):
+        """What a click at p on ent would cut away, lit as the cursor goes over it (CadView),
+        not the whole object; [] when it can't be trimmed."""
+        from .trim import trimmed_away
+        return trimmed_away(ent, p, self._cutters(ent)) or []
+
     def pick(self, p):
         ent = self.ctx.pick_entity(p)
         if ent is None:
             return
         sheet = self.ctx.sheet()
-        bb = ent.bbox()
-        cutters = [c for c in sheet.query(bb) if c.id != ent.id
-                   and self.ctx.layer_visible(c.layer)]
+        cutters = self._cutters(ent)
         res = trim_entity(ent, p, cutters)
         if res is None:
             self.ctx.message("That object can't be trimmed.")
