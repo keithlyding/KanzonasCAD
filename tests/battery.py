@@ -616,12 +616,20 @@ def random_editing(log, out, ops, seed, drawing=None):
                                                                               new[0].layer)
                 BC.CHECKED["wire on the current layer"] += 1
 
+    def clear_of_drawing(k):
+        # a spot off on its own: just past the right of what is drawn (not hundreds of times
+        # the scale away: on a 1:2000 sheet that was a million inches, and the wires later
+        # steps drew out to it made every step crawl, the Linux build's seed 306)
+        bb = s.extents()
+        x = (bb[2] if bb is not None else world["o"][0]) + 20.0 * k
+        return (round((x + rnd.randint(0, 40) * k) / 0.25) * 0.25,
+                round((world["o"][1] + rnd.randint(0, 40) * k) / 0.25) * 0.25)
+
     def op_wire_around():
         # (0.16.7: a wire to a pin on the far side of a symbol goes round it, not through it,
         # and arrives straight out of the pin's side; off on its own, far from everything)
         k = s.k()
-        o = (world["o"][0] + 400.0 * k + rnd.randint(0, 40) * k,
-             world["o"][1] + 400.0 * k + rnd.randint(0, 40) * k)
+        o = clear_of_drawing(k)
         name = rnd.choice(["Drive control terminals", "Disconnect 3-pole", "Relay coil",
                            "Fuses 3-pole"])
         before = set(s.entities)
@@ -661,8 +669,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         # (0.16.7: a bus clicked across a symbol off on its own goes round it: none of its
         # wires runs through it)
         k = s.k()
-        o = (world["o"][0] + 500.0 * k + rnd.randint(0, 40) * k,
-             world["o"][1] + 500.0 * k + rnd.randint(0, 40) * k)
+        o = clear_of_drawing(k)
         name = rnd.choice(["Drive control terminals", "Disconnect 3-pole", "Variable frequency drive"])
         before = set(s.entities)
         v.run(C.InsertCmd, lib.get("symbol", name), {})

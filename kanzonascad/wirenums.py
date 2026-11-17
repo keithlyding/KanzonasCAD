@@ -450,13 +450,19 @@ def _clear_spot(a, b, busy):
     ts = [0.0, L]
     i0, i1 = sorted((int(a[0] // _CELL), int(b[0] // _CELL)))
     j0, j1 = sorted((int(a[1] // _CELL), int(b[1] // _CELL)))
-    for i in range(i0 - 1, i1 + 2):
-        for j in range(j0 - 1, j1 + 2):
-            for q in busy.get((i, j), ()):
-                t = (q[0] - a[0]) * ux + (q[1] - a[1]) * uy
-                if 1e-6 < t < L - 1e-6 and \
-                        abs((q[0] - a[0]) * uy - (q[1] - a[1]) * ux) <= 1e-6:
-                    ts.append(t)
+    if (i1 - i0 + 3) * (j1 - j0 + 3) > len(busy):
+        # (a piece longer than the cells in use: those cells, not every one along it; a wire
+        # a million inches long took two million steps on every repaint, the Linux build's
+        # battery, seed 306)
+        near = [q for (i, j), qs in busy.items()
+                if i0 - 1 <= i <= i1 + 1 and j0 - 1 <= j <= j1 + 1 for q in qs]
+    else:
+        near = [q for i in range(i0 - 1, i1 + 2) for j in range(j0 - 1, j1 + 2)
+                for q in busy.get((i, j), ())]
+    for q in near:
+        t = (q[0] - a[0]) * ux + (q[1] - a[1]) * uy
+        if 1e-6 < t < L - 1e-6 and abs((q[0] - a[0]) * uy - (q[1] - a[1]) * ux) <= 1e-6:
+            ts.append(t)
     if len(ts) == 2:
         return ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)
     ts.sort()
