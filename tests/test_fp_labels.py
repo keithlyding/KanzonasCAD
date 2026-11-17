@@ -79,14 +79,20 @@ class LabelWindowTest(unittest.TestCase):
         ents = self.s.entities
         self.assertEqual([ents[i].label for i in (self.a.id, self.b.id)], ["cat", "cat"])
         self.assertEqual(len(self.p.undo_stack), steps + 1)
-        h = self.p.settings.get("tag_height") * self.s.k()
+        # (0.18.1: its own height, Panel settings' Footprint label height, 0.08" to start)
+        h = self.p.settings.get("fp_label_height") * self.s.k()
+        self.assertAlmostEqual(h, 0.08 * self.s.k())
         self.assertAlmostEqual(ents[self.a.id].tag_h, h)
+        # (0.18.1: Show tag shows the tag too, under the part number)
         self.win.acts["fp_label_tag"].trigger()
-        self.assertEqual(ents[self.b.id].label_text().text, "M2")
+        self.assertEqual([t.text for _k, t in ents[self.b.id].label_texts()],
+                         [ents[self.b.id].label_value("cat"), "M2"])
+        self.assertTrue(self.win.acts["fp_label_tag"].isChecked())
         self.win.acts["fp_label_none"].trigger()
         self.assertIsNone(self.s.entities[self.a.id].label_text())
+        self.assertFalse(self.win.acts["fp_label_tag"].isChecked())
         self.p.undo()
-        self.assertEqual(self.s.entities[self.a.id].label, "tag")
+        self.assertEqual(self.s.entities[self.a.id].label, "cat,tag")
         # nothing selected: says so, changes nothing
         self.v.set_selection({self.line.id})
         self.assertEqual(self.win.footprint_label("desc"), 0)

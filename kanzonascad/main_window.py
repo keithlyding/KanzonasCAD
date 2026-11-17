@@ -562,9 +562,13 @@ class MainWindow(BlockEditing, QMainWindow):
                 ("desc", "Show &description", "its description"),
                 ("name", "Show &block name", "its library footprint's name"),
                 ("", "&No label", "no label")):
-            A("fp_label_" + (key or "none"), text, lambda _c=False, k=key: self.footprint_label(k),
+            # (each shown or not, several at once: the owner, 0.18.1, "the show tag option
+            # needs to show for showing of more than one attribute")
+            A("fp_label_" + (key or "none"), text,
+              lambda c=False, k=key: self.footprint_label(k, c), checkable=bool(key),
               icon="fp_label", label=text.replace("&", ""),
-              tip="The selected footprints show %s" % tip)
+              tip=("The selected footprints show %s too (again: not any more)" % tip) if key
+              else "The selected footprints show nothing on them")
         A("manual", "&User manual", lambda: self.show_manual(), "F1", label="Manual")
         A("check_updates", "Check for &updates...", lambda: self.check_updates(True),
           icon="updates", label="Updates")
@@ -841,6 +845,7 @@ class MainWindow(BlockEditing, QMainWindow):
                     (True, "true"))
         v.cursorMoved.connect(self._cursor_moved)
         v.selectionChanged.connect(self._update_ui)
+        v.selectionChanged.connect(self._label_checks)
         v.selectionChanged.connect(self._fill_layers)
         v.sheetChanged.connect(self._fill_sheets)
         v.sheetChanged.connect(self._pick_on_sheet_change)
@@ -2309,26 +2314,47 @@ class MainWindow(BlockEditing, QMainWindow):
                 if isinstance(e, M.Insert) and e.defn is not None
                 and e.defn.kind == "footprint" and not v.layer_locked(e.layer)]
 
-    def footprint_label(self, which):
+    def footprint_label(self, which, on=None):
         """Footprint label: the selected footprints show their tag, part number, description
-        or block name, or nothing (which: a key of model.LABELS, or ""); one undoable edit.
-        The label is paper-sized, as the tags."""
+        or block name besides what they show (on), or not any more (on False); which "":
+        nothing. on None: shown unless they all show it. One undoable edit. The label is
+        paper-sized (Panel settings: Footprint label height)."""
         v = self.view()
         fps = self._selected_footprints()
         if v is None or not fps:
             self._say("Footprint label: select the footprints first (on a layer that isn't "
                       "locked)")
+            self._label_checks()
             return 0
         sheet = v.sheet()
-        h = v.project.settings.get("tag_height") * sheet.k()
+        h = float(v.project.settings.get("fp_label_height", 0.08)) * sheet.k()
+        if which and on is None:
+            on = not all(which in M.label_keys(e.label) for e in fps)
         with v.project.edit("Footprint label") as ed:
             for e in fps:
-                if e.label != which:
-                    ed.change(sheet, e.copy(label=which, tag_h=e.tag_h or h))
+                keys = M.label_keys(e.label)
+                if not which:
+                    keys = []
+                elif on and which not in keys:
+                    keys.append(which)
+                elif not on and which in keys:
+                    keys.remove(which)
+                if ",".join(keys) != e.label:
+                    ed.change(sheet, e.copy(label=",".join(keys), tag_h=e.tag_h or h))
         self._say("%d footprint(s) %s" % (
-            len(fps), "show their %s" % M.LABEL_NAMES[which].lower() if which
-            else "show no label"))
+            len(fps), ("show their %s" if on else "don't show their %s") %
+            M.LABEL_NAMES[which].lower() if which else "show no label"))
+        self._label_checks()
         return len(fps)
+
+    def _label_checks(self):
+        """The Footprint label menu's ticks: what every selected footprint shows."""
+        fps = self._selected_footprints()
+        for key in M.LABELS:
+            a = self.acts["fp_label_" + key]
+            a.blockSignals(True)
+            a.setChecked(bool(fps) and all(key in M.label_keys(e.label) for e in fps))
+            a.blockSignals(False)
 
     def object_color(self):
         v = self.view()
@@ -2475,11 +2501,31 @@ class MainWindow(BlockEditing, QMainWindow):
         if attrs is None:
             return
         new = ins.copy(attrs=attrs, hidden=sorted(hidden))
+        if "label" in shown:
+            new = new.copy(label=shown["label"], tag_h=ins.tag_h or float(
+                v.project.settings.get("fp_label_height", 0.08)) * v.sheet().k())
         for n, ang in shown.get("angles", {}).items():
             new = new.with_attr_angle(n, ang)
-        if new.to_dict() != ins.to_dict():
+        # a linked footprint's ratings are its device's: typed here, they go there too (the
+        # owner, 0.18.1: asked, edit from either); the device then gives them back to it
+        from . import tags
+        got = tags.parent_of(v.project, ins) if "device" in shown else None
+        dev_new = None
+        if got is not None:
+            dattrs = dict(got[1].attrs)
+            for k, val in shown["device"].items():
+                if val:
+                    dattrs[k] = val
+                else:
+                    dattrs.pop(k, None)
+            if dattrs != got[1].attrs:
+                dev_new = got[1].copy(attrs=dattrs)
+        if new.to_dict() != ins.to_dict() or dev_new is not None:
             with v.project.edit("Attributes") as ed:
-                ed.change(v.sheet(), new)
+                if new.to_dict() != ins.to_dict():
+                    ed.change(v.sheet(), new)
+                if dev_new is not None:
+                    ed.change(got[0], dev_new)
 
     # ---- cross-references -----------------------------------------------------------------
     def update_xrefs(self):

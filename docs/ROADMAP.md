@@ -49,6 +49,9 @@ nobody understands).
   tab that only shows up when needed (or manually selected)"): a block's tools on a Block tab
   shown in a block's tab (or always, View > Block tab); a tab too wide for the window shows
   its groups smaller from the right, as Office does, rather than scrolling.
+- 0.18.1: footprint labels (owner, Nov 2026): several lines at once, a grip for each, their
+  own height (0.08" to start: owner's choice), a linked device's ratings on its footprint,
+  edited from either one (owner's choice).
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,

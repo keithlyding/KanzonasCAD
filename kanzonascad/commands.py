@@ -2736,8 +2736,8 @@ class InsertCmd(Command):
                 if show == "tag" and not ins.attrs.get("TAG"):
                     show = "cat" if (ins.attrs.get("CAT") or defn.catalog) else "name"
                 if show:
-                    ins = ins.copy(label=show, tag_h=project.settings.get("tag_height", 0.1) *
-                                   sheet.k())
+                    ins = ins.copy(label=show, tag_h=float(project.settings.get(
+                        "fp_label_height", 0.08)) * sheet.k())
             if ins.layer not in project.layers:
                 ed.layer(ins.layer, None, M.Layer(ins.layer, M.ADAPTIVE).to_dict())
             ed.add(sheet, ins)

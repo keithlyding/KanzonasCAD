@@ -1085,24 +1085,34 @@ that fills both); its length, manufacturer, catalog number and the length it is 
 (or ducts) selected too, <b>Also the other selected...</b> gives them all the same size and part
 in one step, each keeping its own length.</li>
 <li><b>Footprint label</b> (Modify menu, the Panel tab's Footprints group, or a right-click
-with footprints selected): the selected footprints show, written across them, their
-<b>Show tag</b> (M1, CR3), <b>Show part number</b> (its catalog number; the block's own when
-the copy has none), <b>Show description</b> or <b>Show block name</b>, or <b>No label</b>. A
-footprint you place shows its tag to start (one with no tag, its part number or block name):
-Project properties, Panel, <b>New footprints show</b> picks another. Select one or many, pick one: one step, Undo takes it back. Each footprint
-keeps its own choice, so some can show part numbers and others tags. The label is centered on
-the part (or at its block's label spot, set in Edit block), turned up the page or reading from
-the right as the part is turned, and paper-sized like the tags (Project properties: tag
-height). An empty tag or description shows "?". It prints and goes into PDF and DXF exports.
-Changing the tag, part number or description (double-click the footprint) changes the
-label.</li>
+with footprints selected): what the selected footprints show written on them. <b>Show tag</b>
+(M1, CR3), <b>Show part number</b> (its catalog number; the block's own when the copy has
+none), <b>Show description</b> and <b>Show block name</b> each turn that line on, and picked
+again, off: a footprint can show several at once, one under the other (a tick shows what
+every selected footprint shows). <b>No label</b> takes them all off. A footprint you place
+shows its tag to start (one with no tag, its part number or block name): Project properties,
+Panel, <b>New footprints show</b> picks another. Select one or many, pick one: one step, Undo
+takes it back. Double-click a footprint for the rest: <b>Shown on it</b> lists everything it
+can show, its device's ratings too (see below). The lines are centered on the part (or at its
+block's label spot, set in Edit block), turned up the page or reading from the right as the
+part is turned. Each shown line has a grip: select the footprint and drag a line's grip to put
+that line anywhere; it then stays there on the part, moving and turning with it. They are
+<b>0.08"</b> tall on paper to start: Panel settings, <b>Footprint label height</b>, sets it
+for every footprint in the project (projects made before 0.18.1 take 0.08" when opened; their
+labels were the tag height). An empty tag or description shows "?"; an empty rating shows no
+line. It prints and goes into PDF and DXF exports. Changing the tag, part number or
+description (double-click the footprint) changes the label.</li>
 <li><b>Which device a footprint is</b>: placing a footprint (Insert footprint, or a part's
 footprint) asks which schematic device it is, as a contact asks which coil: <b>Enter</b> takes
 the one offered (the next device with no footprint yet, in page order; one with the
 footprint's catalog number first), a typed tag takes that device, <b>L</b> lists them, <b>N</b>
 leaves it a footprint of its own. It then carries the device's tag (and its manufacturer,
 catalog number and description where it has none), shows it, and follows it: renumber the
-schematic and the panel's labels change with it. On the bill of materials the device and its
+schematic and the panel's labels change with it. It has the device's ratings too
+(horsepower, volts, amps, full-load amps, VA, primary and secondary volts, rating): its
+window (double-click it) lists them under <b>From its device</b>, and they are the same on
+both: change one there or on the symbol and the other has it (one step for Undo). Tick them
+under <b>Shown on it</b> to write them on the footprint (5HP, 480V). On the bill of materials the device and its
 footprint are one part. Typing another tag on a footprint (double-click it) makes it that
 device's footprint, or, if no device has that tag, a footprint of its own showing it.</li>
 <li><b>Footprints snap onto DIN rail.</b> While you place a footprint (Insert), move it,
