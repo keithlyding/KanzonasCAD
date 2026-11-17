@@ -16,7 +16,10 @@ Fails on:
   Class.member), as after a rename or a move;
 - filler words in the manual, the release notes and the README ("seamless", "robust",
   "leverage", "utilize"...): the project writes plainly;
-- a test that checks nothing (no assertion, check or failure path), or asserts a constant;
+- a test that checks nothing (no assertion, check or failure path), asserts a constant, or
+  asserts something always true: the same thing on both sides (assertEqual(x, x), x == x),
+  an `or` that falls back to what it is compared with (assertEqual(x, y or x)), or `or` a
+  true constant (assertTrue(x or True));
 - commented-out code in the program;
 - a block of 8 or more lines repeated in the program (one function, not two copies).
 
@@ -250,6 +253,52 @@ def empty_tests(rep, files):
                     n.func.attr in ("assertTrue", "assertIsNotNone") and n.args and \
                     isinstance(n.args[0], ast.Constant) and n.args[0].value:
                 rep.add("test checks nothing", p, n.lineno, n.func.attr + " of a constant")
+            why = _always_true(n)
+            if why:
+                rep.add("test checks nothing", p, n.lineno, why)
+
+
+SAME_SIDES = ("assertEqual", "assertEquals", "assertIs", "assertAlmostEqual",
+              "assertCountEqual", "assertListEqual", "assertDictEqual", "assertTupleEqual",
+              "assertSetEqual", "assertSequenceEqual", "assertMultiLineEqual",
+              "assertGreaterEqual", "assertLessEqual", "assertIn")
+
+
+def _true_or(node):
+    """An `or` with a true constant in it: true whatever the rest is."""
+    return isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or) and \
+        any(isinstance(v, ast.Constant) and v.value for v in node.values)
+
+
+def _always_true(n):
+    """Why the assertion at n can't fail, or None: the same expression on both sides, an `or`
+    falling back to the other side (assertEqual(got, [...] or got): the owner's session, Nov
+    2026, a check written that way passed whatever got was), or `or` a true constant."""
+    def same(a, b):
+        return ast.dump(a) == ast.dump(b)
+
+    def falls_back(a, b):
+        return isinstance(b, ast.BoolOp) and isinstance(b.op, ast.Or) and \
+            same(b.values[-1], a)
+    if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and len(n.args) >= 2 and \
+            n.func.attr in SAME_SIDES:
+        a, b = n.args[0], n.args[1]
+        if same(a, b):
+            return "%s of the same thing on both sides" % n.func.attr
+        if n.func.attr != "assertIn" and (falls_back(a, b) or falls_back(b, a)):
+            return "%s against an `or` that falls back to the other side" % n.func.attr
+    if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.args and \
+            n.func.attr == "assertTrue" and _true_or(n.args[0]):
+        return "assertTrue of `or` a true constant"
+    if isinstance(n, ast.Assert):
+        t = n.test
+        if _true_or(t):
+            return "assert of `or` a true constant"
+        if isinstance(t, ast.Compare) and len(t.ops) == 1 and \
+                isinstance(t.ops[0], (ast.Eq, ast.Is, ast.GtE, ast.LtE)) and \
+                same(t.left, t.comparators[0]):
+            return "assert of the same thing on both sides"
+    return None
 
 
 def commented_code(rep, files):
