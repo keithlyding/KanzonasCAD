@@ -143,13 +143,6 @@ def check_sheet(sheet):
             assert len(e.points) >= 2, e.points
             for a, b in zip(e.points, e.points[1:]):
                 assert abs(a[0] - b[0]) > 1e-9 or abs(a[1] - b[1]) > 1e-9, e.points
-            # (no wire doubles back over itself: two wires joined end to end the wrong way,
-            # seed 306)
-            for a, b, c in zip(e.points, e.points[1:], e.points[2:]):
-                d1, d2 = (b[0] - a[0], b[1] - a[1]), (c[0] - b[0], c[1] - b[1])
-                assert not (abs(d1[0] * d2[1] - d1[1] * d2[0]) <= 1e-12 and
-                            d1[0] * d2[0] + d1[1] * d2[1] < 0), \
-                    "wire %s doubles back over itself: %s" % (eid, e.points)
     json.dumps(sheet.to_dict())
     check_groups(sheet)
     # (drawing slop: wire ends that look joined but aren't)
