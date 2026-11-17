@@ -18,10 +18,20 @@ def window():
     return w, d.view
 
 
+# typed for Insert's "Belongs to": the device it offers as the nearest (its button), as a
+# user picks it (since 0.17 Enter places a contact on its own)
+NEAREST = "<nearest>"
+
+
 def type_in(view, *items):
-    """Feed typed input to the running command, as the command line does."""
+    """Feed typed input to the running command, as the command line does (NEAREST: the
+    device Insert offers as the nearest for a contact)."""
     for t in items:
         assert view.cmd is not None, "no command running for %r" % (t,)
+        if t == NEAREST:
+            cands = getattr(view.cmd, "cands", None)
+            assert cands, "nothing offered as the nearest device"
+            t = cands[0][1].attrs["TAG"]
         ok = view.input_text(t)
         assert ok, "input %r was not used" % (t,)
 

@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, NEAREST
 
 from kanzonascad import commands as C
 from kanzonascad import model as M
@@ -47,10 +47,10 @@ class TagTest(unittest.TestCase):
         self.assertEqual([self.tag_of(x) for x in (a, b, m)], ["CR601", "CR602", "M601"])
         self.assertTrue(a.attrs.get("DEV"))
         self.assertNotEqual(a.attrs["DEV"], b.attrs["DEV"])
-        # a contact takes its device's tag (asked for: Enter takes the nearest CR coil); a
+        # a contact takes its device's tag (asked for: the nearest CR coil offered); a
         # symbol without a prefix gets no tag
         self.v.run(C.InsertCmd, self.contact, {})
-        type_in(self.v, "5,8", "")
+        type_in(self.v, "5,8", NEAREST)
         got = [e for e in self.v.sheet().entities.values() if tags.is_child(e)][-1]
         self.assertEqual((got.attrs.get("TAG"), got.attrs.get("PARENT")),
                          ("CR601", a.attrs["DEV"]))

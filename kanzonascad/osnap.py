@@ -246,10 +246,34 @@ def parallel(base, dirs, p, r):
     return out
 
 
-def apparent(segs, p, r):
+def rounds(e):
+    """An object's circles and arcs as (center, radius): for Apparent intersection, an arc as
+    its whole circle (where a line extended would meet the arc extended)."""
+    return [(pc[1], pc[2]) for pc in _segments_and_curves(e) if pc[0] in ("circle", "arc")]
+
+
+def apparent(segs, p, r, circles=(), ray=None):
     """Where two straight pieces would meet if extended (not where they actually cross: that
-    is Intersection), within r of p."""
+    is Intersection), within r of p; and where a straight piece extended meets a circle (or an
+    arc's circle) it doesn't reach (the owner, 0.17: "Orthosnap not working correctly when
+    trying to align with apparent intersection of circle coordinates"). ray: the Ortho line
+    from the last point, (a, b): where it meets the pieces extended and the circles, wherever
+    they are (it is the direction the point is held to)."""
     out = []
+    for a, b in segs:
+        for c, rad in circles:
+            for q in G.line_circle_intersections(a, b, c, rad, segment=False):
+                if G.dist_to_segment(q, a, b) > 1e-9 and G.dist(q, p) <= r:
+                    out.append(q)
+    if ray is not None:
+        a, b = ray
+        for c, rad in circles:
+            out += [q for q in G.line_circle_intersections(a, b, c, rad, segment=False)
+                    if G.dist(q, p) <= r]
+        for c, d in segs:
+            q = _line_line(a, b, c, d)
+            if q is not None and G.dist(q, p) <= r:
+                out.append(q)
     n = len(segs)
     for i in range(n):
         a, b = segs[i]
@@ -268,3 +292,14 @@ def apparent(segs, p, r):
             if G.dist(q, p) <= r:
                 out.append(q)
     return out
+
+
+def _line_line(a, b, c, d):
+    """Where the lines through a-b and c-d meet, or None (parallel)."""
+    rx, ry = b[0] - a[0], b[1] - a[1]
+    sx, sy = d[0] - c[0], d[1] - c[1]
+    den = rx * sy - ry * sx
+    if abs(den) < 1e-12:
+        return None
+    t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den
+    return (a[0] + rx * t, a[1] + ry * t)

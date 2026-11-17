@@ -1,6 +1,6 @@
 import unittest
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, NEAREST
 
 from kanzonascad import commands as C
 from kanzonascad import model as M
@@ -43,7 +43,7 @@ class XrefTest(unittest.TestCase):
     def test_contacts_follow_their_device(self):
         coil = self.place(self.coil, (3, 9))
         motor = self.place(self.motor_coil, (3, 6))
-        a = self.place(self.no, (8, 9), "")                 # Enter: the nearest CR coil
+        a = self.place(self.no, (8, 9), NEAREST)            # the nearest CR coil offered
         b = self.place(self.nc, (8, 6), "m601")             # a typed tag (any case)
         self.assertEqual(self.now(self.s6, a).attrs["TAG"], "CR601")
         self.assertEqual(self.now(self.s6, a).attrs["PARENT"], coil.attrs["DEV"])
@@ -78,8 +78,8 @@ class XrefTest(unittest.TestCase):
 
     def test_cross_references(self):
         coil = self.place(self.coil, (3, 9))
-        self.place(self.no, (8, 9), "")
-        self.place(self.nc, (8, 4), "")
+        self.place(self.no, (8, 9), NEAREST)
+        self.place(self.nc, (8, 4), NEAREST)
         self.v.show_sheet(self.s7.id)
         self.place(self.no, (5, 9), "CR601")                # on page 7
         here = self.p.zone_text(self.s6, 3, 9)
@@ -100,7 +100,7 @@ class XrefTest(unittest.TestCase):
 
     def test_freeze_and_manual_updates(self):
         self.place(self.coil, (3, 9))
-        c = self.place(self.no, (8, 9), "")
+        c = self.place(self.no, (8, 9), NEAREST)
         before = xrefs.live(self.p, self.s6)
         with self.p.edit("freeze") as ed:
             xrefs.freeze(ed, self.p, self.s6, True)

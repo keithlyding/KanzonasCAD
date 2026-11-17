@@ -111,6 +111,9 @@ class CadView(QWidget):
         self.track_pts = []                     # points acquired: in line with them (Extension)
         self.par_dirs = []                      # directions acquired by hovering (Parallel)
         self.app_segs = []                      # lines hovered (Apparent intersection)
+        self.app_circles = []                   # circles and arcs hovered (the same)
+        self.ortho_ray = None                   # the Ortho line from the last point, while
+                                                # a point is looked for (Apparent intersection)
         self.snap_from = None                   # where an Extension / Parallel snap runs from
         self.polar_on = False
         # crosshair: arms this % of the view long, as AutoCAD's CURSORSIZE (5 to start), or
@@ -260,6 +263,7 @@ class CadView(QWidget):
         self._window = None
         self.osnap_once = None
         self.tracked, self.par_dirs, self.app_segs = [], [], []
+        self.app_circles = []
         self.track_pts = []
         self.cmd = cls(self, *args)
         self.commandChanged.emit()
@@ -601,8 +605,9 @@ class CadView(QWidget):
         if base is not None and "par" in modes:
             for q in OS.parallel(base, self.par_dirs, p, r):
                 offer("par", q, base)
-        if "app" in modes and len(self.app_segs) >= 2:
-            for q in OS.apparent(self.app_segs, p, r):
+        if "app" in modes and (len(self.app_segs) >= 2 or self.app_circles or
+                               (self.ortho_ray is not None and self.app_segs)):
+            for q in OS.apparent(self.app_segs, p, r, self.app_circles, self.ortho_ray):
                 offer("app", q)
         if best is None:
             self.snap_from = None
@@ -631,6 +636,12 @@ class CadView(QWidget):
         if ("par" in modes or "app" in modes) and self.cursor is not None:
             rect, r = self._near(self.cursor, APERTURE)
             for e in self.snap_query(rect):
+                if "app" in modes:
+                    for c, rad in OS.rounds(e):
+                        if abs(G.dist(self.cursor, c) - rad) <= r and \
+                                (c, rad) not in self.app_circles:
+                            self.app_circles = (self.app_circles + [(c, rad)])[-3:]
+                            return
                 for a, b in OS.segments(e):
                     if G.dist_to_segment(self.cursor, a, b) > r:
                         continue
@@ -701,9 +712,13 @@ class CadView(QWidget):
         # Ortho and Polar don't bend it)
         free = getattr(cmd, "free_point", False)
         probe = p
+        self.ortho_ray = None
         if self.ortho_on and cmd.base is not None and not free:
             probe = self._ortho(cmd.base, p)
+            b = cmd.base
+            self.ortho_ray = (b, (b[0] + 1.0, b[1]) if probe[1] == b[1] else (b[0], b[1] + 1.0))
         s = self.object_snap(probe)
+        self.ortho_ray = None
         if s is not None:
             self.snap = s
             return s[1]

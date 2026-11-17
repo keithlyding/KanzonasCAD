@@ -369,16 +369,18 @@ def builtin_symbols():
                   tag=(PIN, TAG3_Y), description="Fused disconnect switch, three poles",
                   attr_texts=[dict(a, pos=(a["pos"][0] + 2 * PIN, a["pos"][1]))
                               for a in _in_fuse(POLES)]))
-    # a contactor's power contacts and its overload heaters: a contact of the starter's coil
-    # (Contactor coil, M), which lists it; the overload contact belongs to the coil too
+    # a contactor's power contacts and its overload heaters: a device of its own (the owner,
+    # 0.17: parents shouldn't try to be children), with its own tag; its auxiliary contacts
+    # and overload contact belong to it
     o = _three(lambda: _contact(False)) + _link(0.0, 0.4, -0.4) + shifted(heater_pole) + \
         [e._map(lambda q: (q[0] + 2 * PIN, q[1])) for e in _heater_link()]
-    S.append(_sym("Starter 3-pole", "JIC/Motor control", o, "child", "NO", "M",
+    S.append(_sym("Starter 3-pole", "JIC/Motor control", o, "parent", "", "M",
                   [{"name": "L%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(POLES)] +
                   [{"name": "T%d" % (i + 1), "pos": (3 * PIN, y)} for i, y in enumerate(POLES)],
                   tag=(PIN, TAG3_Y),
                   description="Motor starter: contactor power contacts and overload heaters, "
-                              "three poles (a contact of its Contactor coil)",
+                              "three poles (a device with its own tag; its contacts belong to "
+                              "it)",
                   attr_texts=_rating(2 * PIN, RATING3_Y)))
     # a drive's control terminals (the owner, 0.16: "Add the drive terminal symbol"): a
     # contact of its Variable frequency drive (its tag, listed under it), one terminal a row

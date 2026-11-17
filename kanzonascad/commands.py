@@ -2082,12 +2082,12 @@ class MakeBlockCmd(Command):
 
 class InsertCmd(Command):
     """Place a symbol or footprint (from the Library panel): pick where; R turns it 90
-    degrees, F flips it. A symbol with pins is held by its first pin (L1, 1, A1...), so the
+    degrees, F flips it side to side, V upside down. A symbol with pins is held by its first pin (L1, 1, A1...), so the
     point picked is where that pin lands, on the pin or wire it is to join (the owner: a 3-pole
     fuse grabbed by its middle met the disconnect's pins with its middle); B moves the hold to
     the next pin, then the block's own base point. A contact then asks which device it belongs
-    to: Enter takes the one offered (the nearest coil with its prefix), a typed tag takes that
-    device, L lists them."""
+    to: a typed tag takes that device (the nearest one with its prefix is offered as a
+    button), L lists them, P picks it on the drawing; Enter places it on its own."""
     name, title = "INSERT", "Insert"
     repeatable = True       # (Enter: the same symbol again, the owner, 0.16)
 
@@ -2118,7 +2118,7 @@ class InsertCmd(Command):
 
     def _ask(self):
         name = self.holds[self.hold][0]
-        opts = [("Rotate 90", "R"), ("Flip", "F")]
+        opts = [("Rotate 90", "R"), ("Flip horizontal", "F"), ("Flip vertical", "V")]
         if len(self.holds) > 1:
             nxt = self.holds[(self.hold + 1) % len(self.holds)][0]
             opts.append(("Base point: %s" % ("pin " + nxt if nxt else "center"), "B"))
@@ -2203,8 +2203,14 @@ class InsertCmd(Command):
         if k == "R":
             self.angle = (self.angle + 90.0) % 360.0
             return True
-        if k == "F":
+        if k in ("F", "V"):
+            # flipped as it is on the drawing, however turned (the owner, 0.17: "Symbols need
+            # to be able to flip horizontally and vertically when inserting"). A copy's mirror
+            # turns it upside down before its angle turns it: turned a, upside down again is
+            # turned -a; left and right swapped is turned 180 - a (until 0.17, F was only the
+            # mirror: upside down when not turned)
             self.mirror = not self.mirror
+            self.angle = ((180.0 if k == "F" else 0.0) - self.angle) % 360.0
             return True
         if k == "B" and len(self.holds) > 1:
             self.hold = (self.hold + 1) % len(self.holds)
@@ -2231,8 +2237,13 @@ class InsertCmd(Command):
         if self.pending is not None and self.link_name is not None:
             self._place(self.pending, dict(self.attrs, TAG=self.link_name))
             return
-        if self.pending is not None and self.cands:
+        if self.pending is not None and self.cands and self.footprint_of:
             self._place(self.pending, self._link(self.cands[0][1]))
+            return
+        if self.pending is not None and self.cands:
+            self._place(self.pending, self.attrs)
+            self.ctx.message("%s placed on its own, linked to no device (double-click it to "
+                             "link it later)" % self.defn.name)
             return
         super().enter()
 
@@ -2288,12 +2299,17 @@ class InsertCmd(Command):
             project = self.ctx.project
             self.cands = tags.candidates(project, self.ctx.sheet(), d.prefix, p)
             if self.cands:
+                # (Enter places it on its own: linking is a choice, the owner, 0.17: "I don't
+                # want parent symbols to try to be children by default"; the nearest device is
+                # offered as a button)
                 self.pending = p
                 s, e = self.cands[0]
-                self.ctx.prompt("Belongs to: Enter for %s (%s), or type a tag"
-                                % (e.attrs.get("TAG", "?"),
-                                   project.zone_text(s, e.pos[0], e.pos[1]) or "?"),
-                                [("List", "L"), ("Pick on drawing", "P")])
+                tag = e.attrs.get("TAG", "?")
+                self.ctx.prompt("Belongs to: type a tag, or pick %s (%s, the nearest); Enter: "
+                                "on its own" % (tag, project.zone_text(s, e.pos[0], e.pos[1])
+                                                or "?"),
+                                [("%s (nearest)" % tag, tag), ("List", "L"),
+                                 ("Pick on drawing", "P")])
                 return
             self.ctx.message("Nothing to link this %s to yet (a %s device): placed unlinked "
                              "(double-click it to link it later)"

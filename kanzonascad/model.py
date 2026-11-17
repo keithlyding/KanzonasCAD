@@ -2106,12 +2106,21 @@ class Insert(Entity):
         out += [("node", p) for _n, p in self.pin_points()]         # (pins: AutoCAD's nodes)
         return out
 
+    def hold_point(self):
+        """Where it is held and dragged: a symbol's first pin (where a wire joins it, as it is
+        held when inserted: the owner, 0.17, "Base points need to be where one of the wires
+        connects"), else its insertion point."""
+        if self.defn is not None and self.defn.kind == "symbol" and self.defn.pins:
+            return self.to_world(self.defn.pins[0]["pos"])
+        return self.pos
+
     def grips(self):
-        return [self.pos] + [q for _n, q in self.text_grips()]
+        return [self.hold_point()] + [q for _n, q in self.text_grips()]
 
     def with_grip(self, i, p):
         if i == 0:
-            return self.copy(pos=list(p))
+            h = self.hold_point()
+            return self.moved(p[0] - h[0], p[1] - h[1])
         # a text dragged to a place of its own, kept in the block's coordinates (it follows
         # the block when it is moved or turned)
         name = self.text_grips()[i - 1][0]
