@@ -405,6 +405,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("wire_label", "Wire number &label", C.WireLabelCmd, "Wire label")
         self._cmd_act("sig_arrows", "Source/destination &arrows", C.SignalArrowsCmd, "Arrows")
+        self._cmd_act("stretch", "Stretc&h", C.StretchCmd, "Stretch")
         self._cmd_act("del_wire", "&Delete wire", C.DeleteWireCmd, "Delete wire")
         self._cmd_act("del_dot", "Delete d&ot", C.DeleteDotCmd, "Delete dot")
         self._cmd_act("clean_wires", "Clea&n up wires", C.CleanWiresCmd, "Clean up")
@@ -445,6 +446,10 @@ class MainWindow(BlockEditing, QMainWindow):
           label="Renumber sheet",
           tip="Number the devices on this sheet in order (CR601, CR602...); tags you locked "
               "stay as they are")
+        A("lock_numbers", "&Lock numbers...", self.lock_numbers, icon="lock_numbers",
+          label="Lock numbers",
+          tip="Lock (or unlock) wire numbers and device tags as they are: the selected ones, "
+              "this sheet, the sheets you pick or the whole project")
         A("update_numbers", "Update &numbers and cross-references...", self.update_numbers,
           icon="update_numbers", label="Update numbers",
           tip="Device tags, wire numbers and cross-references, on this sheet, the sheets you "
@@ -614,7 +619,7 @@ class MainWindow(BlockEditing, QMainWindow):
             else:
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
-        for k in ("move", "copy", "rotate", "scale", "mirror", "array", "offset", "erase",
+        for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "offset", "erase",
                   "trim", "number", None,
                   "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "object_color", "FPLABEL", None, "lay_off", "lay_iso",
@@ -628,7 +633,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_cw", "sheet_ccw",
-                  None, "renumber", "update_numbers",
+                  None, "renumber", "update_numbers", "lock_numbers",
                   "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "materials", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
@@ -674,7 +679,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
                                a["arc"], a["text"], a["mtext"], a["hatch"], a["number"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
-                                 a["array"], a["offset"], a["erase"], a["trim"]]),
+                                 a["stretch"], a["array"], a["offset"], a["erase"],
+                                 a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
             # (the owner, 0.17.4: "I also need the measuring tool repeated in home and
             # schematic tabs")
@@ -687,7 +693,8 @@ class MainWindow(BlockEditing, QMainWindow):
         r.add_tab("Schematic", [
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"], a["dash_box"]]),
             # (the owner: "Copy is not included in schematic and needs to be")
-            ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
+            ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["stretch"],
+                                 a["erase"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"], a["attr_vis"],
                                   a["del_comp"]]),
@@ -698,7 +705,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["del_wire"], a["del_dot"],
                                      a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
-            ("Numbering", "large", [a["update_numbers"], a["renumber"]]),
+            ("Numbering", "large", [a["update_numbers"], a["renumber"], a["lock_numbers"]]),
             ("Cross-references", "large", [a["sig_arrows"], a["xref_update"], a["xref_freeze"],
                                            a["xref_auto"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
@@ -2639,6 +2646,40 @@ class MainWindow(BlockEditing, QMainWindow):
         self.cmdline.add_history(msg)
         self._update_ui()
 
+    def lock_numbers(self):
+        """Lock numbers...: lock (or unlock) wire numbers and/or device tags as they are, on
+        the selected objects, this sheet, chosen sheets or the whole project, in one step."""
+        v = self.view()
+        if v is None:
+            return
+        from . import tags, wirenums
+        p, s = v.project, v.sheet()
+        ents = s.entities
+        picked = [ents[i] for i in v.selection() if i in ents and
+                  (isinstance(ents[i], M.Wire) or tags.is_device(ents[i]))]
+        got = self.ask_lock_numbers(p, s, len(picked))
+        if not got or not (got["wires"] or got["tags"]):
+            return
+        if got["sheets"] is None:
+            pairs = [(s, picked)]
+        else:
+            pairs = [(sh, list(sh.entities.values())) for sh in got["sheets"]
+                     if sh is not p.title_block]
+        nw = nt = 0
+        with p.edit("Lock numbers" if got["lock"] else "Unlock numbers") as ed:
+            for sh, es in pairs:
+                if got["wires"]:
+                    nw += wirenums.set_locks(ed, sh, [e for e in es if isinstance(e, M.Wire)],
+                                             got["lock"])
+                if got["tags"]:
+                    nt += tags.set_locks(ed, sh, es, got["lock"])
+        self.cmdline.add_history("%s %d wire(s) and %d device tag(s)" % (
+            "Locked" if got["lock"] else "Unlocked", nw, nt))
+
+    def ask_lock_numbers(self, project, sheet, selected):
+        """The Lock numbers window (a test replaces it)."""
+        return dialogs.lock_numbers_dialog(self, project, sheet, selected)
+
     def ask_update_numbers(self, project, sheet):
         """The Update numbers and cross-references window (a test replaces it)."""
         return dialogs.update_numbers_dialog(self, project, sheet)
@@ -2882,7 +2923,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
-                  "update_numbers", "sig_arrows", "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext", "use_tb",
+                  "update_numbers", "lock_numbers", "sig_arrows", "stretch", "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext", "use_tb",
                   "rail", "duct", "materials", "bom", "cables", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",

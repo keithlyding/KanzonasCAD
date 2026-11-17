@@ -70,11 +70,15 @@ def export_dxf(project, sheet, path, include_frame=True):
     if include_frame:
         with printing():                # ({Print date}: now)
             ents = frame_entities(project, sheet) + ents
-    # the cross-references, as plain texts on layer SYMBOLS
+    # the cross-references, as plain texts on their layer XREFS (SYMBOLS in a project without
+    # one); none when that layer is off, as on the screen
     from .xrefs import texts as xref_texts
-    for t in xref_texts(project, sheet):
-        t.layer = "SYMBOLS" if "SYMBOLS" in project.layers else "0"
-        ents.append(t)
+    xl = project.layers.get("XREFS")
+    if xl is None or xl.visible:
+        for t in xref_texts(project, sheet):
+            t.layer = "XREFS" if xl is not None else (
+                "SYMBOLS" if "SYMBOLS" in project.layers else "0")
+            ents.append(t)
     # the wire numbers, on layer WIRES
     from .wirenums import labels
     for t in labels(project, sheet):

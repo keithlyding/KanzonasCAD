@@ -41,7 +41,12 @@ DEFAULT_LAYERS = [
     ("NOTES", "#00a0ff"),
     ("PANEL", ADAPTIVE),
     ("DIMENSIONS", "#00c8c8"),
+    # the cross-references' text (a coil's contacts, a contact's coil, the other end of a
+    # connector or arrow): a layer of its own, cyan (the owner, 0.18: "Cross reference labels
+    # need to be a different layer by default. And a different color")
+    ("XREFS", "#00e5ff"),
 ]
+XREF_HEIGHT_BEFORE_018 = 0.08   # (see Project.from_dict: such projects take the new 0.065)
 
 # the project's own settings (Project properties); sheets that follow the project take the
 # layout ones (size, zones) from here
@@ -51,7 +56,7 @@ DEFAULT_SETTINGS = {
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
-    "xref_height": 0.08,        # cross-reference text
+    "xref_height": 0.065,       # cross-reference text (0.08 before 0.18: "slightly smaller")
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
     "wire_number_height": 0.08,
     "dim_height": 0.1,          # dimension text, paper inches
@@ -3264,6 +3269,12 @@ class Project:
             for ld in d["layers"]:
                 lay = Layer.from_dict(ld)
                 p.layers[lay.name] = lay
+            if "XREFS" not in p.layers:
+                # (a project from before 0.18: its cross-references get their layer, and
+                # the old size for them the new one; a size set by hand stays)
+                p.layers["XREFS"] = Layer("XREFS", dict(DEFAULT_LAYERS)["XREFS"])
+                if float(p.settings.get("xref_height", 0)) == XREF_HEIGHT_BEFORE_018:
+                    p.settings["xref_height"] = DEFAULT_SETTINGS["xref_height"]
         for bd in d.get("blocks", []) or []:
             b = BlockDef.from_dict(bd)
             p.blocks[b.name] = b

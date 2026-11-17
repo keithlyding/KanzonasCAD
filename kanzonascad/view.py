@@ -159,6 +159,7 @@ class CadView(QWidget):
         self._hover = None
         self._hover_parts = None         # (what a picking command would act on: Trim)
         self._hot_grip = None
+        self.picked_grips = set()       # {(entity id, grip index)}: grips picked with Shift
         self._picture = None            # (key, QPixmap): the drawing as last drawn
         self._lit = None                # (key, QPixmap): that, with the selection lit
         self._shift_cache = None        # (key, objects, paths): what a Move preview slides
@@ -193,6 +194,7 @@ class CadView(QWidget):
 
     def set_selection(self, ids):
         self.sel = set(ids)
+        self.picked_grips = {g for g in getattr(self, "picked_grips", set()) if g[0] in self.sel}
         self._sel_cache = None
         self.selectionChanged.emit()
         self.update()
@@ -288,6 +290,7 @@ class CadView(QWidget):
             self.messaged.emit("*Cancel*")
         self._drag = None
         self._window = None
+        self.picked_grips = set()
         self._preview = set()
         self.update()
 
@@ -1029,7 +1032,17 @@ class CadView(QWidget):
         if cmd is None:
             g = self.grip_at(pos)
             if g is not None:
-                self.run(C.GripCmd, g[0], g[1])
+                key = (g[0].id, g[1])
+                if e.modifiers() & Qt.ShiftModifier:
+                    # (Shift: picks the grip, or puts it back; picked ones move together)
+                    self.picked_grips ^= {key}
+                    self.update()
+                    return
+                ents = self.sheet().entities
+                others = [(ents[i], k) for i, k in self.picked_grips
+                          if i in ents and key in self.picked_grips]
+                self.picked_grips = set()
+                self.run(C.GripCmd, g[0], g[1], others)
                 return
         ent = self.pick_entity(p)
         if ent is not None:
@@ -1607,7 +1620,8 @@ class CadView(QWidget):
                 continue
             for k, g in enumerate(e.grips()):
                 q = self.to_screen(g)
-                is_hot = hot is not None and hot[0].id == e.id and hot[1] == k
+                is_hot = (hot is not None and hot[0].id == e.id and hot[1] == k) or \
+                    (e.id, k) in self.picked_grips
                 p.setBrush(QColor("#ff3030") if is_hot else QColor("#2f7bff"))
                 p.drawRect(QRectF(q.x() - GRIP / 2, q.y() - GRIP / 2, GRIP, GRIP))
 

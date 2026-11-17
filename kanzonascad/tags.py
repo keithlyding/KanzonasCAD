@@ -123,6 +123,23 @@ def renumber_sheet(ed, project, sheet):
     return changed
 
 
+def set_locks(ed, sheet, ents, lock):
+    """Lock (or unlock) the tags of the devices among ents (contacts take their device's):
+    TAG_LOCK, as a device's "Lock this tag". Returns how many changed."""
+    n = 0
+    for e in ents:
+        if not is_device(e) or locked(e) == lock:
+            continue
+        attrs = dict(e.attrs)
+        if lock:
+            attrs["TAG_LOCK"] = "1"
+        else:
+            attrs.pop("TAG_LOCK", None)
+        ed.change(sheet, e.copy(attrs=attrs))
+        n += 1
+    return n
+
+
 def fix_sheet(ed, project, sheet):
     """Update numbers and cross-references' "keep, only fix" (0.18): the sheet's unlocked
     devices keep their tags; one with no tag (or only its prefix and ?) or a tag not of this

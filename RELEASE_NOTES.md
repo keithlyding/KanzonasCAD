@@ -19,6 +19,14 @@ build fails without them.
   or on the wrong page. One Undo takes it back.
 - The Library can show only **three-phase** symbols, or only single-phase and control ones
   (the third list above the symbols). Block **Properties...** has Phases to correct the guess.
+- **Lock numbers...** (Schematic tab, Numbering; Sheets menu): lock or unlock wire numbers and
+  device tags as they are, for the selected ones, this sheet, the sheets you tick or the whole
+  project. Locked ones stay when you renumber.
+- **Stretch** (S; Modify menu, Home and Schematic tabs): drag a window over the ends of a bus's
+  wires and move them all at once; the wires stay square. Or Shift+click several grips (they
+  turn red) and drag one: they all move together.
+- Cross-reference text is on a layer of its own, **XREFS**, in cyan, and a little smaller.
+  Projects made earlier get the layer and the new size when opened.
 
 **Fixed**
 - Scooting a device whose pin sits on the corner of a wire (not cut there) could slide the pin

@@ -334,11 +334,18 @@ class SheetRenderer:
                      for t in wirenums.labels(self.project, self.sheet) +
                      wirenums.gauge_labels(self.project, self.sheet))
         if self._xrefs is None or self._xrefs[0] != (shown, nums):
-            items = [text_item(M.Text((x, y), t, h, 0.0, "center")) for x, y, t, h in shown]
-            items += [text_item(t) for t in wirenums.labels(self.project, self.sheet)]
+            refs = [text_item(M.Text((x, y), t, h, 0.0, "center")) for x, y, t, h in shown]
+            items = [text_item(t) for t in wirenums.labels(self.project, self.sheet)]
             items += [text_item(t) for t in wirenums.gauge_labels(self.project, self.sheet)]
-            self._xrefs = ((shown, nums), items)
-        draw_texts(painter, self._xrefs[1], self.pal.color(self.project, M.Text(
+            self._xrefs = ((shown, nums), (refs, items))
+        refs, items = self._xrefs[1]
+        # (the cross-references on their layer XREFS: its color, and hidden with it; a
+        # project without one draws them as the symbols)
+        lay = self.project.layers.get("XREFS")
+        if lay is None or lay.visible:
+            draw_texts(painter, refs, self.pal.color(self.project, M.Text(
+                (0, 0), "", 0.1, layer="XREFS" if lay is not None else "SYMBOLS")), outlines)
+        draw_texts(painter, items, self.pal.color(self.project, M.Text(
             (0, 0), "", 0.1, layer="SYMBOLS")), outlines)
 
     def paint(self, painter, pen_width=0.0, paper=True, under=None):

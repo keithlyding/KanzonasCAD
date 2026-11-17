@@ -375,6 +375,19 @@ def set_number(ed, project, sheet, wire, num, lock=True):
             return
 
 
+def set_locks(ed, sheet, wires, lock):
+    """Lock (or unlock) the numbers of these wires' groups as they are: Wire.num_lock, as the
+    Wire number window's "Lock this number" (a group is one number: all its wires). Returns
+    how many wires changed."""
+    n = 0
+    for w in wires:
+        cur = sheet.entities.get(w.id, w)
+        if cur.num and cur.num_lock != lock:
+            ed.change(sheet, cur.copy(num_lock=lock))
+            n += 1
+    return n
+
+
 # ---- a number typed that another wire has: a cross-reference (0.17.5) ------------------------
 def group_of(project, sheet, wire):
     """(group key, [(sheet, wire)]) of the group wire is in, or None."""

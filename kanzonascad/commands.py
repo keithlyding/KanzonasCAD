@@ -1005,10 +1005,13 @@ class GripCmd(Command):
     name, title = "GRIP", "Stretch"
     repeatable = False
 
-    def __init__(self, ctx, ent, index):
+    def __init__(self, ctx, ent, index, others=()):
         super().__init__(ctx)
         self.ent, self.index = ent, index
         self.base = self.last = ent.grips()[index]
+        # (several grips picked with Shift: they all move the same way, the owner, 0.18;
+        # [(entity, grip index)] besides this one)
+        self.others = [(e, k) for e, k in others if (e.id, k) != (ent.id, index)]
 
     def begin(self):
         self.ctx.prompt("Specify stretch point")
@@ -1024,6 +1027,14 @@ class GripCmd(Command):
         """{id: new entity} a drag of the grip to p gives (a wire's run: the wires joined to
         it too)."""
         k = self._run()
+        if self.others:
+            dx, dy = p[0] - self.base[0], p[1] - self.base[1]
+            out = {}
+            for e, i in [(self.ent, self.index)] + self.others:
+                cur = out.get(e.id, e)
+                g = e.grips()[i]
+                out[e.id] = cur.with_grip(i, (g[0] + dx, g[1] + dy))
+            return out
         if k is None:
             return {self.ent.id: self.ent.with_grip(self.index, p)}
         return _run_drag(self.ctx, self.ent, k, p)
@@ -1041,6 +1052,95 @@ class GripCmd(Command):
 
     def preview(self, p):
         return list(self._dragged(p).values())
+
+
+def stretched(sheet, rect, dx, dy):
+    """STRETCH (as AutoCAD's): what a crossing window rect (x0, y0, x1, y1) moved by dx, dy
+    does: an object wholly inside moves; a wire's ends inside move, its next corner sliding
+    along so it stays square (Wire.end_moved: a bus's three ends stretched together, the owner,
+    0.18); a line's ends and a polyline's corners inside move; a symbol, text, circle... whose
+    insertion point or center is inside moves (wires on a symbol's pins follow it). Returns
+    the changed copies."""
+    x0, y0, x1, y1 = rect
+
+    def inside(q):
+        return x0 - 1e-9 <= q[0] <= x1 + 1e-9 and y0 - 1e-9 <= q[1] <= y1 + 1e-9
+
+    out = []
+    for e in sheet.query(rect):
+        bb = e.bbox()
+        if inside(bb[:2]) and inside(bb[2:]):
+            out.append(e.moved(dx, dy))
+            continue
+        if isinstance(e, M.Wire):
+            w = e
+            for i in (0, -1):
+                q = w.points[i]
+                if inside(e.points[i]) and len(w.points) >= 2:
+                    w = w.end_moved(i, (q[0] + dx, q[1] + dy))
+            if w is not e:
+                out.append(w)
+        elif isinstance(e, M.Line):
+            p1 = (e.p1[0] + dx, e.p1[1] + dy) if inside(e.p1) else e.p1
+            p2 = (e.p2[0] + dx, e.p2[1] + dy) if inside(e.p2) else e.p2
+            if (p1, p2) != (e.p1, e.p2):
+                out.append(e.copy(p1=list(p1), p2=list(p2)))
+        elif isinstance(e, M.Polyline):
+            pts = [[q[0] + dx, q[1] + dy] if inside(q) else list(q) for q in e.points]
+            if pts != [list(q) for q in e.points]:
+                out.append(e.copy(points=pts))
+        else:
+            anchor = getattr(e, "pos", None) or getattr(e, "center", None)
+            if anchor is not None and inside(anchor):
+                out.append(e.moved(dx, dy))
+    return out
+
+
+class StretchCmd(Command):
+    """STRETCH (S): a crossing window over the ends to move (two corners), then the base point
+    and where it goes: what stretched() says, in one step (the owner, 0.18: "Is there a way to
+    stretch a bus of wires at the same time, so I don't have to do all three individually?")."""
+    name, title = "STRETCH", "Stretch"
+
+    def begin(self):
+        self.corner = self.rect = self.base = None
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Stretch: first corner of the crossing window (around the ends to "
+                        "move)")
+
+    def point(self, p):
+        if self.corner is None:
+            self.corner = p
+            self.ctx.prompt("Other corner")
+        elif self.rect is None:
+            a = self.corner
+            self.rect = (min(a[0], p[0]), min(a[1], p[1]), max(a[0], p[0]), max(a[1], p[1]))
+            if not self.ctx.sheet().query(self.rect):
+                self.ctx.message("Nothing in that window")
+                self.corner = self.rect = None
+                self.ctx.prompt("Stretch: first corner of the crossing window")
+                return
+            self.ctx.prompt("Base point")
+        elif self.base is None:
+            self.base = self.last = p
+            self.ctx.prompt("Second point")
+        else:
+            got = stretched(self.ctx.sheet(), self.rect, p[0] - self.base[0],
+                            p[1] - self.base[1])
+            if got:
+                with self.ctx.edit(self.title) as ed:
+                    for e in got:
+                        ed.change(self.ctx.sheet(), e)
+            self.finish()
+
+    def preview(self, p):
+        if self.corner is not None and self.rect is None:
+            a = self.corner
+            return [M.Polyline([a, (p[0], a[1]), p, (a[0], p[1])], True)]
+        if self.base is not None:
+            return stretched(self.ctx.sheet(), self.rect, p[0] - self.base[0],
+                             p[1] - self.base[1])
+        return []
 
 
 class PasteCmd(Command):
@@ -4493,6 +4593,7 @@ COMMANDS = {
     "WIRECROSS": (WireCrossCmd, ["WX"]),
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
     "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
+    "STRETCH": (StretchCmd, ["S"]),
     "SIGARROW": (SignalArrowsCmd, ["SDA", "SOURCEARROW", "XARROW"]),
     "DELWIRE": (DeleteWireCmd, ["DW"]),
     "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),

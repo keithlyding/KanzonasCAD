@@ -1462,6 +1462,92 @@ def random_editing(log, out, ops, seed, drawing=None):
                         seen[k] = 1
             BC.CHECKED["Update numbers: tags of their page, none twice"] += 1
 
+    def op_stretch():
+        # (0.18) STRETCH through the command: a crossing window over some wire ends, moved;
+        # every wire end inside (of a wire not wholly inside) moved by exactly that, one step
+        ws = s.wires()
+        if not ws:
+            return
+        w = rnd.choice(ws)
+        q = rnd.choice([w.points[0], w.points[-1]])
+        k = s.k()
+        h = rnd.choice([0.3, 1.0, 2.5]) * k
+        rect = (q[0] - h, q[1] - h, q[0] + h, q[1] + h)
+        d = rnd.choice([(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -1.0), (1.0, 0.5)])
+        d = (d[0] * k, d[1] * k)
+        before = {x.id: x for x in s.query(rect) if isinstance(x, M.Wire)}
+        n0 = len(p.undo_stack)
+        v.run(C.StretchCmd)
+        type_in(v, fmt(rect[:2]), fmt(rect[2:]), fmt(q), fmt((q[0] + d[0], q[1] + d[1])))
+        finish()
+        if len(p.undo_stack) == n0:
+            return
+        assert len(p.undo_stack) == n0 + 1, "Stretch took more than one step"
+
+        def inside(r):
+            return rect[0] - 1e-9 <= r[0] <= rect[2] + 1e-9 and \
+                rect[1] - 1e-9 <= r[1] <= rect[3] + 1e-9
+        for x in before.values():
+            got = s.entities.get(x.id)
+            if got is None or all(inside(r) for r in x.points):
+                continue
+            for i in (0, -1):
+                if inside(x.points[i]):
+                    want = (x.points[i][0] + d[0], x.points[i][1] + d[1])
+                    # (a wire may be joined to another after: its end is still a wire end
+                    # there, or on a pin it was taken to)
+                    assert any(G.dist(r, want) < 1e-6 for y in s.wires()
+                               for r in (y.points[0], y.points[-1])) or \
+                        wires.pins_on(s, want), "Stretch: an end at %s didn't go to %s" % (
+                            x.points[i], want)
+        BC.CHECKED["stretch moves the ends in the window"] += 1
+
+    def op_grips():
+        # (0.18) several grips picked with Shift (the view's picked grips), one of them
+        # dragged: every picked grip moves the same way
+        ws = s.wires()
+        if len(ws) < 2:
+            return
+        pick = rnd.sample(ws, min(len(ws), rnd.randint(2, 3)))
+        grips = [(w, rnd.choice([0, len(w.points) - 1])) for w in pick]
+        start = {(w.id, i): w.grips()[i] for w, i in grips}
+        k = s.k()
+        d = (rnd.choice([-1, 1]) * 0.5 * k, rnd.choice([0, 1]) * 0.5 * k)
+        v.set_selection({w.id for w in pick})
+        v.picked_grips = {(w.id, i) for w, i in grips}
+        w0, i0 = grips[0]
+        v.run(C.GripCmd, w0, i0, [(w, i) for w, i in grips])
+        g = start[(w0.id, i0)]
+        type_in(v, fmt((g[0] + d[0], g[1] + d[1])))
+        finish()
+        for (wid, i), g in start.items():
+            want = (g[0] + d[0], g[1] + d[1])
+            assert any(G.dist(r, want) < 1e-6 for y in s.wires() for r in y.points) or \
+                wires.pins_on(s, want), "a picked grip at %s didn't go to %s" % (g, want)
+        BC.CHECKED["picked grips move together"] += 1
+
+    def op_lock_numbers():
+        # (0.18) Lock numbers..., as the window answers: on the selected wires, or this sheet
+        o = {"lock": rnd.random() < 0.6, "wires": True, "tags": rnd.random() < 0.7,
+             "sheets": None if rnd.random() < 0.5 else [s]}
+        ws = s.wires()
+        if not ws:
+            return
+        chosen = rnd.sample(ws, min(len(ws), rnd.randint(1, 4)))
+        v.set_selection({w.id for w in chosen})
+        win.ask_lock_numbers = lambda project, sheet, n: o
+        try:
+            win.lock_numbers()
+        finally:
+            win.__dict__.pop("ask_lock_numbers", None)
+        target = chosen if o["sheets"] is None else s.wires()
+        for w in target:
+            got = s.entities.get(w.id)
+            if got is not None and got.num:
+                assert got.num_lock == o["lock"], "wire %s %slocked after %s" % (
+                    got.num, "" if got.num_lock else "un", "Lock" if o["lock"] else "Unlock")
+        BC.CHECKED["Lock numbers as asked"] += 1
+
     def op_tap():
         # (0.17.2: a wire drawn off the middle of another asks; Enter: its number, N: one of
         # its own; worked out from the numbers after. On a wire of its own, just past the
@@ -2288,7 +2374,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2),
+             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2), (op_stretch, 2), (op_grips, 2), (op_lock_numbers, 2),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),

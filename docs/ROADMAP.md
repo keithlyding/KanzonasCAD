@@ -42,6 +42,9 @@ nobody understands).
   cross-references (tags, wires, cross-references; renumber or keep, asked each time; this
   sheet, picked sheets or the whole project); the Library's phase filter (worked out from pins
   and name, Properties... overrides).
+  Also in 0.18: cross-reference text on layer XREFS, cyan, 0.065" (owner's choice); Lock
+  numbers (lock what's there, for a selection, sheets or the project: owner's choice over a
+  sheet setting); Stretch, as AutoCAD's, and Shift-picked grips moving together (owner: both).
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,

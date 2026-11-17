@@ -441,6 +441,13 @@ numbers</b> (only what has no number gets one, and a number that isn't of its sh
 fixed, its count kept when free). And where: <b>This sheet</b>, <b>The whole project</b>, or
 <b>These sheets</b> (tick them in the list). One step: Undo takes it all back. Frozen sheets
 keep their cross-references.</li>
+<li><b>Lock numbers...</b> (Schematic tab: Numbering, Sheets menu) locks wire numbers and/or
+device tags as they are, so numbering, Renumber sheet and Update numbers leave them alone:
+<b>The selected objects</b> (select the wires and devices first), <b>This sheet</b>, <b>The
+whole project</b> or <b>These sheets</b>. <b>Unlock</b> in the same window gives them back to
+numbering. It is the same lock as a device's <b>Lock this tag</b> and a wire's <b>Lock this
+number</b> (double-click it), which lock one at a time; new wires and devices still get
+numbers. (Freeze cross-references, below, is for a sheet's cross-reference text only.)</li>
 <li>Contacts take their device's tag (next section); symbols without a tag prefix get no
 tag.</li>
 <li>Behind each tag, every device also has a hidden identity that survives renaming, so
@@ -483,6 +490,10 @@ object.</li>
 operator, one line per contact, <b>NO 6-D3</b> or <b>NC 7-B2</b> (in sheet order, then zone
 order); under each contact, where its device is (<b>6-D1</b>). They use the project's grid
 reference format and each sheet's zones, and go into PDF and DXF exports as text.</li>
+<li>They are on a layer of their own, <b>XREFS</b> (cyan to start; Layers... changes its color or
+switches them off, on the screen, in prints and in exports), and a little smaller than wire
+numbers: 0.065 inch (Project properties, Schematic). A project made before 0.18 gets the layer
+when it is opened, and its cross-references the new size unless it was changed.</li>
 <li>Double-click a coil and untick <b>List its contacts under it</b> to hide its list; untick
 <b>List this contact under its device</b> on a contact to leave it out of the list.</li>
 <li>They follow every change. <b>Update cross-references automatically</b> (Schematic tab,
@@ -835,6 +846,12 @@ manufacturer's drawing to its real size. Lengths can be typed in millimeters:
 <code>45mm</code>. On a panel sheet, footprints are left out (they're real size).</td></tr>
 <tr><td>Mirror</td><td>MIRROR, MI</td><td>Select, two points of the mirror line, keep or erase
 the originals (the mirrored objects show while it asks). Text stays readable.</td></tr>
+<tr><td>Stretch</td><td>STRETCH, S</td><td>Drag a crossing window over the ends to move (the
+three ends of a bus, say), then a base point and where it goes. Wire ends in the window move
+and their wires stay square (a corner slides along, or a jog is added); a line's ends and a
+polyline's corners in it move; an object wholly in it, and a symbol, text or circle whose
+insertion point or center is in it, moves whole (wires on a symbol's pins follow). One step.
+</td></tr>
 <tr><td>Array</td><td>ARRAY, AR</td><td>Copies of the selected objects in rows and columns
 (R, to start: how many rows, how many columns, the distance between rows (up; negative: down)
 and between columns (across; negative: left)) or round a center (P: the center, how many in
@@ -1156,7 +1173,10 @@ too).</li>
 that end, corner, radius or text position (a symbol: its insertion point, its tag, an
 attribute shown). A polyline or rectangle also has a grip in the <b>middle of each side</b>:
 drag it and that side moves straight out or in (a rectangle stays a rectangle, longer or
-shorter); a wire has its corners only.</li>
+shorter); a wire has its corners only. <b>Shift+click</b> grips to pick several (on any of
+the selected objects: the ends of a bus's wires, say): they turn red; click one of them and
+then where it goes, and all of them move the same way, in one step. Shift+click a picked grip
+again to put it back; Esc drops them all.</li>
 <li>Select first, then start Move, Copy objects, Rotate... (or start the command and then
 select, pressing Enter when done).</li>
 <li>Right-click: Enter while a command runs; otherwise a menu with Repeat, the clipboard and
