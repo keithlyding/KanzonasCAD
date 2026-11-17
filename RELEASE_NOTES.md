@@ -62,7 +62,8 @@ build fails without them.
   bus's own other ends (a stray dot and tangled wires). The bus now leaves its ends straight
   on, and a way round whose wires would touch isn't used.
 - Moving or stretching something so a wire's end went back along its own last leg left a
-  hidden corner where the wire ran back over itself. The wire now runs straight.
+  hidden corner where the wire ran back over itself. The wire now runs straight. Clean up
+  wires could also join two wires into one that ran back over itself; it no longer does.
 - Typing a wire number that two other wires already had (one kept with "just the same
   number") and answering Source or Destination could say there was no open end when one of
   them had one. The arrow now goes on the one with an open end.
