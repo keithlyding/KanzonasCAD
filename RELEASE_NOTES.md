@@ -51,6 +51,8 @@ build fails without them.
 - Scooting a device whose pin sits on the corner of a wire (not cut there) could slide the pin
   off the wire. It now refuses that move.
 - The Schematic tab ran off the screen.
+- Trim on a small circle, clicked right where something crosses it (or in its middle), left
+  the circle whole. It now cuts it there.
 
 ## 0.17.5
 

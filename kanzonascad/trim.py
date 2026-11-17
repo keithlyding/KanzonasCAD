@@ -142,10 +142,7 @@ def trim(ent, click, cutters):
         angs = sorted({round(G.angle_of(ent.center, p), 9) % 360.0 for p in crossings})
         if len(angs) < 2:
             return []
-        a0 = G.angle_of(ent.center, click)
-        # the crossings before and after the pick, going counterclockwise
-        after = min(angs, key=lambda a: (a - a0) % 360.0)
-        before = min(angs, key=lambda a: (a0 - a) % 360.0)
+        before, after = _circle_cut(ent, click, angs)
         return [Arc(ent.center, ent.radius, after, before, **keep)]
 
     if isinstance(ent, Arc):
@@ -158,6 +155,18 @@ def trim(ent, click, cutters):
         return out
 
     return None
+
+
+def _circle_cut(ent, click, angs):
+    """A circle cut at click, between two or more crossings (angles): (the crossing at or
+    before the click, the first after it, going counterclockwise). A click right on a crossing
+    (at its center, where the angle is 0: the battery, seed 3151) cuts from that crossing on:
+    before, both were that crossing and the circle came back whole, as an arc of 360 degrees."""
+    a0 = G.angle_of(ent.center, click)
+    tol = math.degrees(EPS / max(ent.radius, EPS))
+    before = min(angs, key=lambda a: (a0 - a + tol) % 360.0)
+    after = min((a for a in angs if a != before), key=lambda a: (a - a0) % 360.0)
+    return before, after
 
 
 def _arc_cut(ent, click, crossings):
@@ -224,9 +233,7 @@ def trimmed_away(ent, click, cutters):
         angs = sorted({round(G.angle_of(ent.center, p), 9) % 360.0 for p in crossings})
         if len(angs) < 2:
             return [ent]
-        a0 = G.angle_of(ent.center, click)
-        after = min(angs, key=lambda a: (a - a0) % 360.0)
-        before = min(angs, key=lambda a: (a0 - a) % 360.0)
+        before, after = _circle_cut(ent, click, angs)
         return [Arc(ent.center, ent.radius, before, after)]
     if isinstance(ent, Arc):
         sw, lo, hi, _tol = _arc_cut(ent, click, crossings)
