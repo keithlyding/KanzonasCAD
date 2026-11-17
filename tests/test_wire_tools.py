@@ -122,5 +122,32 @@ class WireToolsTest(unittest.TestCase):
         self.assertEqual(now.layer, "WIRES_BLUE")
 
 
+
+class JoinFoldTest(unittest.TestCase):
+    def test_end_to_end_joins_but_never_folds_back(self):
+        # (the battery, seed 306: a wire laid back along another from its end was joined to
+        # it, one wire doubling back over itself)
+        for back, joined in ((False, 1), (True, 0)):
+            p = M.Project.new()
+            s = p.sheets[0]
+            with p.edit("a") as ed:
+                ed.add(s, M.Wire([(3.0, 0.0), (0.0, 0.0), (0.0, -1.0)]))
+            with p.edit("b") as ed:
+                ed.add(s, M.Wire([(3.0, 0.0), (2.0, 0.0) if back else (5.0, 0.0)]))
+                self.assertEqual(wires.join_at(ed, s, [(3.0, 0.0)]), joined)
+            got = sorted(w.points for w in s.wires())
+            if back:
+                self.assertEqual(got, [[(3.0, 0.0), (0.0, 0.0), (0.0, -1.0)],
+                                       [(3.0, 0.0), (2.0, 0.0)]])
+            else:
+                self.assertEqual(got, [[(0.0, -1.0), (0.0, 0.0), (5.0, 0.0)]])
+            for w in s.wires():                         # (no wire runs back over itself)
+                for q0, q1, q2 in zip(w.points, w.points[1:], w.points[2:]):
+                    d1 = (q1[0] - q0[0], q1[1] - q0[1])
+                    d2 = (q2[0] - q1[0], q2[1] - q1[1])
+                    self.assertFalse(d1[0] * d2[1] == d1[1] * d2[0] and
+                                     d1[0] * d2[0] + d1[1] * d2[1] < 0, w.points)
+
+
 if __name__ == "__main__":
     unittest.main()

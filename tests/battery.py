@@ -50,6 +50,7 @@ from tests.util import APP, window, type_in  # noqa: E402
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QFileDialog  # noqa: E402
 
+from kanzonascad import block_editor as BE  # noqa: E402
 from kanzonascad import commands as C  # noqa: E402
 from kanzonascad import model as M  # noqa: E402
 from kanzonascad import geometry as G  # noqa: E402
@@ -615,12 +616,20 @@ def random_editing(log, out, ops, seed, drawing=None):
                                                                               new[0].layer)
                 BC.CHECKED["wire on the current layer"] += 1
 
+    def clear_of_drawing(k):
+        # a spot off on its own: just past the right of what is drawn (not hundreds of times
+        # the scale away: on a 1:2000 sheet that was a million inches, and the wires later
+        # steps drew out to it made every step crawl, the Linux build's seed 306)
+        bb = s.extents()
+        x = (bb[2] if bb is not None else world["o"][0]) + 20.0 * k
+        return (round((x + rnd.randint(0, 40) * k) / 0.25) * 0.25,
+                round((world["o"][1] + rnd.randint(0, 40) * k) / 0.25) * 0.25)
+
     def op_wire_around():
         # (0.16.7: a wire to a pin on the far side of a symbol goes round it, not through it,
         # and arrives straight out of the pin's side; off on its own, far from everything)
         k = s.k()
-        o = (world["o"][0] + 400.0 * k + rnd.randint(0, 40) * k,
-             world["o"][1] + 400.0 * k + rnd.randint(0, 40) * k)
+        o = clear_of_drawing(k)
         name = rnd.choice(["Drive control terminals", "Disconnect 3-pole", "Relay coil",
                            "Fuses 3-pole"])
         before = set(s.entities)
@@ -649,7 +658,10 @@ def random_editing(log, out, ops, seed, drawing=None):
         type_in(v, fmt(a), fmt(pin))
         finish()
         new = [w for i, w in s.entities.items() if i not in before and isinstance(w, M.Wire)]
-        mine = [w for w in new if pin in (w.points[0], w.points[-1])]
+        # (on it as the program joins: within TOL; the point is typed with 12 digits, so a
+        # pin at 6.000000000000001 is typed 6, seed 8)
+        mine = [w for w in new if min(G.dist(pin, w.points[0]), G.dist(pin, w.points[-1]))
+                <= wires.TOL]
         assert mine, "the wire to %s's pin %s didn't end on it" % (name, pin_name)
         w = mine[0]
         assert not wires._crosses(w.points, [(e, bb)]), \
@@ -660,8 +672,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         # (0.16.7: a bus clicked across a symbol off on its own goes round it: none of its
         # wires runs through it)
         k = s.k()
-        o = (world["o"][0] + 500.0 * k + rnd.randint(0, 40) * k,
-             world["o"][1] + 500.0 * k + rnd.randint(0, 40) * k)
+        o = clear_of_drawing(k)
         name = rnd.choice(["Drive control terminals", "Disconnect 3-pole", "Variable frequency drive"])
         before = set(s.entities)
         v.run(C.InsertCmd, lib.get("symbol", name), {})
@@ -916,7 +927,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         name = rnd.choice([n for n in syms if lib.get("symbol", n).pins and
                            len(lib.get("symbol", n).pins) == 6])
         turns = rnd.randint(0, 3)
-        a = pt()
+        # (in a clear spot: laid over other wires, which pin ends on which wire isn't defined,
+        # seed 306)
+        a = clear_of_drawing(s.k())
         up = turns % 2 == 1                     # (turned sideways: the bus runs up and down)
         L = 3.0
         with p.edit("bus to land on") as ed:
@@ -1766,6 +1779,60 @@ def random_editing(log, out, ops, seed, drawing=None):
         assert now == keep, "updating %s moved or retagged its copies" % name
         BC.CHECKED["update blocks"] += 1
 
+    def op_block_pins():
+        # in a block's tab (Edit block...): pins added with Add pin, then renamed, moved,
+        # reordered and deleted in Pins...; what Save block would make has exactly those pins
+        # in that order; undone all the way, the tab is as it opened, and redone as it was
+        # (closed without saving: the library stays as it is)
+        name = rnd.choice(syms)
+        d = win.edit_block("symbol", name)
+        if d is None:
+            return
+        bp, sess, bs, bv = d.project, d.block_session, d.view.sheet(), d.view
+        opened = norm({"sheets": [bs.to_dict()]})
+        try:
+            ox, oy = sess.offset
+            bv.run(C.AddPinCmd)
+            for _k in range(rnd.randint(1, 3)):
+                q = (ox + rnd.randint(-8, 8) * 0.0625, oy + rnd.randint(-8, 8) * 0.0625)
+                type_in(bv, "%r,%r" % q)
+                offered = BE.next_pin_name(BE.pin_names(bp, sess))
+                bv.enter()
+                assert offered in BE.pin_names(bp, sess), "Add pin: %s not added" % offered
+            bv.escape()
+            rows = [(e.id, e.text.strip(), pos[0], pos[1])
+                    for e, pos in BE.pin_markers(bp, sess)]
+            rnd.shuffle(rows)
+            if len(rows) > 1 and rnd.random() < 0.5:
+                rows.pop(rnd.randrange(len(rows)))
+            rows = [(eid, "P%d" % k if rnd.random() < 0.3 else n,
+                     x + rnd.choice([0.0, 0.0625, -0.125]), y) for k, (eid, n, x, y)
+                    in enumerate(rows)]
+            names = [r[1] for r in rows]
+            if len(set(names)) != len(names):
+                assert BE.apply_pins(bp, sess, rows) is not None, "two pins, one name, taken"
+            else:
+                assert BE.apply_pins(bp, sess, rows) is None
+                got = BE.to_block(bp, sess).defn.pins
+                assert [(q["name"], q["pos"]) for q in got] == \
+                    [(n, (BE._round(x), BE._round(y))) for _i, n, x, y in rows], \
+                    "Pins...: %r, saved as %r" % (rows, got)
+                BC.CHECKED["block pins arranged"] += 1
+            after = norm({"sheets": [bs.to_dict()]})
+            steps = len(bp.undo_stack)
+            while bp.undo_stack:
+                bp.undo()
+            assert norm({"sheets": [bs.to_dict()]}) == opened, "block tab undone: not as it opened"
+            for _k in range(steps):
+                bp.redo()
+            assert norm({"sheets": [bs.to_dict()]}) == after, "block tab redone: not as it was"
+        finally:
+            if bv.cmd is not None:
+                bv.cancel()
+            bp.saved_at = len(bp.undo_stack)
+            win.close_tab(win.tabs.indexOf(d))
+            APP.processEvents()
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -1784,7 +1851,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

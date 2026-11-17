@@ -244,6 +244,11 @@ def to_block(project, sess):
             ents.append((0 if i is not None else 1, i if i is not None else eid, eid, out))
     ents.sort(key=lambda t: (t[0], t[1]))
     pins.sort(key=lambda t: (t[0], t[1]))
+    if s.pin_order:
+        # (the order set in Pins..., undone with it: markers it doesn't list after, as they
+        # were)
+        rank = {eid: i for i, eid in enumerate(s.pin_order)}
+        pins.sort(key=lambda t: (rank.get(t[2], len(rank)),))
     attrs.sort(key=lambda t: (t[0], t[1]))
     tags.sort(key=lambda t: (t[0], t[1]))
     rails.sort(key=lambda t: (t[0], t[1]))
@@ -287,6 +292,75 @@ def to_block(project, sess):
         base[a[2]] = (s.entities[a[2]].to_dict(), ("attr", k))
     defn.builtin = False
     return Result(defn, pin_map, warnings, base)
+
+
+def pin_markers(project, sess):
+    """[(marker text, its pin's place in the block: x, y from the base point)] of the pins on
+    the editor's sheet, in the order Save block would give them."""
+    res = to_block(project, sess)
+    s = project.sheet_by_id(sess.sheet_id)
+    by_id = {}
+    for eid, (_d, what) in res.base.items():
+        if what[0] == "pin":
+            by_id[what[1]] = eid
+    return [(s.entities[by_id[k]], res.defn.pins[k]["pos"]) for k in range(len(res.defn.pins))
+            if k in by_id]
+
+
+def pin_marker(sess, point, name):
+    """A new pin's marker (a text on BLOCK PINS) at point on the editor's sheet."""
+    left = point[0] < sess.offset[0] - 1e-9
+    return M.Text(point, name, PIN_HEIGHT * sess.scale, align="right" if left else "left",
+                  layer=LAYER_PINS)
+
+
+def next_pin_name(names):
+    """The name a new pin is offered: one more than the highest number among them (13, 14:
+    15), else the next letter-number (A1, A2: A3), else how many there are, plus one."""
+    import re
+    best = None
+    for n in names:
+        m = re.fullmatch(r"([A-Za-z]*)(\d+)", n.strip())
+        if m and (best is None or int(m.group(2)) > best[1]):
+            best = (m.group(1), int(m.group(2)))
+    if best is not None:
+        return "%s%d" % (best[0], best[1] + 1)
+    return str(len(names) + 1)
+
+
+def pin_names(project, sess):
+    """The names on the editor's pin markers."""
+    s = project.sheet_by_id(sess.sheet_id)
+    return [e.text.strip() for e in s.entities.values()
+            if isinstance(e, M.Text) and e.layer == LAYER_PINS]
+
+
+def apply_pins(project, sess, rows):
+    """Pins... done: rows [(marker id, name, x, y)] in the order the pins take, x and y from
+    the base point. Markers left out are erased; the others renamed and moved; the order kept
+    with the sheet (one step, undone as one). Returns what's wrong with the rows, or None."""
+    s = project.sheet_by_id(sess.sheet_id)
+    names = [str(r[1]).strip() for r in rows]
+    if any(not n for n in names):
+        return "Every pin needs a name"
+    dup = sorted({n for n in names if names.count(n) > 1})
+    if dup:
+        return "Two pins can't have the same name (%s)" % ", ".join(dup)
+    keep = [r[0] for r in rows]
+    ox, oy = sess.offset
+    with project.edit("Pins") as ed:
+        for e in list(s.entities.values()):
+            if isinstance(e, M.Text) and e.layer == LAYER_PINS and e.id not in keep:
+                ed.remove(s, e.id)
+        for (eid, _n, x, y), name in zip(rows, names):
+            cur = s.entities[eid]
+            at = (_round(ox + float(x)), _round(oy + float(y)))
+            if cur.text != name or G.dist(cur.pos, at) > 1e-9:
+                ed.change(s, cur.copy(text=name, pos=at,
+                                      align="right" if float(x) < -1e-9 else "left"))
+        if list(s.pin_order) != keep:
+            ed.sheet_meta(s, pin_order=keep)
+    return None
 
 
 def saved(sess, result):

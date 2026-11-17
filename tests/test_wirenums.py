@@ -139,5 +139,24 @@ class WireNumberTest(unittest.TestCase):
         self.assertTrue(out and all(isinstance(e, M.Wire) for e in out), out)
 
 
+
+class ClearSpotTest(unittest.TestCase):
+    def test_a_very_long_piece_is_quick_and_the_same(self):
+        # (the Linux build's battery, seed 306: wires a million inches long, and every
+        # repaint walked each half inch along them)
+        import time
+        busy = {}
+        for q in ((0.0, 3.0), (0.0, 10.0), (5.0, 5.0)):
+            busy.setdefault((int(q[0] // wirenums._CELL), int(q[1] // wirenums._CELL)),
+                            []).append(q)
+        short = wirenums._clear_spot((0.0, 0.0), (0.0, 12.0), busy)
+        self.assertEqual(short, (0.0, 6.5))             # (between the two on it)
+        t = time.perf_counter()
+        far = wirenums._clear_spot((0.0, 0.0), (0.0, 1.0e6), busy)
+        self.assertLess(time.perf_counter() - t, 0.05)
+        self.assertEqual(far, (0.0, (10.0 + 1.0e6) / 2))
+        self.assertEqual(wirenums._clear_spot((0.0, 1.0e6), (0.0, 0.0), busy), far)
+
+
 if __name__ == "__main__":
     unittest.main()

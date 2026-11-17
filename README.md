@@ -5,13 +5,17 @@
 A free, open-source electrical CAD program for Windows and Linux, for people who know
 AutoCAD but want fewer commands, fewer settings and fewer surprises.
 
-- AutoCAD-style drawing: command line, object snaps, ortho, polar tracking, grips,
-  window/crossing/lasso selection.
+- AutoCAD-style drawing: command line, object snaps, ortho, polar tracking, grips (corners
+  and the middles of sides), window/crossing/lasso selection, Array, Offset, and Number texts
+  (1, 2, 3; A, B, C; S1, S2... down or across).
 - Projects of ANSI sheets with a grid of zones (`6-D1` references) and an editable title block.
-- A library of your own: JIC/NFPA schematic symbols, panel footprints and parts, with 41
-  symbols and 34 generic footprints (breakers, contactors, relays, power supplies, terminals...)
-  built in.
-- Wires that stay attached to symbols, and buses.
+- A library of your own: JIC/NFPA schematic symbols, panel footprints and parts, with 44
+  symbols and 34 generic footprints (breakers, contactors, relays, power supplies, terminals,
+  fused disconnects, starters with overloads, drive control terminals...) built in.
+- A block editor: change any symbol or footprint in a tab of its own, add pins by clicking,
+  and rename, move, reorder or delete them in a list; pin names can show on the drawing.
+- Wires and buses that stay attached to symbols, land on their pins, and go around the symbols
+  in their way (how far is a setting); drag a run of wire sideways and the wires on it follow.
 - Device tags by page number (`CR601`), contacts linked to their coil, and cross-references
   that update themselves.
 - Three-phase power symbols, terminal strips that number their terminals, PLC I/O points.
@@ -22,11 +26,13 @@ AutoCAD but want fewer commands, fewer settings and fewer surprises.
   drawn plain, with a gap or a loop.
 - Panel sheets at a scale (1:4, 3" = 1'-0"...) with dimensions, DIN rail and wire duct at real
   size, footprints that snap onto the rail, and a materials list of the rail and duct to cut.
-- Leaders with notes or numbered balloons, hatch and solid fill, multi-line text.
+- Leaders with notes or numbered balloons, dashed boxes with a note (on their own or belonging
+  to a device), hatch and solid fill, multi-line text.
 - Reports: a bill of materials (parts by manufacturer and catalog number), and Cables between
   locations: what to pull between panels and where every wire lands on both sides (TB1-12),
   with the cable, its type and the conductors' colors or numbers (CSV and PDF).
-- Project templates, title block position (corner, right-hand or bottom strip), and Options.
+- Project templates, title block position (corner, right-hand or bottom strip), Options, and
+  reopening the files you had open last.
 - DXF in and out, DWG in (AutoCAD R13-2018), PDF out. Imported blocks stay blocks, AutoCAD
   Electrical's attributes (P_TAG1, DESC1, MFG, CAT) become tags and parts, dimensions stay
   dimensions, and an imported title block can become the project's.
@@ -42,7 +48,7 @@ AutoCAD but want fewer commands, fewer settings and fewer surprises.
 Coming next: wire lists and terminal strip reports, check-out and check-in of sheets, shared
 libraries. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-Press **F1** in the app for the user manual.
+Press **F1** in the app for the user manual (chapters on the left, and a search box).
 
 ## Install on Windows (the easy way)
 

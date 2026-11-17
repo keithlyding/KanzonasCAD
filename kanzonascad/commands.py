@@ -1764,11 +1764,14 @@ class BusCmd(Command):
         tail = [q[len(self.points) - 1:] for q in paths]
         if not boxes or not any(_crosses(q, boxes) for q in tail):
             return new
-        # (tight first: the other wires may be on the outside of every turn; else with room
-        # for the whole bus on each side)
-        for extra in ((0.0, width) if width > 0 else (0.0,)):
+        # (tight first: the other wires may be on the outside of every turn; then the bus's
+        # width kept clear on the side its other wires are on, the right of the way it goes
+        # unless flipped; then all round)
+        side = -1 if self._flip_for(self.points + new) else 1
+        for extra, on in (((0.0, None), (width, side), (width, None)) if width > 0
+                          else ((0.0, None),)):
             got = route_around(sheet, self.points[-1], new[-1], new, wire_clear(self.ctx),
-                               extra)
+                               extra, on)
             if got is new:
                 continue
             tail = [q[len(self.points) - 1:] for q in self._paths(self.points + got)]
@@ -3880,6 +3883,65 @@ class LayerOnCmd(Command):
         self.finish()
 
 
+class AddPinCmd(Command):
+    """ADDPIN (Add pin, in a block's tab): click where a pin goes, then its name (Enter takes
+    the one offered: one more than the highest number); again for the next, Enter or Esc
+    ends. A pin is a text on BLOCK PINS: its insertion point is where a wire attaches."""
+    name, title = "ADDPIN", "Add pin"
+
+    def begin(self):
+        from . import block_editor as BE
+        self.BE = BE
+        self.sess = getattr(self.ctx, "block_session", None)
+        if self.sess is None:
+            self.ctx.message("Add pin works in a block's tab (Edit block... opens one)")
+            self.finish()
+            return
+        self._ask_point()
+
+    def _offered(self):
+        return self.BE.next_pin_name(self.BE.pin_names(self.ctx.project, self.sess))
+
+    def _ask_point(self):
+        self.step, self.at = "pos", None
+        self.ctx.prompt("Pin location (pin %s; Enter or Esc ends)" % self._offered())
+
+    def point(self, p):
+        if self.step != "pos":
+            return
+        self.at = self.base = self.last = p
+        self.step = "name"
+        self.ctx.prompt("Pin name <%s>" % self._offered(), typing=True)
+
+    def wants_raw_text(self):
+        return self.step == "name"
+
+    def text(self, s):
+        if self.step != "name":
+            return False
+        name = s.strip() or self._offered()
+        if name in self.BE.pin_names(self.ctx.project, self.sess):
+            self.ctx.message("There's already a pin %s: type another name" % name)
+            self.ctx.prompt("Pin name <%s>" % self._offered(), typing=True)
+            return True
+        with self.ctx.edit("Add pin") as ed:
+            ed.add(self.ctx.sheet(), self.BE.pin_marker(self.sess, self.at, name))
+        self.ctx.message("Pin %s added" % name)
+        self._ask_point()
+        return True
+
+    def enter(self):
+        if self.step == "name":
+            self.text("")
+        else:
+            self.finish()
+
+    def preview(self, p):
+        if self.step == "pos":
+            return [self.BE.pin_marker(self.sess, p, self._offered())]
+        return [self.BE.pin_marker(self.sess, self.at, self._offered())]
+
+
 class LayerUnlockAllCmd(Command):
     """LAYULK: unlock every layer."""
     name, title = "LAYULK", "Unlock all layers"
@@ -3924,6 +3986,7 @@ COMMANDS = {
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
     "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)
     "SCOOT": (ScootCmd, ["AESCOOT"]),
+    "ADDPIN": (AddPinCmd, ["PIN", "AP"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
     "DISTRIBUTE": (DistributeCmd, ["DIST"]),
     "DELDOT": (DeleteDotCmd, ["DD"]),

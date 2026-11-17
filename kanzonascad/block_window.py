@@ -206,6 +206,7 @@ class BlockEditing:
         d.block_session = sess
         d.block_source = source
         v = d.view
+        v.block_session = sess          # (Add pin finds it there)
         v.overlay = paint_pins
         v.current_layer = "0"
         self._project_changed(d)
@@ -256,6 +257,54 @@ class BlockEditing:
         self._say(msg)
         src = d.block_source if self._is_open(d.block_source) else None
         self._offer_update(src, defn, defn.name, res.pin_map)
+        return True
+
+    # ---- Pins... -----------------------------------------------------------------------
+    def ask_pins(self, rows):
+        """The Pins dialog: the rows as left, or None when cancelled (a test replaces it)."""
+        from .dialogs import PinsDialog
+        dlg = PinsDialog(self, rows, self._find_pin)
+        while dlg.exec():
+            try:
+                return dlg.rows()
+            except ValueError as ex:
+                QMessageBox.warning(self, "Pins", str(ex))
+        return None
+
+    def _find_pin(self, eid):
+        """Find (Pins...): the pin's marker selected and in the middle of the view."""
+        v = self.view()
+        e = v.sheet().entities.get(eid) if v is not None else None
+        if e is None:
+            return
+        v.set_selection([eid])
+        v.center = e.pos
+        v.update()
+
+    def pins_dialog(self):
+        """Pins...: the block's pins renamed, reordered, moved or deleted, one undoable step.
+        True when something changed."""
+        d = self.doc()
+        if not is_block_doc(d):
+            self._say("Pins works in a block's tab (Edit block... opens one)")
+            return False
+        if d.view.cmd is not None:
+            d.view.cancel()
+        sess = d.block_session
+        rows = [(e.id, e.text.strip(), pos[0], pos[1])
+                for e, pos in BE.pin_markers(d.project, sess)]
+        while True:
+            got = self.ask_pins(rows)
+            if got is None:
+                return False
+            why = BE.apply_pins(d.project, sess, got)
+            if why is None:
+                break
+            QMessageBox.warning(self, "Pins", why)
+            rows = got
+        self._project_changed(d)
+        names = [r[1] for r in got]
+        self._say("%d pin(s): %s" % (len(names), ", ".join(names)) if names else "No pins")
         return True
 
     # ---- Duplicate... and Save block as... ------------------------------------------------

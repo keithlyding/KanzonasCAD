@@ -38,7 +38,7 @@ ICONS = {
     "new_revision": "file-document-edit-outline", "fp_label": "label-outline", "layers": "layers-outline", "title_block": "table-edit",
     "black_bg": "invert-colors",
     "make_block": "shape-plus", "explode": "shape-outline", "library": "bookshelf",
-    "edit_block": "vector-square-edit", "save_block": "content-save-check-outline",
+    "edit_block": "vector-square-edit", "save_block": "content-save-check-outline", "add_pin": "vector-point-plus", "pins": "order-numeric-ascending",
     "block_props": "card-text-outline",
     "part": "tag-plus-outline", "color": "palette-outline", "wire": "vector-polyline-edit", "bus": "reorder-horizontal", "sheets": "file-multiple-outline",
     # help

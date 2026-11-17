@@ -344,7 +344,17 @@ does. Change it with every normal command (Move, Copy, Trim, Text, grips, Undo..
 is the <b>base point</b> (on the locked layer BLOCK BASE POINT); each green text on layer BLOCK
 PINS is a <b>pin</b>: its insertion point, marked with a small ring, is where wires attach, and
 its text is the pin's name (edit the text to rename it, move it with its grip, copy it to add
-a pin, erase it to remove one); the blue text on BLOCK TAG is where the tag goes, and texts on
+a pin, erase it to remove one). <b>Add pin</b> (ADDPIN, PIN, AP; Library menu and the
+Schematic and Panel tabs, in that tab) adds pins by clicking: click where the pin goes (the
+snaps help: a line's end), then type its name or press Enter for the one offered (one more than
+the highest number: 15 after 13 and 14, A3 after A1 and A2); it goes on with the next pin until
+Enter or Esc. A name already there is asked again. <b>Pins...</b> (the same places) lists the
+pins in their order, with each one's name and place (X and Y in inches from the base point):
+double-click a name or a place to change it (a pin put in the wrong spot: type where it goes);
+drag a row, or <b>Move up</b> and <b>Move down</b>, to change the order (the order a bus lands
+on them wire for wire, and the order Properties... lists them); <b>Delete</b> takes a pin out;
+<b>Find</b> selects it on the drawing and puts it in the middle of the view. OK makes all of it
+one step (Undo takes it back); two pins with the same name are refused. The blue text on BLOCK TAG is where the tag goes, and texts on
 BLOCK ATTRIBUTES are where a terminal's number or a PLC address shows. A footprint has a pink
 <b>DIN RAIL</b> text on layer BLOCK DIN RAIL: its insertion point (a ring, with a dashed line
 across the part where the rail's centerline runs) is the middle of the part's rail clip. Move
@@ -355,7 +365,7 @@ changes); erased, it goes back to that. The blue <b>LABEL</b> text on layer BLOC
 where its <b>Footprint label</b> goes, the same way: left where it opened, the middle of the
 drawing; moved, that spot. <b>Save block</b>
 (Library menu, the ribbon, or Save, Ctrl+S, in that tab) puts it back in your library: the
-pins keep their order, new ones come after. Closing the tab with changes not saved asks
+pins keep their order (or the one set in Pins...), new ones come after. Closing the tab with changes not saved asks
 first. <b>Save block as...</b> (Library menu and the ribbon, in that tab) saves it under a new
 name instead, with its catalog number left blank: the block it was opened from stays as it
 was in your library, and the tab goes on editing the new one.</li>
@@ -719,8 +729,9 @@ to start), <b>R</b> for the rotation (degrees), or <b>J</b> (Justify) for where 
 on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR (bottom), or L,
 C, R (on the baseline). All three are kept for the next texts.
 <b>Double-click a text</b> to change its wording, height, angle and justification afterward
-(with "Keep the text where it is" ticked, a new justification moves only its insertion point,
-which is where it snaps and turns around).</td></tr>
+(a new justification moves the text around its insertion point; tick "Keep the text where it
+is", unticked to start, to move only the insertion point instead, which is where it snaps and
+turns around).</td></tr>
 <tr><td>Multiline text</td><td>MTEXT, MT, NOTE</td><td>One text of several lines (a note): click a
 corner of its box, then the opposite corner (its lines wrap at the box's width), or press
 Enter after the first corner for no wrapping; type the text in the box that opens (Enter starts

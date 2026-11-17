@@ -438,21 +438,30 @@ def _out_of(sheet, p, boxes):
     return None
 
 
-def route_around(sheet, a, b, plain, clear=CLEAR, extra=0.0):
+def route_around(sheet, a, b, plain, clear=CLEAR, extra=0.0, side=None):
     """The corner points from a to b (plain: the usual one-corner path's) going around the
     symbols in the way, straight across and up and down, leaving a pin (and arriving at one)
     straight out of its side, the fewest corners and then the shortest; plain when nothing is in
     the way or no way round is found. clear: how far (paper inches) it keeps from a symbol
     (project setting wire_clear); extra: more, in drawing units (a bus: the width of its other
-    wires)."""
+    wires), all round, or with side (1: right of the way it goes, -1: left) only on that side:
+    the band each leg sweeps that far over is kept clear too (a bus's other wires, beside its
+    first one: the battery, seed 19, a bus 4.75" wide past a tall terminal strip)."""
     import heapq
     k = sheet.k()
+    band = extra if side else 0.0
+    extra = 0.0 if side else extra
     c = clear * k + extra
-    pad = 3.0 * k + extra
+    pad = 3.0 * k + extra + band
     region = (min(a[0], b[0]) - pad, min(a[1], b[1]) - pad, max(a[0], b[0]) + pad,
               max(a[1], b[1]) + pad)
     boxes = _boxes(sheet, region, k)
-    if not boxes or not _crosses([a] + plain, boxes):
+    # (with extra, the box grown by it: a bus whose first wire just misses a symbol while the
+    # others run through it, the battery, seed 8 on a 1:6 sheet)
+    grow = extra + band
+    if not boxes or not _crosses([a] + plain, [(e, (bb[0] - grow, bb[1] - grow,
+                                                    bb[2] + grow, bb[3] + grow))
+                                               for e, bb in boxes]):
         return plain
     g = 0.125 * k                               # (corners on the 1/8" grid)
 
@@ -486,6 +495,18 @@ def route_around(sheet, a, b, plain, clear=CLEAR, extra=0.0):
                     y1 > by0 + TOL:
                 return True
         return False
+
+    def swept(p, q):
+        # (the band beside the leg, band wide on side: inside no grown box)
+        L = G.dist(p, q)
+        if not band or L < TOL:
+            return False
+        nx, ny = (q[1] - p[1]) / L * side, -(q[0] - p[0]) / L * side      # (right: side 1)
+        bx = (p[0], q[0], p[0] + nx * band, q[0] + nx * band)
+        by = (p[1], q[1], p[1] + ny * band, q[1] + ny * band)
+        x0, x1, y0, y1 = min(bx), max(bx), min(by), max(by)
+        return any(x0 < gx1 - TOL and x1 > gx0 + TOL and y0 < gy1 - TOL and y1 > gy0 + TOL
+                   for gx0, gy0, gx1, gy1 in grown)
     if inside(a2) or inside(b2):
         return plain
     xs = sorted({round(v, 9) for v in [a2[0], b2[0]] + [q for bx in grown for q in (bx[0], bx[2])]})
@@ -511,7 +532,7 @@ def route_around(sheet, a, b, plain, clear=CLEAR, extra=0.0):
             if not (0 <= ni < len(xs) and 0 <= nj < len(ys)):
                 continue
             p, q = (xs[i], ys[j]), (xs[ni], ys[nj])
-            if inside(q) or blocked(p, q):
+            if inside(q) or blocked(p, q) or swept(p, q):
                 continue
             nc = cost + G.dist(p, q) + (BEND * k if way is not None and way != w else 0.0)
             if nc < best.get(((ni, nj), w), 1e300) - 1e-12:
@@ -648,6 +669,13 @@ def join_at(ed, sheet, points):
         (a, ia), (b, ib) = sorted(ends, key=lambda t: (not t[0].num_lock, _order(t[0].id)))
         pa = list(a.points) if ia == -1 else list(reversed(a.points))
         pb = list(b.points) if ib == 0 else list(reversed(b.points))
+        # (not when b goes back along a: joined, the wire would fold back over itself, the
+        # battery, seed 306: a bus wire laid on another wire the other way, and a pin left in
+        # the middle of the fold)
+        da = (pa[-2][0] - p[0], pa[-2][1] - p[1])
+        db = (pb[1][0] - p[0], pb[1][1] - p[1])
+        if abs(da[0] * db[1] - da[1] * db[0]) <= TOL * TOL and da[0] * db[0] + da[1] * db[1] > 0:
+            continue
         merged = _tidy(pa + pb[1:])
         if len(merged) < 2:
             continue
