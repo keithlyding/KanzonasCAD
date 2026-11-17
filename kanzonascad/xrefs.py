@@ -20,6 +20,8 @@ Either way, out_of_date() lists the sheets whose shown references differ from th
 A reference is a plain tuple (x, y, text, height): saved in the sheet as it is while held.
 """
 
+import math
+
 from .model import Insert, Text, text_width
 from . import tags
 
@@ -95,14 +97,25 @@ def live_all(project):
             out[s.id].append((round(x, 6), round(y, 6), text, hh))
             y -= hh * LINE
     # off-sheet connectors: where the same name's other ends are
-    from .wirenums import connectors
+    from .wirenums import connectors, ARROWS, number_at
     for name, ends in connectors(project).items():
         for s, c in ends:
             hh = hk[s.id]
             others = [_where(project, os_, oc) for os_, oc in ends if oc is not c]
+            text = ", ".join(others) if others else "?"
+            if c.block in ARROWS:
+                # a source or destination arrow: its wire's number and the other's place
+                # (2046 / 7-A2), past the arrow's far end, away from its wire (the owner,
+                # 0.17.5: arrows "connected" to the line, so nothing written over it)
+                num = number_at(s, c)
+                if num:
+                    text = "%s / %s" % (num, text)
+                x, y = _past_arrow(c, text, hh)
+                out[s.id].append((round(x, 6), round(y, 6), text, hh))
+                continue
             bb = c.bbox()
             out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - hh, 6),
-                              ", ".join(others) if others else "?", hh))
+                              text, hh))
     for s, c in contacts:
         if tags.numbered(c):
             continue                    # (a terminal shows its number, not where its strip is)
@@ -121,6 +134,23 @@ def live_all(project):
         out[s.id].append((round(x, 6), round(y, 6), text, hh))
     _cache["sig"], _cache["by_sheet"] = sig, out
     return out
+
+
+ARROW_LENGTH = 0.3125      # (a source or destination arrow's length from its pin, paper inches)
+
+
+def _past_arrow(c, text, hh):
+    """Where an arrow's text is centered: past its far end along the way it points out of its
+    wire, beside the end when it lies across, under or over it when it lies up and down."""
+    pin = c.pin_points()[0][1]
+    a = math.radians(c.angle)
+    d = (math.cos(a), math.sin(a))
+    reach = ARROW_LENGTH * c.scale + 0.4 * hh
+    fx, fy = pin[0] + d[0] * reach, pin[1] + d[1] * reach
+    if abs(d[0]) >= abs(d[1]):
+        w = text_width(text, hh)
+        return fx + (w / 2.0 if d[0] > 0 else -w / 2.0), pin[1] - 0.35 * hh
+    return pin[0], (fy - hh if d[1] < 0 else fy + 0.2 * hh)
 
 
 def live(project, sheet):

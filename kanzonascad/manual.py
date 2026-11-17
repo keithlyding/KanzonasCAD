@@ -729,8 +729,10 @@ and one where it comes back on another sheet, with the same name. Placing one as
 Enter takes the one offered (a connector still waiting for its other end, else the next free
 letter). The wire keeps the number of the sheet it starts on, and under each connector its
 other end's place shows (<b>7-A2</b>). <b>Source arrow</b> and <b>Destination arrow</b>
-(Library, JIC/Wiring) are the same, drawn as arrows: pointing out where the wire leaves,
-pointing in where it arrives.</li>
+(Library, JIC/Wiring) are the same, drawn as arrows on the wire's end: a source arrow points
+away from the line where the wire leaves, a destination arrow's tip is on the line, pointing
+into it, where the wire arrives. Past each arrow's far end (not over the wire), the wire's
+number and the other arrow's place (<b>2046 / 7-A2</b>).</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
 numbers and cross-references.</li>
 <li>Wire numbers go into PDF and DXF exports as text.</li>

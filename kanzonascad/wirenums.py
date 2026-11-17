@@ -404,6 +404,18 @@ def open_end(nodes, first=None):
     return None
 
 
+ARROWS = ("Source arrow", "Destination arrow")
+
+
+def number_at(sheet, ins):
+    """The number of the wire on a connector's pin ("" when none)."""
+    for _n, q in ins.pin_points():
+        for w in sheet.query_point(q, TOL):
+            if getattr(w, "kind", "") == "wire" and w.num and w.touches(q, TOL):
+                return w.num
+    return ""
+
+
 def new_link_name(project):
     """The lowest connector name nobody uses yet (A, B... Z, AA...)."""
     got = connectors(project)

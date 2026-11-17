@@ -22,7 +22,9 @@ build fails without them.
 - Typing a wire number another wire already has asks whether it's a cross-reference:
   **Source** or **Destination** puts a **Source arrow** and a **Destination arrow** (new in the
   Library, JIC/Wiring) on the open ends of the two wires, so they become one wire and each
-  shows where the other is. Or keep just the same number.
+  shows where the other is. Or keep just the same number. A source arrow sits on the end of
+  its wire pointing away from the line, a destination arrow's tip touches the line pointing
+  into it, and past each the wire's number and the other's place (2046 / 7-A2).
 
 **Fixed**
 - Moving, scooting or turning a symbol with two pins of the same name (a drive with two GND
