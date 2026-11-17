@@ -1351,7 +1351,9 @@ def random_editing(log, out, ops, seed, drawing=None):
             kept = sum(length(x) for i, x in s.entities.items() if i not in before)
             whole, cut = length(hit), sum(length(x) for x in lit)
             assert abs(kept + cut - whole) <= 1e-6 * max(1.0, whole), \
-                "Trim lit %.6g of %.6g and left %.6g" % (cut, whole, kept)
+                "Trim lit %.6g of %.6g and left %.6g: %r at %r, lit %r, left %r" % (
+                    cut, whole, kept, hit, q, lit,
+                    [x for i, x in s.entities.items() if i not in before])
             BC.CHECKED["trim lights what it cuts"] += 1
 
     def op_wire_xref():
@@ -1452,16 +1454,34 @@ def random_editing(log, out, ops, seed, drawing=None):
         # (0.18: their text outside them, off their wires)
         from kanzonascad import xrefs as X
         texts = X.texts(p, s)
+        num_now = (s.entities[a.id].num if a.id in s.entities else None) \
+            if wirenums.enabled(p) else None
         for e in new:
             pin = e.pin_points()[0][1]
             ws = [w for w in s.wires() if w.touches(pin)]
-            t = min(texts, key=lambda t: G.dist(t.pos, pin), default=None)
-            if t is None or not ws:
+            if not ws:
                 continue
-            box = t.bbox()
-            for a, b in zip(ws[0].points, ws[0].points[1:]):
-                assert not G.segment_hits_rect(a, b, box), \
-                    "the text %r of a %s lies on its wire" % (t.text, e.block)
+            # (its own text: the arrow pair's two texts can be alike and big on a scaled
+            # sheet, where the other's may be the nearer one: any text of the arrow's kind
+            # beside it, clear of the arrow and of its wire, will do)
+            eb = e.bbox()
+            reach = 2.0 * float(p.settings.get("xref_height", 0.065)) * s.k()
+
+            def beside(box):
+                return box[0] <= eb[2] + reach and box[2] >= eb[0] - reach and \
+                    box[1] <= eb[3] + reach and box[3] >= eb[1] - reach
+
+            def clear(box):
+                if box[0] < eb[2] and box[2] > eb[0] and box[1] < eb[3] and box[3] > eb[1]:
+                    return False
+                return not any(G.segment_hits_rect(q, r, box)
+                               for q, r in zip(ws[0].points, ws[0].points[1:]))
+            mine = [t for t in texts if beside(t.bbox()) and
+                    (not num_now or t.text.startswith("%s / " % num_now))]
+            assert mine, "no text beside the %s at %r" % (e.block, pin)
+            assert any(clear(t.bbox()) for t in mine), \
+                "the text of a %s lies on it or on its wire: %r, the arrow %r, its wire %r" % (
+                    e.block, [(t.text, t.bbox()) for t in mine], eb, ws[0].points)
         BC.CHECKED["source and destination arrows"] += 1
 
     def op_update_numbers():

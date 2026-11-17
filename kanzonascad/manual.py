@@ -17,12 +17,23 @@ and reports come next.</i></p>
 <h2>The window</h2>
 <ul>
 <li><b>Menus and ribbon</b> along the top, as in KanzonasPDF. The ribbon's tabs are
-<b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>; each
-group of buttons has its name under it (Rail and duct, Dimensions, Blocks...). Move, Copy,
+<b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>, and
+<b>Block</b> while you edit a block; each
+group of buttons has its name under it (Rail and duct, Dimensions, Numbering...). Move, Copy,
 Rotate, Mirror and Erase are on the Schematic and Panel tabs too (Modify), not only Home. Double-click a
 tab name (or <b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
 <b>Ribbon group names</b> (View) turns the names off, for a more compact ribbon, and on
-again.</li>
+again. When the window is too narrow for a tab, its groups shrink from the right: big
+buttons become small ones with their names beside them, then icons alone (the name shows
+when you hold the mouse over one); widen the window and they grow back. Only a tab that
+still doesn't fit as icons scrolls sideways (the mouse wheel over it).</li>
+<li><b>The Block tab</b> holds a block's own tools: <b>Save block</b>, <b>Save block as...</b>,
+<b>Block properties...</b>, <b>Duplicate block...</b>, <b>Add pin</b>, <b>Pins...</b>,
+<b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
+in a block's tab (Edit block..., on the Schematic tab's Symbols group and the Panel tab's
+Footprints group, opens one), and goes away when you leave it. To have it all the time, turn
+on <b>Block tab</b> (View menu, and the View tab's Ribbon group). The same commands are always
+in the Library menu.</li>
 <li><b>Project tabs</b>: each open project has its own tab. Drag a tab away from the tabs and
 let go to give it a window of its own (see <b>Windows and two screens</b>).</li>
 <li><b>Sheets panel</b> on the left: the project's sheets with their page numbers. Click one to
@@ -359,14 +370,15 @@ drawing; Edit block... adds its pins); the kind can change either way. Renaming 
 under the new name, removes your file under the old one and points your parts at the new
 name.</li>
 <li><b>Edit block...</b> (a button in the Library popup, its right-click menu, or the Library
-menu and the Schematic and Panel tabs, for a block selected in the drawing): the library's
+menu, the Schematic tab's Symbols group, the Panel tab's Footprints group and the Block tab,
+for a block selected in the drawing): the library's
 copy of the block opens in a tab of its own, <b>Block: name</b>, as AutoCAD's Block Editor
 does. Change it with every normal command (Move, Copy, Trim, Text, grips, Undo...). The cross
 is the <b>base point</b> (on the locked layer BLOCK BASE POINT); each green text on layer BLOCK
 PINS is a <b>pin</b>: its insertion point, marked with a small ring, is where wires attach, and
 its text is the pin's name (edit the text to rename it, move it with its grip, copy it to add
-a pin, erase it to remove one). <b>Add pin</b> (ADDPIN, PIN, AP; Library menu and the
-Schematic and Panel tabs, in that tab) adds pins by clicking: click where the pin goes (the
+a pin, erase it to remove one). <b>Add pin</b> (ADDPIN, PIN, AP; Library menu and the Block
+tab, in that tab) adds pins by clicking: click where the pin goes (the
 snaps help: a line's end), then type its name or press Enter for the one offered (one more than
 the highest number: 15 after 13 and 14, A3 after A1 and A2); it goes on with the next pin until
 Enter or Esc. A name already there is asked again. <b>Pins...</b> (the same places) lists the
@@ -385,14 +397,14 @@ when placed; left where it opened, it stays the middle of the drawing (also when
 changes); erased, it goes back to that. The blue <b>LABEL</b> text on layer BLOCK TAG is
 where its <b>Footprint label</b> goes, the same way: left where it opened, the middle of the
 drawing; moved, that spot. <b>Save block</b>
-(Library menu, the ribbon, or Save, Ctrl+S, in that tab) puts it back in your library: the
+(Library menu, the ribbon's Block tab, or Save, Ctrl+S, in that tab) puts it back in your library: the
 pins keep their order (or the one set in Pins...), new ones come after. Closing the tab with changes not saved asks
-first. <b>Save block as...</b> (Library menu and the ribbon, in that tab) saves it under a new
+first. <b>Save block as...</b> (Library menu and the Block tab, in that tab) saves it under a new
 name instead, with its catalog number left blank: the block it was opened from stays as it
 was in your library, and the tab goes on editing the new one.</li>
 <li><b>Duplicate...</b> (a button in the Library popup, its right-click menu, or
-<b>Duplicate block...</b> in the Library menu and the Schematic and Panel tabs, for a block
-selected in the drawing): to make a block that is almost like one you have (a footprint of
+<b>Duplicate block...</b> in the Library menu and the Block tab, for a block selected in the
+drawing): to make a block that is almost like one you have (a footprint of
 the next size up, a contactor with another contact arrangement), it asks for a name (offering
 "name copy"), saves a copy under it in your library with everything the same but the catalog
 number, left blank, and opens the copy in Edit block right away to be changed. Set its

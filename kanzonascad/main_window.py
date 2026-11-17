@@ -368,6 +368,9 @@ class MainWindow(BlockEditing, QMainWindow):
           label="Collapse")
         A("group_names", "Ribbon &group names", self._toggle_group_names, checkable=True,
           label="Group names")
+        A("block_tab", "&Block tab", self._toggle_block_tab, checkable=True, label="Block tab",
+          tip="Show the ribbon's Block tab all the time (it shows by itself in a block's tab, "
+              "Edit block)")
         self.theme_group = QActionGroup(self)
         for mode, text in (("light", "&Light"), ("dark", "&Dark"), ("system", "Same as &system")):
             a = A("theme_" + mode, text, None, checkable=True, icon="theme",
@@ -601,7 +604,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
                   "osnap", "polar", "drafting", None, "black", "command_line", "sheets",
-                  "collapse", "group_names"):
+                  "collapse", "group_names", "block_tab"):
             m.addSeparator() if k is None else m.addAction(a[k])
         tm = m.addMenu("&Theme")
         for mode in ("light", "dark", "system"):
@@ -697,11 +700,12 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["stretch"],
                                  a["erase"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
-            ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"], a["attr_vis"],
-                                  a["del_comp"]]),
-            ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"],
-                                 a["dup_block"], a["save_block_as"], a["add_pin"],
-                                 a["pins"]]),
+            # (the owner, 0.18: "0.17.4's schematic ribbon goes off the screen. Block
+            # properties should generally only be visible when editing/creating a block":
+            # Edit block here, the rest on the Block tab; a tab too wide for the window
+            # shows its groups' buttons small, from the right: Ribbon.fit)
+            ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["edit_block"],
+                                  a["explode"], a["attr_vis"], a["del_comp"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["del_wire"], a["del_dot"],
                                      a["clean_wires"]]),
@@ -714,13 +718,10 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Settings", "large", [a["schematic_settings"]]),
         ])
         r.add_tab("Panel", [
-            ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["explode"],
-                                     a["attr_vis"],
+            ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["edit_block"],
+                                     a["explode"], a["attr_vis"],
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
-            ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"],
-                                 a["dup_block"], a["save_block_as"], a["add_pin"],
-                                 a["pins"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
@@ -751,7 +752,14 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Panels", "small", [a["command_line"], a["sheets"], a["black"]]),
             ("Windows", "large", [a["new_window"], a["move_window"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
-            ("Ribbon", "small", [a["collapse"], a["group_names"]]),
+            ("Ribbon", "small", [a["collapse"], a["group_names"], a["block_tab"]]),
+        ])
+        # a block's own tools: shown in a block's tab (Edit block), or always (View, Block tab)
+        r.add_tab("Block", [
+            ("Block", "large", [a["save_block"], a["save_block_as"], a["block_props"],
+                                a["dup_block"]]),
+            ("Pins", "large", [a["add_pin"], a["pins"]]),
+            ("Library", "large", [a["edit_block"], a["update_blocks"]]),
         ])
         tb = self.ribbon_bar = QToolBar("Ribbon")
         tb.setObjectName("ribbon")
@@ -766,6 +774,9 @@ class MainWindow(BlockEditing, QMainWindow):
         r.set_group_names(names)
         r.setMaximumHeight(r.expanded_height())
         r.collapsedChanged.connect(lambda on: a["collapse"].setChecked(on))
+        a["block_tab"].setChecked(self.settings.value("ribbon_block_tab", "false")
+                                  in (True, "true"))
+        self._show_block_tab()
 
     def _build_status(self):
         sb = self.statusBar()
@@ -978,6 +989,7 @@ class MainWindow(BlockEditing, QMainWindow):
 
     def _tab_changed(self, _i):
         v = self.view()
+        self._show_block_tab(select=True)
         self.cmdline.attach(v)
         self._fill_sheets()
         self._fill_layers()
@@ -2075,6 +2087,8 @@ class MainWindow(BlockEditing, QMainWindow):
         if v is not self.view():
             return
         title = {"schematic": "Schematic", "panel": "Panel"}.get(v.sheet().kind)
+        if is_block_doc(self.doc()):
+            title = "Block"             # (a block's tab: its own tools)
         if title is None:
             return
         for i in range(self.ribbon.count()):
@@ -2903,6 +2917,19 @@ class MainWindow(BlockEditing, QMainWindow):
     def _toggle_collapse(self, on):
         if self.ribbon._collapsed != on:
             self.ribbon.set_collapsed(on)
+
+    def _show_block_tab(self, select=False):
+        """The Block tab: there in a block's tab (Edit block), or always when View, Block tab
+        is on; hidden elsewhere."""
+        in_block = hasattr(self, "tabs") and is_block_doc(self.doc())   # (building: no tabs)
+        self.ribbon.show_tab("Block", in_block or self.acts["block_tab"].isChecked(),
+                             select=select and in_block)
+
+    def _toggle_block_tab(self, on):
+        self.settings.setValue("ribbon_block_tab", bool(on))
+        self._show_block_tab(select=False)
+        if on:
+            self.ribbon.setCurrentIndex(self.ribbon.tab_index("Block"))
 
     def _toggle_group_names(self, on):
         self.ribbon.set_group_names(on)

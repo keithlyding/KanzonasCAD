@@ -45,6 +45,10 @@ nobody understands).
   Also in 0.18: cross-reference text on layer XREFS, cyan, 0.065" (owner's choice); Lock
   numbers (lock what's there, for a selection, sheets or the project: owner's choice over a
   sheet setting); Stretch, as AutoCAD's, and Shift-picked grips moving together (owner: both).
+  The ribbon (owner, Nov 2026: "the schematic ribbon goes off the screen... make it its own
+  tab that only shows up when needed (or manually selected)"): a block's tools on a Block tab
+  shown in a block's tab (or always, View > Block tab); a tab too wide for the window shows
+  its groups smaller from the right, as Office does, rather than scrolling.
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,

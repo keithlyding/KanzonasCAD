@@ -37,12 +37,20 @@ build fails without them.
   however the connector is turned.
 - Cross-reference text is on a layer of its own, **XREFS**, in cyan, and a little smaller.
   Projects made earlier get the layer and the new size when opened.
+- The ribbon fits the window: when a tab is too wide, its groups shrink from the right (big
+  buttons become small ones, then icons with their names as tooltips) and grow back when you
+  widen the window.
+- A block's tools (Save block, Save block as, Block properties, Duplicate block, Add pin, Pins)
+  are on a new **Block** tab that shows up while you edit a block, instead of on the Schematic
+  and Panel tabs. **Edit block** stays there to open one; View > **Block tab** keeps the tab
+  shown all the time.
 
 **Fixed**
 - Renumbering a sheet could give a device the same tag as a device on another sheet. Update
   numbers' "Keep the numbers" now also fixes a tag two devices share.
 - Scooting a device whose pin sits on the corner of a wire (not cut there) could slide the pin
   off the wire. It now refuses that move.
+- The Schematic tab ran off the screen.
 
 ## 0.17.5
 

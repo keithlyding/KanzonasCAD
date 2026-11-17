@@ -210,6 +210,7 @@ class BlockEditing:
         v.overlay = paint_pins
         v.current_layer = "0"
         self._project_changed(d)
+        self._show_block_tab(select=True)   # (the tab came before it was a block's)
         QTimer.singleShot(0, v, lambda: zoom_block(v))
         self.settings.setValue("library_geometry", self.library_dialog.saveGeometry())
         self.library_dialog.hide()
