@@ -3572,11 +3572,16 @@ class DuctCmd(_RunCmd):
 
 
 class ScootCmd(_TwoPoint):
-    """SCOOT (AutoCAD Electrical's): slide devices along their own wire. Select them, a base
-    point, then where to: they move only along their wire (across a rung, or up and down a
-    vertical wire), and the wires on their pins stretch and shorten with them, staying
-    straight. They stop short of a wire's far end or corner."""
+    """SCOOT (AutoCAD Electrical's): select devices, a base point, then where to. They move
+    with everything attached to them (the owner, 0.17.3: "I need to be able to scoot a motor
+    and everything attached to it gets scooted with it. Same thing if I scoot a vfd"): the
+    symbols wired to them and the wires between, straight across or up and down; a wire
+    leaving that branch onto a bus slides along it, or stretches when the move isn't along
+    it (scoot.branch_moved). O: only these devices, sliding along their own wire as before
+    (across a rung, or up and down a vertical wire), the wires on their pins stretching and
+    shortening, stopping short of a wire's far end or corner."""
     name, title = "SCOOT", "Scoot"
+    only = False
 
     def begin(self):
         from . import scoot
@@ -3596,7 +3601,27 @@ class ScootCmd(_TwoPoint):
         self.ax = scoot.axis(self.devs[0])
         self.ents = self.devs
         self.from_pt = None
-        self.ctx.prompt("Specify base point")
+        self._ask_base()
+
+    def _ask_base(self):
+        self.ctx.prompt("Specify base point (%s)" % (
+            "only these, along their wire" if self.only else
+            "with everything attached to them"),
+            [("Everything attached", "A") if self.only else ("Only these", "O")])
+
+    def text(self, s):
+        k = s.strip().upper()
+        if self.devs and k in ("O", "A"):
+            self.only = k == "O"
+            if self.from_pt is None:
+                self._ask_base()
+            return True
+        return False
+
+    def _branch_delta(self, p):
+        """Straight across or up and down, whichever the cursor is more."""
+        dx, dy = p[0] - self.from_pt[0], p[1] - self.from_pt[1]
+        return (dx, 0.0) if abs(dx) >= abs(dy) else (0.0, dy)
 
     def _slide(self, p):
         from . import scoot
@@ -3609,17 +3634,27 @@ class ScootCmd(_TwoPoint):
 
     def result(self, p):
         from . import scoot
+        if not self.only:
+            dx, dy = self._branch_delta(p)
+            return scoot.branch_moved(self.ctx.sheet(), self.devs, dx, dy)
         d = self._slide(p)
         return [e.moved(self.ax[0] * d, self.ax[1] * d) if scoot.axis(e) == self.ax else e
                 for e in self.devs]
 
     def apply(self, p):
-        d = self._slide(p)
+        if self.only:
+            d = self._slide(p)
+        else:
+            dx, dy = self._branch_delta(p)
+            d = abs(dx) + abs(dy)
         sheet = self.ctx.sheet()
+        got = self.result(p)
         with self.ctx.edit(self.title) as ed:
-            for e in self.result(p):
+            for e in got:
                 ed.change(sheet, e)
-        self.ctx.message("Scooted %s" % M.fmt_inches(abs(d)))
+        self.ctx.message("Scooted %s%s" % (M.fmt_inches(abs(d)), "" if self.only else
+                                           " with everything attached (%d objects)"
+                                           % len(got)))
         self.finish()
 
     # ---- a wire's run ----------------------------------------------------------------------

@@ -60,3 +60,117 @@ def clamp(sheet, ins, ax, d):
 def devices(ents):
     """The block references among ents that have a wire direction."""
     return [e for e in ents if isinstance(e, Insert) and axis(e) is not None]
+
+
+# ---- a whole branch (the owner, 0.17.3: "I need to be able to scoot a motor and everything
+# attached to it gets scooted with it. Same thing if I scoot a vfd") ------------------------
+def _pins_at(sheet, q):
+    return [e for e in sheet.query((q[0] - TOL, q[1] - TOL, q[0] + TOL, q[1] + TOL))
+            if isinstance(e, Insert) and any(abs(r[0] - q[0]) <= TOL and abs(r[1] - q[1]) <= TOL
+                                             for _n, r in e.pin_points())]
+
+
+def _wires_at(sheet, q):
+    return [e for e in sheet.query((q[0] - TOL, q[1] - TOL, q[0] + TOL, q[1] + TOL))
+            if isinstance(e, Wire) and e.touches(q, TOL)]
+
+
+def _is_end(w, q):
+    return any(abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
+               for p in (w.points[0], w.points[-1]))
+
+
+def branch(sheet, devs):
+    """What moves with these devices: (symbols, wires moved whole, [(wire, its end on the
+    branch: 0 or -1)] the wires leaving it). From each symbol's pins along its wires: a wire
+    from a pin to another symbol's pin brings that symbol (and so on: a motor, its drive, its
+    contactor); one carried on end to end by a single wire continues; a wire whose far end
+    taps another wire's middle (a bus), or meets a junction of several, leaves the branch
+    there (its end on the branch moves, the other stays on what it meets)."""
+    syms = {e.id: e for e in devs}
+    whole, leaving = {}, {}
+    todo = list(devs)
+    while todo:
+        e = todo.pop()
+        for _n, p in e.pin_points():
+            for w in _wires_at(sheet, p):
+                if w.id in whole or w.id in leaving or not _is_end(w, p):
+                    continue
+                path = [w]
+                at = p
+                while True:
+                    cur = path[-1]
+                    i = 0 if abs(cur.points[0][0] - at[0]) <= TOL and \
+                        abs(cur.points[0][1] - at[1]) <= TOL else -1
+                    far = cur.points[-1 if i == 0 else 0]
+                    others = [x for x in _wires_at(sheet, far) if x.id != cur.id]
+                    pins = _pins_at(sheet, far)
+                    if pins:
+                        for s in pins:
+                            if s.id not in syms:
+                                syms[s.id] = s
+                                todo.append(s)
+                        for x in path:
+                            whole[x.id] = x
+                        break
+                    ends = [x for x in others if _is_end(x, far)]
+                    if not others:
+                        for x in path:                  # (a loose end: moves with it)
+                            whole[x.id] = x
+                        break
+                    if len(others) == 1 and ends and others[0].id not in whole and \
+                            others[0].id not in leaving and others[0] not in path:
+                        path.append(others[0])          # (carried on end to end)
+                        at = far
+                        continue
+                    # (taps a bus, or a junction: the last wire leaves the branch here)
+                    for x in path[:-1]:
+                        whole[x.id] = x
+                    leaving[cur.id] = (cur, i)    # (i: its end on the branch, which moves)
+                    break
+    return list(syms.values()), list(whole.values()), list(leaving.values())
+
+
+def branch_moved(sheet, devs, dx, dy):
+    """The changed copies for the branch of devs moved by dx, dy (across or up and down): its
+    symbols and inner wires moved whole; each wire leaving it moved whole when the move runs
+    along what its far end is on (a drop sliding along a bus) and stays on it, else its end on
+    the branch moved with a jog where needed (Wire.end_moved; it stretches or shortens)."""
+    syms, whole, leaving = branch(sheet, devs)
+    out = [e.moved(dx, dy) for e in syms] + [w.moved(dx, dy) for w in whole]
+    # (a wire tapping the middle of one that moves whole, a drop off a bus the disconnect's
+    # wires make: its end there goes with it, unless the move runs along that wire)
+    inside = {w.id for w in whole} | {w.id for w, _i in leaving} | {e.id for e in syms}
+    for W in whole:
+        for x in sheet.query(W.bbox()):
+            if not isinstance(x, Wire) or x.id in inside:
+                continue
+            for i in (0, -1):
+                q = x.points[i]
+                if W.touches(q, TOL) and not _is_end(W, q) and not _runs_along(W, q, dx, dy):
+                    x = x.end_moved(i, (q[0] + dx, q[1] + dy))
+            if x is not sheet.entities.get(x.id):
+                out.append(x)
+                inside.add(x.id)
+    for w, i in leaving:
+        far = w.points[-1 if i == 0 else 0]
+        slid = (far[0] + dx, far[1] + dy)
+        on = [x for x in _wires_at(sheet, far) if x.id != w.id]
+        if on and all(x.touches(slid, TOL) and _runs_along(x, far, dx, dy) for x in on):
+            out.append(w.moved(dx, dy))
+        else:
+            q = w.points[i]
+            out.append(w.end_moved(i, (q[0] + dx, q[1] + dy)))
+    return out
+
+
+def _runs_along(x, q, dx, dy):
+    """Does wire x run the way of the move where q is on it?"""
+    for a, b in zip(x.points, x.points[1:]):
+        lo_x, hi_x = sorted((a[0], b[0]))
+        lo_y, hi_y = sorted((a[1], b[1]))
+        if lo_x - TOL <= q[0] <= hi_x + TOL and lo_y - TOL <= q[1] <= hi_y + TOL:
+            if (abs(a[1] - b[1]) <= TOL and abs(dy) <= TOL) or \
+                    (abs(a[0] - b[0]) <= TOL and abs(dx) <= TOL):
+                return True
+    return False

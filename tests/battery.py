@@ -1431,12 +1431,35 @@ def random_editing(log, out, ops, seed, drawing=None):
             return
         e = rnd.choice(ins)
         v.set_selection({e.id})
-        v.run(C.ScootCmd)
+        cmd = v.run(C.ScootCmd)
+        # (0.17.3: with everything attached, the pins that had wires keep them; O: only it,
+        # along its wire, as before)
+        only = rnd.random() < 0.5
+        wired = {q for x in s.inserts() for _n, q in x.pin_points()
+                 if any(w.touches(q) for w in s.wires())}
+        if v.cmd is not None and cmd.devs and only:
+            v.input_text("O")
+        d = (rnd.choice([-1, 1]) * 0.5, 0.0) if rnd.random() < 0.5 else \
+            (0.0, rnd.choice([-1, 1]) * 0.5)
+        moved = []
         if v.cmd is not None:
             type_in(v, fmt(e.pos))
+            if v.cmd is not None and cmd.devs and not only:
+                moved = {x.id for x in cmd.result((e.pos[0] + d[0], e.pos[1] + d[1]))
+                         if isinstance(x, M.Insert)}
             if v.cmd is not None:
-                v.input_text(fmt((e.pos[0] + rnd.choice([-1, 1]) * 0.5, e.pos[1])))
+                v.input_text(fmt((e.pos[0] + d[0], e.pos[1] + d[1])))
         finish()
+        if moved:
+            # each pin that had a wire still has one, where it is now (moved with the branch)
+            after = {q for x in s.inserts() for _n, q in x.pin_points()
+                     if any(w.touches(q) for w in s.wires())}
+            gone = [q for q in wired if q not in after and not any(
+                (abs(q[0] + d[0] - r[0]) < 1e-9 and abs(q[1] + d[1] - r[1]) < 1e-9)
+                for r in after)]
+            assert not gone, "scooting %s with what's attached left pins %s without a wire" % (
+                e.block, gone[:3])
+            BC.CHECKED["scoot with everything attached"] += 1
 
     def op_align():
         ins = [e for e in s.inserts() if len(e.pin_points()) >= 2]

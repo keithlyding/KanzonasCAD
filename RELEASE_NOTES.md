@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.17.3
+
+**New**
+- **Scoot** moves a device with everything attached to it: scoot a motor and its drive and
+  contactor come along with the wires between; its drops slide along the bus (or stretch, when
+  you scoot toward or away from the bus). Type O to slide only the selected device along its
+  own wire, as before.
+
 ## 0.17.2
 
 **New**
