@@ -1281,6 +1281,26 @@ def bus_paths(points, count, spacing, flip=False):
     return out
 
 
+def _paths_cross(paths):
+    """Does any piece of one of these wires cross or overlap a piece of another, other than
+    meeting it end to end?"""
+    segs = [(i, a, b) for i, q in enumerate(paths) for a, b in zip(q, q[1:])]
+    for x in range(len(segs)):
+        i, a, b = segs[x]
+        for y in range(x + 1, len(segs)):
+            j, c, d = segs[y]
+            if i == j:
+                continue
+            for q in G.segment_intersections(a, b, c, d):
+                if not any(G.dist(q, e) <= 1e-9 for e in (a, b, c, d)):
+                    return True
+            # (along each other: the same line, overlapping)
+            if G.dist_to_segment(c, a, b) <= 1e-9 and G.dist_to_segment(d, a, b) <= 1e-9 or \
+                    G.dist_to_segment(a, c, d) <= 1e-9 and G.dist_to_segment(b, c, d) <= 1e-9:
+                return True
+    return False
+
+
 def pin_side(sheet, p, tol=1e-6):
     """The pins of a symbol on one side of it, in a line through the pin at p and evenly
     spaced (a 3-pole device's L1, L2, L3; a VFD's T1-T3): ([world points] in the block's pin
@@ -1639,6 +1659,13 @@ class BusCmd(Command):
             return
         sheet = self.ctx.sheet()
         land = self._landing(sheet, p)
+        if land is None:
+            # (on or near a device: its nearest pins, wire for wire, jogging in when they are
+            # spaced otherwise; the owner, 0.17.1)
+            fan = self._fan(sheet, p)
+            if fan is not None:
+                self._make(fan)
+                return
         why = self._why_not_landed(sheet, p)
         if why:
             self.ctx.message(why)
@@ -1784,6 +1811,178 @@ class BusCmd(Command):
             if not any(_crosses(q, boxes) for q in tail):
                 return got
         return new
+
+    def _near_sides(self, sheet, p):
+        """[(distance, pins, k, s)]: on a symbol the click is on or near (its drawing's box, a
+        quarter inch out on paper), each run of as many pins as the bus has wires on one of its
+        sides (every k-th coordinate the same; s: the side's way out, away from the drawing),
+        nearest the click first (the owner, 0.17.1: "These need to connect to the nearest 3
+        points on the device")."""
+        from .wires import body_box
+        near = 0.25 * sheet.k()
+        out = []
+        seen = set()
+        for e in sheet.query((p[0] - near, p[1] - near, p[0] + near, p[1] + near)):
+            if not isinstance(e, M.Insert) or e.defn is None or e.defn.kind != "symbol" or \
+                    len(e.defn.pins) < self.count:
+                continue
+            bb = body_box(e)
+            if bb is None or not (bb[0] - near <= p[0] <= bb[2] + near and
+                                  bb[1] - near <= p[1] <= bb[3] + near):
+                continue
+            c = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
+            for _n, q in e.pin_points():
+                got = pin_side(sheet, q)
+                if got is None:
+                    continue
+                line = got[0]
+                key = tuple(sorted((round(x[0], 9), round(x[1], 9)) for x in line))
+                if key in seen or len(line) < self.count:
+                    continue
+                seen.add(key)
+                k = 0 if all(abs(x[0] - line[0][0]) <= 1e-6 for x in line) else 1
+                s = 1.0 if line[0][k] >= c[k] else -1.0
+                along = sorted(line, key=lambda x: x[1 - k])
+                for i in range(len(along) - self.count + 1):
+                    win = along[i:i + self.count]
+                    mid = (sum(x[0] for x in win) / len(win), sum(x[1] for x in win) / len(win))
+                    out.append((G.dist(p, mid), win, k, s))
+        out.sort(key=lambda t: t[0])
+        return out
+
+    def _fan(self, sheet, p):
+        """Every wire's points (the whole bus) landing on the run of pins nearest the click p
+        on a side facing the bus, each wire on its own pin, wires and pins in the same order
+        across: the bus comes square at the side, and where the pins are closer together or
+        farther apart than its wires, each wire jogs over to its pin, nearer the pins the
+        farther along they go (so none crosses another); or None. When the plain landing
+        (_landing: a side of exactly the bus's pins, as far apart) can't."""
+        if not self.points or self.count < 1:
+            return None
+        a = self.points[-1]
+        g = 0.125 * sheet.k()
+        n = self.count
+        for _d, win, k, s in self._near_sides(sheet, p)[:12]:
+            m = 1 - k
+            side = win[0][k]
+            h0 = 2 * g
+            far = h0 + (n + 1) * g
+            if (a[k] - side) * s < far - 1e-9:
+                continue                # (the bus must come at the side from out in front)
+            pins = sorted(win, key=lambda q: q[m])
+            # the bus's first wire comes in at S; where its others come in, across, is
+            # measured (they lie to one side or the other however it turned), and S moved so
+            # the bus is centered on the pins: the fewest jogs
+            # (started from in line with where the bus is, or with the pins' middle: whichever
+            # has a way there; then centered from how its wires lie, and each way there tried)
+            for start in (a[m], sum(q[m] for q in pins) / n):
+                stage = [None, None]
+                stage[k], stage[m] = side + s * far, start
+                for _try in range(3):
+                    S = tuple(stage)
+                    paths = next(self._fan_mains(S, k, m), None)
+                    if paths is None:
+                        break
+                    offs = [q[-1][m] - S[m] for q in paths]
+                    want = sum(q[m] for q in pins) / n - sum(offs) / n
+                    want = round(want / g) * g if g > 0 else want
+                    if abs(want - stage[m]) <= 1e-9:
+                        break
+                    stage[m] = want
+                got = self._fan_onto(sheet, tuple(stage), pins, k, s, h0)
+                if got is not None:
+                    return got
+        return None
+
+    def _fan_onto(self, sheet, S, pins, k, s, h0):
+        """The first way to S that, with each wire's jog onto its pin, crosses neither another
+        wire of the bus nor a symbol: every wire's points, or None."""
+        from .wires import _boxes, _crosses
+        m = 1 - k
+        n = self.count
+        g = 0.125 * sheet.k()
+        side = pins[0][k]
+        for paths in self._fan_mains(S, k, m):
+            if any(abs(q[-1][k] - S[k]) > 1e-6 for q in paths):
+                continue
+            order = sorted(range(n), key=lambda i: paths[i][-1][m])
+            right_movers = [i for i in order if pins[order.index(i)][m] > paths[i][-1][m] + 1e-9]
+            left_movers = [i for i in reversed(order)
+                           if pins[order.index(i)][m] < paths[i][-1][m] - 1e-9]
+            height = {}
+            for rank, i in enumerate(right_movers):
+                height[i] = h0 + rank * g
+            for rank, i in enumerate(left_movers):
+                height[i] = h0 + rank * g
+            out = []
+            for i in range(n):
+                pin = pins[order.index(i)]
+                pts = list(paths[i])
+                w = pts[-1]
+                if i in height:
+                    v = side + s * height[i]
+                    j1, j2 = [None, None], [None, None]
+                    j1[m], j1[k] = w[m], v
+                    j2[m], j2[k] = pin[m], v
+                    pts += [tuple(j1), tuple(j2)]
+                pts.append(tuple(pin))
+                out.append([tuple(q) for q in M._tidy(pts)])
+            if _paths_cross(out):
+                continue
+            bb = None
+            for q in out:
+                bb = G.bbox_union(bb, G.bbox_of(q))
+            boxes = _boxes(sheet, (bb[0] - 1, bb[1] - 1, bb[2] + 1, bb[3] + 1), sheet.k())
+            tails = [q[len(self.points) - 1:] for q in out]
+            if any(_crosses(q, boxes) for q in tails):
+                continue
+            return out
+        return None
+
+    def _fan_mains(self, S, k, m):
+        """Every wire's points from the bus's start to S, its last leg coming square at the
+        side (along k), for each way there in turn: the usual route, a Z (square on, across
+        halfway, square in), across first, and the way round the symbols in between; leaving
+        pins or wires it started on square, as the usual route does."""
+        from .wires import route_around
+        a = self.points[-1]
+        sheet = self.ctx.sheet()
+        first = self._route(S)
+        c1 = [None, None]
+        c1[m], c1[k] = S[m], a[k]
+        n = self.count
+        g = 0.125 * sheet.k()
+        mid = (a[k] + S[k]) / 2
+        mid = round(mid / g) * g if g > 0 else mid
+        z1, z2 = [None, None], [None, None]
+        z1[k], z1[m] = mid, a[m]
+        z2[k], z2[m] = mid, S[m]
+        width = max(0, n - 1) * self.spacing
+        tries = [first, [tuple(z1), tuple(z2), S], [tuple(c1), S]]
+        for t in list(tries):
+            if not t:
+                continue
+            side = -1 if self._flip_for(self.points + t) else 1
+            for extra, on in ((0.0, None), (width, side)):
+                got = route_around(sheet, a, S, t, wire_clear(self.ctx), extra, on)
+                if got is not t:
+                    tries.append(got)
+        for new in tries:
+            new = [q for i, q in enumerate(new) if G.dist(q, ([a] + new)[i]) > 1e-9]
+            if not new:
+                continue
+            if len(self.points) == 1 and (self.toward is not None or
+                                          self.tap_start is not None):
+                # (still leaving its pins or wires square: the first leg as the usual one)
+                if not first or (abs(new[0][1] - a[1]) < 1e-9) != \
+                        (abs(first[0][1] - a[1]) < 1e-9):
+                    continue
+            last = ([a] + new)[-2]
+            if abs(last[m] - S[m]) > 1e-9:
+                continue                # (its last leg isn't square at the side)
+            paths = self._paths(self.points + new)
+            if len(paths) == n:
+                yield paths
 
     def _land_route(self, sheet, p, pins):
         """The points that take the bus onto a side of pins wire for wire (each wire on its
@@ -1935,10 +2134,10 @@ class BusCmd(Command):
         return self._onto(self._onto(paths, self.tap_start, True, pts), self.tap_end, False,
                           pts)
 
-    def _make(self):
+    def _make(self, fan=None):
         made = 0
-        if self.step == "path" and len(self.points) >= 2:
-            paths = self._paths(self.points)
+        if self.step == "path" and (len(self.points) >= 2 or fan):
+            paths = fan if fan else self._paths(self.points)
             sheet = self.ctx.sheet()
             project = self.ctx.project
             # (left at the WIRES layer: the current wire layer, as a wire's)
@@ -1976,6 +2175,10 @@ class BusCmd(Command):
             new = self._land_route(sheet, land, got[0]) if got is not None else None
             if new:
                 return [M.Wire(q) for q in self._paths(self.points + new)]
+        else:
+            fan = self._fan(sheet, p)
+            if fan is not None:
+                return [M.Wire(q) for q in fan]
         p = land if land is not None else (p[0] + self.offset[0], p[1] + self.offset[1])
         pts = self.points + self._around(self._route(p))
         return [M.Wire(q) for q in self._paths(pts)]
@@ -2082,12 +2285,12 @@ class MakeBlockCmd(Command):
 
 class InsertCmd(Command):
     """Place a symbol or footprint (from the Library panel): pick where; R turns it 90
-    degrees, F flips it. A symbol with pins is held by its first pin (L1, 1, A1...), so the
+    degrees, F flips it side to side, V upside down. A symbol with pins is held by its first pin (L1, 1, A1...), so the
     point picked is where that pin lands, on the pin or wire it is to join (the owner: a 3-pole
     fuse grabbed by its middle met the disconnect's pins with its middle); B moves the hold to
     the next pin, then the block's own base point. A contact then asks which device it belongs
-    to: Enter takes the one offered (the nearest coil with its prefix), a typed tag takes that
-    device, L lists them."""
+    to: a typed tag takes that device (the nearest one with its prefix is offered as a
+    button), L lists them, P picks it on the drawing; Enter places it on its own."""
     name, title = "INSERT", "Insert"
     repeatable = True       # (Enter: the same symbol again, the owner, 0.16)
 
@@ -2118,7 +2321,7 @@ class InsertCmd(Command):
 
     def _ask(self):
         name = self.holds[self.hold][0]
-        opts = [("Rotate 90", "R"), ("Flip", "F")]
+        opts = [("Rotate 90", "R"), ("Flip horizontal", "F"), ("Flip vertical", "V")]
         if len(self.holds) > 1:
             nxt = self.holds[(self.hold + 1) % len(self.holds)][0]
             opts.append(("Base point: %s" % ("pin " + nxt if nxt else "center"), "B"))
@@ -2203,8 +2406,14 @@ class InsertCmd(Command):
         if k == "R":
             self.angle = (self.angle + 90.0) % 360.0
             return True
-        if k == "F":
+        if k in ("F", "V"):
+            # flipped as it is on the drawing, however turned (the owner, 0.17: "Symbols need
+            # to be able to flip horizontally and vertically when inserting"). A copy's mirror
+            # turns it upside down before its angle turns it: turned a, upside down again is
+            # turned -a; left and right swapped is turned 180 - a (until 0.17, F was only the
+            # mirror: upside down when not turned)
             self.mirror = not self.mirror
+            self.angle = ((180.0 if k == "F" else 0.0) - self.angle) % 360.0
             return True
         if k == "B" and len(self.holds) > 1:
             self.hold = (self.hold + 1) % len(self.holds)
@@ -2231,8 +2440,13 @@ class InsertCmd(Command):
         if self.pending is not None and self.link_name is not None:
             self._place(self.pending, dict(self.attrs, TAG=self.link_name))
             return
-        if self.pending is not None and self.cands:
+        if self.pending is not None and self.cands and self.footprint_of:
             self._place(self.pending, self._link(self.cands[0][1]))
+            return
+        if self.pending is not None and self.cands:
+            self._place(self.pending, self.attrs)
+            self.ctx.message("%s placed on its own, linked to no device (double-click it to "
+                             "link it later)" % self.defn.name)
             return
         super().enter()
 
@@ -2288,12 +2502,17 @@ class InsertCmd(Command):
             project = self.ctx.project
             self.cands = tags.candidates(project, self.ctx.sheet(), d.prefix, p)
             if self.cands:
+                # (Enter places it on its own: linking is a choice, the owner, 0.17: "I don't
+                # want parent symbols to try to be children by default"; the nearest device is
+                # offered as a button)
                 self.pending = p
                 s, e = self.cands[0]
-                self.ctx.prompt("Belongs to: Enter for %s (%s), or type a tag"
-                                % (e.attrs.get("TAG", "?"),
-                                   project.zone_text(s, e.pos[0], e.pos[1]) or "?"),
-                                [("List", "L"), ("Pick on drawing", "P")])
+                tag = e.attrs.get("TAG", "?")
+                self.ctx.prompt("Belongs to: type a tag, or pick %s (%s, the nearest); Enter: "
+                                "on its own" % (tag, project.zone_text(s, e.pos[0], e.pos[1])
+                                                or "?"),
+                                [("%s (nearest)" % tag, tag), ("List", "L"),
+                                 ("Pick on drawing", "P")])
                 return
             self.ctx.message("Nothing to link this %s to yet (a %s device): placed unlinked "
                              "(double-click it to link it later)"

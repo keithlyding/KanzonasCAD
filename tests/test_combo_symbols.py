@@ -5,7 +5,7 @@ disconnect shows its rating in each fuse, and the starter is a contact of its Co
 (its tag, listed under the coil)."""
 import unittest
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, NEAREST
 
 from kanzonascad import commands as C
 from kanzonascad import model as M
@@ -28,7 +28,9 @@ class ComboSymbolsTest(unittest.TestCase):
         before = set(self.v.sheet().entities)
         self.v.run(C.InsertCmd, self.lib.get("symbol", name), {})
         type_in(self.v, "%r,%r" % at)
-        while self.v.cmd is not None:       # (a contact's "Belongs to": the first offered)
+        if self.v.cmd is not None and self.v.cmd.cands:     # (a contact's "Belongs to":
+            type_in(self.v, NEAREST)                        # the nearest offered)
+        while self.v.cmd is not None:
             self.v.cmd.enter()
         return [e for i, e in self.v.sheet().entities.items()
                 if i not in before and isinstance(e, M.Insert)][0]
@@ -58,13 +60,15 @@ class ComboSymbolsTest(unittest.TestCase):
         for e in (ds, st):
             top = e.pos[1] + max(q.bbox()[3] for q in e.defn.entities)
             self.assertGreater(e.tag_text().pos[1], top)
-        # the starter belongs to the coil: its tag, listed under it
+        # the starter is a device of its own (the owner, 0.17: parents shouldn't try to be
+        # children): a tag of its own, not the coil's, and listed under nothing
         coil = s.entities[coil.id]
-        self.assertEqual(st.attrs.get("PARENT"), coil.attrs["DEV"])
-        self.assertEqual(st.attrs.get("TAG"), coil.attrs["TAG"])
+        self.assertIsNone(st.attrs.get("PARENT"))
+        self.assertTrue(st.attrs["TAG"].startswith("M"))
+        self.assertNotEqual(st.attrs["TAG"], coil.attrs["TAG"])
         self.assertTrue(ds.attrs["TAG"].startswith("DS"))
         under = [t for t in xrefs.live(self.p, s) if t[2].startswith("NO ")]
-        self.assertEqual(len(under), 1)
+        self.assertEqual(under, [])
 
     def test_the_fuse_rating_shows_in_each_fuse(self):
         ds = self.insert("Fused disconnect 3-pole", (2.0, 8.0))

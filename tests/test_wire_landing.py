@@ -71,6 +71,22 @@ class WireLandingTest(unittest.TestCase):
         self.assertNotEqual(self.click_near(pin1), pin1)
         v.cancel()
 
+    def test_a_wire_clicked_on_a_symbol_goes_to_its_nearest_pin(self):
+        # (the owner, 0.17.1: "connecting wires to symbols with multiple contact points ...
+        # need to connect to the nearest ... points on the device")
+        v = self.v
+        e = self.insert("Disconnect 3-pole", (5.0, 5.0))
+        p = self.pins(e)
+        v.center, v.scale = (5.25, 4.5), 100.0
+        v.run(C.WireCmd)
+        inside = (p["L2"][0] + 0.1, p["L2"][1] + 0.05)       # (on its drawing, off any snap)
+        self.assertEqual(v.resolve(inside), p["L2"])
+        v.cancel()
+        # a line isn't a wire: no pull to the pin
+        v.run(C.LineCmd)
+        self.assertNotEqual(v.resolve(inside), p["L2"])
+        v.cancel()
+
     def test_a_symbols_middle_is_never_a_wire_target(self):
         v = self.v
         v.osnap_on = True
@@ -122,23 +138,54 @@ class WireLandingTest(unittest.TestCase):
         type_in(self.v, "%r,%r" % start)
         return cmd
 
-    def test_a_bus_says_why_it_cant_land(self):
+    def landed(self, before, sym):
+        """The bus just drawn: its wires, each ending on its own pin of sym, none crossing
+        another, none running through a symbol; the pins they landed on."""
+        from kanzonascad import wires as W
+        s = self.v.sheet()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+        pins = dict(s.entities[sym.id].pin_points())
+        got = sorted(n for n, q in pins.items() if any(w.touches(q) for w in s.wires()))
+        self.assertTrue(C._paths_cross([w.points for w in new]) is False,
+                        [w.points for w in new])
+        boxes = [(e, W.body_box(e)) for e in s.inserts()]
+        for w in new:
+            self.assertFalse(W._crosses(w.points, boxes), w.points)
+        return got
+
+    def test_a_bus_lands_on_the_nearest_pins_it_can(self):
+        # (until 0.17.1 these were refused, saying why; the owner: "These need to connect to
+        # the nearest 3 points on the device")
         ds = self.insert("Disconnect 3-pole", (2.0, 8.0))
         fu = self.insert("Fuses 3-pole", (7.0, 8.0), "RR")          # (turned round)
+        before = set(self.v.sheet().entities)
         self.bus_from(self.pins(ds)["T1"])
         type_in(self.v, "%r,%r" % self.pins(fu)["L1"])
-        self.assertIn("other way", self.said[-1])
-        self.assertIsNotNone(self.v.cmd)                       # (not landed: still drawing)
-        self.v.cancel()
-        # spacing: a bus 3/4" apart onto 1/2" poles
-        self.said.clear()
+        self.assertIsNone(self.v.cmd)                           # (landed)
+        self.assertEqual(len(self.landed(before, fu)), 3)
+        # spacing: a bus 3/4" apart onto 1/2" poles: each wire jogs onto its own
         fu2 = self.insert("Fuses 3-pole", (12.0, 4.0))
+        before = set(self.v.sheet().entities)
         self.v.run(C.BusCmd)
         self.assertTrue(self.v.input_text("D"))
         self.assertTrue(self.v.input_text("0.75"))
         type_in(self.v, "9.0,4.0", "%r,%r" % self.pins(fu2)["L1"])
-        self.assertTrue(any('0.5" apart' in t and '0.75"' in t for t in self.said), self.said)
-        self.v.cancel()
+        self.assertIsNone(self.v.cmd)
+        self.assertEqual(self.landed(before, fu2), ["L1", "L2", "L3"])
+
+    def test_a_click_near_a_device_takes_its_nearest_pins(self):
+        dt = self.insert("Drive control terminals", (20.0, 9.0))
+        p = self.pins(dt)
+        with self.v.project.edit("w") as ed:
+            for y in (8.0, 7.5, 7.0):
+                ed.add(self.v.sheet(), M.Wire([(2.0, y), (6.0, y)]))
+        before = set(self.v.sheet().entities)
+        self.bus_from((6.0, 8.0))                               # (on the three wires' ends)
+        near = (p["S+"][0] + 0.05, p["S+"][1] - 0.1)            # (beside S+, not on it)
+        type_in(self.v, "%r,%r" % near)
+        self.assertIsNone(self.v.cmd)
+        # the three nearest: S2, S+ and 01 (1/4" apart: the bus's 1/2" wires jog in)
+        self.assertEqual(self.landed(before, dt), sorted(["S2", "S+", "01"]))
 
     # 4 ------------------------------------------------------------------------------------
     def test_a_bus_takes_a_z_to_land_wire_for_wire(self):
@@ -217,15 +264,15 @@ class WireLandingTest(unittest.TestCase):
             self.assertEqual(got is not None, side, (angle, got))
             self.v.project.undo()
 
-    def test_a_bus_doesnt_land_through_a_symbol(self):
+    def test_a_bus_lands_on_the_side_that_faces_it(self):
+        # (its L side faces away: until 0.17.1 refused; now the T side, which faces the bus)
         a = self.insert("Fuses 3-pole", (10.5, 8.0))
         b = self.insert("Fuses 3-pole", (4.0, 8.0))
+        before = set(self.v.sheet().entities)
         self.bus_from(self.pins(a)["L1"])
-        type_in(self.v, "%r,%r" % self.pins(b)["L1"])         # (its L side faces away)
-        self.assertIsNotNone(self.v.cmd)
-        self.assertIn("faces away", self.said[-1])
-        self.v.cancel()
-
+        type_in(self.v, "%r,%r" % self.pins(b)["L1"])
+        self.assertIsNone(self.v.cmd)
+        self.assertEqual(self.landed(before, b), ["T1", "T2", "T3"])
 
 if __name__ == "__main__":
     unittest.main()

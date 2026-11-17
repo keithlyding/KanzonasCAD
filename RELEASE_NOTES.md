@@ -6,6 +6,26 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.17.1
+
+**New**
+- Inserting a symbol: **F** flips it horizontally and **V** vertically, as you see it,
+  however it's turned.
+- A placed symbol's grip is its first pin, where a wire joins it, not its middle.
+- Apparent intersection works with circles and arcs: where a line extended would meet one,
+  and, with Ortho on, where your Ortho line meets a circle or a line extended.
+
+**Fixed**
+- Placing a contact no longer links it to a device unless you choose one: the nearest device
+  is offered as a button, and Enter places it on its own.
+- The Starter 3-pole is a device with its own tag, not a contact of a coil.
+- A bus ended on or near a device lands on its nearest pins, as many as it has wires, on a
+  side facing it, jogging in when the pins are closer together or farther apart than its
+  wires. Before, it ended where you clicked without connecting.
+- A wire clicked on a symbol's drawing goes to its nearest pin.
+- Wire crossings are drawn as a loop in new projects (they were drawn plain, so they didn't
+  show). Change it in Project properties, Schematic.
+
 ## 0.17
 
 **New**

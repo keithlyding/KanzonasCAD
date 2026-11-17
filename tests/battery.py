@@ -55,6 +55,7 @@ from kanzonascad import commands as C  # noqa: E402
 from kanzonascad import model as M  # noqa: E402
 from kanzonascad import geometry as G  # noqa: E402
 from kanzonascad import wires, crossings, wirenums, fileio, templates  # noqa: E402
+from kanzonascad import tags as tags_mod  # noqa: E402
 from tests import battery_checks as BC  # noqa: E402
 
 
@@ -919,12 +920,24 @@ def random_editing(log, out, ops, seed, drawing=None):
         name = rnd.choice(syms)
         before = set(s.entities)
         cmd = v.run(C.InsertCmd, lib.get("symbol", name), {})
-        for k in rnd.sample(["R", "F", "B"], rnd.randint(0, 2)):
+        for k in rnd.sample(["R", "F", "V", "B"], rnd.randint(0, 3)):
             v.input_text(k)
         held = cmd.holds[cmd.hold][0]
         at = pt()
         if v.cmd is not None:
             v.input_text(fmt(at))
+        # (a contact asking which device: the one offered as the nearest, or Enter, which
+        # places it on its own since 0.17: linked to that device, or to none)
+        linked = None
+        c = v.cmd
+        if c is not None and c.pending is not None and c.cands and not c.footprint_of and \
+                c.link_name is None:
+            dev = c.cands[0][1]
+            if rnd.random() < 0.5:
+                v.input_text(dev.attrs["TAG"])
+                linked = tags_mod.find_tag(p, dev.attrs["TAG"])[1].attrs["DEV"]
+            else:
+                linked = ""
         finish()
         # (held by a pin, that pin is exactly where the point was given: 0.16)
         new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
@@ -933,6 +946,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert got == at, "%s held by pin %s: the pin went to %s, not %s" % (
                 name, held, got, at)
             BC.CHECKED["insert by its pin"] += 1
+        if linked is not None and len(new) == 1:
+            got = new[0].attrs.get("PARENT", "")
+            assert got == linked, "%s's device: %r, not %r" % (name, got, linked)
+            BC.CHECKED["contact linked as asked" if linked else "contact on its own"] += 1
         if v.cmd is None and rnd.random() < 0.25:
             # Enter: the same symbol again (0.16), held by its first pin
             before = set(s.entities)

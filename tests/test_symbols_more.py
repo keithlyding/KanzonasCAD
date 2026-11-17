@@ -1,6 +1,6 @@
 import unittest
 
-from tests.util import APP, window, type_in, by_base_point
+from tests.util import APP, window, type_in, by_base_point, NEAREST
 
 from kanzonascad import commands as C
 from kanzonascad import model as M
@@ -42,14 +42,14 @@ class MoreSymbolsTest(unittest.TestCase):
 
     def test_power_contacts_belong_to_the_contactor(self):
         coil = self.place("Contactor coil", (3, 2))
-        k = self.place("Contactor power contacts 3-pole", (4, 7), "")
+        k = self.place("Contactor power contacts 3-pole", (4, 7), NEAREST)
         self.assertEqual(self.now(k).attrs.get("PARENT"), coil.attrs["DEV"])
         self.assertEqual(self.now(k).attrs["TAG"], "M601")
 
     def test_terminals_number_themselves_on_their_strip(self):
         strip = self.place("Terminal strip", (12, 2))
-        a = self.place("Terminal", (3, 8), "")
-        b = self.place("Terminal", (3, 7), "")
+        a = self.place("Terminal", (3, 8), NEAREST)
+        b = self.place("Terminal", (3, 7), NEAREST)
         self.assertEqual([self.now(t).attrs.get("TERM") for t in (a, b)], ["1", "2"])
         self.assertEqual(self.now(a).attrs["TAG"], strip.attrs["TAG"])
         # the number shows on the drawing
@@ -65,7 +65,7 @@ class MoreSymbolsTest(unittest.TestCase):
     def test_plc_points_list_under_their_card(self):
         from kanzonascad import xrefs
         card = self.place("PLC I/O card", (12, 3))
-        pt = self.place("PLC input", (3, 8), "")
+        pt = self.place("PLC input", (3, 8), NEAREST)
         with self.p.edit("addr") as ed:
             ed.change(self.v.sheet(), self.now(pt).copy(
                 attrs=dict(self.now(pt).attrs, ADDR="I:0/3")))

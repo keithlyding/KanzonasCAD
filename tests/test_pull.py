@@ -11,7 +11,7 @@ from unittest import mock
 
 from PySide6.QtWidgets import QDialog, QLineEdit, QListWidget, QTableWidget, QComboBox
 
-from tests.util import APP, window, type_in  # noqa: F401
+from tests.util import APP, window, type_in, NEAREST  # noqa: F401
 
 from kanzonascad import commands as C
 from kanzonascad import dialogs
@@ -34,6 +34,8 @@ class Builder:
         before = set(v.sheet().entities)
         v.run(C.InsertCmd, self.lib.get("symbol", name), attrs or {})
         type_in(v, "%g,%g" % at)
+        if v.cmd is not None and getattr(v.cmd, "cands", None):
+            type_in(v, NEAREST)
         if v.cmd is not None:
             v.input_text("")
         if v.cmd is not None:

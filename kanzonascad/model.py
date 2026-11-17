@@ -64,7 +64,9 @@ DEFAULT_SETTINGS = {
     "wire_clear": 0.125,        # ...that far from them, paper inches
     "wire_lead": False,         # a second wire on a pin leaves it on a 45-degree lead (the
                                 # owner, 0.16: "a little bend... That needs to go away": off)
-    "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)
+    "wire_crossing": "loop",    # wires crossing: plain, gap or loop (crossings.py; a loop to
+                                # start since 0.17.1, the owner: "wire crossings are still not
+                                # being created automatically"; projects saved keep theirs)
     "wire_jump": "vertical",    # which one jumps: vertical or horizontal
     "rail_profile": "TS35x7.5",             # DIN rail and wire duct drawn next
     "duct_size": [2.0, 3.0],
@@ -2106,12 +2108,21 @@ class Insert(Entity):
         out += [("node", p) for _n, p in self.pin_points()]         # (pins: AutoCAD's nodes)
         return out
 
+    def hold_point(self):
+        """Where it is held and dragged: a symbol's first pin (where a wire joins it, as it is
+        held when inserted: the owner, 0.17, "Base points need to be where one of the wires
+        connects"), else its insertion point."""
+        if self.defn is not None and self.defn.kind == "symbol" and self.defn.pins:
+            return self.to_world(self.defn.pins[0]["pos"])
+        return self.pos
+
     def grips(self):
-        return [self.pos] + [q for _n, q in self.text_grips()]
+        return [self.hold_point()] + [q for _n, q in self.text_grips()]
 
     def with_grip(self, i, p):
         if i == 0:
-            return self.copy(pos=list(p))
+            h = self.hold_point()
+            return self.moved(p[0] - h[0], p[1] - h[1])
         # a text dragged to a place of its own, kept in the block's coordinates (it follows
         # the block when it is moved or turned)
         name = self.text_grips()[i - 1][0]

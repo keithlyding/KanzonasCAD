@@ -5,7 +5,7 @@ left to right, top to bottom" (Number texts); "Can you add chapters and search f
 help manual?"."""
 import unittest
 
-from tests.util import APP, window, type_in
+from tests.util import APP, window, type_in, NEAREST
 
 from kanzonascad import commands as C
 from kanzonascad import manual
@@ -121,9 +121,7 @@ class CommandsTest(unittest.TestCase):
         while self.v.cmd is not None:
             self.v.cmd.enter()
         self.v.run(C.InsertCmd, d, {})
-        type_in(self.v, "6,9")
-        while self.v.cmd is not None:
-            self.v.cmd.enter()
+        type_in(self.v, "6,9", NEAREST)
         vfd, term = sorted(self.s.inserts(), key=lambda e: e.pos[0])
         self.assertEqual(term.attrs["TAG"], vfd.attrs["TAG"])
         self.assertEqual(term.attrs["PARENT"], vfd.attrs["DEV"])

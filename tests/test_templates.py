@@ -14,7 +14,7 @@ def _template_project():
     p = M.Project.new()
     s = p.sheets[0]
     with p.edit("set up") as ed:
-        ed.project_settings({"wire_crossing": "loop", "text_height": 0.15})
+        ed.project_settings({"wire_crossing": "gap", "text_height": 0.15})
         ed.add(s, M.Line((1, 1), (5, 1)))
         ed.add(p.title_block, M.Text((1, 0.5), "ACME CONTROLS", 0.2))
         ed.add_sheet(p.make_sheet("Panel layout"))
@@ -35,7 +35,7 @@ class TemplatesTest(unittest.TestCase):
         self.assertIsNone(p.path)
         self.assertFalse(p.is_modified())
         self.assertEqual(p.undo_stack, [])
-        self.assertEqual(p.settings["wire_crossing"], "loop")
+        self.assertEqual(p.settings["wire_crossing"], "gap")
         self.assertEqual(p.settings["text_height"], 0.15)
         self.assertEqual(p.fields.get("Drawn by"), "KL")
         self.assertIn("WIRES_BLUE", p.layers)
@@ -78,14 +78,14 @@ class WindowTemplatesTest(unittest.TestCase):
                               os.path.join(tempfile.mkdtemp(), "Std.kzcad"))
         self.win.settings.setValue("template_path", path)
         d = self.win.new_project()
-        self.assertEqual(d.project.settings["wire_crossing"], "loop")
+        self.assertEqual(d.project.settings["wire_crossing"], "gap")
         self.assertEqual(len(d.project.sheets), 2)
         self.assertFalse(d.project.is_modified())
         self.assertIsNone(d.project.path)
         # back to built-in
         self.win.settings.setValue("template_path", "")
         d = self.win.new_project()
-        self.assertEqual(d.project.settings["wire_crossing"], "plain")
+        self.assertEqual(d.project.settings["wire_crossing"], "loop")         # (the built-in start: a loop, 0.17.1)
 
     def test_unreadable_template_falls_back_to_built_in(self):
         bad = os.path.join(tempfile.mkdtemp(), "gone.kzcad")
