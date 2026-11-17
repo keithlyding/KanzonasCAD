@@ -70,6 +70,37 @@ class BusAroundRunsTest(unittest.TestCase):
             self.assertFalse(self.through(new, box), [w.points for w in new])
             self.p.undo()
 
+    def test_a_wide_bus_past_a_tall_symbol_keeps_its_other_wire_clear(self):
+        # (the battery, seed 19: two wires 4.75" apart past a 6.5" terminal strip; the tight
+        # way went below it, its second wire through it, and room all round swallowed the
+        # start: it went straight through)
+        d = M.BlockDef("Tall", "symbol", [M.Polyline([(0, 0), (2.5, 0), (2.5, 6.5), (0, 6.5)],
+                                                     True)],
+                       [{"name": "1", "pos": (0, 6.0)}], (1.25, 6.7), 0.1, "", "", "device",
+                       "", "X")
+        self.v.run(C.InsertCmd, d, {})
+        self.v.cmd.hold = 1
+        type_in(self.v, "10.0,3.0")
+        while self.v.cmd is not None:
+            self.v.cmd.enter()
+        tall = self.s.inserts()[-1]                     # (x 10..12.5, y 3..9.5)
+        for flip in (False, True):
+            before = set(self.s.entities)
+            self.v.run(C.BusCmd)
+            self.assertTrue(self.v.input_text("N"))
+            self.assertTrue(self.v.input_text("2"))
+            self.assertTrue(self.v.input_text("4.75"))      # (the spacing, asked next)
+            self.assertEqual((self.v.cmd.count, self.v.cmd.spacing), (2, 4.75))
+            if flip:
+                self.v.input_text("F")
+            y = 6.5 if not flip else 6.0                # (the second wire below it, or above)
+            type_in(self.v, "7.0,%r" % y, "15.5,%r" % y)
+            self.v.cmd.enter()
+            new = [e for i, e in self.s.entities.items() if i not in before]
+            self.assertEqual(len(new), 2)
+            self.assertFalse(self.through(new, tall), [w.points for w in new])
+            self.p.undo()
+
     def test_the_clearance_is_a_setting(self):
         box = self.box()
         got = {}

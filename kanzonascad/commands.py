@@ -1764,11 +1764,14 @@ class BusCmd(Command):
         tail = [q[len(self.points) - 1:] for q in paths]
         if not boxes or not any(_crosses(q, boxes) for q in tail):
             return new
-        # (tight first: the other wires may be on the outside of every turn; else with room
-        # for the whole bus on each side)
-        for extra in ((0.0, width) if width > 0 else (0.0,)):
+        # (tight first: the other wires may be on the outside of every turn; then the bus's
+        # width kept clear on the side its other wires are on, the right of the way it goes
+        # unless flipped; then all round)
+        side = -1 if self._flip_for(self.points + new) else 1
+        for extra, on in (((0.0, None), (width, side), (width, None)) if width > 0
+                          else ((0.0, None),)):
             got = route_around(sheet, self.points[-1], new[-1], new, wire_clear(self.ctx),
-                               extra)
+                               extra, on)
             if got is new:
                 continue
             tail = [q[len(self.points) - 1:] for q in self._paths(self.points + got)]
