@@ -851,7 +851,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             before = set(here.entities)
             v.run(C.DashBoxCmd)
             v.input_text(fmt(a))
-            v.input_text(fmt(b))
+            v.input_text("#" + fmt(b))             # (a point: a plain x,y is the size)
             if how == "pick":
                 assert isinstance(v.cmd, C.PickDeviceCmd), "Pick on drawing didn't start"
                 v.show_sheet(dev[0].id)
@@ -859,7 +859,14 @@ def random_editing(log, out, ops, seed, drawing=None):
                 assert isinstance(v.cmd, C.PickDeviceCmd), "picking stopped on another sheet"
                 got = dict(dev[1].pin_points())
                 q = next(iter(got.values())) if got else dev[1].pos
-                v.cmd.point(q)
+                hit = v.pick_entity(q, M.Insert)
+                if hit is None or not tags.is_device(hit):
+                    # (another symbol over that pin is what a click there picks, seed 23: the
+                    # program says it isn't a device and waits; Esc stops, and no box)
+                    v.escape()
+                    how = "esc"
+                else:
+                    v.cmd.point(q)
                 for _i in range(3):
                     APP.processEvents()
                 assert v.sheet() is here, "picking didn't come back to the box's sheet"
@@ -867,6 +874,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             del win.ask_dash_box
             finish()
         new = [e for i, e in here.entities.items() if i not in before and isinstance(e, M.DashBox)]
+        if how == "esc":
+            assert not new, "Esc while picking made a box"
+            BC.CHECKED["dashed box: Esc while picking"] += 1
+            return
         assert len(new) == 1, "Dashed box made %d boxes" % len(new)
         box = new[0]
         x0, x1 = sorted((a[0], b[0]))
@@ -885,6 +896,114 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert xrefs.live(p, parent[0]), "the device lists nothing"
             BC.CHECKED["dashed box belongs to a device"] += 1
         BC.CHECKED["dashed box"] += 1
+
+    def op_array():
+        # (0.16.5: copies in rows and columns, or round a center: exactly where they go)
+        sel = [e for e in some(rnd.randint(1, 3)) if not isinstance(e, (M.Wire, M.WireCross))]
+        if not sel:
+            return
+        before = set(s.entities)
+        v.set_selection({e.id for e in sel})
+        v.run(C.ArrayCmd)
+        if rnd.random() < 0.7:
+            rows, cols = rnd.randint(1, 3), rnd.randint(1, 3)
+            dr, dc = rnd.choice([-1, 1]) * rnd.randint(1, 8) * 0.25, \
+                rnd.choice([-1, 1]) * rnd.randint(1, 8) * 0.25
+            type_in(v, "R", str(rows), str(cols), "%.12g" % dr, "%.12g" % dc)
+            shifts = [(c * dc, r * dr) for r in range(rows) for c in range(cols) if r or c]
+        else:
+            n = rnd.randint(2, 5)
+            type_in(v, "P", fmt(pt()), str(n), "360")
+            shifts = None
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before]
+        want = (len(shifts) if shifts is not None else n - 1) * len(sel)
+        assert len(new) == want, "Array made %d objects, not %d" % (len(new), want)
+        if shifts:
+            def key(e):
+                return e.pos if isinstance(e, M.Insert) else e.bbox()[:2]
+            got = sorted((e.kind, round(key(e)[0], 6), round(key(e)[1], 6)) for e in new)
+            exp = sorted((e.kind, round(key(e)[0] + dx, 6), round(key(e)[1] + dy, 6))
+                         for dx, dy in shifts for e in sel)
+            assert got == exp, "Array put copies at %s, not %s" % (got[:3], exp[:3])
+            BC.CHECKED["array where they go"] += 1
+
+    def op_offset():
+        # (0.16.5: a copy a set distance away, smaller or bigger)
+        a = pt()
+        w, h = rnd.randint(2, 8) * 0.25, rnd.randint(2, 8) * 0.25
+        kind = rnd.choice(["rect", "line", "circle"])
+        with p.edit("to offset") as ed:
+            if kind == "rect":
+                e = ed.add(s, M.Polyline([a, (a[0] + w, a[1]), (a[0] + w, a[1] + h),
+                                          (a[0], a[1] + h)], True))
+                on, inside = (a[0] + w / 2, a[1]), (a[0] + w / 2, a[1] + h / 2)
+                outside = (a[0] + w / 2, a[1] - 1)
+            elif kind == "line":
+                e = ed.add(s, M.Line(a, (a[0] + w, a[1])))
+                on, inside, outside = (a[0] + w / 2, a[1]), (a[0] + w / 2, a[1] + 1), \
+                    (a[0] + w / 2, a[1] - 1)
+            else:
+                e = ed.add(s, M.Circle(a, w))
+                on, inside, outside = (a[0] + w, a[1]), a, (a[0] + 3 * w, a[1])
+        d = rnd.randint(1, 3) * 0.125
+        side = rnd.choice([inside, outside])
+        before = set(s.entities)
+        v.set_selection(set())
+        v.run(C.OffsetCmd)
+        type_in(v, "%.12g" % d)
+        v.cmd.pick(on)
+        if v.cmd is not None and v.cmd.ent is not None and v.cmd.ent.id == e.id:
+            v.cmd.point(side)
+        else:
+            finish()
+            return                      # (another object nearer the pick)
+        finish()
+        new = [x for i, x in s.entities.items() if i not in before]
+        out = side is outside
+        if kind == "rect":
+            if not out and (2 * d >= min(w, h) - 1e-9):
+                assert not new, "a rectangle offset past its middle was made"
+                return
+            k = d if out else -d
+            exp = (a[0] - k, a[1] - k, a[0] + w + k, a[1] + h + k)
+            assert len(new) == 1 and all(abs(x - y) < 1e-9 for x, y in zip(new[0].bbox(), exp)), \
+                "offset rectangle %s, not %s" % (new and new[0].bbox(), exp)
+        elif kind == "line":
+            exp = a[1] + (-d if out else d)
+            assert len(new) == 1 and abs(new[0].p1[1] - exp) < 1e-9 and \
+                abs(new[0].p2[1] - exp) < 1e-9, "offset line not %s away" % d
+        else:
+            exp = w + d if out else w - d
+            assert len(new) == 1 and abs(new[0].radius - exp) < 1e-9, \
+                "offset circle radius %s, not %s" % (new and new[0].radius, exp)
+        BC.CHECKED["offset where it goes"] += 1
+
+    def op_mid_grip():
+        # (0.16.5: a rectangle's side dragged by its middle grip: still a rectangle, that side
+        # moved straight out or in by how far the grip went across it)
+        rects = [e for e in s.entities.values() if type(e) is M.Polyline and e.closed and
+                 len(e.points) == 4 and all(abs(q[0] - r[0]) < 1e-9 or abs(q[1] - r[1]) < 1e-9
+                                            for q, r in zip(e.points, e.points[1:] + e.points[:1]))]
+        if not rects:
+            return
+        e = rnd.choice(rects)
+        k = rnd.randrange(4)
+        to = pt()
+        v.set_selection(set())
+        v.run(C.GripCmd, e, 4 + k)
+        v.input_text(fmt(to))
+        finish()
+        got = s.entities[e.id]
+        a, b = e.points[k], e.points[(k + 1) % 4]
+        horiz = abs(a[1] - b[1]) < 1e-9
+        for i, q in enumerate(got.points):
+            if i in (k, (k + 1) % 4):
+                assert (abs(q[1] - to[1]) < 1e-9) if horiz else (abs(q[0] - to[0]) < 1e-9), \
+                    "a side dragged to %s went to %s" % (to, q)
+            else:
+                assert q == e.points[i], "a middle grip moved another corner"
+        BC.CHECKED["middle grip"] += 1
 
     def op_line():
         v.run(C.LineCmd)
@@ -1062,7 +1181,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         b = (a[0] + rnd.choice([0.5, 1, 2]), a[1] + rnd.choice([0.5, 1]))
         if rnd.random() < 0.7:
             v.run(C.RectangleCmd)
-            type_in(v, fmt(a), fmt(b))
+            # (the second corner typed as a size, as a user would, or as a point with #)
+            type_in(v, fmt(a), fmt((b[0] - a[0], b[1] - a[1])) if rnd.random() < 0.5
+                    else "#" + fmt(b))
             finish()
         v.run(C.HatchCmd)
         if v.cmd is not None and rnd.random() < 0.6:
@@ -1462,7 +1583,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

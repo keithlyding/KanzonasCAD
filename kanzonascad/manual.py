@@ -672,7 +672,7 @@ empty command line repeats the last command. <b>Esc</b> cancels.</p>
 options.</td></tr>
 <tr><td>Polyline</td><td>PLINE, PL</td><td>One connected object through all its points.</td></tr>
 <tr><td>Rectangle</td><td>RECTANG, REC</td><td>Two corners (or the first corner, then
-@width,height).</td></tr>
+width,height; D: length and width, then the side).</td></tr>
 <tr><td>Circle: Center, radius</td><td>CIRCLE, C</td><td>Center, then radius (a point or a
 number); D switches to a diameter. At the first prompt, 3P, 2P or TTR switch to those ways.</td></tr>
 <tr><td>Circle: Center, diameter</td><td></td><td>Center, then diameter.</td></tr>
@@ -708,6 +708,17 @@ manufacturer's drawing to its real size. Lengths can be typed in millimeters:
 <code>45mm</code>. On a panel sheet, footprints are left out (they're real size).</td></tr>
 <tr><td>Mirror</td><td>MIRROR, MI</td><td>Select, two points of the mirror line, keep or erase
 the originals. Text stays readable.</td></tr>
+<tr><td>Array</td><td>ARRAY, AR</td><td>Copies of the selected objects in rows and columns
+(R, to start: how many rows, how many columns, the distance between rows (up; negative: down)
+and between columns (across; negative: left)) or round a center (P: the center, how many in
+all, the angle they fill: Enter for 360; each copy turned with it). Copied devices get tags of
+their own, as with Copy; one Undo takes the whole array back.</td></tr>
+<tr><td>Offset</td><td>OFFSET, O</td><td>A copy of a line, polyline or rectangle, circle or
+arc, a set distance away: smaller or bigger, on the side you click. Type the distance (Enter:
+the last one), pick the object, click the side; it goes on with the same distance until
+Enter. <b>T</b> (Through) instead of a distance: the copy passes through the point you click.
+A shape offset inward past its middle is refused (it would turn inside out); wires aren't
+offset (draw a bus).</td></tr>
 <tr><td>Erase</td><td>ERASE, E, or Delete</td><td>Removes the selected objects.</td></tr>
 <tr><td>Trim</td><td>TRIM, TR</td><td>Click the part of an object to cut away: it is trimmed
 back to the nearest crossing objects on either side (every object is a cutting edge, as in
@@ -740,6 +751,13 @@ shows the way you used last, as in AutoCAD. The Draw menu has them under Circle.
 <li><code>3,4</code> - the point x=3, y=4 (inches from the sheet's lower left corner).</li>
 <li><code>@1,0</code> - 1 inch right of the last point.</li>
 <li><code>@2&lt;45</code> - 2 inches from the last point at 45 degrees.</li>
+<li><code>#3,4</code> - the point x=3, y=4 wherever a plain x,y means something else (a box's
+second corner, below).</li>
+<li>A <b>Rectangle</b>'s or <b>Dashed box</b>'s second corner: <code>0.19,0.15</code> is its
+<b>size</b> from the first corner (0.19 across, 0.15 up; <code>-2,-1</code> goes left and
+down), as AutoCAD's dynamic input takes it; <code>#x,y</code> is a point. Rectangle's
+<b>D</b> (Dimensions) asks the length, then the width, then a click on the side it goes
+(Enter: up and right).</li>
 <li><code>1.5</code> - 1.5 inches from the last point toward the cursor (direct distance;
 with ORTHO on, straight across or up and down).</li>
 </ul>
@@ -993,7 +1011,9 @@ too).</li>
 <li><b>Select all</b> (Ctrl+A); Esc clears the selection.</li>
 <li>Selected objects show blue <b>grips</b>. Click a grip, then click where it goes, to stretch
 that end, corner, radius or text position (a symbol: its insertion point, its tag, an
-attribute shown).</li>
+attribute shown). A polyline or rectangle also has a grip in the <b>middle of each side</b>:
+drag it and that side moves straight out or in (a rectangle stays a rectangle, longer or
+shorter); a wire has its corners only.</li>
 <li>Select first, then start Move, Copy objects, Rotate... (or start the command and then
 select, pressing Enter when done).</li>
 <li>Right-click: Enter while a command runs; otherwise a menu with Repeat, the clipboard and

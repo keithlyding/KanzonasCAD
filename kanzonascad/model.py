@@ -316,11 +316,31 @@ class Polyline(Entity):
         return out
 
     def grips(self):
-        return list(self.points)
+        """Its corners, then the middle of each side (the owner, 0.16: "I need a middle
+        grabber on rectangles also, so I can resize it longer or shorter"). A wire has only
+        its corners (Wire.grips)."""
+        return list(self.points) + [((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+                                    for a, b in self.segments()]
 
     def with_grip(self, i, p):
         pts = [list(q) for q in self.points]
-        pts[i] = list(p)
+        n = len(self.points)
+        if i < n:
+            pts[i] = list(p)
+            return self.copy(points=pts)
+        # a side's middle: the side moves straight out or in by as far as the grip went across
+        # it (a rectangle stays one: longer or shorter)
+        k = i - n
+        j = (k + 1) % n
+        a, b = self.points[k], self.points[j]
+        L = G.dist(a, b)
+        if L < 1e-12:
+            return self.copy(points=pts)
+        nx, ny = -(b[1] - a[1]) / L, (b[0] - a[0]) / L
+        m = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+        d = (p[0] - m[0]) * nx + (p[1] - m[1]) * ny
+        pts[k] = [a[0] + nx * d, a[1] + ny * d]
+        pts[j] = [b[0] + nx * d, b[1] + ny * d]
         return self.copy(points=pts)
 
     def _map(self, fn, **_kw):
@@ -369,6 +389,9 @@ class Wire(Polyline):
             if G.dist_to_segment(p, a, b) <= tol:
                 return True
         return False
+
+    def grips(self):
+        return list(self.points)            # (a wire: its corners and ends only)
 
     def end_moved(self, i, p):
         """A copy with end i (0 or -1) at p, kept straight across / up and down: the next

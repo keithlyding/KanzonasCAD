@@ -35,8 +35,11 @@ def parse_number(text):
 
 
 def parse_point(text, last=None):
-    """A typed point, or None. last: the point "@" is relative to."""
+    """A typed point, or None. last: the point "@" is relative to. "#x,y" is x,y itself
+    (AutoCAD's absolute mark), where a command takes a plain x,y as a size."""
     t = to_inches(text).strip()
+    if t.startswith("#"):
+        t = t[1:].strip()
     m = _RE_ABS.match(t)
     if m:
         return (float(m.group(1)), float(m.group(2)))
@@ -225,32 +228,94 @@ class PolylineCmd(Command):
         return []
 
 
+def size_typed(cmd, text):
+    """A plain "x,y" typed for a box's second corner is its size from the first corner (as
+    AutoCAD's dynamic input takes it; the owner: "I'm trying to make a rectangle that is
+    0.19x0.15" and it's coming out as 8.76x3.76"": typed as a size, it was taken as the corner
+    0.19,0.15 of the sheet). "#x,y" is that point itself; "@x,y" as always. The point, or
+    None when it isn't a plain x,y."""
+    t = to_inches(text).strip()
+    m = _RE_ABS.match(t)
+    if m is None or cmd.last is None:
+        return None
+    return (cmd.last[0] + float(m.group(1)), cmd.last[1] + float(m.group(2)))
+
+
 class RectangleCmd(Command):
+    """RECTANG: two corners; after the first, a typed width,height is its size (#x,y: a
+    point), and D asks its length and width, then a click says which way it goes."""
     name, title = "RECTANG", "Rectangle"
 
     def begin(self):
         self.first = None
+        self.dims = None                # (D: [length, width] typed so far)
         self.ctx.prompt("Specify first corner")
 
     @staticmethod
     def _rect(a, b):
         return M.Polyline([a, (b[0], a[1]), b, (a[0], b[1])], True)
 
+    def _corner(self, p):
+        """The other corner for the cursor at p: with both sizes typed (D), that size,
+        toward p."""
+        if self.dims is not None and len(self.dims) == 2:
+            a = self.first
+            return (a[0] + self.dims[0] * (1 if p[0] >= a[0] else -1),
+                    a[1] + self.dims[1] * (1 if p[1] >= a[1] else -1))
+        return p
+
+    def text(self, s):
+        if self.first is None:
+            return False
+        k = s.strip().upper()
+        if k == "D":
+            self.dims = []
+            self.ctx.prompt("Specify length (across)")
+            return True
+        if self.dims is None:
+            q = size_typed(self, s)
+            if q is not None:
+                self.point(q)
+                return True
+        return False
+
+    def number(self, v):
+        if self.dims is None or len(self.dims) >= 2 or v <= 0:
+            return False
+        self.dims.append(v)
+        self.ctx.prompt("Specify width (up and down)" if len(self.dims) == 1 else
+                        "Click on the side it goes (or Enter: up and right)")
+        return True
+
+    def enter(self):
+        if self.dims is not None and len(self.dims) == 2:
+            self.point((self.first[0] + 1.0, self.first[1] + 1.0))
+            return
+        Command.enter(self)
+
     def point(self, p):
         if self.first is None:
             self.first = self.last = p
-            self.ctx.prompt("Specify other corner (or @width,height)")
+            self.ctx.prompt("Specify other corner (or width,height; D for dimensions)",
+                            [("Dimensions", "D")])
             return
+        if self.dims is not None and len(self.dims) < 2:
+            return                      # (waiting for the length and width)
+        p = self._corner(p)
         if abs(p[0] - self.first[0]) < 1e-9 or abs(p[1] - self.first[1]) < 1e-9:
             return
         r = self._rect(self.first, p)
         r.layer = self.ctx.layer()
         with self.ctx.edit("Rectangle") as ed:
             ed.add(self.ctx.sheet(), r)
+        self.ctx.message("Rectangle %s x %s" % (_fmt(abs(p[0] - self.first[0])),
+                                                _fmt(abs(p[1] - self.first[1]))))
         self.finish()
 
     def preview(self, p):
-        return [self._rect(self.first, p)] if self.first else []
+        if not self.first or (self.dims is not None and len(self.dims) < 2):
+            return []
+        return [self._rect(self.first, self._corner(p))]
 
 
 class CircleCmd(Command):
@@ -2165,10 +2230,17 @@ class DashBoxCmd(Command):
         self.first = None
         self.ctx.prompt("Specify first corner of the dashed box")
 
+    def text(self, s):
+        q = size_typed(self, s) if self.first is not None else None
+        if q is not None:
+            self.point(q)
+            return True
+        return False
+
     def point(self, p):
         if self.first is None:
             self.first = self.base = self.last = p
-            self.ctx.prompt("Specify opposite corner")
+            self.ctx.prompt("Specify opposite corner (or width,height)")
             return
         if abs(p[0] - self.first[0]) < 1e-9 or abs(p[1] - self.first[1]) < 1e-9:
             self.ctx.message("A box needs width and height: pick a corner across from the first")
@@ -2247,6 +2319,296 @@ class PickDeviceCmd(Command):
         Command.cancel(self)
         if got is not None:
             got(None)
+
+
+class ArrayCmd(Command):
+    """ARRAY: copies of the selected objects in rows and columns (R, to start) or round a
+    center (P), as AutoCAD's ARRAY. Rectangular: rows, columns, then the distance between
+    rows (up; negative: down) and between columns (across; negative: left). Polar: the
+    center, how many in all, and the angle they fill (360 to start), each turned with it.
+    Copies are new objects: devices get tags of their own, as Copy gives them."""
+    name, title = "ARRAY", "Array"
+    selects = True
+
+    def begin(self):
+        self.ents = _selected(self.ctx)
+        self.mode = None
+        self.vals = []
+        self.center = None
+        self.ctx.prompt("Rectangular or Polar? (Enter: Rectangular)",
+                        [("Rectangular", "R"), ("Polar", "P")])
+
+    QUESTIONS = {"R": ["Number of rows (up and down)", "Number of columns (across)",
+                       "Distance between rows (up; negative: down)",
+                       "Distance between columns (across; negative: left)"],
+                 "P": ["Number of items in all", "Angle to fill (degrees; Enter: 360)"]}
+
+    def _ask(self):
+        q = self.QUESTIONS[self.mode]
+        if self.mode == "P" and self.center is None:
+            self.ctx.prompt("Specify center point of the array")
+            return
+        if len(self.vals) < len(q):
+            self.ctx.prompt(q[len(self.vals)])
+
+    def text(self, s):
+        k = s.strip().upper()
+        if self.mode is None and k in ("R", "P"):
+            self.mode = k
+            self._ask()
+            return True
+        return False
+
+    def enter(self):
+        if self.selecting():
+            return Command.enter(self)
+        if self.mode is None:
+            self.mode = "R"
+            self._ask()
+            return
+        if self.mode == "P" and len(self.vals) == 1:
+            self.number(360.0)
+            return
+        self.finish()
+
+    def point(self, p):
+        if self.mode is None:
+            self.mode = "R"
+        if self.mode == "P" and self.center is None:
+            self.center = self.base = self.last = p
+            self._ask()
+
+    def number(self, v):
+        if self.mode is None:
+            return False
+        if self.mode == "P" and self.center is None:
+            return False
+        i = len(self.vals)
+        if i < 2 and self.mode == "R" or i == 0 and self.mode == "P":
+            if v < 1 or abs(v - round(v)) > 1e-9 or v > 1000:
+                self.ctx.message("A whole number from 1 to 1000")
+                return True
+            v = int(round(v))
+        self.vals.append(v)
+        need = len(self.QUESTIONS[self.mode])
+        if len(self.vals) >= need:
+            self._make()
+        else:
+            self._ask()
+        return True
+
+    def copies(self, vals=None):
+        """[(dx, dy, angle)] of the copies (not the original)."""
+        vals = self.vals if vals is None else vals
+        out = []
+        if self.mode == "R":
+            rows, cols, dr, dc = (list(vals) + [0, 0, 0, 0])[:4]
+            for r in range(int(rows)):
+                for c in range(int(cols)):
+                    if r or c:
+                        out.append((c * dc, r * dr, 0.0))
+        elif self.mode == "P" and vals:
+            n = int(vals[0])
+            fill = vals[1] if len(vals) > 1 else 360.0
+            step = fill / n if abs(abs(fill) - 360.0) < 1e-9 else \
+                (fill / (n - 1) if n > 1 else 0.0)
+            for i in range(1, n):
+                out.append((0.0, 0.0, step * i))
+        return out
+
+    def _placed(self, e, dx, dy, ang):
+        c = e.rotated(self.center, ang) if ang else e.moved(dx, dy)
+        c.id = None
+        return c
+
+    def _make(self):
+        from .tags import retag_copies
+        made = [self._placed(e, dx, dy, a) for dx, dy, a in self.copies() for e in self.ents]
+        if not made:
+            self.ctx.message("One row and one column: nothing to copy")
+            self.finish()
+            return
+        sheet = self.ctx.sheet()
+        with self.ctx.edit("Array") as ed:
+            for e in retag_copies(self.ctx.project, sheet, made):
+                ed.add(sheet, e)
+        self.ctx.message("Array: %d copies" % (len(made) // max(1, len(self.ents))))
+        self.finish()
+
+    def preview(self, p):
+        if self.mode == "R" and len(self.vals) == 3:
+            # (the column spacing still to type: shown toward the cursor)
+            got = self.copies(self.vals + [p[0] - self._origin()[0]])
+        elif self.mode == "R" and len(self.vals) == 2:
+            got = self.copies(self.vals + [p[1] - self._origin()[1], 0.0])
+        else:
+            return []
+        if len(got) * len(self.ents) > 2000:
+            return []
+        return [self._placed(e, dx, dy, a) for dx, dy, a in got for e in self.ents]
+
+    def _origin(self):
+        bb = None
+        for e in self.ents:
+            bb = G.bbox_union(bb, e.bbox())
+        return (bb[0], bb[1]) if bb else (0.0, 0.0)
+
+
+def offset_entity(e, d, side):
+    """A copy of e d away on the side of the point side (OFFSET), or (None, why)."""
+    if isinstance(e, M.Wire) or not isinstance(e, (M.Line, M.Polyline, M.Circle, M.Arc)):
+        return None, "Offset works on lines, polylines and rectangles, circles and arcs"
+    if isinstance(e, M.Line):
+        a, b = e.p1, e.p2
+        L = G.dist(a, b)
+        if L < 1e-12:
+            return None, "That line has no length"
+        nx, ny = -(b[1] - a[1]) / L, (b[0] - a[0]) / L
+        sgn = 1.0 if (side[0] - a[0]) * nx + (side[1] - a[1]) * ny >= 0 else -1.0
+        c = e.copy(p1=[a[0] + nx * d * sgn, a[1] + ny * d * sgn],
+                   p2=[b[0] + nx * d * sgn, b[1] + ny * d * sgn])
+        c.id = None
+        return c, None
+    if isinstance(e, (M.Circle, M.Arc)):
+        inside = G.dist(side, e.center) < e.radius
+        r = e.radius - d if inside else e.radius + d
+        if r <= 1e-9:
+            return None, "Too far inside: the %s would vanish" % e.kind
+        c = e.copy(radius=r)
+        c.id = None
+        return c, None
+    pts = list(e.points)
+    if len(pts) < 2:
+        return None, "That polyline has one point"
+    segs = e.segments()
+    # the side: left or right of the side nearest the point picked
+    best = min(range(len(segs)), key=lambda i: G.dist_to_segment(side, *segs[i]))
+    a, b = segs[best]
+    cross = (b[0] - a[0]) * (side[1] - a[1]) - (b[1] - a[1]) * (side[0] - a[0])
+    s = d if cross >= 0 else -d                 # (left of travel: positive)
+    lines = []
+    for a, b in segs:
+        L = G.dist(a, b)
+        if L < 1e-12:
+            continue
+        nx, ny = -(b[1] - a[1]) / L, (b[0] - a[0]) / L
+        lines.append(((a[0] + nx * s, a[1] + ny * s), (b[0] + nx * s, b[1] + ny * s)))
+    if not lines:
+        return None, "That polyline has no length"
+
+    def meet(l1, l2):
+        (p1, p2), (p3, p4) = l1, l2
+        d1 = (p2[0] - p1[0], p2[1] - p1[1])
+        d2 = (p4[0] - p3[0], p4[1] - p3[1])
+        den = d1[0] * d2[1] - d1[1] * d2[0]
+        if abs(den) < 1e-12:
+            return p2                           # (straight on: the shared point)
+        t = ((p3[0] - p1[0]) * d2[1] - (p3[1] - p1[1]) * d2[0]) / den
+        return (p1[0] + d1[0] * t, p1[1] + d1[1] * t)
+    if e.closed:
+        new = [meet(lines[i - 1], lines[i]) for i in range(len(lines))]
+    else:
+        new = [lines[0][0]] + [meet(lines[i - 1], lines[i]) for i in range(1, len(lines))] + \
+            [lines[-1][1]]
+    # each side must still run the way it did (else it was offset past its own width)
+    sides = list(zip(new, new[1:] + ([new[0]] if e.closed else [])))
+    for (p, q), (a, b) in zip(sides, lines):
+        if (q[0] - p[0]) * (b[0] - a[0]) + (q[1] - p[1]) * (b[1] - a[1]) <= 1e-12:
+            return None, "Too far: the shape would turn inside out"
+    c = e.copy(points=[list(q) for q in new])
+    c.id = None
+    return c, None
+
+
+class OffsetCmd(Command):
+    """OFFSET: a copy of a line, polyline (a rectangle), circle or arc, a set distance away on
+    the side you click, as AutoCAD's OFFSET (the owner, 0.16: "duplicate a shape either
+    larger or smaller than the one selected"): type the distance (or T: through a point),
+    then pick the object and click the side; it goes on with the same distance until
+    Enter."""
+    name, title = "OFFSET", "Offset"
+
+    def begin(self):
+        self.dist = getattr(self.ctx, "_offset_dist", None)
+        self.through = False
+        self.ent = None
+        self.ctx.set_selection(set())
+        self._ask_dist()
+
+    def _ask_dist(self):
+        self.picking = False
+        last = " (Enter: %s)" % _fmt(self.dist) if self.dist else ""
+        self.ctx.prompt("Specify offset distance%s" % last, [("Through", "T")])
+
+    def _ask_object(self):
+        self.picking = True
+        self.ent = None
+        self.ctx.prompt("Select object to offset (Enter to finish)")
+
+    def text(self, s):
+        if s.strip().upper() == "T" and not self.picking and self.ent is None:
+            self.through = True
+            self._ask_object()
+            return True
+        return False
+
+    def number(self, v):
+        if self.picking or self.ent is not None:
+            return False
+        if v <= 0:
+            self.ctx.message("The distance must be more than 0")
+            return True
+        self.dist = v
+        self.ctx._offset_dist = v
+        self._ask_object()
+        return True
+
+    def enter(self):
+        if not self.picking and self.ent is None and self.dist:
+            self._ask_object()
+            return
+        self.finish()
+
+    def pick(self, p):
+        e = self.ctx.pick_entity(p)
+        if e is None:
+            return
+        got, why = offset_entity(e, 1e-6, p)       # (can it be offset at all)
+        if got is None:
+            self.ctx.message(why)
+            return
+        self.ent = e
+        self.picking = False
+        self.ctx.prompt("Specify point %s" % ("to offset through" if self.through else
+                                              "on side to offset"))
+
+    def _distance(self, p):
+        if not self.through:
+            return self.dist
+        e = self.ent
+        if isinstance(e, (M.Circle, M.Arc)):
+            return abs(G.dist(p, e.center) - e.radius)
+        return e.distance(p)
+
+    def point(self, p):
+        if self.ent is None:
+            return
+        d = self._distance(p)
+        got, why = offset_entity(self.ent, d, p) if d > 1e-9 else (None, "That's on it")
+        if got is None:
+            self.ctx.message(why)
+            return
+        sheet = self.ctx.sheet()
+        with self.ctx.edit("Offset") as ed:
+            ed.add(sheet, got)
+        self._ask_object()
+
+    def preview(self, p):
+        if self.ent is None:
+            return []
+        d = self._distance(p)
+        got, _why = offset_entity(self.ent, d, p) if d > 1e-9 else (None, None)
+        return [got] if got is not None else []
 
 
 class PickWindowCmd(Command):
@@ -3354,6 +3716,8 @@ COMMANDS = {
     "USETITLEBLOCK": (UseTitleBlockCmd, ["USETB", "TBUSE"]),
     "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
     "DASHBOX": (DashBoxCmd, ["DB", "DBOX", "BOX"]),
+    "ARRAY": (ArrayCmd, ["AR", "ARRAYRECT", "ARRAYPOLAR"]),
+    "OFFSET": (OffsetCmd, ["O"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
     "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)
