@@ -404,6 +404,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("distribute", "Dis&tribute objects", C.DistributeCmd, "Distribute")
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("wire_label", "Wire number &label", C.WireLabelCmd, "Wire label")
+        self._cmd_act("sig_arrows", "Source/destination &arrows", C.SignalArrowsCmd, "Arrows")
         self._cmd_act("del_wire", "&Delete wire", C.DeleteWireCmd, "Delete wire")
         self._cmd_act("del_dot", "Delete d&ot", C.DeleteDotCmd, "Delete dot")
         self._cmd_act("clean_wires", "Clea&n up wires", C.CleanWiresCmd, "Clean up")
@@ -444,6 +445,10 @@ class MainWindow(BlockEditing, QMainWindow):
           label="Renumber sheet",
           tip="Number the devices on this sheet in order (CR601, CR602...); tags you locked "
               "stay as they are")
+        A("update_numbers", "Update &numbers and cross-references...", self.update_numbers,
+          icon="update_numbers", label="Update numbers",
+          tip="Device tags, wire numbers and cross-references, on this sheet, the sheets you "
+              "pick or the whole project: renumbered in order, or kept and only fixed")
         A("xref_update", "&Update cross-references", self.update_xrefs, icon="xref_update",
           label="Update",
           tip="Bring the cross-references of every sheet up to date (frozen sheets keep theirs)")
@@ -598,7 +603,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Draw")
         for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", "mtext", "hatch", None,
                   "wire", "bus",
-                  "wire_cross", None,
+                  "wire_cross", "sig_arrows", None,
                   "dim_linear", "dim_aligned", "leader", "dash_box", None, "rail", "duct"):
             if k == "CIRCLE":
                 cm = m.addMenu("&Circle")
@@ -623,7 +628,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
         for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_cw", "sheet_ccw",
-                  None, "renumber",
+                  None, "renumber", "update_numbers",
                   "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "materials", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
@@ -693,8 +698,9 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["del_wire"], a["del_dot"],
                                      a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
-            ("Tags", "large", [a["renumber"]]),
-            ("Cross-references", "large", [a["xref_update"], a["xref_freeze"], a["xref_auto"]]),
+            ("Numbering", "large", [a["update_numbers"], a["renumber"]]),
+            ("Cross-references", "large", [a["sig_arrows"], a["xref_update"], a["xref_freeze"],
+                                           a["xref_auto"]]),
             ("Look", "small", [a["object_color"], a["layers"]]),
             ("Settings", "large", [a["schematic_settings"]]),
         ])
@@ -2598,6 +2604,45 @@ class MainWindow(BlockEditing, QMainWindow):
         self.cmdline.add_history("Renumbered %d device tag(s) and the unlocked wire numbers on "
                                  "sheet %s" % (n, v.project.sheet_number(v.sheet())))
 
+    def update_numbers(self):
+        """Update numbers and cross-references: device tags, wire numbers and cross-references,
+        on this sheet, chosen sheets or the whole project, renumbered or only fixed, in one
+        step."""
+        v = self.view()
+        if v is None:
+            return
+        got = self.ask_update_numbers(v.project, v.sheet())
+        if not got or not got["sheets"] or not (got["tags"] or got["wires"] or got["xrefs"]):
+            return
+        from . import tags, wirenums, xrefs
+        p = v.project
+        sheets = [s for s in got["sheets"] if s is not p.title_block]
+        done = []
+        with p.edit("Update numbers and cross-references") as ed:
+            if got["tags"]:
+                n = sum((tags.renumber_sheet if got["renumber"] else tags.fix_sheet)(ed, p, s)
+                        for s in sheets)
+                done.append("%d device tag(s)" % n)
+            if got["wires"] and wirenums.enabled(p):
+                wirenums.sync(ed, p, renumber=sheets if got["renumber"] else None)
+                done.append("wire numbers %s" % ("renumbered" if got["renumber"] else
+                                                 "checked"))
+            frozen = [s for s in sheets if s.xref_frozen]
+            if got["xrefs"]:
+                n = xrefs.update(ed, p, [s for s in sheets if not s.xref_frozen])
+                done.append("cross-references on %d sheet(s)" % n)
+        msg = "Updated on sheet(s) %s: %s" % (", ".join(str(p.sheet_number(s)) for s in sheets),
+                                              "; ".join(done))
+        if got["xrefs"] and frozen:
+            msg += "; frozen, cross-references kept: sheet(s) %s" % ", ".join(
+                str(p.sheet_number(s)) for s in frozen)
+        self.cmdline.add_history(msg)
+        self._update_ui()
+
+    def ask_update_numbers(self, project, sheet):
+        """The Update numbers and cross-references window (a test replaces it)."""
+        return dialogs.update_numbers_dialog(self, project, sheet)
+
     def edit_wire_number(self, wire):
         """Double-clicked wire: type its number (locked), or clear it to let numbering give it
         one."""
@@ -2829,7 +2874,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
-                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext", "use_tb",
+                  "update_numbers", "sig_arrows", "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext", "use_tb",
                   "rail", "duct", "materials", "bom", "cables", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",

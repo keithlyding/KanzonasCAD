@@ -347,7 +347,8 @@ class CadView(QWidget):
     def show_sheet(self, sheet_id):
         if sheet_id == self.sheet_id:
             return
-        self.cancel()
+        if not getattr(self.cmd, "across_sheets", False):
+            self.cancel()                # (Source/destination arrows goes on: its other end)
         self.sel = set()
         self._sel_cache = None
         self.sheet_id = sheet_id

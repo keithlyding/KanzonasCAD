@@ -36,6 +36,13 @@ nobody understands).
 - Multi-sheet projects with a sheet list and sheet types (schematic, panel, report, other):
   done since 0.1/0.2.
 
+- 0.18: cross-references and numbering (owner, Nov 2026): Source/destination arrows as
+  AutoCAD Electrical's (click the source end, then the destination end on any sheet; one wire,
+  the source's number; each arrow shows the number and the other's place); Update numbers and
+  cross-references (tags, wires, cross-references; renumber or keep, asked each time; this
+  sheet, picked sheets or the whole project); the Library's phase filter (worked out from pins
+  and name, Properties... overrides).
+
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,
 cross-references, wire numbers, off-sheet connectors, more symbols), then the panel.

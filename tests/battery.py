@@ -1393,6 +1393,73 @@ def random_editing(log, out, ops, seed, drawing=None):
         else:
             assert not new and got.num == a.num, "cancelled, yet the number changed"
 
+    def op_sig_arrows():
+        # (0.18) Source/destination arrows through the command: a click near one wire's open
+        # end, then another's: a Source arrow and a Destination arrow of one name on those
+        # ends, one wire with the source's number
+        from kanzonascad import wires as W
+        def opens(w):
+            return [q for q in (w.points[0], w.points[-1])
+                    if not W.connects_at(s, q, exclude=w.id)]
+        ws = [w for w in s.wires() if opens(w) and G.dist(w.points[0], w.points[-1]) > 0.5]
+        if len(ws) < 2:
+            return
+        a, b = rnd.sample(ws, 2)
+        if wirenums.group_of(p, s, a)[0] == wirenums.group_of(p, s, b)[0]:
+            return
+        qa, qb = rnd.choice(opens(a)), rnd.choice(opens(b))
+        num = a.num
+        before = {e.id for e in s.inserts()}
+        v.run(C.SignalArrowsCmd)
+        for q in (qa, qb):
+            if v.cmd is not None and getattr(v.cmd, "pick", None):
+                v.cmd.pick(q)
+        finish()
+        new = [e for e in s.inserts() if e.id not in before and e.block in wirenums.ARROWS]
+        if not new:
+            return                  # (a pick took another wire there: nothing placed, checked)
+        assert len(new) == 2 and new[0].attrs["TAG"] == new[1].attrs["TAG"], \
+            "arrows not a pair: %r" % [(e.block, e.attrs.get("TAG")) for e in new]
+        at = {e.block: e.pin_points()[0][1] for e in new}
+        assert G.dist(at["Source arrow"], qa) < 1e-9 and \
+            G.dist(at["Destination arrow"], qb) < 1e-9, \
+            "arrows not on the ends clicked: %r, %r %r" % (at, qa, qb)
+        if num and wirenums.enabled(p):
+            nb = [w.num for w in s.wires() if w.touches(qb)]
+            assert nb and nb[0] == num, "the destination took %r, not the source's %s" % (
+                nb, num)
+        BC.CHECKED["source and destination arrows"] += 1
+
+    def op_update_numbers():
+        # (0.18) Update numbers and cross-references, as the window answers: tags, wires,
+        # cross-references, renumbered or kept, on this sheet or every sheet, one step; then
+        # every unlocked device on those sheets has a tag of its sheet's page, none twice
+        o = {"tags": rnd.random() < 0.8, "wires": rnd.random() < 0.8,
+             "xrefs": rnd.random() < 0.8, "renumber": rnd.random() < 0.5,
+             "sheets": [s] if rnd.random() < 0.5 else list(p.sheets)}
+        win.ask_update_numbers = lambda project, sheet: o
+        n0 = len(p.undo_stack)
+        try:
+            win.update_numbers()
+        finally:
+            win.__dict__.pop("ask_update_numbers", None)
+        assert len(p.undo_stack) - n0 <= 1, "Update numbers took more than one step"
+        if o["tags"]:
+            seen = {}
+            for sh in o["sheets"]:
+                if sh is p.title_block:
+                    continue
+                page = p.sheet_number(sh)
+                for e in sh.entities.values():
+                    if tags_mod.is_device(e) and not tags_mod.locked(e):
+                        got = tags_mod.split(e.attrs.get("TAG", ""), e.defn.prefix)
+                        assert got is not None and got[0] == page, \
+                            "%s on sheet %s after Update numbers" % (e.attrs.get("TAG"), page)
+                        k = e.attrs["TAG"]
+                        assert k not in seen, "%s twice after Update numbers" % k
+                        seen[k] = 1
+            BC.CHECKED["Update numbers: tags of their page, none twice"] += 1
+
     def op_tap():
         # (0.17.2: a wire drawn off the middle of another asks; Enter: its number, N: one of
         # its own; worked out from the numbers after. On a wire of its own, just past the
@@ -2219,7 +2286,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2),
+             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
@@ -2450,6 +2517,15 @@ def mixed_project(win):
         ed.change(v.sheet(), mtr.copy(attrs=dict(mtr.attrs, HP="5", VOLTS="460", FLA="7.6"),
                                       hidden=["FLA"]).with_attr_angle("HP", 90.0)
                   .with_attr_angle("TAG", 30.0))
+    # (0.18) a pair of source and destination arrows through the command
+    with p.edit("wires for arrows") as ed:
+        wa = ed.add(v.sheet(), M.Wire([(1.0, 1.0), (4.0, 1.0)]))
+        wb = ed.add(v.sheet(), M.Wire([(9.0, 1.0), (12.0, 1.0)]))
+    v.run(C.SignalArrowsCmd)
+    v.cmd.pick(wa.points[-1])
+    v.cmd.pick(wb.points[0])
+    if v.cmd is not None:
+        v.cmd.enter()
     coil = [e for e in v.sheet().inserts() if e.attrs.get("TAG", "").startswith("CR")][0]
     pin = max((q for _n, q in coil.pin_points()), key=lambda q: q[0])
     v.run(C.WireCmd)

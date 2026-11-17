@@ -123,6 +123,29 @@ def renumber_sheet(ed, project, sheet):
     return changed
 
 
+def fix_sheet(ed, project, sheet):
+    """Update numbers and cross-references' "keep, only fix" (0.18): the sheet's unlocked
+    devices keep their tags; one with no tag (or only its prefix and ?) or a tag not of this
+    sheet's page takes one (its count kept when free here, else the lowest free one). Returns
+    how many changed."""
+    page = project.sheet_number(sheet)
+    changed = 0
+    key = order_key(sheet, sheet.number_order)
+    for e in sorted((e for e in sheet.entities.values() if is_device(e) and not locked(e)),
+                    key=lambda e: key(e.pos)):
+        prefix = e.defn.prefix
+        got = split(e.attrs.get("TAG", ""), prefix)
+        if got is not None and got[0] == page:
+            continue
+        taken = used_counts(project, prefix, page, skip={e.id})
+        n = got[1] if got is not None and got[1] not in taken else lowest_free(taken)
+        attrs = dict(e.attrs, TAG=make(prefix, page, n))
+        attrs.setdefault("DEV", uuid.uuid4().hex[:12])
+        ed.change(sheet, e.copy(attrs=attrs))
+        changed += 1
+    return changed
+
+
 def sync_pages(ed, project):
     """Unlocked device tags whose page part isn't their sheet's page number any more (the sheet
     was renumbered or moved) take the right page, keeping their count when it's free."""

@@ -333,7 +333,13 @@ manufacturer typed, the series of that family); the list grows from what you typ
 <b>?</b> button beside Manufacturer opens this section.</p>
 <p>In the Library popup, the search box also finds a manufacturer, family or series, and the
 two lists above the symbols (<b>All manufacturers</b>, <b>All families</b>) show only one
-manufacturer's blocks, or one family's; the manufacturer list also filters the Parts tab. A
+manufacturer's blocks, or one family's; the manufacturer list also filters the Parts tab. The
+third list, <b>All phases</b>, shows only the <b>Three-phase</b> blocks or only the
+<b>Single-phase and control</b> ones. A block is three-phase when it has pins L1-L3, T1-T3 or
+U, V, W, or says 3-pole, 3-phase or 3ph in its name or description (the breakers,
+disconnects, fuses, contactor power contacts, overloads and starter of three poles, the
+three-phase motor and the drive); <b>Phases</b> in its Properties... (Automatic, Three-phase,
+Single-phase or control) sets it when that guess is wrong. A
 block's tooltip shows all three. Placing a block whose manufacturer is set fills in the placed
 copy's manufacturer (as a part does; a part's own manufacturer wins), and <b>New part...</b>
 with a symbol or footprint selected in the Library starts the part with that block and its
@@ -427,6 +433,14 @@ changes it. Untick "Lock this tag" there to give it back.</li>
 <li><b>Renumber sheet</b> (Schematic tab, Sheets menu) numbers the sheet's unlocked devices
 01, 02... per prefix in the sheet's <b>numbering order</b> (Sheet properties): across then
 down, or down then across. Locked tags stay and their numbers are skipped.</li>
+<li><b>Update numbers and cross-references...</b> (Schematic tab: Numbering, Sheets menu) does
+it for more at once. Tick what to update: <b>Device tags</b>, <b>Wire numbers</b>,
+<b>Cross-references</b> (any of them, or all). Choose how: <b>Renumber in order</b> (01, 02...
+for tags and 001, 002... for wires, in each sheet's order; locked ones stay) or <b>Keep the
+numbers</b> (only what has no number gets one, and a number that isn't of its sheet's page is
+fixed, its count kept when free). And where: <b>This sheet</b>, <b>The whole project</b>, or
+<b>These sheets</b> (tick them in the list). One step: Undo takes it all back. Frozen sheets
+keep their cross-references.</li>
 <li>Contacts take their device's tag (next section); symbols without a tag prefix get no
 tag.</li>
 <li>Behind each tag, every device also has a hidden identity that survives renaming, so
@@ -729,7 +743,16 @@ Enter takes the one offered (a connector still waiting for its other end, else t
 letter). The wire keeps the number of the sheet it starts on, and under each connector its
 other end's place shows (<b>7-A2</b>). <b>Source arrow</b> and <b>Destination arrow</b>
 (Library, JIC/Wiring) are the same, drawn as arrows: pointing out where the wire leaves,
-pointing in where it arrives.</li>
+pointing in where it arrives; under each, the wire's number and the other's place
+(<b>2046 / 7-A2</b>).</li>
+<li><b>Source/destination arrows</b> (SIGARROW, SDA; Draw menu, Schematic tab:
+Cross-references), as AutoCAD Electrical's signal arrows: click near the open end of the wire
+where it leaves (an end on nothing: a Source arrow goes there), then near the open end where it
+arrives, on this sheet or another (go to it in the Sheets panel: the command waits), and a
+Destination arrow goes there. They get a new name, the two wires become one wire with the
+source's number, and each arrow shows that number and the other's place. It goes on with the
+next pair; Enter or Esc ends it. An end connected to something, or the same wire twice, is
+refused with a message.</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
 numbers and cross-references.</li>
 <li>Wire numbers go into PDF and DXF exports as text.</li>

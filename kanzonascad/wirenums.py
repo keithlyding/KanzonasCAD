@@ -282,11 +282,15 @@ def _assemble(project):
 
 # ---- numbering -------------------------------------------------------------------------------
 def sync(ed, project, renumber=None):
-    """Give every group its number (see the module's notes); renumber: a sheet whose
+    """Give every group its number (see the module's notes); renumber: a sheet (or several:
+    Update numbers and cross-references, 0.18) whose
     unlocked groups are numbered again from 001."""
     if not enabled(project):
         return
     gs, info, dist = _assemble(project)
+    again = [] if renumber is None else [renumber] if not isinstance(renumber, (list, tuple,
+                                                                               set)) \
+        else list(renumber)
     order = sorted(info, key=lambda g: info[g][0])
     page = {}
     taken = {}                                  # page -> counts used
@@ -312,7 +316,7 @@ def sync(ed, project, renumber=None):
             continue
         pg = page[g]
         mine = taken.setdefault(pg, set())
-        have = [] if renumber is not None and info[g][1] is renumber else info[g][2]
+        have = [] if info[g][1] in again else info[g][2]
         for n in have:
             got = split(n)
             if got and got[0] == pg and not got[2] and got[1] not in mine:
@@ -402,6 +406,29 @@ def open_end(nodes, first=None):
                 L = math.hypot(q[0] - r[0], q[1] - r[1]) or 1.0
                 return s, tuple(q), ((q[0] - r[0]) / L, (q[1] - r[1]) / L)
     return None
+
+
+ARROWS = ("Source arrow", "Destination arrow")
+
+
+def number_at(sheet, ins):
+    """The number of the wire on a connector's pin ("" when none)."""
+    for _n, q in ins.pin_points():
+        for w in sheet.query_point(q, TOL):
+            if getattr(w, "kind", "") == "wire" and w.num and w.touches(q, TOL):
+                return w.num
+    return ""
+
+
+def wire_end(sheet, wire, p):
+    """(sheet, end point, direction out) of the end of wire nearer p."""
+    a, b = wire.points[0], wire.points[-1]
+    if math.hypot(p[0] - a[0], p[1] - a[1]) <= math.hypot(p[0] - b[0], p[1] - b[1]):
+        q, r = a, wire.points[1]
+    else:
+        q, r = b, wire.points[-2]
+    L = math.hypot(q[0] - r[0], q[1] - r[1]) or 1.0
+    return sheet, tuple(q), ((q[0] - r[0]) / L, (q[1] - r[1]) / L)
 
 
 def new_link_name(project):

@@ -1786,7 +1786,8 @@ class BlockDef:
     def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
                  category="", description="", role="device", contact="", prefix="",
                  builtin=False, wiring="", attr_texts=(), manufacturer="", family="",
-                 series="", catalog="", rail_pos=None, own_colors=False, show_pins=False):
+                 series="", catalog="", rail_pos=None, own_colors=False, show_pins=False,
+                 phases=""):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -1831,6 +1832,10 @@ class BlockDef:
         # its pins' names drawn beside them (a symbol's terminal numbers: the owner, 0.16: "when
         # making terminal numbers, will they show up?"); hidden on a copy as attribute PINS
         self.show_pins = bool(show_pins)
+        # three-phase or not, for the Library's filter (the owner, 0.18: "Can symbols be
+        # further filtered by whether they're 3ph or not?"): "3", "1" (single-phase or
+        # control), or "" to be worked out from it (phases_of)
+        self.phases = str(phases) if str(phases) in ("1", "3") else ""
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -1845,7 +1850,8 @@ class BlockDef:
                     k: getattr(self, k) for k in MAKER_FIELDS if getattr(self, k)} | (
                     {"rail_pos": list(self.rail_pos)} if self.rail_pos is not None else {}) | (
                     {"own_colors": True} if self.own_colors else {}) | (
-                    {"show_pins": True} if self.show_pins else {})
+                    {"show_pins": True} if self.show_pins else {}) | (
+                    {"phases": self.phases} if self.phases else {})
 
     @classmethod
     def from_dict(cls, d, builtin=False):
@@ -1856,7 +1862,8 @@ class BlockDef:
                    d.get("prefix", ""), builtin, d.get("wiring", ""),
                    d.get("attr_texts", ()), d.get("manufacturer", ""), d.get("family", ""),
                    d.get("series", ""), d.get("catalog", ""), d.get("rail_pos"),
-                   d.get("own_colors", False), d.get("show_pins", False))
+                   d.get("own_colors", False), d.get("show_pins", False),
+                   d.get("phases", ""))
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
@@ -1890,6 +1897,25 @@ class BlockDef:
         for p in self.pins:
             bb = G.bbox_union(bb, (p["pos"][0], p["pos"][1], p["pos"][0], p["pos"][1]))
         return bb or (0.0, 0.0, 0.0, 0.0)
+
+
+_THREE = (("L1", "L2", "L3"), ("T1", "T2", "T3"), ("U", "V", "W"), ("U1", "V1", "W1"))
+
+
+def phases_of(defn):
+    """"3" when a block is three-phase, else "1" (single-phase or control): as set on it
+    (BlockDef.phases), else worked out: pins L1-L3, T1-T3 or U, V, W, or "3-pole", "3-phase",
+    "three-phase" or "3ph" in its name or description."""
+    if defn.phases:
+        return defn.phases
+    names = {p["name"].upper() for p in defn.pins}
+    if any(set(t) <= names for t in _THREE):
+        return "3"
+    words = (defn.name + " " + defn.description).lower()
+    if any(w in words for w in ("3-pole", "3 pole", "3-phase", "three-phase", "three phase",
+                                "3ph", "three poles")):
+        return "3"
+    return "1"
 
 
 def pin_keys(pins):

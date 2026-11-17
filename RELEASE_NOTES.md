@@ -6,6 +6,24 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18
+
+**New**
+- **Source/destination arrows** (Schematic tab, Cross-references; Draw menu): click the open
+  end of a wire where it leaves, then the open end where it arrives, on this sheet or another.
+  A Source arrow and a Destination arrow go there; the wires become one wire with the source's
+  number, and each arrow shows that number and where the other is (2046 / 7-A2).
+- **Update numbers and cross-references...** (Schematic tab, Numbering; Sheets menu): device
+  tags, wire numbers and cross-references, together or apart, on this sheet, the sheets you
+  tick or the whole project. Renumber them in order, or keep them and only fix what's missing
+  or on the wrong page. One Undo takes it back.
+- The Library can show only **three-phase** symbols, or only single-phase and control ones
+  (the third list above the symbols). Block **Properties...** has Phases to correct the guess.
+
+**Fixed**
+- Scooting a device whose pin sits on the corner of a wire (not cut there) could slide the pin
+  off the wire. It now refuses that move.
+
 ## 0.17.5
 
 **New**

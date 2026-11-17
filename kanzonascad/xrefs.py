@@ -96,13 +96,21 @@ def live_all(project):
             y -= hh * LINE
     # off-sheet connectors: where the same name's other ends are
     from .wirenums import connectors
+    from .wirenums import ARROWS, number_at
     for name, ends in connectors(project).items():
         for s, c in ends:
             hh = hk[s.id]
             others = [_where(project, os_, oc) for os_, oc in ends if oc is not c]
+            text = ", ".join(others) if others else "?"
+            if c.block in ARROWS:
+                # (a source or destination arrow: its wire's number too, the owner, 0.18:
+                # "2046 / 7-A2")
+                num = number_at(s, c)
+                if num:
+                    text = "%s / %s" % (num, text)
             bb = c.bbox()
             out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - hh, 6),
-                              ", ".join(others) if others else "?", hh))
+                              text, hh))
     for s, c in contacts:
         if tags.numbered(c):
             continue                    # (a terminal shows its number, not where its strip is)

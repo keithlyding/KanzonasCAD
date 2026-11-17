@@ -144,8 +144,10 @@ def branch_moved(sheet, devs, dx, dy):
     for e in syms:
         for _n, q in e.pin_points():
             for w in _wires_at(sheet, q):
-                if w.id not in moving and not _is_end(w, q) and \
-                        not _runs_along(w, q, dx, dy):
+                # (along it is fine only while the pin stays on it: a wire turning a corner
+                # at the pin runs along the move on one side only, the battery, 0.18, seed 21)
+                if w.id not in moving and not _is_end(w, q) and not (
+                        _runs_along(w, q, dx, dy) and w.touches((q[0] + dx, q[1] + dy), TOL)):
                     return None
     out = [e.moved(dx, dy) for e in syms] + [w.moved(dx, dy) for w in whole]
     # (a wire tapping the middle of one that moves whole, a drop off a bus the disconnect's

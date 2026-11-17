@@ -2338,7 +2338,8 @@ class MakeBlockCmd(Command):
                           wiring=d.get("wiring", ""), manufacturer=d.get("manufacturer", ""),
                           family=d.get("family", ""), series=d.get("series", ""),
                           catalog=d.get("catalog", ""),
-                          show_pins=bool(d.get("show_pins", False)))
+                          show_pins=bool(d.get("show_pins", False)),
+                          phases=d.get("phases", ""))
         if d["kind"] == "symbol":
             if tag_pt is not None:
                 defn.tag_pos = (tag_pt[0] - bx, tag_pt[1] - by)
@@ -4022,6 +4023,93 @@ class WireLabelCmd(Command):
         self.finish()
 
 
+class SignalArrowsCmd(Command):
+    """SIGARROW (Source/destination arrows, as AutoCAD Electrical's signal arrows; the owner,
+    0.18: "I would like source and destination arrows for wire cross references"): click the
+    end of a wire where it leaves (a Source arrow goes there), then the end where it arrives,
+    on this sheet or another (go to it in the Sheets panel: the command goes on), and a
+    Destination arrow goes there. They are a pair of one new name: one wire, the source's
+    number on both, each showing the wire's number and the other's place (2046 / 7-A2). Goes
+    on with the next pair until Enter or Esc."""
+    name, title = "SIGARROW", "Source/destination arrows"
+    across_sheets = True
+
+    def begin(self):
+        self.src = None
+        self.done = 0
+        self.ctx.set_selection(set())
+        self._ask()
+
+    def _ask(self):
+        if self.src is None:
+            self.ctx.prompt("Click the end of the wire where it leaves (the source arrow goes "
+                            "there); Enter to finish")
+        else:
+            self.ctx.prompt("Click the end of the wire where it arrives (the destination "
+                            "arrow), here or on another sheet (Sheets panel); Esc cancels")
+
+    def _end(self, p):
+        from . import wirenums
+        from .wires import connects_at
+        w = _pick_wire(self.ctx, p)
+        if w is None:
+            self.ctx.message("Click a wire near its end")
+            return None
+        got = wirenums.wire_end(self.ctx.sheet(), w, p)
+        if connects_at(got[0], got[1], exclude=w.id):
+            self.ctx.message("That end is connected to something: click the open end of a "
+                             "wire (the end where it leaves or arrives)")
+            return None
+        return got, w
+
+    def pick(self, p):
+        from . import wirenums
+        got = self._end(p)
+        if got is None:
+            return
+        (end, w) = got
+        project = self.ctx.project
+        if self.src is None:
+            self.src = (end, w)
+            self.ctx.message("Source: wire %s. Now the end where it arrives" % (w.num or "?"))
+            self._ask()
+            return
+        (s_end, s_w) = self.src
+        a = wirenums.group_of(project, s_end[0], s_end[0].entities.get(s_w.id, s_w))
+        b = wirenums.group_of(project, end[0], w)
+        if a is not None and b is not None and a[0] == b[0]:
+            self.ctx.message("That is the same wire: click the end of the wire it goes on to")
+            return
+        lib = getattr(self.ctx.window(), "library", None)
+        defs = [project.blocks.get(n) or (lib.get("symbol", n) if lib is not None else None)
+                for n in wirenums.ARROWS]
+        if None in defs:
+            self.ctx.message("The Source arrow and Destination arrow symbols aren't in the "
+                             "library")
+            self.finish()
+            return
+        src_sheet = s_end[0]
+        num = src_sheet.entities[s_w.id].num if s_w.id in src_sheet.entities else None
+        with self.ctx.edit(self.title) as ed:
+            name = wirenums.cross_reference(ed, project, s_end, end, defs[0], defs[1], True)
+            if num and wirenums.enabled(project):
+                wirenums.sync(ed, project)
+                cur = src_sheet.entities[s_w.id]
+                if cur.num != num:
+                    # (the destination takes the source's number: numbering would give the
+                    # pair the number of the sheet first in order)
+                    wirenums.set_number(ed, project, src_sheet, cur, num, True)
+        self.done += 1
+        self.ctx.message("Arrows %s: wire %s from %s to %s (Undo takes them back)" % (
+            name, num or "?", project.zone_text(src_sheet, *s_end[1]) or "?",
+            project.zone_text(end[0], *end[1]) or "?"))
+        self.src = None
+        self._ask()
+
+    def enter(self):
+        self.finish()
+
+
 class TrimWireCmd(Command):
     """TRIMWIRE (AutoCAD Electrical's Trim Wire): click a wire and the piece clicked goes, up
     to the nearest wire or pin on either side (to its end when there is none). No cutting
@@ -4402,6 +4490,7 @@ COMMANDS = {
     "WIRECROSS": (WireCrossCmd, ["WX"]),
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
     "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
+    "SIGARROW": (SignalArrowsCmd, ["SDA", "SOURCEARROW", "XARROW"]),
     "DELWIRE": (DeleteWireCmd, ["DW"]),
     "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),
     "DELCOMP": (DeleteComponentCmd, ["AEERASECOMP"]),
