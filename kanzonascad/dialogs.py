@@ -1987,12 +1987,35 @@ def wire_number_dialog(parent, num, tap_of=None, own=False, locked=False):
     return text, (box.isChecked() if box is not None else own), bool(text) and lock.isChecked()
 
 
+def _sheet_list(project, sheet, some):
+    """The project's sheets with a tick each (this one ticked), usable while the radio button
+    some ("These sheets:") is on: Update numbers and Lock numbers."""
+    from PySide6.QtWidgets import QListWidget, QListWidgetItem
+    lst = QListWidget()
+    lst.setObjectName("sheet_list")
+    for s in project.sheets:
+        it = QListWidgetItem("%s  %s" % (project.sheet_number(s), s.title or ""))
+        it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+        it.setCheckState(Qt.Checked if s is sheet else Qt.Unchecked)
+        it.setData(Qt.UserRole, s.id)
+        lst.addItem(it)
+    lst.setEnabled(False)
+    some.toggled.connect(lst.setEnabled)
+    return lst
+
+
+def _ticked_sheets(project, lst):
+    ids = {lst.item(i).data(Qt.UserRole) for i in range(lst.count())
+           if lst.item(i).checkState() == Qt.Checked}
+    return [s for s in project.sheets if s.id in ids]
+
+
 def update_numbers_dialog(parent, project, sheet):
     """Update numbers and cross-references (the owner, 0.18: "a way to update wire numbers and
     cross references, tag numbers and cross references, and both ... for specific sheets or
     for the whole project"; asked each time: renumber or keep). Returns {"tags", "wires",
     "xrefs": bool, "renumber": bool, "sheets": [sheets]} or None."""
-    from PySide6.QtWidgets import QRadioButton, QListWidget, QListWidgetItem, QGroupBox
+    from PySide6.QtWidgets import QRadioButton, QGroupBox
     dlg = QDialog(parent)
     dlg.setWindowTitle("Update numbers and cross-references")
     lay = QVBoxLayout(dlg)
@@ -2027,16 +2050,7 @@ def update_numbers_dialog(parent, project, sheet):
     every.setObjectName("whole_project")
     some.setObjectName("these_sheets")
     this.setChecked(True)
-    lst = QListWidget()
-    lst.setObjectName("sheet_list")
-    for s in project.sheets:
-        it = QListWidgetItem("%s  %s" % (project.sheet_number(s), s.title or ""))
-        it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
-        it.setCheckState(Qt.Checked if s is sheet else Qt.Unchecked)
-        it.setData(Qt.UserRole, s.id)
-        lst.addItem(it)
-    lst.setEnabled(False)
-    some.toggled.connect(lst.setEnabled)
+    lst = _sheet_list(project, sheet, some)
     for b in (this, every, some):
         pl.addWidget(b)
     pl.addWidget(lst, 1)
@@ -2052,9 +2066,7 @@ def update_numbers_dialog(parent, project, sheet):
     elif every.isChecked():
         sheets = list(project.sheets)
     else:
-        ids = {lst.item(i).data(Qt.UserRole) for i in range(lst.count())
-               if lst.item(i).checkState() == Qt.Checked}
-        sheets = [s for s in project.sheets if s.id in ids]
+        sheets = _ticked_sheets(project, lst)
     return {"tags": tags_box.isChecked(), "wires": wires_box.isChecked(),
             "xrefs": xref_box.isChecked(), "renumber": again.isChecked(), "sheets": sheets}
 
@@ -2065,7 +2077,7 @@ def lock_numbers_dialog(parent, project, sheet, selected):
     choosing the entire sheet"; asked: lock what's there). selected: how many wires and devices
     are selected. Returns {"lock": bool, "wires": bool, "tags": bool, "sheets": [sheets] or
     None for the selection} or None."""
-    from PySide6.QtWidgets import QRadioButton, QListWidget, QListWidgetItem, QGroupBox
+    from PySide6.QtWidgets import QRadioButton, QGroupBox
     dlg = QDialog(parent)
     dlg.setWindowTitle("Lock numbers")
     lay = QVBoxLayout(dlg)
@@ -2101,16 +2113,7 @@ def lock_numbers_dialog(parent, project, sheet, selected):
         pl.addWidget(b)
     sel.setEnabled(selected > 0)
     (sel if selected else this).setChecked(True)
-    lst = QListWidget()
-    lst.setObjectName("sheet_list")
-    for s in project.sheets:
-        it = QListWidgetItem("%s  %s" % (project.sheet_number(s), s.title or ""))
-        it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
-        it.setCheckState(Qt.Checked if s is sheet else Qt.Unchecked)
-        it.setData(Qt.UserRole, s.id)
-        lst.addItem(it)
-    lst.setEnabled(False)
-    some.toggled.connect(lst.setEnabled)
+    lst = _sheet_list(project, sheet, some)
     pl.addWidget(lst, 1)
     lay.addWidget(where, 1)
     lay.addWidget(_gray("Each wire and device keeps its lock: the Wire number window's Lock "
@@ -2127,9 +2130,7 @@ def lock_numbers_dialog(parent, project, sheet, selected):
     elif every.isChecked():
         sheets = list(project.sheets)
     else:
-        ids = {lst.item(i).data(Qt.UserRole) for i in range(lst.count())
-               if lst.item(i).checkState() == Qt.Checked}
-        sheets = [s for s in project.sheets if s.id in ids]
+        sheets = _ticked_sheets(project, lst)
     return {"lock": lock.isChecked(), "wires": wires.isChecked(), "tags": tags_box.isChecked(),
             "sheets": sheets}
 
