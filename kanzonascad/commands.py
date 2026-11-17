@@ -1012,13 +1012,34 @@ class GripCmd(Command):
     def begin(self):
         self.ctx.prompt("Specify stretch point")
 
+    def _run(self):
+        """A wire's run (the middle grip of segment k), or None."""
+        e = self.ent
+        if isinstance(e, M.Wire) and self.index >= len(e.points):
+            return self.index - len(e.points)
+        return None
+
+    def _dragged(self, p):
+        """{id: new entity} a drag of the grip to p gives (a wire's run: the wires joined to
+        it too)."""
+        k = self._run()
+        if k is None:
+            return {self.ent.id: self.ent.with_grip(self.index, p)}
+        return _run_drag(self.ctx, self.ent, k, p)
+
     def point(self, p):
-        with self.ctx.edit("Stretch") as ed:
-            ed.change(self.ctx.sheet(), self.ent.with_grip(self.index, p))
+        sheet = self.ctx.sheet()
+        got = self._dragged(p)
+        if not got and self._run() is not None:
+            _run_drag(self.ctx, self.ent, self._run(), p, say=True)
+        if got:
+            with self.ctx.edit("Stretch") as ed:
+                for e in got.values():
+                    ed.change(sheet, e)
         self.finish()
 
     def preview(self, p):
-        return [self.ent.with_grip(self.index, p)]
+        return list(self._dragged(p).values())
 
 
 class PasteCmd(Command):
@@ -1134,7 +1155,12 @@ class WireCmd(Command):
         h = self.hfirst
         if h is None:
             h = abs(p[0] - a[0]) >= abs(p[1] - a[1])
-        return start + route(a, p, h)
+        plain = route(a, p, h)
+        if not start and self.ctx.project.settings.get("wire_around", True):
+            # (round the symbols in the way: the owner, 0.16, a wire run through a drive)
+            from .wires import route_around
+            return route_around(sheet, a, p, plain, wire_clear(self.ctx))
+        return start + plain
 
     def point(self, p):
         from .wires import connects_at
@@ -1191,6 +1217,32 @@ class WireCmd(Command):
         if not self.points:
             return []
         return [M.Wire(self.points + self._route(p), layer=wire_layer(self.ctx))]
+
+
+def _run_drag(ctx, w, k, p, say=False):
+    """{id: new wire} for wire w's run k dragged to p (wires.segment_drag); {} when it can't
+    move, saying why when say."""
+    from .wires import segment_drag
+    sheet = ctx.sheet()
+    got = segment_drag(sheet, w, k, p)
+    if got is None:
+        if say:
+            ctx.message("Moved there, the wire would leave a symbol's pin or a wire joined to "
+                        "it (a pin on that run, or on the part of the run beside it that would "
+                        "get shorter): move the symbol first, or drag the run less far")
+        return {}
+    return {i: sheet.entities[i].copy(points=[list(q) for q in pts])
+            for i, pts in got.items() if i in sheet.entities}
+
+
+def wire_clear(ctx):
+    """How far wires keep from symbols going round them (paper inches; Schematic settings)."""
+    from .wires import CLEAR
+    try:
+        v = float(ctx.project.settings.get("wire_clear", CLEAR))
+    except (TypeError, ValueError):
+        v = CLEAR
+    return v if v > 0 else CLEAR
 
 
 def _flag_misses(ctx, points):
@@ -1621,6 +1673,7 @@ class BusCmd(Command):
                 self._make()
                 return
             new = self._route(p)
+        new = self._around(new)
         if not new:
             if self.toward is not None and len(self.points) == 1:
                 self.ctx.message("Click off the line of the symbol's pins: the bus leaves them "
@@ -1685,6 +1738,43 @@ class BusCmd(Command):
         if self._land_route(sheet, p, got[0]) is None:
             return None
         return got[0][0]
+
+    def _around(self, new):
+        """The points a click adds, going round the symbols in the bus's way (the owner,
+        0.16: "Bus needs to go around objects as well"): its first wire routed with room for
+        the others beside it (wires.route_around, the clearance plus the bus's width), kept
+        only when then none of its wires runs through a symbol; new as it is otherwise."""
+        if not new or not self.points or \
+                not self.ctx.project.settings.get("wire_around", True) or \
+                (len(self.points) == 1 and self.tap_start is not None):
+            return new
+        from .wires import route_around, _boxes, _crosses
+        sheet = self.ctx.sheet()
+        paths = self._paths(self.points + new)
+        if not paths:
+            return new
+        bb = None
+        for q in paths:
+            bb = G.bbox_union(bb, G.bbox_of(q))
+        k = sheet.k()
+        width = max(0, self.count - 1) * self.spacing
+        pad = 3.0 * k + width
+        boxes = _boxes(sheet, (bb[0] - pad, bb[1] - pad, bb[2] + pad, bb[3] + pad), k)
+        # (only the leg being added counts: what is drawn so far stays as it is)
+        tail = [q[len(self.points) - 1:] for q in paths]
+        if not boxes or not any(_crosses(q, boxes) for q in tail):
+            return new
+        # (tight first: the other wires may be on the outside of every turn; else with room
+        # for the whole bus on each side)
+        for extra in ((0.0, width) if width > 0 else (0.0,)):
+            got = route_around(sheet, self.points[-1], new[-1], new, wire_clear(self.ctx),
+                               extra)
+            if got is new:
+                continue
+            tail = [q[len(self.points) - 1:] for q in self._paths(self.points + got)]
+            if not any(_crosses(q, boxes) for q in tail):
+                return got
+        return new
 
     def _land_route(self, sheet, p, pins):
         """The points that take the bus onto a side of pins wire for wire (each wire on its
@@ -1878,7 +1968,7 @@ class BusCmd(Command):
             if new:
                 return [M.Wire(q) for q in self._paths(self.points + new)]
         p = land if land is not None else (p[0] + self.offset[0], p[1] + self.offset[1])
-        pts = self.points + self._route(p)
+        pts = self.points + self._around(self._route(p))
         return [M.Wire(q) for q in self._paths(pts)]
 
 
@@ -3218,10 +3308,18 @@ class ScootCmd(_TwoPoint):
 
     def begin(self):
         from . import scoot
-        self.devs = scoot.devices(_selected(self.ctx))
+        sel = _selected(self.ctx)
+        self.devs = scoot.devices(sel)
+        self.run = None
         if not self.devs:
-            self.ctx.message("Scoot: select symbols on a wire (devices, contacts, terminals...)")
-            self.finish()
+            # a wire's run instead: picked, then where it goes (the owner, 0.16: AutoCAD
+            # Electrical's Scoot drags a wire too, the wires joined to it following)
+            self.ents = []
+            self.from_pt = None
+            self.picking = True
+            self.ctx.set_selection(set())
+            self.ctx.prompt("Scoot: click the run of wire to move (or select symbols on a "
+                            "wire first)")
             return
         self.ax = scoot.axis(self.devs[0])
         self.ents = self.devs
@@ -3251,6 +3349,47 @@ class ScootCmd(_TwoPoint):
                 ed.change(sheet, e)
         self.ctx.message("Scooted %s" % M.fmt_inches(abs(d)))
         self.finish()
+
+    # ---- a wire's run ----------------------------------------------------------------------
+    def pick(self, p):
+        w = self.ctx.pick_entity(p, M.Wire)
+        if w is None:
+            self.ctx.message("Click a wire")
+            return
+        k = min(range(len(w.points) - 1),
+                key=lambda i: G.dist_to_segment(p, w.points[i], w.points[i + 1]))
+        a, b = w.points[k], w.points[k + 1]
+        if abs(a[0] - b[0]) > 1e-9 and abs(a[1] - b[1]) > 1e-9:
+            self.ctx.message("That run is slanted: Scoot moves runs across or up and down")
+            return
+        self.run = (w, k)
+        self.picking = False
+        self.base = self.last = p
+        self.ctx.prompt("Specify where the run goes (%s)" % (
+            "up or down" if abs(a[1] - b[1]) < 1e-9 else "left or right"))
+
+    def _run_moved(self, p):
+        w, k = self.run
+        return _run_drag(self.ctx, w, k, p)
+
+    def point(self, p):
+        if self.run is None:
+            return _TwoPoint.point(self, p)
+        got = self._run_moved(p)
+        if not got:
+            w, k = self.run
+            _run_drag(self.ctx, w, k, p, say=True)
+        if got:
+            sheet = self.ctx.sheet()
+            with self.ctx.edit(self.title) as ed:
+                for e in got.values():
+                    ed.change(sheet, e)
+        self.finish()
+
+    def preview(self, p):
+        if self.run is None:
+            return _TwoPoint.preview(self, p) if self.devs else []
+        return list(self._run_moved(p).values())
 
 
 class AlignDevicesCmd(Command):

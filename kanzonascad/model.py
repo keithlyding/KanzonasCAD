@@ -60,6 +60,8 @@ DEFAULT_SETTINGS = {
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
     "wire_gauge_shown": True,   # a wire layer's gauge and color beside its wires
     "footprint_label": "tag",   # what a footprint placed shows to start (Footprint label)
+    "wire_around": True,        # a wire goes round the symbols in its way (wires.route_around)
+    "wire_clear": 0.125,        # ...that far from them, paper inches
     "wire_lead": False,         # a second wire on a pin leaves it on a 45-degree lead (the
                                 # owner, 0.16: "a little bend... That needs to go away": off)
     "wire_crossing": "plain",   # wires crossing: plain, gap or loop (crossings.py)
@@ -391,7 +393,10 @@ class Wire(Polyline):
         return False
 
     def grips(self):
-        return list(self.points)            # (a wire: its corners and ends only)
+        """Its corners and ends, then the middle of each straight run (dragged, the run moves
+        sideways and the wires joined to it follow: wires.segment_drag, through GripCmd)."""
+        return list(self.points) + [((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+                                    for a, b in zip(self.points, self.points[1:])]
 
     def end_moved(self, i, p):
         """A copy with end i (0 or -1) at p, kept straight across / up and down: the next
@@ -1854,7 +1859,7 @@ class Insert(Entity):
     what a footprint shows on it ("" nothing, or a key of LABELS)."""
     kind = "insert"
     __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "label",
-                 "hidden", "attr_at", "_world")
+                 "hidden", "attr_at", "_world", "_body")
 
     def __init__(self, block, pos, angle=0.0, scale=1.0, mirror=False, attrs=None, defn=None,
                  tag_h=None, label="", hidden=(), attr_at=None, **kw):
@@ -1876,6 +1881,7 @@ class Insert(Entity):
         self.attr_at = {str(k): (float(v[0]), float(v[1]), float(v[2]) if len(v) > 2 else 0.0)
                         for k, v in (attr_at or {}).items()}
         self._world = None
+        self._body = None                   # (its drawing's box: wires.body_box)
 
     def _data(self):
         d = {"block": self.block, "pos": list(self.pos), "angle": self.angle,

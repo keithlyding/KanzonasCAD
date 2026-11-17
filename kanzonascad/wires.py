@@ -244,6 +244,309 @@ def route(a, b, horizontal_first=True):
 
 
 
+# ---- a run of a wire dragged sideways (its middle grip; Scoot on a wire) --------------------
+def segment_drag(sheet, w, k, to, _seen=None):
+    """A straight run of wire w (from its point k to k + 1) moved square to itself to pass
+    through to (the owner, 0.16: "drag a wire left or right if it's vertical or up-and-down if
+    it's horizontal, and then the rest of the wires will automatically reconnect to it in its
+    new location"): {wire id: new points} for w and the wires joined to it. Its neighbours stretch
+    (they are square to it); an end of w that is joined to something (a pin, a wire) stays,
+    with a short jog to the run's new place; a wire ending on the run (a T) or at one of its
+    corners moves its end with it, or gets a jog when its last leg isn't square to the run.
+    {} when the run isn't straight across or up and down; None when a symbol's pin sits on
+    the run itself (its middle, or a corner of it): moved, the wire would leave that pin (the
+    battery, seeds 11 and 23: a run through a starter's T1)."""
+    pts = list(w.points)
+    if not 0 <= k < len(pts) - 1:
+        return {}
+    a, b = pts[k], pts[k + 1]
+    if abs(a[1] - b[1]) < TOL:
+        d = (0.0, to[1] - a[1])
+    elif abs(a[0] - b[0]) < TOL:
+        d = (to[0] - a[0], 0.0)
+    else:
+        return {}
+    if abs(d[0]) < TOL and abs(d[1]) < TOL:
+        return {}
+
+    last = len(pts) - 1
+    x0, x1 = sorted((a[0], b[0]))
+    y0, y1 = sorted((a[1], b[1]))
+    for e in sheet.query((x0 - TOL, y0 - TOL, x1 + TOL, y1 + TOL)):
+        if isinstance(e, Insert):
+            for _n, q in e.pin_points():
+                if G.dist_to_segment(q, a, b) > TOL:
+                    continue
+                if (k == 0 and G.dist(q, a) <= TOL) or (k + 1 == last and G.dist(q, b) <= TOL):
+                    continue            # (w's own end on it: it stays, with a jog)
+                return None
+
+    def mv(q):
+        return (q[0] + d[0], q[1] + d[1])
+    # a neighbour run shortened by the move: what was on the part it loses (a pin, a wire's
+    # end) would come off the wire (the battery, seed 31: a short run dragged far past the end
+    # of the long run beside it, which had two pins on it)
+    for j, c in ((k - 1, k), (k + 2, k + 1)):
+        if not 0 <= j <= last:
+            continue
+        f, old = pts[j], pts[c]
+        nw = mv(old)
+        nx0, nx1 = sorted((f[0], old[0]))
+        ny0, ny1 = sorted((f[1], old[1]))
+        for e in sheet.query((nx0 - TOL, ny0 - TOL, nx1 + TOL, ny1 + TOL)):
+            if isinstance(e, Insert):
+                spots = [q for _n, q in e.pin_points()]
+            elif isinstance(e, Wire) and e.id != w.id:
+                spots = [e.points[0], e.points[-1]]
+            else:
+                continue
+            for q in spots:
+                # (at the corner itself it moves with it: a wire's end there follows, and a pin
+                # there is one on the run, refused above)
+                if G.dist(q, old) > TOL and G.dist_to_segment(q, f, old) <= TOL and \
+                        G.dist_to_segment(q, f, nw) > TOL:
+                    return None
+    new = list(pts)
+    new[k], new[k + 1] = mv(a), mv(b)
+
+    moving = (_seen or set()) | {w.id}
+
+    def joined(q):
+        # (to something staying: a pin, or a wire not moving in this drag)
+        if pins_on(sheet, q):
+            return True
+        return any(o.id not in moving and o.distance(q) <= TOL
+                   for o in sheet.query((q[0] - TOL, q[1] - TOL, q[0] + TOL, q[1] + TOL))
+                   if isinstance(o, Wire))
+    # (an end of w that is joined stays put: a jog to the run's new place)
+    if k == 0 and joined(a):
+        new = [a] + new
+        off = 1
+    else:
+        off = 0
+    if k + 1 == last and joined(b):
+        new = new + [b]
+    out = {w.id: [tuple(q) for q in _tidy_pts(new)]}
+
+    def moved_end(o, i):
+        """o's end i (0 or -1) moved with the run: stretched along its last leg when that is
+        square to the run, else a jog added."""
+        ps = list(o.points)
+        e = ps[i]
+        nb = ps[1] if i == 0 else ps[-2]
+        along = (abs(e[0] - nb[0]) < TOL) if d[0] == 0.0 else (abs(e[1] - nb[1]) < TOL)
+        if along:
+            ps[i] = mv(e)
+        elif i == 0:
+            ps = [mv(e)] + ps
+        else:
+            ps = ps + [mv(e)]
+        return [tuple(q) for q in _tidy_pts(ps)]
+    seen = (_seen or set()) | {w.id}
+    for o in sheet.query((x0 - TOL, y0 - TOL, x1 + TOL, y1 + TOL)):
+        if not isinstance(o, Wire) or o.id in seen:
+            continue
+        for i in (0, -1):
+            e = o.points[i]
+            if G.dist_to_segment(e, a, b) > TOL:
+                continue
+            nb = o.points[1] if i == 0 else o.points[-2]
+            straight_on = (G.dist(e, a) <= TOL or G.dist(e, b) <= TOL) and \
+                G.dist_to_segment(nb, a, b) > TOL and (
+                    (abs(nb[0] - e[0]) < TOL) if d[0] != 0.0 else (abs(nb[1] - e[1]) < TOL))
+            if straight_on and len(o.points) >= 2:
+                # (it carries the run straight on: its own end run moves sideways with it)
+                more = segment_drag(sheet, o, 0 if i == 0 else len(o.points) - 2, to,
+                                    seen | set(out))
+                if more is None:
+                    return None             # (a pin on the run it carries on: no move)
+                for oid, q in more.items():
+                    if oid not in out:
+                        out[oid] = q
+                seen |= set(more)
+                break
+            # (at a corner of w that is w's own joined end, w keeps its place: o stays)
+            if (G.dist(e, a) <= TOL and k == 0 and off) or \
+                    (G.dist(e, b) <= TOL and k + 1 == last and len(new) > len(pts) + off):
+                continue
+            out[o.id] = moved_end(o if o.id not in out else Wire(out[o.id]), i)
+    return out
+
+
+def _tidy_pts(pts):
+    from .model import _tidy
+    return _tidy([list(q) for q in pts])
+
+
+# ---- going around symbols -----------------------------------------------------------------
+# (the owner, 0.16: "When inserting wires, they are not going around the object": a wire from
+# an overload's T3 to a drive's L3 on the drive's bottom edge ran straight through the drive)
+CLEAR = 0.125       # paper inches a wire keeps from a symbol's drawing
+BEND = 0.75         # what a corner costs, in inches of wire (fewer corners over a bit shorter)
+
+
+def body_box(e):
+    """The box of a placed symbol's drawing, its tag and attribute texts left out (kept per
+    copy: a copy is a value)."""
+    got = getattr(e, "_body", None)
+    if got is not None:
+        return got
+    bb = None
+    d = e.defn
+    if d is not None:
+        for x in d.entities:
+            bb = G.bbox_union(bb, x._map(e.to_world, rot=e.angle, factor=e.scale,
+                                         mirror=None).bbox())
+    e._body = bb
+    return bb
+
+
+def _boxes(sheet, region, k):
+    out = []
+    for e in sheet.query(region):
+        if isinstance(e, Insert) and e.defn is not None and e.defn.kind == "symbol":
+            bb = body_box(e)
+            if bb is not None and bb[2] - bb[0] > 1e-9 and bb[3] - bb[1] > 1e-9:
+                out.append((e, bb))
+    return out
+
+
+def _crosses(pts, boxes):
+    """Does the path run through the inside of any box?"""
+    for a, b in zip(pts, pts[1:]):
+        x0, x1 = sorted((a[0], b[0]))
+        y0, y1 = sorted((a[1], b[1]))
+        for _e, bb in boxes:
+            if x0 < bb[2] - TOL and x1 > bb[0] + TOL and y0 < bb[3] - TOL and \
+                    y1 > bb[1] + TOL:
+                return True
+    return False
+
+
+def _out_of(sheet, p, boxes):
+    """The way out of the symbol whose pin p is (dx, dy, a unit along x or y), or None."""
+    for e, bb in boxes:
+        if any(G.dist(q, p) <= TOL for _n, q in e.pin_points()):
+            cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+            dx, dy = p[0] - cx, p[1] - cy
+            # (the side it is on: nearest the box's edge)
+            near = min((abs(p[0] - bb[0]), (-1, 0)), (abs(p[0] - bb[2]), (1, 0)),
+                       (abs(p[1] - bb[1]), (0, -1)), (abs(p[1] - bb[3]), (0, 1)))
+            if near[0] <= TOL * 10 or not (bb[0] < p[0] < bb[2] and bb[1] < p[1] < bb[3]):
+                return near[1]
+            return (1 if dx >= 0 else -1, 0) if abs(dx) >= abs(dy) else (0, 1 if dy >= 0 else -1)
+    return None
+
+
+def route_around(sheet, a, b, plain, clear=CLEAR, extra=0.0):
+    """The corner points from a to b (plain: the usual one-corner path's) going around the
+    symbols in the way, straight across and up and down, leaving a pin (and arriving at one)
+    straight out of its side, the fewest corners and then the shortest; plain when nothing is in
+    the way or no way round is found. clear: how far (paper inches) it keeps from a symbol
+    (project setting wire_clear); extra: more, in drawing units (a bus: the width of its other
+    wires)."""
+    import heapq
+    k = sheet.k()
+    c = clear * k + extra
+    pad = 3.0 * k + extra
+    region = (min(a[0], b[0]) - pad, min(a[1], b[1]) - pad, max(a[0], b[0]) + pad,
+              max(a[1], b[1]) + pad)
+    boxes = _boxes(sheet, region, k)
+    if not boxes or not _crosses([a] + plain, boxes):
+        return plain
+    g = 0.125 * k                               # (corners on the 1/8" grid)
+
+    def out_pt(p):
+        d = _out_of(sheet, p, boxes)
+        if d is None:
+            return p, None
+        return (p[0] + d[0] * (c + g), p[1] + d[1] * (c + g)), d
+    a2, _da = out_pt(a)
+    b2, _db = out_pt(b)
+    import math
+    grown = []
+    for e, bb in boxes:
+        grown.append((math.floor((bb[0] - c) / g) * g, math.floor((bb[1] - c) / g) * g,
+                      math.ceil((bb[2] + c) / g) * g, math.ceil((bb[3] + c) / g) * g))
+
+    def inside(q):
+        return any(x0 + TOL < q[0] < x1 - TOL and y0 + TOL < q[1] < y1 - TOL
+                   for x0, y0, x1, y1 in grown)
+
+    def blocked(p, q):
+        x0, x1 = sorted((p[0], q[0]))
+        y0, y1 = sorted((p[1], q[1]))
+        for bx0, by0, bx1, by1 in grown:
+            if x0 < bx1 - TOL and x1 > bx0 + TOL and y0 < by1 - TOL and y1 > by0 + TOL:
+                return True
+            if abs(y0 - y1) < TOL and by0 + TOL < y0 < by1 - TOL and x0 < bx1 - TOL and \
+                    x1 > bx0 + TOL:
+                return True
+            if abs(x0 - x1) < TOL and bx0 + TOL < x0 < bx1 - TOL and y0 < by1 - TOL and \
+                    y1 > by0 + TOL:
+                return True
+        return False
+    if inside(a2) or inside(b2):
+        return plain
+    xs = sorted({round(v, 9) for v in [a2[0], b2[0]] + [q for bx in grown for q in (bx[0], bx[2])]})
+    ys = sorted({round(v, 9) for v in [a2[1], b2[1]] + [q for bx in grown for q in (bx[1], bx[3])]})
+    xi, yi = {x: i for i, x in enumerate(xs)}, {y: i for i, y in enumerate(ys)}
+    start = (xi[round(a2[0], 9)], yi[round(a2[1], 9)])
+    goal = (xi[round(b2[0], 9)], yi[round(b2[1], 9)])
+    # (Dijkstra over the grid's crossings: the state is the crossing and the way it came)
+    best = {(start, None): 0.0}
+    heap = [(0.0, start, None)]
+    came = {}
+    end = None
+    while heap:
+        cost, node, way = heapq.heappop(heap)
+        if best.get((node, way), 1e300) < cost - 1e-12:
+            continue
+        if node == goal:
+            end = (node, way)
+            break
+        i, j = node
+        for di, dj, w in ((1, 0, "x"), (-1, 0, "x"), (0, 1, "y"), (0, -1, "y")):
+            ni, nj = i + di, j + dj
+            if not (0 <= ni < len(xs) and 0 <= nj < len(ys)):
+                continue
+            p, q = (xs[i], ys[j]), (xs[ni], ys[nj])
+            if inside(q) or blocked(p, q):
+                continue
+            nc = cost + G.dist(p, q) + (BEND * k if way is not None and way != w else 0.0)
+            if nc < best.get(((ni, nj), w), 1e300) - 1e-12:
+                best[((ni, nj), w)] = nc
+                came[((ni, nj), w)] = (node, way)
+                heapq.heappush(heap, (nc, (ni, nj), w))
+    if end is None:
+        return plain
+    pts = []
+    st = end
+    while st[0] != start or st[1] is not None:
+        pts.append((xs[st[0][0]], ys[st[0][1]]))
+        st = came.get(st)
+        if st is None:
+            break
+    pts.append((xs[start[0]], ys[start[1]]))
+    pts.reverse()
+    path = [a] + ([a2] if G.dist(a, a2) > TOL else []) + pts[1:]
+    if G.dist(pts[-1], b) > TOL:
+        path.append(b)
+    # (straight runs as one: no corner where it doesn't turn)
+    out = [path[0]]
+    for q in path[1:]:
+        if G.dist(q, out[-1]) < TOL:
+            continue
+        if len(out) >= 2:
+            p0, p1 = out[-2], out[-1]
+            if (abs(p0[0] - p1[0]) < TOL and abs(p1[0] - q[0]) < TOL) or \
+                    (abs(p0[1] - p1[1]) < TOL and abs(p1[1] - q[1]) < TOL):
+                out[-1] = q
+                continue
+        out.append(q)
+    return out[1:]
+
+
 # ---- trim, delete and clean up (Trim wire, Delete wire, Clean up wires) ---------------------
 def _hits(sheet, w):
     """Distances along w where it meets something: another wire (crossing it, ending on it,

@@ -463,6 +463,24 @@ and up or down, with one corner per click; the corner follows the cursor, and F 
 other way. The wire <b>ends by itself</b> when you click a pin or another wire; Enter ends it
 anywhere; so does Esc or starting another command (what is drawn is kept). U takes back
 the last click.</p>
+<p>A wire <b>goes around the symbols in its way</b>: when the leg to your click would run
+through a symbol's drawing, it goes round it instead (straight across and up or down, the
+fewest corners, 1/8 inch clear of it on paper), and it leaves a pin, and arrives at one,
+straight out of the side the pin is on: a wire from above to a drive's L3 on its bottom edge
+goes down beside the drive and comes up into L3 from below. The preview shows the way it will
+go. With nothing in the way a wire is as it always was. A <b>bus</b> goes round them too, all
+its wires: as close as the clearance lets it when its other wires are on the outside of the
+turns, with room for them when they are on the inside. Project properties, Schematic,
+<b>Wires go around the symbols in their way</b> turns it off, and <b>...keeping this far from
+them</b> sets how far (on paper: 1/8 inch to start, 0.25 for 1/4 inch).</p>
+<p><b>Dragging a run of wire</b> (AutoCAD Electrical's Scoot on a wire): select a wire and
+drag the grip in the middle of one of its straight runs (or Scoot, click the wire, Enter, then
+click the run): a run up and down moves left or right, a run across moves up or down, and its
+neighbours stretch, staying square. The wires on it follow: a wire teed onto the run moves its
+end with it, a wire carrying the run straight on moves with it, and one joined at a corner
+stretches. An end of the run on a pin or another wire stays connected through a short jog. A
+run with a symbol's pin on its middle (or at a corner of it) isn't moved: the command line
+says so (move the symbol, or Scoot it along the wire).</p>
 <p>Drawing a wire or a bus, <b>pins and wire ends always pull the point onto them</b> (the
 green snap marker shows it), even with Object snap (F3) off, so a wire lands exactly on the
 pin you click near; a symbol's insertion point (its middle, which is not a pin) is never a
