@@ -143,8 +143,9 @@ def _outside(sheet, c, text, hh):
     its wire, the way the wire comes into its pin and on out (beside it when the wire runs
     across, under or over it when the wire runs up and down); None when no wire ends on it."""
     from .wires import TOL
+    from .geometry import segment_hits_rect
     pin = c.pin_points()[0][1]
-    d = None
+    d = wire = None
     for w in sheet.query_point(pin, TOL):
         if getattr(w, "kind", "") != "wire":
             continue
@@ -154,17 +155,30 @@ def _outside(sheet, c, text, hh):
                 L = math.hypot(q[0] - r[0], q[1] - r[1])
                 if L > TOL:
                     d = ((q[0] - r[0]) / L, (q[1] - r[1]) / L)
+                    wire = w
         if d is not None:
             break
     if d is None:
         return None
     bb = c.bbox()
     gap = 0.4 * hh
+    tw = text_width(text, hh)
+    mid = (bb[0] + bb[2]) / 2.0
+    beside = [(bb[2] + gap + tw / 2.0, pin[1] - 0.35 * hh),         # right of it
+              (bb[0] - gap - tw / 2.0, pin[1] - 0.35 * hh)]         # left of it
+    over = [(mid, bb[3] + gap), (mid, bb[1] - gap - hh)]           # over it, under it
     if abs(d[0]) >= abs(d[1]):
-        w = text_width(text, hh)
-        x = bb[2] + gap + w / 2.0 if d[0] > 0 else bb[0] - gap - w / 2.0
-        return x, pin[1] - 0.35 * hh
-    return pin[0], (bb[3] + gap if d[1] > 0 else bb[1] - gap - hh)
+        # the wire comes in across: past its far end first, then over or under it
+        spots = [beside[0] if d[0] > 0 else beside[1]] + over
+    else:
+        spots = [(pin[0], over[0][1]) if d[1] > 0 else (pin[0], over[1][1])] + beside
+    # (the first of them clear of its own wire: a wire that comes back round past the
+    # connector, found by the long battery, seed 3152, ran under the text)
+    for x, y in spots:
+        tb = Text((x, y), text, hh, 0.0, "center").bbox()
+        if not any(segment_hits_rect(a, b, tb) for a, b in zip(wire.points, wire.points[1:])):
+            return x, y
+    return spots[0]
 
 
 def live(project, sheet):

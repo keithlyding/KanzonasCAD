@@ -34,7 +34,8 @@ build fails without them.
   duct goes on the side the cursor is (F for the other side). It now shows its finger slots
   and mounting holes, and Panel settings can add a light hatch to every duct.
 - A connector's cross-reference text is always outside it, on the side away from its wire,
-  however the connector is turned.
+  however the connector is turned, and moves over or under it when the wire comes back round
+  past that side.
 - Cross-reference text is on a layer of its own, **XREFS**, in cyan, and a little smaller.
   Projects made earlier get the layer and the new size when opened.
 - The ribbon fits the window: when a tab is too wide, its groups shrink from the right (big
