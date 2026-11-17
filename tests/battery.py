@@ -717,24 +717,48 @@ def random_editing(log, out, ops, seed, drawing=None):
         to = pt()
         # (a pin on the run's middle or a corner of it: refused, the wire left as it was;
         # worked out here from the pins, seeds 11 and 23)
-        last = len(w.points) - 1
-        pinned = any(G.dist_to_segment(q, a, b) <= 1e-6 and
-                     not (i == 0 and G.dist(q, a) <= 1e-6) and
-                     not (i + 1 == last and G.dist(q, b) <= 1e-6)
-                     for e in s.inserts() for _n, q in e.pin_points())
         # (or a pin or a wire's end on the part of a run beside it that gets shorter: seed 31,
         # a run dragged past the end of the long run beside it, which had two pins on it)
         horiz0 = abs(a[1] - b[1]) < 1e-9
         dd = (0.0, to[1] - a[1]) if horiz0 else (to[0] - a[0], 0.0)
-        for j, c in ((i - 1, i), (i + 2, i + 1)):
-            if pinned or not 0 <= j <= last:
-                continue
-            f, old = w.points[j], w.points[c]
-            nw = (old[0] + dd[0], old[1] + dd[1])
-            spots = [q for e in s.inserts() for _n, q in e.pin_points()] + \
-                [q for x in s.wires() if x.id != w.id for q in (x.points[0], x.points[-1])]
-            pinned = any(G.dist(q, old) > 1e-6 and G.dist_to_segment(q, f, old) <= 1e-6 and
-                         G.dist_to_segment(q, f, nw) > 1e-6 for q in spots)
+        pins_all = [q for e in s.inserts() for _n, q in e.pin_points()]
+
+        def held(x, k, seen):
+            """Is run k of wire x kept from moving: a pin on it (not x's own end), a pin or a
+            wire's end on the part of a run beside it that the move shortens, or the same on
+            a wire carrying it straight on, which moves with it (seed 8: a pin on the wire
+            carrying the run on)."""
+            p0, p1 = x.points[k], x.points[k + 1]
+            n = len(x.points) - 1
+            if any(G.dist_to_segment(q, p0, p1) <= 1e-6 and
+                   not (k == 0 and G.dist(q, p0) <= 1e-6) and
+                   not (k + 1 == n and G.dist(q, p1) <= 1e-6) for q in pins_all):
+                return True
+            for j, c in ((k - 1, k), (k + 2, k + 1)):
+                if not 0 <= j <= n:
+                    continue
+                f, old = x.points[j], x.points[c]
+                nw = (old[0] + dd[0], old[1] + dd[1])
+                spots = pins_all + [q for y in s.wires() if y.id != x.id
+                                    for q in (y.points[0], y.points[-1])]
+                if any(G.dist(q, old) > 1e-6 and G.dist_to_segment(q, f, old) <= 1e-6 and
+                       G.dist_to_segment(q, f, nw) > 1e-6 for q in spots):
+                    return True
+            for y in s.wires():
+                if y.id in seen:
+                    continue
+                for end in (0, -1):
+                    e = y.points[end]
+                    nb = y.points[1] if end == 0 else y.points[-2]
+                    if (G.dist(e, p0) <= 1e-6 or G.dist(e, p1) <= 1e-6) and \
+                            G.dist_to_segment(nb, p0, p1) > 1e-6 and \
+                            ((abs(nb[0] - e[0]) < 1e-6) if dd[0] != 0.0 else
+                             (abs(nb[1] - e[1]) < 1e-6)):
+                        if held(y, 0 if end == 0 else len(y.points) - 2, seen | {x.id}):
+                            return True
+                        break
+            return False
+        pinned = held(w, i, {w.id})
         v.set_selection(set())
         v.run(C.GripCmd, w, len(w.points) + i)
         v.input_text(fmt(to))
@@ -1798,7 +1822,9 @@ def random_editing(log, out, ops, seed, drawing=None):
             pg.circle(c, r, fill=r == 3)
             circles.append((c, r))
         for i in range(rnd.randint(0, 4)):
-            at, a = (rnd.randint(2, 50) * 9.0, 500 + i * 30.0), rnd.choice([0, 90, 180, 270])
+            # (each on its own line, across and up and down: two words close on one line are
+            # rightly read as one text, seed 306)
+            at, a = (60.0 + i * 90.0, 500 + i * 60.0), rnd.choice([0, 90, 180, 270])
             word = rnd.choice(["CR", "M", "PB", "LT"]) + str(rnd.randint(1, 999))
             pg.text(at, word, 8, angle=a)
             texts.append((at, word, a))
