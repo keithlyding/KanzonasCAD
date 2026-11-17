@@ -1374,6 +1374,11 @@ def random_editing(log, out, ops, seed, drawing=None):
             return
         num = rnd.choice([b.num, b.num, "9%03d" % rnd.randint(0, 999)])
         lock = rnd.random() < 0.7
+        if num == a.num:
+            # (it has that number already: two groups kept with one number on purpose, "just
+            # the same number" earlier; typing it again changes nothing and asks nothing,
+            # seed 3262)
+            return
         how = rnd.choice(["source", "destination", "same", None])
         # (by sheet and id: ids are a sheet's own, seed 4103)
         links = {(sh.id, e.id) for sh in p.sheets for e in sh.inserts()
@@ -1466,7 +1471,9 @@ def random_editing(log, out, ops, seed, drawing=None):
             # sheet, where the other's may be the nearer one: any text of the arrow's kind
             # beside it, clear of the arrow and of its wire, will do)
             eb = e.bbox()
-            reach = 2.0 * float(p.settings.get("xref_height", 0.065)) * s.k()
+            # (its text can go a few heights farther out, clear of a wire that wraps round
+            # it: xrefs._outside)
+            reach = 8.0 * float(p.settings.get("xref_height", 0.065)) * s.k()
 
             def beside(box):
                 return box[0] <= eb[2] + reach and box[2] >= eb[0] - reach and \
