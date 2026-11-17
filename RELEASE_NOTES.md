@@ -17,6 +17,12 @@ build fails without them.
   its text (the tag too). Hide or show any of them there, or for many symbols at once with
   Modify > Show or hide attributes...
 - Projects started earlier get the new fields with **Update blocks from library...**.
+- The **Wire number** window has **Lock this number**, as tags have: it ticks itself when you
+  type a number; untick it to let numbering change the number later.
+- Typing a wire number another wire already has asks whether it's a cross-reference:
+  **Source** or **Destination** puts a **Source arrow** and a **Destination arrow** (new in the
+  Library, JIC/Wiring) on the open ends of the two wires, so they become one wire and each
+  shows where the other is. Or keep just the same number.
 
 **Fixed**
 - Moving, scooting or turning a symbol with two pins of the same name (a drive with two GND

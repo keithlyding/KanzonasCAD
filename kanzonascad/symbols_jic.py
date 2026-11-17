@@ -495,4 +495,20 @@ def builtin_symbols():
                   pins=[{"name": "1", "pos": (0, 0)}], tag=(0.15625, 0.1),
                   description="Off-sheet connector: the wire continues at the connector of "
                               "the same name", wiring="link"))
+    # source and destination arrows (the owner, 0.17.5: "I would like source and destination
+    # arrows for wire cross references"): connectors too (a pair of one name is one wire), the
+    # source pointing out where the wire leaves, the destination pointing in (its tip on the
+    # pin, the body away) where it arrives
+    o = [Polyline([(0, 0.0625), (0.25, 0.0625), (0.3125, 0), (0.25, -0.0625), (0, -0.0625)],
+                  True), Line((0.0625, 0.0), (0.2, 0.0))]
+    S.append(_sym("Source arrow", "JIC/Wiring", o, "device", "", "",
+                  pins=[{"name": "1", "pos": (0, 0)}], tag=(0.15625, 0.1),
+                  description="Source arrow: where a wire leaves for its destination arrow "
+                              "(the one of the same name)", wiring="link"))
+    o = [Polyline([(0, 0), (0.0625, 0.0625), (0.3125, 0.0625), (0.3125, -0.0625),
+                   (0.0625, -0.0625)], True), Line((0.1125, 0.0), (0.25, 0.0))]
+    S.append(_sym("Destination arrow", "JIC/Wiring", o, "device", "", "",
+                  pins=[{"name": "1", "pos": (0, 0)}], tag=(0.1875, 0.1),
+                  description="Destination arrow: where a wire arrives from its source arrow "
+                              "(the one of the same name)", wiring="link"))
     return S

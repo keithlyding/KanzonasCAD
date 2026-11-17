@@ -1336,6 +1336,63 @@ def random_editing(log, out, ops, seed, drawing=None):
                 "Trim lit %.6g of %.6g and left %.6g" % (cut, whole, kept)
             BC.CHECKED["trim lights what it cuts"] += 1
 
+    def op_wire_xref():
+        # (0.17.5) a wire's number typed in the Wire number window, as a double-click opens it:
+        # one another wire has (a cross-reference: Source, Destination or just the same
+        # number) or a new one, locked or not. Source or Destination: a pair of off-sheet
+        # connectors of one new name on the two open ends (out where it leaves, in where it
+        # arrives) and one number on both; the same number: as typed; the lock as ticked
+        if not wirenums.enabled(p):
+            return
+        from kanzonascad import wires as W
+        ws = [w for w in s.wires() if w.num and any(
+            not W.connects_at(s, q, exclude=w.id) for q in (w.points[0], w.points[-1]))]
+        if len(ws) < 2:
+            return
+        a, b = rnd.sample(ws, 2)
+        if wirenums.group_of(p, s, a)[0] == wirenums.group_of(p, s, b)[0]:
+            return
+        num = rnd.choice([b.num, b.num, "9%03d" % rnd.randint(0, 999)])
+        lock = rnd.random() < 0.7
+        how = rnd.choice(["source", "destination", "same", None])
+        links = {e.id for sh in p.sheets for e in sh.inserts()
+                 if e.defn is not None and e.defn.wiring == "link"}
+        win.ask_wire_number = lambda n, tap_of=None, own=False, locked=False: (num, own, lock)
+        asked = []
+        win.ask_cross_reference = lambda n, where: asked.append(n) or how
+        try:
+            win.edit_wire_number(s.entities[a.id])
+        finally:
+            win.__dict__.pop("ask_wire_number", None)
+            win.__dict__.pop("ask_cross_reference", None)
+        new = [e for sh in p.sheets for e in sh.inserts()
+               if e.defn is not None and e.defn.wiring == "link" and e.id not in links]
+        got = s.entities.get(a.id)
+        if num != b.num or got is None:
+            assert not new, "connectors placed for a number no other wire had"
+            return
+        assert asked == [num], "a number another wire has wasn't asked about: %r" % asked
+        if how in ("source", "destination"):
+            assert len(new) == 2 and new[0].attrs["TAG"] == new[1].attrs["TAG"], \
+                "a cross-reference didn't place one pair of connectors: %r" % (
+                    [(e.block, e.attrs.get("TAG")) for e in new])
+            mine = [e for e in new if e.id in s.entities and
+                    any(G.dist(q, r) < 1e-9 for _n, q in e.pin_points()
+                        for r in (got.points[0], got.points[-1]))]
+            want = "Source arrow" if how == "source" else "Destination arrow"
+            assert any(e.block == want for e in mine), "%s: no %s on the wire" % (how, want)
+            other = s.entities.get(b.id)
+            assert other is not None and got.num == other.num == num, \
+                "a cross-reference left two numbers: %s, %s" % (got.num, other and other.num)
+            assert got.num_lock == lock, "the lock wasn't as ticked"
+            BC.CHECKED["cross-reference by a number typed"] += 1
+        elif how == "same":
+            assert not new and got.num == num and got.num_lock == lock, \
+                "just the same number: %s locked %s" % (got.num, got.num_lock)
+            BC.CHECKED["the same number, as typed"] += 1
+        else:
+            assert not new and got.num == a.num, "cancelled, yet the number changed"
+
     def op_tap():
         # (0.17.2: a wire drawn off the middle of another asks; Enter: its number, N: one of
         # its own; worked out from the numbers after. On a wire of its own, just past the
@@ -2162,7 +2219,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1),
+             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),

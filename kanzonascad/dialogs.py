@@ -1954,18 +1954,26 @@ def pdf_import_dialog(parent, name, pages, k):
     return {"page": page.value(), "scale": scale.value(), "filled": filled.isChecked()}
 
 
-def wire_number_dialog(parent, num, tap_of=None, own=False):
-    """A wire's number (typed: locked; empty: numbering gives one) and, for a wire tapped off
-    another (tap_of: that wire's number), whether it has a number of its own. Returns (number,
-    own) or None."""
+def wire_number_dialog(parent, num, tap_of=None, own=False, locked=False):
+    """A wire's number (empty: numbering gives one), whether it is locked (the owner, 0.17.5:
+    "should there be a checkbox to check locked or unlocked?": ticked by itself when a number
+    is typed), and, for a wire tapped off another (tap_of: that wire's number), whether it has
+    a number of its own. Returns (number, own, locked) or None."""
     dlg = QDialog(parent)
     dlg.setWindowTitle("Wire number")
     form = QFormLayout(dlg)
-    form.addRow(QLabel("The number of this wire and every wire joined to it. A number you type "
-                       "is locked: numbering leaves it alone. Leave it empty to let numbering "
-                       "give it one."))
+    form.addRow(QLabel("The number of this wire and every wire joined to it. Leave it empty to "
+                       "let numbering give it one."))
     edit = QLineEdit(num or "")
     form.addRow("Wire number", edit)
+    lock = QCheckBox("Lock this number (numbering leaves it alone)")
+    lock.setObjectName("num_lock")
+    lock.setChecked(bool(locked and num))
+    lock.setToolTip("Unlocked, numbering may change it: when its sheet is renumbered or its page "
+                    "number changes, or when it doesn't fit its sheet (another page's number)")
+    # (a number typed is meant: it locks itself, as a tag does; untick to let numbering have it)
+    edit.textEdited.connect(lambda t: lock.setChecked(bool(t.strip())))
+    form.addRow("", lock)
     box = None
     if tap_of is not None:
         box = QCheckBox("A number of its own (not %s, the wire it taps off)" % (tap_of or "?"))
@@ -1975,4 +1983,27 @@ def wire_number_dialog(parent, num, tap_of=None, own=False):
     form.addRow(_buttons(dlg))
     if dlg.exec() != QDialog.Accepted:
         return None
-    return edit.text().strip().upper(), (box.isChecked() if box is not None else own)
+    text = edit.text().strip().upper()
+    return text, (box.isChecked() if box is not None else own), bool(text) and lock.isChecked()
+
+
+def cross_reference_question(parent, num, where):
+    """A wire number typed that another wire already has (where: its sheet and zone, 7-A2):
+    "source" (this wire goes on to that one), "destination" (it comes from there), "same" (two
+    wires with one number, as typed), or None (cancelled)."""
+    box = QMessageBox(parent)
+    box.setWindowTitle("Wire number already used")
+    box.setIcon(QMessageBox.Question)
+    box.setText("Wire %s is already on the drawing at %s.\n\nIs this the same wire carried on "
+                "(a cross-reference)? Off-sheet connectors are put on the open ends of both, "
+                "with each other's place under them." % (num, where))
+    src = box.addButton("Source: it goes on to %s" % where, QMessageBox.AcceptRole)
+    dst = box.addButton("Destination: it comes from %s" % where, QMessageBox.AcceptRole)
+    same = box.addButton("No: just the same number", QMessageBox.AcceptRole)
+    box.addButton(QMessageBox.Cancel)
+    src.setObjectName("source")
+    dst.setObjectName("destination")
+    same.setObjectName("same")
+    box.exec()
+    got = box.clickedButton()
+    return {src: "source", dst: "destination", same: "same"}.get(got)

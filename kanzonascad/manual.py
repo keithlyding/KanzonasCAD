@@ -704,9 +704,19 @@ or down then across) and then <b>kept</b>: drawing more doesn't renumber what's 
 wire takes the lowest free number of its page, so a deleted number comes back.</li>
 <li>When two wires are joined, the lower number stays; when one is cut in two (a symbol placed
 on it, Trim), the part later in order takes a new number.</li>
-<li><b>Double-click a wire</b> to type its number (for it and every wire joined to it). A typed
-number is locked: numbering leaves it alone. Clear it to let numbering give one back. For a
-tap, the same window has <b>A number of its own</b>.</li>
+<li><b>Double-click a wire</b> to type its number (for it and every wire joined to it).
+<b>Lock this number</b> ticks itself when you type one: numbering leaves a locked number alone.
+Untick it to keep the number for now but let numbering change it (Renumber sheet, a new page
+number, or a number that isn't of its sheet's page). Clear the number to let numbering give one
+back. For a tap, the same window has <b>A number of its own</b>.</li>
+<li>Typing a number another wire already has asks whether this is a <b>cross-reference</b>:
+<b>Source</b> (this wire goes on to that one) or <b>Destination</b> (it comes from there) puts a
+pair of arrows with a new name on the open end of each wire (the end on nothing): a <b>Source
+arrow</b> pointing out where the wire leaves and a <b>Destination arrow</b> pointing in where it
+arrives. They are then one wire with that number, and each shows
+the other's place under it (7-A2). One step: Undo takes it all back. <b>No: just the same
+number</b> gives this wire the number as typed, without connectors. A wire with no open end
+(both ends on pins or wires) says so: draw it out to where it leaves the sheet first.</li>
 <li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
 as device tags do.</li>
 <li><b>Renumber sheet</b> also numbers the sheet's unlocked wires again, 001, 002... in
@@ -717,7 +727,9 @@ of the wire on its input with A, B, C... added (6001A, 6001B; after Z come AA, A
 and one where it comes back on another sheet, with the same name. Placing one asks its name:
 Enter takes the one offered (a connector still waiting for its other end, else the next free
 letter). The wire keeps the number of the sheet it starts on, and under each connector its
-other end's place shows (<b>7-A2</b>).</li>
+other end's place shows (<b>7-A2</b>). <b>Source arrow</b> and <b>Destination arrow</b>
+(Library, JIC/Wiring) are the same, drawn as arrows: pointing out where the wire leaves,
+pointing in where it arrives.</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
 numbers and cross-references.</li>
 <li>Wire numbers go into PDF and DXF exports as text.</li>

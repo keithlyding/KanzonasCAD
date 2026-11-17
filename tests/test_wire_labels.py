@@ -82,7 +82,7 @@ class WireLabelTest(unittest.TestCase):
         tap = [w for w in self.s.wires() if w.touches((3.0, 7.0))][0]
         asked = []
 
-        def ask(num, tap_of=None, own=False):
+        def ask(num, tap_of=None, own=False, locked=False):
             asked.append((num, tap_of, own))
             return num, True
         self.win.ask_wire_number = ask
@@ -90,7 +90,8 @@ class WireLabelTest(unittest.TestCase):
         self.assertEqual(asked[0][1], self.num((1.0, 5.0)))      # (it says which it taps)
         self.assertNotEqual(self.num((3.0, 7.0)), self.num((1.0, 5.0)))
         # and back
-        self.win.ask_wire_number = lambda num, tap_of=None, own=False: (num, False)
+        self.win.ask_wire_number = lambda num, tap_of=None, own=False, locked=False: (num,
+                                                                                      False)
         self.win.edit_wire_number([w for w in self.s.wires() if w.touches((3.0, 7.0))][0])
         self.assertEqual(self.num((3.0, 7.0)), self.num((1.0, 5.0)))
 
