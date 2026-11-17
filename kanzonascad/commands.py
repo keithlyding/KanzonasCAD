@@ -1389,12 +1389,38 @@ class WireCmd(Command):
         return [M.Wire(self.points + self._route(p), layer=wire_layer(self.ctx))]
 
 
+def _strands_a_pin(sheet, got):
+    """Would wires changed to got ({id: points}) leave a pin that one of them was on with no
+    wire? (A wire tapping the dragged run, a pin on its middle, followed the run past its other
+    end and left that pin behind: the battery, seed 6006.)"""
+    old = [sheet.entities[i] for i in got if i in sheet.entities]
+    if not old:
+        return False
+    new = {i: M.Wire(pts) for i, pts in got.items()}
+    bb = None
+    for e in old:
+        bb = G.bbox_union(bb, e.bbox())
+    for e in sheet.query(bb):
+        if not isinstance(e, M.Insert):
+            continue
+        for _n, q in e.pin_points():
+            if not any(x.touches(q) for x in old):
+                continue
+            near = [x for x in sheet.query((q[0] - 1e-6, q[1] - 1e-6, q[0] + 1e-6, q[1] + 1e-6))
+                    if isinstance(x, M.Wire) and x.id not in got]
+            if not any(x.touches(q) for x in list(new.values()) + near):
+                return True
+    return False
+
+
 def _run_drag(ctx, w, k, p, say=False):
     """{id: new wire} for wire w's run k dragged to p (wires.segment_drag); {} when it can't
     move, saying why when say."""
     from .wires import segment_drag
     sheet = ctx.sheet()
     got = segment_drag(sheet, w, k, p)
+    if got is not None and _strands_a_pin(sheet, got):
+        got = None
     if got is None:
         if say:
             ctx.message("Moved there, the wire would leave a symbol's pin or a wire joined to "

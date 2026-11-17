@@ -67,6 +67,8 @@ build fails without them.
 - Typing a wire number that two other wires already had (one kept with "just the same
   number") and answering Source or Destination could say there was no open end when one of
   them had one. The arrow now goes on the one with an open end.
+- Dragging a run of wire by its middle grip could leave a symbol's pin with no wire, when a
+  wire tapping that run passed through the pin. Such a drag is now refused, with the reason.
 - Scooting a breaker with everything attached, or stretching a wire's end onto its other end,
   could squeeze a wire down to nothing and leave it broken. That wire is now removed.
 - Copying or moving a footprint to a point you snapped to near DIN rail pulled it onto the
