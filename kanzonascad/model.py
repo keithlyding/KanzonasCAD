@@ -2376,6 +2376,8 @@ class Sheet:
         self.xref_shown = None              # the cross-references shown while frozen (or while
                                             # the project's aren't automatic): xrefs.py
         self.no_dots = []                   # junction dots deleted (Delete dot): [(x, y)]
+        self.pin_order = []                 # a block editor's sheet: its pin markers' ids in
+                                            # the order set in Pins... (block_editor.to_block)
         self.col_start = int(col_start)     # the first column's number (1 to start)
         self.row_start = int(row_start)     # the first row's letter: 0 = A, 1 = B...
         self.fields = dict(fields or {})
@@ -2569,19 +2571,22 @@ class Sheet:
 
     # ---- storing ---------------------------------------------------------------------------
     def meta_dict(self):
-        return {"id": self.id, "title": self.title, "size": self.size, "cols": self.cols,
-                "rows": self.rows, "col_start": self.col_start, "row_start": self.row_start,
-                "own_layout": self.own_layout, "kind": self.kind,
-                "location": self.location,
-                "number_order": self.number_order,
-                "number": self.number, "fields": dict(self.fields),
-                "scale": self.scale, "scale_name": self.scale_name,
-                "rotation": self.rotation,
-                "cabinet": list(self.cabinet) if self.cabinet else None,
-                "xref_frozen": self.xref_frozen,
-                "xref_shown": [list(t) for t in self.xref_shown]
-                if self.xref_shown is not None else None,
-                "no_dots": [list(q) for q in self.no_dots]}
+        d = {"id": self.id, "title": self.title, "size": self.size, "cols": self.cols,
+             "rows": self.rows, "col_start": self.col_start, "row_start": self.row_start,
+             "own_layout": self.own_layout, "kind": self.kind,
+             "location": self.location,
+             "number_order": self.number_order,
+             "number": self.number, "fields": dict(self.fields),
+             "scale": self.scale, "scale_name": self.scale_name,
+             "rotation": self.rotation,
+             "cabinet": list(self.cabinet) if self.cabinet else None,
+             "xref_frozen": self.xref_frozen,
+             "xref_shown": [list(t) for t in self.xref_shown]
+             if self.xref_shown is not None else None,
+             "no_dots": [list(q) for q in self.no_dots]}
+        if self.pin_order:
+            d["pin_order"] = list(self.pin_order)
+        return d
 
     def to_dict(self):
         d = self.meta_dict()
@@ -2620,6 +2625,7 @@ class Sheet:
         self.xref_shown = [tuple(t) for t in shown] if shown is not None else None
         self.no_dots = [(round(float(q[0]), 6), round(float(q[1]), 6))
                         for q in (d.get("no_dots") or [])]
+        self.pin_order = [int(i) for i in (d.get("pin_order") or [])]
         self.version += 1
 
     @classmethod

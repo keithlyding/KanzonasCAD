@@ -9,7 +9,8 @@ from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QSpin
                                QDialogButtonBox, QVBoxLayout, QTableWidget, QTableWidgetItem,
                                QHBoxLayout, QPushButton, QColorDialog, QInputDialog,
                                QMessageBox, QDoubleSpinBox, QLabel, QHeaderView,
-                               QCheckBox, QTabWidget, QWidget)
+                               QCheckBox, QTabWidget, QWidget, QTreeWidget,
+                               QTreeWidgetItem, QAbstractItemView)
 
 from . import model as M
 
@@ -977,7 +978,7 @@ def edit_text_dialog(parent, ent):
         just.addItem("%s  (%s)" % (names[code], code), code)
     just.setCurrentIndex(just.findData(M.justify_code(ent.align, ent.valign)))
     keep = QCheckBox("Keep the text where it is on the drawing")
-    keep.setChecked(True)
+    keep.setChecked(False)              # (the owner, 0.16.8: not ticked to start with)
     keep.setToolTip("Changing the justification moves the insertion point instead of the text")
     form.addRow("Text", text)
     form.addRow("Height", height)
@@ -1825,3 +1826,87 @@ def numbering_dialog(parent, count, last=None):
         if why is None:
             return a
         QMessageBox.warning(dlg, "Number texts", why)
+
+
+class PinsDialog(QDialog):
+    """Pins... (a block's tab): its pins in order, each with its name and its place (x, y in
+    inches from the base point), all editable. Drag a row, or Move up / Move down, to change
+    the order (the order a bus lands wire for wire); Delete takes one out; Find shows it on
+    the drawing (find(marker id)). rows() gives [(marker id, name, x, y)] in order."""
+
+    def __init__(self, parent, rows, find=None):
+        super().__init__(parent)
+        self.setWindowTitle("Pins")
+        self.find = find
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("The pins in their order (a bus lands on them in this order). "
+                             "Double-click a name or a place to change it; drag a row to "
+                             "move it."))
+        t = self.tree = QTreeWidget()
+        t.setColumnCount(3)
+        t.setHeaderLabels(["Pin", "X (in)", "Y (in)"])
+        t.setRootIsDecorated(False)
+        t.setDragDropMode(QAbstractItemView.InternalMove)
+        t.setSelectionMode(QAbstractItemView.SingleSelection)
+        t.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
+        for eid, name, x, y in rows:
+            it = QTreeWidgetItem([name, _num(x), _num(y)])
+            it.setData(0, Qt.UserRole, eid)
+            # (no drops onto a row: a dragged row goes between rows, never under one)
+            it.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable |
+                        Qt.ItemIsDragEnabled)
+            t.addTopLevelItem(it)
+        t.header().setSectionResizeMode(QHeaderView.ResizeToContents)
+        lay.addWidget(t)
+        row = QHBoxLayout()
+        for text, slot in (("Move up", lambda: self.move(-1)), ("Move down", lambda: self.move(1)),
+                           ("Delete", self.delete), ("Find", self.find_it)):
+            b = QPushButton(text)
+            b.clicked.connect(slot)
+            row.addWidget(b)
+        lay.addLayout(row)
+        lay.addWidget(_buttons(self))
+        if rows:
+            t.setCurrentItem(t.topLevelItem(0))
+        self.resize(420, 360)
+
+    def _current(self):
+        it = self.tree.currentItem()
+        return (self.tree.indexOfTopLevelItem(it), it) if it is not None else (-1, None)
+
+    def move(self, step):
+        i, it = self._current()
+        j = i + step
+        if it is None or not 0 <= j < self.tree.topLevelItemCount():
+            return
+        self.tree.takeTopLevelItem(i)
+        self.tree.insertTopLevelItem(j, it)
+        self.tree.setCurrentItem(it)
+
+    def delete(self):
+        i, it = self._current()
+        if it is not None:
+            self.tree.takeTopLevelItem(i)
+
+    def find_it(self):
+        _i, it = self._current()
+        if it is not None and self.find is not None:
+            self.find(it.data(0, Qt.UserRole))
+
+    def rows(self):
+        """The rows as they are now; a place that isn't a number: ValueError naming it."""
+        out = []
+        for i in range(self.tree.topLevelItemCount()):
+            it = self.tree.topLevelItem(i)
+            xy = []
+            for c in (1, 2):
+                try:
+                    xy.append(float(it.text(c).strip().rstrip('"')))
+                except ValueError:
+                    raise ValueError("Pin %s: %r isn't a number" % (it.text(0), it.text(c)))
+            out.append((it.data(0, Qt.UserRole), it.text(0).strip(), xy[0], xy[1]))
+        return out
+
+
+def _num(v):
+    return ("%.6f" % v).rstrip("0").rstrip(".") if v != 0 else "0"

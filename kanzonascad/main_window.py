@@ -518,6 +518,13 @@ class MainWindow(BlockEditing, QMainWindow):
         A("save_block", "Sa&ve block", self.save_block, icon="save_block", label="Save block",
           tip="Put the block open in this tab back in your library (and update its copies in "
               "the project if you say so)")
+        A("add_pin", "Add &pin", lambda: self._run(C.AddPinCmd), icon="add_pin",
+          label="Add pin",
+          tip="Add a pin to the block open in this tab: click where it goes, then its name "
+              "(ADDPIN, PIN, AP)")
+        A("pins", "P&ins...", self.pins_dialog, icon="pins", label="Pins",
+          tip="The pins of the block open in this tab: their names, order and places; rename, "
+              "reorder, move, delete or find one")
         A("dup_block", "&Duplicate block...", lambda: self.duplicate_block(),
           icon="block_props", label="Duplicate block",
           tip="Copy the selected block under a new name in your library (catalog number left "
@@ -619,7 +626,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
-                  "save_block_as", "update_blocks", None,
+                  "save_block_as", "add_pin", "pins", "update_blocks", None,
                   "new_part", "library_folder"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Window")
@@ -669,7 +676,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"], a["attr_vis"],
                                   a["del_comp"]]),
             ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"],
-                                 a["dup_block"], a["save_block_as"]]),
+                                 a["dup_block"], a["save_block_as"], a["add_pin"],
+                                 a["pins"]]),
             ("Parts", "large", [a["new_part"]]),
             ("Edit wires", "large", [a["trim_wire"], a["del_wire"], a["del_dot"],
                                      a["clean_wires"]]),
@@ -685,7 +693,8 @@ class MainWindow(BlockEditing, QMainWindow):
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
             ("Blocks", "small", [a["edit_block"], a["save_block"], a["block_props"],
-                                 a["dup_block"], a["save_block_as"]]),
+                                 a["dup_block"], a["save_block_as"], a["add_pin"],
+                                 a["pins"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
@@ -2683,8 +2692,9 @@ class MainWindow(BlockEditing, QMainWindow):
         in_block = is_block_doc(self.doc())
         a["save_block"].setEnabled(in_block)
         a["save_block"].setVisible(in_block)
-        a["save_block_as"].setEnabled(in_block)
-        a["save_block_as"].setVisible(in_block)
+        for k in ("save_block_as", "add_pin", "pins"):
+            a[k].setEnabled(in_block)
+            a[k].setVisible(in_block)
         a["undo"].setEnabled(bool(has and p.undo_stack))
         a["redo"].setEnabled(bool(has and p.redo_stack))
         sel = bool(has and v.sel)

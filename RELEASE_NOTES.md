@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.16.8
+
+**New**
+- In a block's tab (Edit block...), **Add pin** adds pins by clicking: click where the pin
+  goes, then type its name or press Enter for the next number.
+- **Pins...** lists a block's pins with their names and places: rename one, type where it
+  goes, drag them into another order, delete one, or find it on the drawing. Undo takes it
+  all back in one step.
+
+**Fixed**
+- Edit text: "Keep the text where it is on the drawing" no longer starts ticked.
+
 ## 0.16.7
 
 **New**
