@@ -10,7 +10,7 @@ import re
 
 from . import geometry as G
 from . import model as M
-from .wires import doubles_back
+from .wires import doubles_back, straighten
 from .trim import trim as trim_entity
 
 _NUM = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
@@ -2006,7 +2006,10 @@ class BusCmd(Command):
                     j2[m], j2[k] = pin[m], v
                     pts += [tuple(j1), tuple(j2)]
                 pts.append(tuple(pin))
-                out.append([tuple(q) for q in M._tidy(pts)])
+                # (no jog that goes over and straight back along the same line: a hidden
+                # corner, a dot with nothing tapped off; the battery, 0.17.5, seed 12, and a
+                # 3/4" bus onto 1/2" poles)
+                out.append([tuple(q) for q in M._tidy(straighten(pts))])
             if _paths_cross(out):
                 continue
             bb = None

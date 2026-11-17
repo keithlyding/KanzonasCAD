@@ -112,8 +112,10 @@ class WireLockXrefTest(unittest.TestCase):
         before = self.num(self.s1, self.a)
         self.type_number(other, answer=None)                    # (cancelled)
         self.assertEqual(self.num(self.s1, self.a), before)
-        self.type_number(other, answer="same")
+        self.type_number(other, lock=False, answer="same")
         self.assertEqual(self.num(self.s1, self.a), other)
+        # (locked though unticked: numbering would give an unlocked duplicate a free number)
+        self.assertTrue(self.s1.entities[self.a.id].num_lock)
         self.assertEqual([e for e in self.s1.inserts() if e.defn.wiring == "link"], [])
 
     def test_no_open_end_says_so(self):
@@ -130,6 +132,61 @@ class WireLockXrefTest(unittest.TestCase):
             QMessageBox.information = real
         self.assertTrue(said and "open end" in said[0], said)
         self.assertEqual([e for e in self.s1.inserts() if e.defn.wiring == "link"], [])
+
+
+class ArrowsOnTheLineTest(unittest.TestCase):
+    """The owner, 0.17.5: "Destination cross reference arrows need to be connected and pointing
+    to the line. Source cross references need to be connected to the line with the arrow
+    pointing away from the line." Across and up and down, both ways; the text past the arrow's
+    far end, over neither the arrow nor the wire."""
+
+    def test_on_the_line_and_the_text_clear(self):
+        win, v = window()
+        try:
+            p, s = v.project, v.sheet()
+            lib = win.library
+            ws = []
+            with p.edit("w") as ed:
+                for a, b in (((1.0, 8.0), (4.0, 8.0)), ((9.0, 8.0), (6.0, 8.0)),
+                             ((12.0, 9.0), (12.0, 6.0)), ((15.0, 4.0), (15.0, 7.0))):
+                    ws.append(ed.add(s, M.Wire([a, b])))
+            from kanzonascad.geometry import dist, segment_hits_rect
+            for i, source in ((0, True), (2, False)):
+                # (open_end: the end each wire was drawn to, then the other)
+                here = wirenums.open_end([(s, ws[i])], first=ws[i])
+                there = wirenums.open_end([(s, ws[i + 1])], first=ws[i + 1])
+                with p.edit("x") as ed:
+                    wirenums.cross_reference(ed, p, here, there,
+                                             lib.get("symbol", "Source arrow"),
+                                             lib.get("symbol", "Destination arrow"), source)
+            texts = xrefs.texts(p, s)
+            for e in s.inserts():
+                pin = e.pin_points()[0][1]
+                w = [x for x in s.wires() if x.touches(pin)][0]
+                end = w.points[0] if dist(w.points[0], pin) < 1e-9 else w.points[-1]
+                self.assertLess(dist(end, pin), 1e-9)                   # (connected)
+                other = w.points[-1] if end is w.points[0] else w.points[0]
+                body = [q for x in e.world_entities() if isinstance(x, M.Polyline)
+                        for q in x.points]
+                tip = max(body, key=lambda q: dist(q, pin))              # (its far point)
+                # all of it on the side away from the wire
+                self.assertGreater(dist(tip, other), dist(pin, other), e.block)
+                # a source's point is its far end; a destination's is on the pin
+                ends = sorted(body, key=lambda q: dist(q, pin))
+                if e.block == "Destination arrow":
+                    self.assertLess(dist(ends[0], pin), 1e-9)               # (tip on the line)
+                # the text: past the far end, over neither the arrow nor the wire
+                t = min(texts, key=lambda t: dist(t.pos, tip))
+                x0, y0, x1, y1 = t.bbox()
+                for a, b in zip(w.points, w.points[1:]):
+                    self.assertFalse(segment_hits_rect(a, b, (x0, y0, x1, y1)),
+                                     (e.block, t.text, (x0, y0, x1, y1)))
+                ex = e.bbox()
+                self.assertFalse(x0 < ex[2] and x1 > ex[0] and y0 < ex[3] and y1 > ex[1],
+                                 (e.block, t.text, (x0, y0, x1, y1), ex))
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            win.close()
 
 
 if __name__ == "__main__":

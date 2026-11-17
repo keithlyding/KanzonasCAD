@@ -501,14 +501,16 @@ def builtin_symbols():
     # pin, the body away) where it arrives
     o = [Polyline([(0, 0.0625), (0.25, 0.0625), (0.3125, 0), (0.25, -0.0625), (0, -0.0625)],
                   True), Line((0.0625, 0.0), (0.2, 0.0))]
+    # (no tag drawn: the pair's name is kept, and the text past the arrow says where the
+    # other end is and the wire's number)
     S.append(_sym("Source arrow", "JIC/Wiring", o, "device", "", "",
-                  pins=[{"name": "1", "pos": (0, 0)}], tag=(0.15625, 0.1),
+                  pins=[{"name": "1", "pos": (0, 0)}], tag=None,
                   description="Source arrow: where a wire leaves for its destination arrow "
                               "(the one of the same name)", wiring="link"))
     o = [Polyline([(0, 0), (0.0625, 0.0625), (0.3125, 0.0625), (0.3125, -0.0625),
                    (0.0625, -0.0625)], True), Line((0.1125, 0.0), (0.25, 0.0))]
     S.append(_sym("Destination arrow", "JIC/Wiring", o, "device", "", "",
-                  pins=[{"name": "1", "pos": (0, 0)}], tag=(0.1875, 0.1),
+                  pins=[{"name": "1", "pos": (0, 0)}], tag=None,
                   description="Destination arrow: where a wire arrives from its source arrow "
                               "(the one of the same name)", wiring="link"))
     return S

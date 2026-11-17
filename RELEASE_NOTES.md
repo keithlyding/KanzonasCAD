@@ -40,7 +40,9 @@ build fails without them.
 - Typing a wire number another wire already has asks whether it's a cross-reference:
   **Source** or **Destination** puts a **Source arrow** and a **Destination arrow** (new in the
   Library, JIC/Wiring) on the open ends of the two wires, so they become one wire and each
-  shows where the other is. Or keep just the same number.
+  shows where the other is. Or keep just the same number. A source arrow sits on the end of
+  its wire pointing away from the line, a destination arrow's tip touches the line pointing
+  into it, and past each the wire's number and the other's place (2046 / 7-A2).
 
 **Fixed**
 - Moving, scooting or turning a symbol with two pins of the same name (a drive with two GND
@@ -52,6 +54,11 @@ build fails without them.
   that click, and **Clean up wires** straightens such wires in drawings you already have.
 - A bus clicked onto a 3-pole device whose pins line up with another device's (stacked half an
   inch apart) could land one pin over, on the other device. It lands on the pins you click.
+- A bus fanned onto a device's pins could leave a wire jogging over and straight back along
+  itself.
+- Scoot with everything attached could leave a pin off its wire: a pin on a wire's corner, or
+  a device whose pin sits on the middle of a wire that moves along. That device now comes
+  along, or Scoot refuses the move.
 
 ## 0.17.4
 

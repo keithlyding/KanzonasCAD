@@ -729,7 +729,8 @@ pair of arrows with a new name on the open end of each wire (the end on nothing)
 arrow</b> pointing out where the wire leaves and a <b>Destination arrow</b> pointing in where it
 arrives. They are then one wire with that number, and each shows
 the other's place under it (7-A2). One step: Undo takes it all back. <b>No: just the same
-number</b> gives this wire the number as typed, without connectors. A wire with no open end
+number</b> gives this wire the number as typed, without connectors, and locks it (numbering
+would give an unlocked one a free number again). A wire with no open end
 (both ends on pins or wires) says so: draw it out to where it leaves the sheet first.</li>
 <li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
 as device tags do.</li>
@@ -742,9 +743,10 @@ and one where it comes back on another sheet, with the same name. Placing one as
 Enter takes the one offered (a connector still waiting for its other end, else the next free
 letter). The wire keeps the number of the sheet it starts on, and under each connector its
 other end's place shows (<b>7-A2</b>). <b>Source arrow</b> and <b>Destination arrow</b>
-(Library, JIC/Wiring) are the same, drawn as arrows: pointing out where the wire leaves,
-pointing in where it arrives; under each, the wire's number and the other's place
-(<b>2046 / 7-A2</b>).</li>
+(Library, JIC/Wiring) are the same, drawn as arrows on the wire's end: a source arrow points
+away from the line where the wire leaves, a destination arrow's tip is on the line, pointing
+into it, where the wire arrives. Past each arrow's far end (not over the wire), the wire's
+number and the other arrow's place (<b>2046 / 7-A2</b>).</li>
 <li><b>Source/destination arrows</b> (SIGARROW, SDA; Draw menu, Schematic tab:
 Cross-references), as AutoCAD Electrical's signal arrows: click near the open end of the wire
 where it leaves (an end on nothing: a Source arrow goes there), then near the open end where it

@@ -757,6 +757,20 @@ def doubles_back(pts):
     return False
 
 
+def straighten(pts):
+    """A route's points without the corners where it turns straight back along itself (a jog
+    over and straight back: a dead end of no use, it goes on from there along the same line)."""
+    out = [tuple(q) for q in pts]
+    i = 1
+    while 0 < i < len(out) - 1:
+        if doubles_back(out[i - 1:i + 2]):
+            del out[i]
+            i = max(1, i - 1)
+        else:
+            i += 1
+    return out
+
+
 def unfold(sheet, pts):
     """A wire's points without a last (or first) leg running straight back over the one
     before it and ending on it: that end goes, the wire keeps its length (the owner's bus

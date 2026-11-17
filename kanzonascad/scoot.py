@@ -86,10 +86,22 @@ def branch(sheet, devs):
     from a pin to another symbol's pin brings that symbol (and so on: a motor, its drive, its
     contactor); one carried on end to end by a single wire continues; a wire whose far end
     taps another wire's middle (a bus), or meets a junction of several, leaves the branch
-    there (its end on the branch moves, the other stays on what it meets)."""
+    there (its end on the branch moves, the other stays on what it meets). A symbol with a pin
+    along a wire that moves whole comes too."""
     syms = {e.id: e for e in devs}
     whole, leaving = {}, {}
     todo = list(devs)
+
+    def moves_whole(path):
+        # (a symbol with a pin along a wire that moves whole is attached to it too: it comes
+        # along, else its pin would come off the wire, the battery, 0.17.5, seed 12)
+        for x in path:
+            whole[x.id] = x
+            for o in sheet.query(x.bbox()):
+                if isinstance(o, Insert) and o.id not in syms and \
+                        any(x.touches(q, TOL) for _n, q in o.pin_points()):
+                    syms[o.id] = o
+                    todo.append(o)
     while todo:
         e = todo.pop()
         for _n, p in e.pin_points():
@@ -110,13 +122,11 @@ def branch(sheet, devs):
                             if s.id not in syms:
                                 syms[s.id] = s
                                 todo.append(s)
-                        for x in path:
-                            whole[x.id] = x
+                        moves_whole(path)
                         break
                     ends = [x for x in others if _is_end(x, far)]
                     if not others:
-                        for x in path:                  # (a loose end: moves with it)
-                            whole[x.id] = x
+                        moves_whole(path)               # (a loose end: moves with it)
                         break
                     if len(others) == 1 and ends and others[0].id not in whole and \
                             others[0].id not in leaving and others[0] not in path:
@@ -124,8 +134,7 @@ def branch(sheet, devs):
                         at = far
                         continue
                     # (taps a bus, or a junction: the last wire leaves the branch here)
-                    for x in path[:-1]:
-                        whole[x.id] = x
+                    moves_whole(path[:-1])
                     leaving[cur.id] = (cur, i)    # (i: its end on the branch, which moves)
                     break
     return list(syms.values()), list(whole.values()), list(leaving.values())
@@ -145,7 +154,7 @@ def branch_moved(sheet, devs, dx, dy):
         for _n, q in e.pin_points():
             for w in _wires_at(sheet, q):
                 # (along it is fine only while the pin stays on it: a wire turning a corner
-                # at the pin runs along the move on one side only, the battery, 0.18, seed 21)
+                # at the pin runs along the move on one side only, the battery, seed 21)
                 if w.id not in moving and not _is_end(w, q) and not (
                         _runs_along(w, q, dx, dy) and w.touches((q[0] + dx, q[1] + dy), TOL)):
                     return None
@@ -168,12 +177,24 @@ def branch_moved(sheet, devs, dx, dy):
         far = w.points[-1 if i == 0 else 0]
         slid = (far[0] + dx, far[1] + dy)
         on = [x for x in _wires_at(sheet, far) if x.id != w.id]
-        if on and all(x.touches(slid, TOL) and _runs_along(x, far, dx, dy) for x in on):
+        # (moved whole only when no other symbol's pin is on it: a pushbutton's pin on its
+        # middle would come off it, the battery, 0.17.5, seed 12)
+        if on and all(x.touches(slid, TOL) and _runs_along(x, far, dx, dy) for x in on) and \
+                not _others_pins_on(sheet, w, inside):
             out.append(w.moved(dx, dy))
         else:
             q = w.points[i]
             out.append(w.end_moved(i, (q[0] + dx, q[1] + dy)))
     return out
+
+
+def _others_pins_on(sheet, w, inside):
+    """Is a pin of a symbol not moving (not in inside) on wire w, anywhere along it?"""
+    for x in sheet.query(w.bbox()):
+        if isinstance(x, Insert) and x.id not in inside:
+            if any(w.touches(q, TOL) for _n, q in x.pin_points()):
+                return True
+    return False
 
 
 def _runs_along(x, q, dx, dy):
