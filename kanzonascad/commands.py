@@ -1451,6 +1451,32 @@ def bus_paths(points, count, spacing, flip=False):
     return out
 
 
+def _same_way(a, b, c):
+    """Do a-b and a-c leave a the same way (across or up and down, and the same direction)?"""
+    u = (b[0] - a[0], b[1] - a[1])
+    w = (c[0] - a[0], c[1] - a[1])
+    return u[0] * w[0] + u[1] * w[1] > 0 and abs(u[0] * w[1] - u[1] * w[0]) <= 1e-9 * max(
+        1.0, abs(u[0]) + abs(u[1])) * max(1.0, abs(w[0]) + abs(w[1]))
+
+
+def _apart(paths):
+    """Do a bus's wires (their points) keep apart: none turns straight back along itself, and
+    no two touch or cross? (A bus carried on from its open ends round a symbol had a wire's
+    way round run onto another's end: joined there with a dot, the battery, seed 77.)"""
+    from .wires import doubles_back
+    from .trim import intersect
+    if any(doubles_back(q) for q in paths):
+        return False
+    segs = [[("seg", a, b) for a, b in zip(q, q[1:])] for q in paths]
+    for i in range(len(segs)):
+        for j in range(i + 1, len(segs)):
+            for sa in segs[i]:
+                for sb in segs[j]:
+                    if intersect(sa, sb):
+                        return False
+    return True
+
+
 def _paths_cross(paths):
     """Does any piece of one of these wires cross or overlap a piece of another, other than
     meeting it end to end?"""
@@ -2004,8 +2030,15 @@ class BusCmd(Command):
                                extra, on)
             if got is new:
                 continue
-            tail = [q[len(self.points) - 1:] for q in self._paths(self.points + got)]
-            if not any(_crosses(q, boxes) for q in tail):
+            if len(self.points) == 1 and getattr(self, "side_pins", None) and \
+                    not _same_way(self.points[0], new[0], got[0]):
+                # (a bus leaving pins or carried on from its ends leaves them square, the way
+                # it was clicked: a way round turning across them ran onto its own ends,
+                # the battery, seed 77)
+                continue
+            paths = self._paths(self.points + got)
+            tail = [q[len(self.points) - 1:] for q in paths]
+            if not any(_crosses(q, boxes) for q in tail) and _apart(tail):
                 return got
         return new
 
