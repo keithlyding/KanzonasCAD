@@ -1310,8 +1310,14 @@ def pin_side(sheet, p, tol=1e-6):
             hi = max((bb[axis + 2] for bb in boxes), default=c)
             if lo < c - 1e-6 and hi > c + 1e-6:
                 continue                # (the drawing on both sides: in and out, not a side)
+            world = [e.to_world(q) for _n, q in line]
+            # (on the drawing too, straight across or up and down: a symbol turned at a slant
+            # has no side a bus can leave square from, the battery, seed 3101: its wires were
+            # laid square from the first pin, the others on no pin)
+            if not any(all(abs(q[k] - world[0][k]) <= 1e-6 for q in world) for k in (0, 1)):
+                continue
             if best is None or len(line) > len(best[0]):
-                best = ([e.to_world(q) for _n, q in line], gaps[0] * e.scale)
+                best = (world, gaps[0] * e.scale)
         if best is not None:
             return best
     return None

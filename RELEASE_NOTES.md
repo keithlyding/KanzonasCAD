@@ -18,6 +18,10 @@ build fails without them.
   as text, and a scanned page has no lines in it at all: bringing in pictures and scans comes
   next.
 
+**Fixed**
+- A bus started on the pins of a symbol turned at a slant laid its other wires on no pins; it
+  now starts there as an ordinary bus.
+
 **Also new since 0.16.6** (0.16.7 wasn't released on its own)
 - Wires go around the symbols in their way instead of through them, and arrive at a pin
   straight out of its side. Project properties, Schematic: "Wires go around the symbols in
