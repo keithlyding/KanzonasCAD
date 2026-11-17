@@ -1365,6 +1365,23 @@ def pin_side(sheet, p, tol=1e-6):
             line = [(n, q) for n, q in pins if abs(q[axis] - at[axis]) <= 1e-6]
             if len(line) < 2:
                 continue
+            # (the evenly spaced run the pin is in, the longest when it is in two: a drive's
+            # L1-L3 with its ground PE1 farther on are a side of three, 0.17.4)
+            line.sort(key=lambda t: t[1][1 - axis])
+            runs, cur = [], [line[0]]
+            for prev, nxt in zip(line, line[1:]):
+                gap = nxt[1][1 - axis] - prev[1][1 - axis]
+                if len(cur) >= 2 and abs(gap - (cur[1][1][1 - axis] - cur[0][1][1 - axis])) > \
+                        1e-6:
+                    runs.append(cur)
+                    cur = [prev]
+                cur.append(nxt)
+            runs.append(cur)
+            mine = [r for r in runs if any(n == hit[0] for n, _q in r) and len(r) >= 2]
+            if not mine:
+                continue
+            line = max(mine, key=len)
+            line.sort(key=lambda t: [n for n, _q in pins].index(t[0]))  # (the block's order)
             along = sorted(q[1 - axis] for _n, q in line)
             gaps = [b - a for a, b in zip(along, along[1:])]
             if min(gaps) <= 1e-9 or max(gaps) - min(gaps) > 1e-6:
@@ -3115,11 +3132,10 @@ class DimLinearCmd(Command):
     def _height(self):
         return float(self.ctx.project.settings.get("dim_height", 0.1)) * self.ctx.sheet().k()
 
-    @property
-    def free_point(self):
-        """The two points measured go where they are picked (the snap): Ortho and Polar
-        don't bend them (the dimension line's place is still Ortho's)."""
-        return len(self.pts) < 2
+    # (its two points follow Ortho and Polar as any point does, an object snap near the mouse
+    # first: the owner, 0.17.4, "Linear measurement is not following polar or ortho"; until
+    # then they went where picked)
+    snap_at_mouse = True
 
     def point(self, p):
         self.pts.append(p)
@@ -3649,6 +3665,12 @@ class ScootCmd(_TwoPoint):
             d = abs(dx) + abs(dy)
         sheet = self.ctx.sheet()
         got = self.result(p)
+        if got is None:
+            self.ctx.message("A wire runs through a pin of what would move, across the way it "
+                             "goes: scoot along that wire, or cut it at the pin first (Trim "
+                             "wire)")
+            self.finish()
+            return
         with self.ctx.edit(self.title) as ed:
             for e in got:
                 ed.change(sheet, e)
@@ -3695,7 +3717,9 @@ class ScootCmd(_TwoPoint):
 
     def preview(self, p):
         if self.run is None:
-            return _TwoPoint.preview(self, p) if self.devs else []
+            if not self.devs or self.from_pt is None:
+                return []
+            return (self.result(p) or []) + [M.Line(self.from_pt, p)]
         return list(self._run_moved(p).values())
 
 

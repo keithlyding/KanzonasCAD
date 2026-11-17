@@ -132,11 +132,21 @@ def branch(sheet, devs):
 
 
 def branch_moved(sheet, devs, dx, dy):
-    """The changed copies for the branch of devs moved by dx, dy (across or up and down): its
+    """The changed copies for the branch of devs moved by dx, dy (across or up and down), or
+    None when a wire runs uncut through one of its pins across the move: its
     symbols and inner wires moved whole; each wire leaving it moved whole when the move runs
     along what its far end is on (a drop sliding along a bus) and stays on it, else its end on
     the branch moved with a jog where needed (Wire.end_moved; it stretches or shortens)."""
     syms, whole, leaving = branch(sheet, devs)
+    # (a wire running through a pin, uncut, across the way it moves: its pins would come off
+    # it; None, and nothing moves: the battery, seed 12)
+    moving = {w.id for w in whole} | {w.id for w, _i in leaving}
+    for e in syms:
+        for _n, q in e.pin_points():
+            for w in _wires_at(sheet, q):
+                if w.id not in moving and not _is_end(w, q) and \
+                        not _runs_along(w, q, dx, dy):
+                    return None
     out = [e.moved(dx, dy) for e in syms] + [w.moved(dx, dy) for w in whole]
     # (a wire tapping the middle of one that moves whole, a drop off a bus the disconnect's
     # wires make: its end there goes with it, unless the move runs along that wire)

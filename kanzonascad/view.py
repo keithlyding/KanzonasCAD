@@ -620,6 +620,10 @@ class CadView(QWidget):
                 offer("ext", q, q0)
             for q, q0, inner in OS.alignment(self.track_pts, base, p, r):
                 offer("ext", q, q0, inner)
+            # (where a tracking line crosses a line, a wire, a circle: before a point
+            # anywhere along it)
+            for q, q0 in OS.track_crossings(self.tracked, self.track_pts, cands, p, r):
+                offer("ext", q, q0, -1)
         if base is not None and "par" in modes:
             for q in OS.parallel(base, self.par_dirs, p, r):
                 offer("par", q, base)
@@ -735,7 +739,11 @@ class CadView(QWidget):
             probe = self._ortho(cmd.base, p)
             b = cmd.base
             self.ortho_ray = (b, (b[0] + 1.0, b[1]) if probe[1] == b[1] else (b[0], b[1] + 1.0))
-        s = self.object_snap(probe)
+        # (a dimension's points: an object's point near the mouse first, even off the Ortho
+        # line; then Ortho and Polar, as for any point)
+        s = self.object_snap(p) if getattr(cmd, "snap_at_mouse", False) else None
+        if s is None:
+            s = self.object_snap(probe)
         self.ortho_ray = None
         if s is not None:
             self.snap = s

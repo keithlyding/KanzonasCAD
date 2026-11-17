@@ -671,6 +671,9 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
                                  a["array"], a["offset"], a["erase"], a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
+            # (the owner, 0.17.4: "I also need the measuring tool repeated in home and
+            # schematic tabs")
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
             ("Layers", "small", [self.layer_box, self.layer_states, a["layers"], a["lay_off"],
                                  a["lay_iso"], a["lay_on"], a["lay_lock"], a["lay_unlock"]]),
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
@@ -680,6 +683,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"], a["dash_box"]]),
             # (the owner: "Copy is not included in schematic and needs to be")
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["explode"], a["attr_vis"],
                                   a["del_comp"]]),
             ("Blocks", "large", [a["edit_block"], a["save_block"], a["block_props"],

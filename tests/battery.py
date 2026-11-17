@@ -1445,8 +1445,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         if v.cmd is not None:
             type_in(v, fmt(e.pos))
             if v.cmd is not None and cmd.devs and not only:
-                moved = {x.id for x in cmd.result((e.pos[0] + d[0], e.pos[1] + d[1]))
-                         if isinstance(x, M.Insert)}
+                got = cmd.result((e.pos[0] + d[0], e.pos[1] + d[1]))
+                moved = {x.id for x in got or () if isinstance(x, M.Insert)}
             if v.cmd is not None:
                 v.input_text(fmt((e.pos[0] + d[0], e.pos[1] + d[1])))
         finish()
@@ -1494,7 +1494,23 @@ def random_editing(log, out, ops, seed, drawing=None):
     def op_dim():
         v.run(C.DimLinearCmd)
         a = pt()
-        for q in (a, (a[0] + 2, a[1]), (a[0] + 1, a[1] - 0.5)):
+        if rnd.random() < 0.5 and v.cmd is not None:
+            # (0.17.4: the second point follows Ortho, with the snaps off: the mouse a little
+            # off level is held level from the first point)
+            v.input_text(fmt(a))
+            flags = (v.osnap_on, v.snap_on, v.ortho_on, v.polar_on)
+            v.osnap_on, v.snap_on, v.ortho_on, v.polar_on = False, False, True, False
+            try:
+                got = v.resolve((a[0] + 2.0, a[1] + 0.3))
+            finally:
+                v.osnap_on, v.snap_on, v.ortho_on, v.polar_on = flags
+            assert abs(got[1] - a[1]) < 1e-9, "a dimension's second point off Ortho: %r from %r" % (
+                got, a)
+            BC.CHECKED["dimension follows Ortho"] += 1
+            pts = [(a[0] + 2, a[1]), (a[0] + 1, a[1] - 0.5)]
+        else:
+            pts = [a, (a[0] + 2, a[1]), (a[0] + 1, a[1] - 0.5)]
+        for q in pts:
             if v.cmd is not None:
                 v.input_text(fmt(q))
         finish()

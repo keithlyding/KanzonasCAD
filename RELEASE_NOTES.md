@@ -6,6 +6,20 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.17.4
+
+**New**
+- The **Variable frequency drive** has a ground on each side: PE1 on the line side and PE2 on
+  the load side.
+- **Linear dimension** and **Aligned dimension** follow Ortho and Polar (an object snap at the
+  mouse still comes first), and the dimension tools are on the Home and Schematic tabs too.
+- **Extension** snap: where the dotted tracking line crosses a line, a wire or a circle, that
+  crossing snaps.
+
+**Fixed**
+- Scoot no longer leaves a wire behind that runs straight through a device's pins across the
+  way it moves: it says so and moves nothing.
+
 ## 0.17.3
 
 **New**
