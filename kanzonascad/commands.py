@@ -1955,7 +1955,8 @@ class MakeBlockCmd(Command):
                           d.get("contact", ""), d.get("prefix", ""),
                           wiring=d.get("wiring", ""), manufacturer=d.get("manufacturer", ""),
                           family=d.get("family", ""), series=d.get("series", ""),
-                          catalog=d.get("catalog", ""))
+                          catalog=d.get("catalog", ""),
+                          show_pins=bool(d.get("show_pins", False)))
         if d["kind"] == "symbol":
             if tag_pt is not None:
                 defn.tag_pos = (tag_pt[0] - bx, tag_pt[1] - by)
@@ -2636,6 +2637,40 @@ class OffsetCmd(Command):
         d = self._distance(p)
         got, _why = offset_entity(self.ent, d, p) if d > 1e-9 else (None, None)
         return [got] if got is not None else []
+
+
+class NumberCmd(Command):
+    """NUMBER: the selected texts numbered in order (numbering.py; the owner, 0.16: "select
+    whatever text boxes and then choose 1,2,3...; A,B,C...; S1, S2, S3...; A1, B2,C3..."): a
+    window says how (the sequence, its start and step, a prefix and suffix, top to bottom or
+    left to right, replacing the text or put before or after it); one edit, one Undo."""
+    name, title = "NUMBER", "Number texts"
+    selects = True
+
+    def begin(self):
+        from . import numbering as N
+        texts = [e for e in _selected(self.ctx) if isinstance(e, (M.Text, M.MText))]
+        if not texts:
+            self.ctx.message("Select texts to number (single-line or multi-line texts)")
+            self.finish()
+            return
+        host = self.ctx.host
+        how = host.ask_numbering(len(texts)) if host is not None else None
+        if how is None:
+            self.finish()
+            return
+        texts = N.ordered(texts, how.get("order", "down"))
+        names = N.labels(len(texts), how.get("sequence", "number"), how.get("start", "1"),
+                         int(how.get("step", 1)), int(how.get("digits", 0)),
+                         how.get("prefix", ""), how.get("suffix", ""),
+                         how.get("letter_start", "A"))
+        sheet = self.ctx.sheet()
+        with self.ctx.edit("Number texts") as ed:
+            for e, label in zip(texts, names):
+                ed.change(sheet, e.copy(text=N.apply_to(e.text, label, how.get("mode",
+                                                                               "replace"))))
+        self.ctx.message("Numbered %d texts: %s ... %s" % (len(texts), names[0], names[-1]))
+        self.finish()
 
 
 class PickWindowCmd(Command):
@@ -3745,6 +3780,7 @@ COMMANDS = {
     "DASHBOX": (DashBoxCmd, ["DB", "DBOX", "BOX"]),
     "ARRAY": (ArrayCmd, ["AR", "ARRAYRECT", "ARRAYPOLAR"]),
     "OFFSET": (OffsetCmd, ["O"]),
+    "NUMBER": (NumberCmd, ["NUM", "TCOUNT"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
     "DINRAIL": (RailCmd, ["RAIL", "DR"]),
     "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)

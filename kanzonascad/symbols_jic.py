@@ -146,6 +146,41 @@ def _heater_link():
         _link(0.0, -gap + 0.0625, -POLE + gap - 0.0625)
 
 
+# a typical small AC drive's control terminals: (number, what it is)
+DRIVE_TERMINALS = [
+    ("S1", "Safety 1"), ("S2", "Safety 2"), ("S+", "Safety +24V"),
+    ("01", "Stop"), ("02", "DigIn 02 / Start-Run FWD"), ("03", "DigIn 03 / Direction-Run REV"),
+    ("04", "Digital Common"), ("05", "DigIn 05"), ("06", "DigIn 06"),
+    ("07", "DigIn 07 / Pulse In"), ("08", "DigIn 08"),
+    ("11", "+24V DC"), ("12", "+10V DC"), ("13", "0-10V (or +/-10V) Input"),
+    ("14", "Analog Common"), ("15", "4-20mA Input"), ("16", "Analog Output"),
+    ("17", "Opto Output 1"), ("18", "Opto Output 2"), ("19", "Opto Common"),
+    ("R1", "Relay 1 N.O."), ("R2", "Relay 1 Common"), ("R5", "Relay 2 Common"),
+    ("R6", "Relay 2 N.C."), ("C1", "RJ45 Shield"), ("C2", "Comm Common")]
+ROW = 0.25          # a terminal block's rows
+
+
+def _terminal_block(name, terminals, prefix, description, width=2.25):
+    """A column of terminals: each a pin on the left (x = -PIN), a lead to its box with its
+    number, and what it is beside it; all in one outline. A contact of a device with prefix
+    (its tag, listed under it)."""
+    o, pins = [], []
+    n = len(terminals)
+    top, bottom = ROW / 2, -(n - 0.5) * ROW
+    o.append(_box(-0.125, bottom, width, top))
+    o.append(Line((0.125, top), (0.125, bottom)))
+    for i, (num, what) in enumerate(terminals):
+        y = -i * ROW
+        if i:
+            o.append(Line((-0.125, y + ROW / 2), (0.125, y + ROW / 2)))
+        o.append(Line((-PIN, y), (-0.125, y)))
+        o.append(Text((0.0, y - 0.035), num, 0.07, align="center"))
+        o.append(Text((0.2, y - 0.035), what, 0.07))
+        pins.append({"name": num, "pos": (-PIN, y)})
+    return _sym(name, "JIC/Power", o, "child", "", prefix, pins, tag=(width / 2, top + 0.1),
+                description=description)
+
+
 def builtin_symbols():
     S = []
     # ---- relays, contactors, timers ------------------------------------------------------
@@ -345,6 +380,13 @@ def builtin_symbols():
                   description="Motor starter: contactor power contacts and overload heaters, "
                               "three poles (a contact of its Contactor coil)",
                   attr_texts=_rating(2 * PIN, RATING3_Y)))
+    # a drive's control terminals (the owner, 0.16: "Add the drive terminal symbol"): a
+    # contact of its Variable frequency drive (its tag, listed under it), one terminal a row
+    # 1/4" apart, wires landing on the left, each terminal's number in its box and what it
+    # is beside it (Edit block changes the list)
+    S.append(_terminal_block("Drive control terminals", DRIVE_TERMINALS, "VFD",
+                             "Control terminals of a variable frequency drive (a contact of "
+                             "its Variable frequency drive)"))
     r, cx = 0.55, 0.625                 # (the circle clear of the pins, every lead reaching it)
     o = [Circle((cx, 0), r), Text((cx, -0.06), "MTR", 0.15, align="center")]
     for y in POLES:

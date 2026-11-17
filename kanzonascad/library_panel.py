@@ -539,9 +539,12 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
                           if defn is not None else None, on_help)
     pin_label = "Pin names, in the order you'll pick them" if defn is None else \
         "Pin names, in order"
+    show_pins = QCheckBox("Show the pin names on the drawing (terminal numbers)")
+    show_pins.setObjectName("show_pins")
+    show_pins.setChecked(defn.show_pins if defn is not None else True)
     sym_rows = [("Part in cross-references", role), ("Contact", contact),
                 ("Tag prefix", prefix), ("Wire numbers through it", wiring),
-                (pin_label, pins)]
+                (pin_label, pins), ("", show_pins)]
     for label, w in sym_rows:
         form.addRow(label, w)
     sym_note = _hint("Part in cross-references, Contact, Tag prefix, Wire numbers and Pin names "
@@ -606,7 +609,7 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
            "category": cat.currentText().strip(), "description": desc.text().strip(),
            "role": role.currentData(), "contact": contact.currentData(),
            "prefix": prefix.text().strip().upper(), "wiring": wiring.currentData(),
-           "pin_names": pin_list()}
+           "pin_names": pin_list(), "show_pins": show_pins.isChecked()}
     out.update({k: _text_of(box).strip() for k, box in makers.items()})
     if defn is None:
         out["replace"] = replace.isChecked()
@@ -623,6 +626,7 @@ def block_with_details(defn, details):
     if d["kind"] == "symbol":
         for k in ("role", "contact", "prefix", "wiring"):
             d[k] = details.get(k, d.get(k, ""))
+        d["show_pins"] = bool(details.get("show_pins", d.get("show_pins", False)))
         if d.get("tag_pos") is None and defn.kind != "symbol" and defn.entities:
             # (a footprint becoming a symbol: its tag above its drawing, as Make block puts it)
             boxes = [e.bbox() for e in defn.entities]
@@ -733,7 +737,8 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         bl = QVBoxLayout(box)
         for n in names:
             val = ins.attrs.get(n, "")
-            c = QCheckBox("%s%s" % (n, ("   (%s)" % val) if val else "   (empty)"))
+            c = QCheckBox("Pin names" if n == "PINS" else
+                          "%s%s" % (n, ("   (%s)" % val) if val else "   (empty)"))
             c.setObjectName("show_" + n)
             c.setChecked(n not in ins.hidden)
             bl.addWidget(c)

@@ -550,7 +550,7 @@ def random_editing(log, out, ops, seed, drawing=None):
     syms = ["Contact NO", "Contact NC", "Relay coil", "Pushbutton NO", "Pushbutton NC",
             "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC",
             "Disconnect 3-pole", "Fuses 3-pole", "Circuit breaker 3-pole",
-            "Fused disconnect 3-pole", "Starter 3-pole"]
+            "Fused disconnect 3-pole", "Starter 3-pole", "Drive control terminals"]
     syms = [n for n in syms if lib.get("symbol", n) is not None]
     start = norm(p.to_dict())
     counts = {}
@@ -1007,6 +1007,43 @@ def random_editing(log, out, ops, seed, drawing=None):
             else:
                 assert q == e.points[i], "a middle grip moved another corner"
         BC.CHECKED["middle grip"] += 1
+
+    def op_number():
+        # (0.16.6: texts on a grid of rows and columns, numbered: each takes the number its
+        # place in the order gives it, worked out from the grid the battery made)
+        from kanzonascad import numbering as N
+        rows, cols = rnd.randint(1, 4), rnd.randint(1, 3)
+        a = pt()
+        dx, dy = rnd.choice([1.0, 1.5, 2.0]), rnd.choice([0.25, 0.5])
+        grid = {}
+        with p.edit("texts to number") as ed:
+            for r in range(rows):
+                for c in range(cols):
+                    word = rnd.choice(["X", "TERM", "Relay 1 Common", "1"])
+                    t = ed.add(s, M.Text((a[0] + c * dx, a[1] - r * dy), word, 0.1))
+                    grid[t.id] = (r, c, word)
+        how = {"sequence": rnd.choice(N.SEQUENCES), "prefix": rnd.choice(["", "S", "TB1-"]),
+               "suffix": rnd.choice(["", "A"]), "start": "1", "step": rnd.choice([1, 2]),
+               "digits": rnd.choice([0, 2]), "letter_start": "A",
+               "order": rnd.choice(N.ORDERS), "mode": rnd.choice(N.MODES)}
+        if how["sequence"] in ("letter", "lower"):
+            how["start"] = "A" if how["sequence"] == "letter" else "a"
+        win.ask_numbering = lambda n: dict(how)
+        try:
+            v.set_selection(set(grid))
+            v.run(C.NumberCmd)
+        finally:
+            del win.ask_numbering
+            finish()
+        names = N.labels(rows * cols, how["sequence"], how["start"], how["step"],
+                         how["digits"], how["prefix"], how["suffix"], how["letter_start"])
+        for i, (r, c, word) in grid.items():
+            k = c * rows + r if how["order"] == "down" else r * cols + c
+            want = N.apply_to(word, names[k], how["mode"])
+            got = s.entities[i].text
+            assert got == want, "Number texts gave row %d column %d %r, not %r (%s)" % (
+                r, c, got, want, how["order"])
+        BC.CHECKED["number texts"] += 1
 
     def op_line():
         v.run(C.LineCmd)
@@ -1615,7 +1652,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

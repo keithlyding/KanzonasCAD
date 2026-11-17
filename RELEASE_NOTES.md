@@ -6,6 +6,20 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.16.6
+
+**New**
+- Symbols can show their pin names (terminal numbers) on the drawing: tick "Show the pin
+  names on the drawing" in Make block or Block properties (ticked to start for symbols you
+  make). Hide them on one copy like any attribute.
+- **Drive control terminals** symbol: a drive's control terminals (S1, S2, S+, 01-08, 11-19,
+  R1-R6, C1, C2) with what each one is; it takes its drive's tag.
+- **Number texts** (Modify menu, Home tab): number the selected texts 1, 2, 3 / A, B, C /
+  S1, S2, S3 / A1, B2, C3 ..., top to bottom or left to right, replacing the text or added
+  before or after it.
+- The user manual (F1) has its chapters on the left and a search box: type to find, with
+  Next and Previous.
+
 ## 0.16.5
 
 **New**
