@@ -2672,6 +2672,9 @@ class Sheet:
         self._next = 1
         self.index = SpatialIndex()
         self.version = 0                # bumped on every change (render caches key on it)
+        # bumped when a block reference or a wire is added, removed or replaced: what reads
+        # only those (inserts(), wires(), duplicates) isn't worked out again for a line drawn
+        self.net_version = 0
         self.touched = set()            # ids changed since the screen renderer last looked
 
     # ---- size, border, zones -------------------------------------------------------------
@@ -2813,30 +2816,34 @@ class Sheet:
         self.entities[ent.id] = ent
         self.index.add(ent)
         self.version += 1
+        if isinstance(ent, (Insert, Wire)) or isinstance(old, (Insert, Wire)):
+            self.net_version += 1
         self.touched.add(ent.id)
 
     def _drop(self, eid):
         if eid in self.entities:
-            del self.entities[eid]
+            old = self.entities.pop(eid)
             self.index.remove(eid)
             self.version += 1
+            if isinstance(old, (Insert, Wire)):
+                self.net_version += 1
             self.touched.add(eid)
 
     def wires(self):
         """The wires on this sheet (kept per sheet version, as inserts())."""
         got = getattr(self, "_wires", None)
-        if got is None or got[0] != self.version:
-            got = self._wires = (self.version, [e for e in self.entities.values()
-                                                if isinstance(e, Wire)])
+        if got is None or got[0] != self.net_version:
+            got = self._wires = (self.net_version, [e for e in self.entities.values()
+                                                    if isinstance(e, Wire)])
         return got[1]
 
     def inserts(self):
         """The block references on this sheet (kept per sheet version: tags, contacts and
         cross-references read them without walking every line)."""
         got = getattr(self, "_inserts", None)
-        if got is None or got[0] != self.version:
-            got = self._inserts = (self.version, [e for e in self.entities.values()
-                                                  if isinstance(e, Insert)])
+        if got is None or got[0] != self.net_version:
+            got = self._inserts = (self.net_version, [e for e in self.entities.values()
+                                                      if isinstance(e, Insert)])
         return got[1]
 
     def query(self, rect):

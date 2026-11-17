@@ -736,7 +736,11 @@ shown under it.</li>
 <p>Every wire gets its number by itself: the page number and three digits, <b>6001</b>, 6002...
 on page 6. The number shows above the wire (beside it when it runs up and down), on its
 longest straight piece, in the middle of the longest stretch clear of crossings and
-junctions. A wire longer than 6 inches on paper shows it near <b>both ends</b> instead (Project
+junctions, <b>where it is out of the way</b>: when another wire, a symbol or its texts, or
+another number is there, it moves along the wire, or to the other side of it, to the first
+spot where it touches nothing. With no room beside the wire anywhere, it is set off to the
+side with a <b>short line</b> back to the wire (drawn, printed and exported with it). A
+number you put with Wire number label stays where you put it. A wire longer than 6 inches on paper shows it near <b>both ends</b> instead (Project
 properties, Schematic: <b>Number near both ends of wires longer than</b>; Off for one).</p>
 <ul>
 <li><b>One number per connected wire</b>: wires joined end to end or in a T share it. A

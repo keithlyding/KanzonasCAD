@@ -80,9 +80,11 @@ def export_dxf(project, sheet, path, include_frame=True):
                 "SYMBOLS" if "SYMBOLS" in project.layers else "0")
             ents.append(t)
     # the wire numbers, on layer WIRES
-    from .wirenums import labels
+    from .wirenums import labels, label_leaders
     for t in labels(project, sheet):
         ents.append(t.copy(layer="WIRES" if "WIRES" in project.layers else "0"))
+    for a, b in label_leaders(project, sheet):
+        ents.append(M.Line(a, b, layer="WIRES" if "WIRES" in project.layers else "0"))
     for e in ents:
         _write(msp, e)
     doc.saveas(path)

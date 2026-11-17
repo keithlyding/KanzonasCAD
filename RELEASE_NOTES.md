@@ -17,6 +17,9 @@ build fails without them.
 - Footprint labels are **smaller**: 0.08" on paper to start. Panel settings has **Footprint
   label height** to change it for the whole project. Projects made earlier take 0.08" when
   opened.
+- **Wire numbers keep out of the way**: a number moves along its wire, or to its other side,
+  to a spot clear of other wires, symbols, texts and numbers. With no room anywhere beside the
+  wire, it goes off to the side with a short line back to the wire.
 - **Duplicates are marked**: a device tag or wire number used twice anywhere in the project
   gets a red frame on the drawing until you fix it (it doesn't print), and the command line
   says which when one appears. Wires joined by connectors or arrows, and a number kept with

@@ -360,8 +360,20 @@ class SheetRenderer:
         if lay is None or lay.visible:
             draw_texts(painter, refs, self.pal.color(self.project, M.Text(
                 (0, 0), "", 0.1, layer="XREFS" if lay is not None else "SYMBOLS")), outlines)
-        draw_texts(painter, items, self.pal.color(self.project, M.Text(
-            (0, 0), "", 0.1, layer="SYMBOLS")), outlines)
+        num_color = self.pal.color(self.project, M.Text((0, 0), "", 0.1, layer="SYMBOLS"))
+        draw_texts(painter, items, num_color, outlines)
+        lead = wirenums.label_leaders(self.project, self.sheet)
+        if lead:
+            # (a number set off to the side of its wire: the little line back to it)
+            path = QPainterPath()
+            for a, b in lead:
+                path.moveTo(QPointF(*a))
+                path.lineTo(QPointF(*b))
+            pen = QPen(num_color, 0.0)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(path)
 
     def paint(self, painter, pen_width=0.0, paper=True, under=None):
         """pen_width 0: cosmetic one-pixel lines (screen); a number: that width in inches

@@ -19,7 +19,7 @@ _cache = {"sig": None, "got": None}
 
 
 def _signature(project):
-    return (tuple((s.id, s.version) for s in project.sheets),
+    return (tuple((s.id, s.net_version, project.sheet_number(s)) for s in project.sheets),
             tuple(project.settings.get("same_numbers") or ()),
             bool(project.settings.get("wire_numbers", True)))
 
