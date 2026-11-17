@@ -398,7 +398,7 @@ drawing tab (for Edit block, the one it was opened from) has copies of the block
 asks <b>Update the copies of ... in ...?</b> Yes changes them in one step (Undo takes it back):
 they take the new drawing, a renamed block's copies take its new name, and their tags,
 descriptions, manufacturers and catalog numbers stay. Wires stay on the pins (matched by
-name) and stretch to where the pins moved; a wire on a pin that is gone stays where it was,
+name; two pins of one name in their order) and stretch to where the pins moved; a wire on a pin that is gone stays where it was,
 and the command line says how many. No keeps the old drawing. Other projects keep their own
 copies of the block as they were.</p>
 <p><b>Update blocks from library...</b> (Library menu) does the same for every block in the
@@ -576,8 +576,10 @@ settings, <b>A second wire on a pin leaves it on a 45-degree lead</b>, makes it 
 a short 45-degree lead (1/8 inch on paper) and then run beside the first, as drawn by hand (to
 the side the cursor is on; a third wire takes the other side; the lead keeps its angle when the
 symbol moves); it is off to start. Several wires on a pin get no dot: the pin is the connection.</li>
-<li><b>Junction dots</b>: a dot goes where <b>three or more wire ends meet</b>, or where a wire
-<b>ends on another wire's middle or bend</b> (a T). A wire carried on from a free end of another
+<li><b>Junction dots</b>: a dot goes only where a wire taps off another: where <b>three or more
+wire ends meet</b>, or where a wire <b>ends on another wire's middle or bend</b> (a T), so that
+wires leave the point three or more ways. Two wires meeting end to end get no dot, straight or
+turning a corner. A wire carried on from a free end of another
 joins it into one wire, with no dot; carried on from a point that is already a bend, or where
 two wires already meet end to end, it makes three: a dot (on the screen both look like the end
 of one wire). <b>Delete dot</b> (DELDOT, DD; Modify menu, Schematic tab: Edit wires): click a
@@ -586,7 +588,8 @@ same spot again (or Undo) to bring it back; keep clicking, Enter ends. It is kep
 sheet.</li>
 <li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
 Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
-where needed). Select the wires too and they move with it instead.</li>
+where needed), on every pin, two pins with the same name too (a drive's two GND). Select the
+wires too and they move with it instead.</li>
 <li><b>Placing a symbol on a wire</b> cuts the wire between the symbol's pins, as AutoCAD
 Electrical does: drop a contact onto a rung and it is wired in.</li>
 <li><b>Scoot</b> (SCOOT, AESCOOT; Modify menu, Schematic tab): select devices (a motor, a
@@ -632,7 +635,11 @@ when none is selected, in one step (Undo puts it back): wires of no length and e
 (repeated, or in the middle of a straight run) go, a wire drawn over another goes, and two
 wires meeting end to end with nothing else there (no pin, no third wire) become one. The
 command line then says what it did and how many wire ends connect to nothing, which is
-usually a wire stopping short of where it should go.</li>
+usually a wire stopping short of where it should go. A wire that runs straight back over
+itself at an end (drawn out past where it was needed and clicked back) loses the doubled piece,
+so it is one straight wire again. <b>Wire</b> and <b>Bus</b> don't take such a click: the command
+line says so, and you click on past it or off to the side, U takes the last point back, or
+Enter ends the wire there.</li>
 <li><b>Cleanup as you draw</b>: a wire drawn exactly where one already runs isn't added twice,
 and a wire drawn on from another wire's free end joins it, so it is one wire. Trim wire and
 Delete wire join the wires they leave meeting end to end. Turn it off with <b>Clean up wires

@@ -18,6 +18,17 @@ build fails without them.
   Modify > Show or hide attributes...
 - Projects started earlier get the new fields with **Update blocks from library...**.
 
+**Fixed**
+- Moving, scooting or turning a symbol with two pins of the same name (a drive with two GND
+  pins) left the wire on one of them behind. Both now come along.
+- A three-pole fuse block listed its Rating three times under Shown on the drawing.
+- Edit block lost the stacking and angle of a symbol's attribute texts when saving.
+- Junction dots show only where a wire taps off another. A wire drawn out and then clicked
+  straight back over itself made a hidden corner that showed a dot: Wire and Bus no longer take
+  that click, and **Clean up wires** straightens such wires in drawings you already have.
+- A bus clicked onto a 3-pole device whose pins line up with another device's (stacked half an
+  inch apart) could land one pin over, on the other device. It lands on the pins you click.
+
 ## 0.17.4
 
 **New**

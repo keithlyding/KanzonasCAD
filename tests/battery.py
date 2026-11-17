@@ -151,6 +151,9 @@ def check_sheet(sheet):
     assert not near, "%d wire end(s) almost meet something without joining it: %s" % (
         len(near), ["%s %.2g from a %s" % (tuple(round(c, 4) for c in p), d, k)
                     for _i, p, k, d in near[:3]])
+    back = BC.folds(sheet)
+    assert not back, "%d wire(s) double back over themselves: %s" % (
+        len(back), [tuple(round(c, 4) for c in q) for _i, q in back[:3]])
 
 
 def _partition(groups):
@@ -1715,7 +1718,58 @@ def random_editing(log, out, ops, seed, drawing=None):
         assert (hide in got.hidden) == hidden, "%s %s, asked %s" % (
             hide, "hidden" if hide in got.hidden else "shown", "hidden" if hidden else "shown")
         assert abs((got.attr_angle(turn) - ang + 180.0) % 360.0 - 180.0) < 1e-6, \
-            "%s's angle %r, asked %r" % (turn, got.attr_angle(turn), ang)
+            "%s's angle %r, asked %r (%s)" % (turn, got.attr_angle(turn), ang, got.block)
+
+    # (0.17.5, the owner's drive with two pins named GND: moved, the wire on one stayed behind)
+    two_gnd = M.BlockDef("Battery drive two grounds", "symbol",
+                         [M.Polyline([(0.0, -0.75), (1.0, -0.75), (1.0, 0.75), (0.0, 0.75)],
+                                     True)],
+                         pins=[{"name": "L1", "pos": (0.0, 0.5)},
+                               {"name": "GND", "pos": (0.0, -0.5)},
+                               {"name": "T1", "pos": (1.0, 0.5)},
+                               {"name": "GND", "pos": (1.0, -0.5)}],
+                         prefix="VFD", tag_pos=(0.5, 0.9), role="device")
+
+    def op_same_name_pins():
+        # a symbol with two pins of one name, a wire on each pin, off on its own; moved,
+        # scooted or turned through the commands: every pin keeps its wire
+        k = s.k()
+        o = clear_of_drawing(k)
+        before = set(s.entities)
+        v.run(C.InsertCmd, two_gnd, {})
+        v.input_text(fmt(o))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) != 1:
+            return
+        e = new[0]
+        for _n, q in e.pin_points():
+            out = -1.0 if q[0] < e.pos[0] + 0.5 * k else 1.0
+            v.run(C.WireCmd)
+            type_in(v, fmt(q), fmt((q[0] + out * k, q[1])))
+            finish()
+        e = s.entities[e.id]
+        if not all(any(w.touches(q) for w in s.wires()) for _n, q in e.pin_points()):
+            return                              # (a wire refused: nothing to check)
+        how = rnd.choice(["move", "scoot", "rotate"])
+        v.set_selection({e.id})
+        if how == "move":
+            v.run(C.MoveCmd)
+            type_in(v, fmt(e.pos), fmt((e.pos[0] + 0.5 * k, e.pos[1] + 1.0 * k)))
+        elif how == "scoot":
+            v.run(C.ScootCmd)
+            q = e.pin_points()[0][1]
+            type_in(v, fmt(q), fmt((q[0], q[1] + 0.5 * k)))
+        else:
+            v.run(C.RotateCmd)
+            type_in(v, fmt(e.pos), "90")
+        finish()
+        e = s.entities.get(e.id)
+        if e is None:
+            return
+        left = [(n, q) for n, q in e.pin_points() if not any(w.touches(q) for w in s.wires())]
+        assert not left, "%s: pins left without their wire: %s" % (how, left)
+        BC.CHECKED["two pins of one name keep their wires"] += 1
 
     def op_run_props():
         # a DIN rail's or wire duct's Properties window, as a double-click opens it (with other
@@ -2108,7 +2162,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2),
+             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),

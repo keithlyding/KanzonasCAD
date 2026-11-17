@@ -10,6 +10,7 @@ import re
 
 from . import geometry as G
 from . import model as M
+from .wires import doubles_back
 from .trim import trim as trim_entity
 
 _NUM = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
@@ -1116,6 +1117,10 @@ def wire_layer(ctx):
     return "WIRES"
 
 
+BACK_OVER = ("That goes straight back over the wire just drawn: click on past it or off to "
+             "the side, U takes the last point back, Enter ends the wire here")
+
+
 class WireCmd(Command):
     """WIRE: click where it starts (a pin, a wire, or anywhere), then where it goes: it runs
     straight across and up or down, turning one corner per click (F flips which way the
@@ -1175,7 +1180,11 @@ class WireCmd(Command):
             return
         if G.dist(self.points[-1], p) < 1e-9:
             return
-        self.points += self._route(p)
+        new = self._route(p)
+        if doubles_back(self.points[-2:] + list(new)):
+            self.ctx.message(BACK_OVER)
+            return
+        self.points += new
         self.base = self.last = p
         if connects_at(self.ctx.sheet(), p):
             self._make()
@@ -1720,6 +1729,7 @@ class BusCmd(Command):
             return
         sheet = self.ctx.sheet()
         land = self._landing(sheet, p)
+        clicked = p
         if land is None:
             # (on or near a device: its nearest pins, wire for wire, jogging in when they are
             # spaced otherwise; the owner, 0.17.1)
@@ -1752,6 +1762,9 @@ class BusCmd(Command):
             if last is not None and abs(last[0][0 if tap[0] else 1] -
                                         last[1][0 if tap[0] else 1]) > 1e-9:
                 new = []                        # (it can't land square on them: a plain click)
+            if new and doubles_back(self.points[-2:] + new):
+                self.ctx.message(BACK_OVER)
+                return
             if new:
                 self.points += new
                 self.tap_end = (tap[0], tap[1])
@@ -1759,15 +1772,21 @@ class BusCmd(Command):
                 return
         new = self._route(p)
         if land is not None:
-            # (onto a symbol's pins as many and as far apart: wire for wire, then done)
-            got = pin_side(sheet, land)
+            # (onto a symbol's pins as many and as far apart: wire for wire, then done; the side
+            # the clicked pin is on, not the first pin's: two symbols overlapping share a pin,
+            # and the first pin's side was the other symbol's, the bus landing one pin over:
+            # the quick battery, seed 12)
+            got = pin_side(sheet, clicked)
             new = self._land_route(sheet, land, got[0]) if got is not None else None
-            if new:
+            if new and not doubles_back(self.points[-2:] + list(new)):
                 self.points += new
                 self._make()
                 return
             new = self._route(p)
         new = self._around(new)
+        if new and doubles_back(self.points[-2:] + list(new)):
+            self.ctx.message(BACK_OVER)
+            return
         if not new:
             if self.toward is not None and len(self.points) == 1:
                 self.ctx.message("Click off the line of the symbol's pins: the bus leaves them "

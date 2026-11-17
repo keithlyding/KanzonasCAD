@@ -1892,6 +1892,18 @@ class BlockDef:
         return bb or (0.0, 0.0, 0.0, 0.0)
 
 
+def pin_keys(pins):
+    """{(pin name, which of that name: 0, 1...): point} of [(pin name, point)]: a symbol's
+    pins told apart when two have one name (the owner's drive, 0.17.5: two GND, its line and
+    load side; matched by name alone, the wire on one of them stayed behind when it moved)."""
+    out, seen = {}, {}
+    for n, q in pins:
+        k = seen.get(n, 0)
+        seen[n] = k + 1
+        out[(n, k)] = q
+    return out
+
+
 # A device's ratings, one attribute each (the owner, 0.17.5: "Electrical symbols need to have
 # voltage, amps, hp, etc (as applicable) for attributes. I'm working on a motor right now"):
 # {name: (what the attributes window calls it, what a plain number gets after it)}. Typed as a
@@ -2017,7 +2029,9 @@ class Insert(Entity):
         if d is None:
             return []
         out = ["TAG"] if d.kind == "symbol" and d.tag_pos is not None else []
-        out += [a["attr"] for a in d.attr_texts if a["attr"] not in out]
+        for a in d.attr_texts:
+            if a["attr"] not in out:            # (a three-pole fuse's rating: once)
+                out.append(a["attr"])
         if d.kind == "symbol" and d.show_pins and d.pins:
             out.append("PINS")              # (its pins' names: shown or hidden as one)
         return out
@@ -2834,7 +2848,7 @@ class Edit:
             ent.id = sheet.new_id()
         old = sheet.entities.get(ent.id)
         if isinstance(old, Insert) and isinstance(ent, Insert):
-            self.pin_moves.append((sheet, dict(old.pin_points()), dict(ent.pin_points())))
+            self.pin_moves.append((sheet, pin_keys(old.pin_points()), pin_keys(ent.pin_points())))
         op = self._remember(sheet, ent.id)
         sheet._put(ent)
         op[4] = ent.to_dict()
