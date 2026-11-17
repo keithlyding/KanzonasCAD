@@ -411,12 +411,28 @@ renumber or retag the coil, or move its sheet, and its contacts change with it.<
 <li><b>Placing a contact</b>: after the click, the command line asks which device it belongs
 to. <b>Enter</b> takes the one offered (the nearest coil with the contact's prefix: CR for a
 relay contact; on this sheet first); type a tag (<code>M601</code>) to take that device, or
-<b>L</b> for a list of them. A tag no device has yet is kept, and the contact links itself
+<b>L</b> for a list of them, or <b>P</b> to <b>pick it on the drawing</b>: go to any sheet
+(the Sheets panel) and click the device; you come back and the contact is placed, linked to
+it (Esc stops). A tag no device has yet is kept, and the contact links itself
 to the device that gets that tag. With no device in the project at all, it's placed unlinked
 (its reference shows <b>?</b>).</li>
 <li><b>Changing it later</b>: double-click the contact. "Belongs to" lists the project's
 devices; pick one or type a tag. Deleting a coil leaves its contacts unlinked (showing
 <b>?</b>) until a device takes that tag again.</li>
+<li><b>Dashed box</b> (DB; Draw menu and the Schematic tab, Draw): a dashed outline around
+anything, with a note in it, that can belong to a device or to nothing. Pick two opposite
+corners; its window asks for the <b>Note</b> (several lines, written inside its top left
+corner; or none) and what it <b>Belongs to</b>: <b>(nothing: a box with a note)</b>, a device
+from the list (every device in the project, by page; type in the box to find one, or type a
+tag such as <code>PDB1</code> or <code>M101</code>), or <b>Pick on drawing...</b>: go to any
+sheet and click the device, and you come back with the box made. A box that belongs to a
+device shows its tag above its top left corner, with where the device is beside it
+(<code>M101 2-E3</code>), follows it when it is renumbered or retagged, and is listed under the
+device like a contact (its zone). Its grips: the four corners (it stays a rectangle), the note
+and the tag (drag them anywhere). Double-click it to change its note or what it belongs to.
+Its text and dashes are paper-sized (the tag height in Project properties), it goes on layer
+NOTES, and it moves, copies, turns, prints and exports to DXF (as dashes and texts) like any
+object.</li>
 <li><b>Cross-references</b> are worked out from the drawing, never typed: under a coil or
 operator, one line per contact, <b>NO 6-D3</b> or <b>NC 7-B2</b> (in sheet order, then zone
 order); under each contact, where its device is (<b>6-D1</b>). They use the project's grid

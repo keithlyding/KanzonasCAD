@@ -638,6 +638,9 @@ def run(log_path):
                                    balloon=i % 3 == 0))
                 ed.add(s, M.MText((x, y), "1. ALL WIRE 14 AWG MTW UNLESS NOTED\n2. GROUND "
                                   "PER NEC 250", 0.1, 0.0, "TL", 1.5))
+                # (0.16.4: dashed boxes with a note, as a new kind of object must be measured)
+                ed.add(s, M.DashBox.from_corners((x, y), (x + 1.2, y - .8),
+                                                 text="FIELD WIRING\nBY OTHERS", height=0.1))
         d = w.add_document(p)
         v = d.view
         v.zoom("sheet")
@@ -684,7 +687,7 @@ def run(log_path):
         assert dl < BUDGET["lasso_move"], "a lasso mouse move took %.1f ms" % (dl * 1000)
         assert dp < BUDGET["lasso_pick"], "the lasso's pick took %.2f s" % dp
         ids = [e.id for e in s.entities.values()
-               if isinstance(e, (M.Leader, M.Hatch, M.MText))][:1000]
+               if isinstance(e, (M.Leader, M.Hatch, M.MText, M.DashBox))][:1000]
         t = time.perf_counter()
         with p.edit("Move") as ed:
             for i in ids:

@@ -20,6 +20,7 @@ from tests.util import APP, window, type_in
 from kanzonascad import commands as C
 from kanzonascad import crossings as X
 from kanzonascad import model as M
+from kanzonascad import geometry as G
 
 
 class WireLandingTest(unittest.TestCase):
@@ -176,6 +177,32 @@ class WireLandingTest(unittest.TestCase):
             self.assertIsNone(cmd._landing(s, q), n)
             self.assertIn("square", cmd._why_not_landed(s, q) or "", n)
         self.v.cancel()
+
+    def test_a_bus_turning_too_close_to_its_pins_doesnt_cross_itself(self):
+        # (the battery, seed 292: a bus off a vertical column of pins turned 1/4" out, less
+        # than its 1/2" spacing, and landed with wire 2 crossing wire 3)
+        from kanzonascad import crossings as X
+        s = self.v.sheet()
+        a = self.insert("Fuses 3-pole", (7.0, 7.0))              # (T1-T3: x 7.5, y 7..6)
+        b = self.insert("Fuses 3-pole", (7.75, 5.75), "RRR")     # (L1-L3: y 5.75, x 7.75..)
+        self.assertEqual(self.pins(a)["T3"], (7.5, 6.0))
+        self.assertEqual(self.pins(b)["L3"], (6.75, 5.75))
+        cmd = self.bus_from(self.pins(a)["T1"])
+        click = self.pins(b)["L1"]
+        before = set(s.entities)
+        landed = cmd._landing(s, click) is not None
+        type_in(self.v, "%r,%r" % click)
+        new = {i for i in s.entities if i not in before}
+
+        def on(w, q):
+            return any(G.dist_to_segment(q, *seg) < 1e-9 for seg in zip(w.points, w.points[1:]))
+        own = [x[0] for x in X.found(s)
+               if sum(1 for i in new if on(s.entities[i], x[0])) >= 2]
+        self.assertEqual(own, [])
+        if not landed:
+            self.assertIn("too close", self.said[-1])
+        if self.v.cmd is not None:
+            self.v.cancel()
 
     def test_a_bus_doesnt_land_through_a_symbol(self):
         a = self.insert("Fuses 3-pole", (10.5, 8.0))

@@ -1628,3 +1628,72 @@ def bus_layers(parent, project, count, current):
     if dlg.exec() != QDialog.Accepted:
         return None
     return [b.currentText().strip() or "WIRES" for b in boxes]
+
+
+def dash_box_dialog(parent, project, box):
+    """A dashed box's note and the device it belongs to (the owner, 0.16: "I'd want to be able
+    to type, select a dropdown of parents that are already in the drawing, or be able to
+    navigate to a sheet and select it"; and boxes with a note that belong to nothing).
+    Returns {"text", "device", "pick"} or None."""
+    from PySide6.QtWidgets import QPlainTextEdit
+    from . import tags
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Dashed box")
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel("Note (written inside the box; several lines, or none):"))
+    note = QPlainTextEdit()
+    note.setPlainText(box.text)
+    note.setMinimumHeight(90)
+    lay.addWidget(note)
+    form = QFormLayout()
+    belongs = QComboBox()
+    belongs.setEditable(True)
+    belongs.setInsertPolicy(QComboBox.NoInsert)
+    belongs.addItem("(nothing: a box with a note)", None)
+    choices = tags.device_choices(project)
+    for s, e in choices:
+        where = project.zone_text(s, e.pos[0], e.pos[1]) or ""
+        desc = e.attrs.get("DESC", "") or (e.defn.description if e.defn else "")
+        belongs.addItem("%s   %s   %s" % (e.attrs.get("TAG", "?"), where, desc or e.block),
+                        e.attrs.get("DEV"))
+    cur = box.attrs.get("PARENT")
+    i = belongs.findData(cur) if cur else 0
+    belongs.setCurrentIndex(max(i, 0))
+    if belongs.completer() is not None:
+        belongs.completer().setFilterMode(Qt.MatchContains)
+    form.addRow("Belongs to", belongs)
+    lay.addLayout(form)
+    hint = QLabel("Type a tag (PDB1, M101), pick one from the list, or Pick on drawing... to "
+                  "go to any sheet and click the device.")
+    hint.setWordWrap(True)
+    lay.addWidget(hint)
+    box_buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    pick = box_buttons.addButton("Pick on drawing...", QDialogButtonBox.ActionRole)
+    picked = {"pick": False}
+
+    def on_pick():
+        picked["pick"] = True
+        dlg.accept()
+    pick.clicked.connect(on_pick)
+    box_buttons.accepted.connect(dlg.accept)
+    box_buttons.rejected.connect(dlg.reject)
+    lay.addWidget(box_buttons)
+    while True:
+        if dlg.exec() != QDialog.Accepted:
+            return None
+        text = note.toPlainText().rstrip()
+        if picked["pick"]:
+            return {"text": text, "device": None, "pick": True}
+        typed = belongs.currentText().strip()
+        k = belongs.findText(typed)
+        dev = belongs.itemData(k) if k >= 0 else None
+        device = None
+        if dev:
+            device = next((e for _s, e in choices if e.attrs.get("DEV") == dev), None)
+        elif k < 0 and typed:
+            got = tags.find_tag(project, typed.split()[0])
+            if got is None:
+                QMessageBox.warning(dlg, "Dashed box", "No device is tagged %s." % typed)
+                continue
+            device = got[1]
+        return {"text": text, "device": device, "pick": False}

@@ -833,6 +833,70 @@ def random_editing(log, out, ops, seed, drawing=None):
             names[i], e.block)
         BC.CHECKED["text grip"] += 1
 
+    def op_dash_box():
+        # (0.16.4: a dashed box through its command and window: a note, belonging to nothing,
+        # to a device from the list, or to one picked on the drawing on another sheet)
+        from kanzonascad import tags, xrefs
+        a, b = pt(), pt()
+        if abs(a[0] - b[0]) < 1e-9 or abs(a[1] - b[1]) < 1e-9:
+            return
+        devs = tags.device_choices(p)
+        how = rnd.choice(["none", "list", "pick"]) if devs else "none"
+        dev = rnd.choice(devs) if devs else None
+        text = rnd.choice(["", "FIELD WIRING", "BY OTHERS\nSEE DWG E-2"])
+        here = s
+        win.ask_dash_box = lambda box: {"text": text, "device": dev[1] if how == "list" else None,
+                                        "pick": how == "pick"}
+        try:
+            before = set(here.entities)
+            v.run(C.DashBoxCmd)
+            v.input_text(fmt(a))
+            v.input_text(fmt(b))
+            if how == "pick":
+                assert isinstance(v.cmd, C.PickDeviceCmd), "Pick on drawing didn't start"
+                v.show_sheet(dev[0].id)
+                APP.processEvents()
+                assert isinstance(v.cmd, C.PickDeviceCmd), "picking stopped on another sheet"
+                got = dict(dev[1].pin_points())
+                q = next(iter(got.values())) if got else dev[1].pos
+                hit = v.pick_entity(q, M.Insert)
+                if hit is None or not tags.is_device(hit):
+                    # (another symbol over that pin is what a click there picks, seeds 23 and
+                    # 292: the program says it isn't a device and waits; Esc stops, no box)
+                    v.escape()
+                    how = "esc"
+                else:
+                    v.cmd.point(q)
+                for _i in range(3):
+                    APP.processEvents()
+                assert v.sheet() is here, "picking didn't come back to the box's sheet"
+        finally:
+            del win.ask_dash_box
+            finish()
+        new = [e for i, e in here.entities.items() if i not in before and isinstance(e, M.DashBox)]
+        if how == "esc":
+            assert not new, "Esc while picking made a box"
+            BC.CHECKED["dashed box: Esc while picking"] += 1
+            return
+        assert len(new) == 1, "Dashed box made %d boxes" % len(new)
+        box = new[0]
+        x0, x1 = sorted((a[0], b[0]))
+        y0, y1 = sorted((a[1], b[1]))
+        assert box.points == [(x0, y1), (x1, y1), (x1, y0), (x0, y0)], \
+            "the box isn't between its corners: %s" % box.points
+        assert box.text == text
+        if how == "none":
+            assert not box.tag(), "a box belonging to nothing shows %s" % box.tag()
+        else:
+            # (a pick may click another device overlapping it: it belongs to the one clicked)
+            parent = tags.devices(p).get(box.attrs.get("PARENT"))
+            assert parent is not None, "the box belongs to no device"
+            assert box.tag() == parent[1].attrs.get("TAG"), "the box shows %s, not %s" % (
+                box.tag(), parent[1].attrs.get("TAG"))
+            assert xrefs.live(p, parent[0]), "the device lists nothing"
+            BC.CHECKED["dashed box belongs to a device"] += 1
+        BC.CHECKED["dashed box"] += 1
+
     def op_line():
         v.run(C.LineCmd)
         type_in(v, fmt(pt()), fmt(pt()))
@@ -1409,7 +1473,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -1656,6 +1720,8 @@ def mixed_project(win):
         ed.add(s, M.Polyline([(17, 1), (19, 1), (19, 2), (17, 2)], True))
         ed.add(s, M.Hatch([[(17, 1), (19, 1), (19, 2), (17, 2)]], "ANSI31", 45.0, 0.125))
         ed.add(s, M.Hatch([[(17, 3), (18, 3), (18, 4), (17, 4)]], "SOLID", 0.0, 0.125))
+        ed.add(s, M.DashBox.from_corners((20, 1), (24, 4), text="FIELD WIRING\nBY OTHERS",
+                                         height=0.1))
     # locations: the schematic and the panel in the MCP, the coil in the field (its own LOC),
     # and the run between them given a cable (Cables between locations)
     from kanzonascad import pull
