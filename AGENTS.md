@@ -88,6 +88,14 @@ nothing.
   long battery: job `battery-long`, 3,000 steps on each of three seeds. Publishing waits for it.
   Merge such a release only when `battery-long` is green too.
 - By hand: `QT_QPA_PLATFORM=offscreen python tests/battery.py OUT_DIR --ops 3000 --seed N`.
+- Before pushing a release that bumps the middle number (and each fix pushed to it), run 10 to
+  12 seeds of the long battery in parallel, seeds not run before (the owner's rule,
+  Nov 2026: the build picks new seeds each run, and four local seeds left one new edge case
+  for nearly every run on GitHub to find, an hour a round). Fix what they find first. The
+  quick way: the **Battery sweep** workflow (`.github/workflows/battery-sweep.yml`), twelve
+  seeds side by side on GitHub's machines in about half an hour: push the branch's head to a
+  branch named `sweep/<anything>` (or, once the workflow is on main, Actions > Battery sweep >
+  Run workflow). Locally, a four-core machine takes two hours or more for ten.
 - `--drawing YOUR.dwg` starts from your own drawing, on your computer.
 - `BATTERY_DUMP_AT=N` saves the project as it was before step N, to look into a failure.
 
