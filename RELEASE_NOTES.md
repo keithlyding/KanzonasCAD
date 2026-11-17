@@ -53,6 +53,8 @@ build fails without them.
 - The Schematic tab ran off the screen.
 - Trim on a small circle, clicked right where something crosses it (or in its middle), left
   the circle whole. It now cuts it there.
+- Dragging a wire's end straight past its last corner, back along the wire, left a hidden
+  corner where the wire ran back over itself. The wire now runs straight to where you drop it.
 
 ## 0.17.5
 

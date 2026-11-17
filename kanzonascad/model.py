@@ -443,6 +443,15 @@ class Wire(Polyline):
                 return True
         return False
 
+    def with_grip(self, i, p):
+        """A corner or end dragged: with no corner left where it turns straight back along
+        itself (an end dragged onto the line of the leg before it ran back up that leg: a
+        hidden fold, found by the long battery with Shift-picked grips, 0.18)."""
+        got = super().with_grip(i, p)
+        from .wires import straighten
+        pts = straighten(got.points)
+        return got if len(pts) == len(got.points) else got.copy(points=[list(q) for q in pts])
+
     def grips(self):
         """Its corners and ends, then the middle of each straight run (dragged, the run moves
         sideways and the wires joined to it follow: wires.segment_drag, through GripCmd)."""
