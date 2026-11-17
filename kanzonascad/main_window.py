@@ -2772,6 +2772,9 @@ class MainWindow(BlockEditing, QMainWindow):
         others = wirenums.others_numbered(project, sheet, cur, num)
         if not others:
             return True
+        # (several wires with that number already, one kept as "just the same number": the
+        # one with an open end, where an arrow can go, first; the battery, seed 5102)
+        others.sort(key=lambda g: wirenums.open_end(g[1]) is None)
         s, w = next((s, w) for s, w in others[0][1] if w.num == num)
         mid = w.points[len(w.points) // 2]
         where = project.zone_text(s, mid[0], mid[1]) or "sheet %s" % project.sheet_number(s)
