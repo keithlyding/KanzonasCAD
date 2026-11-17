@@ -50,6 +50,30 @@ class SlopTest(unittest.TestCase):
                         for i in range(9))
         self.assertIn("repeated block", self._scan(slop.repeated_blocks, lines + "\n" + lines))
 
+    def test_always_true_assertions_are_found(self):
+        # (the owner, Nov 2026, "Sure" to looking for these: a check written as
+        # assertEqual(got, [...][:0] or got) passed whatever got was)
+        always = ["self.assertEqual(got, got)",
+                  "self.assertEqual(got, [1][:0] or got)",
+                  "self.assertEqual(x or got, got)",
+                  "self.assertIs(a.b, a.b)",
+                  "self.assertIn(k, k)",
+                  "self.assertTrue(ok or True)",
+                  "assert got == got",
+                  "assert ok or 1"]
+        for line in always:
+            self.assertEqual(self._scan(slop.empty_tests, "def test_a():\n    %s\n" % line),
+                             ["test checks nothing"], line)
+        fine = ["self.assertEqual(got, want)",
+                "self.assertEqual(got, want or default)",
+                "self.assertIn(k, keys or [])",
+                "self.assertTrue(ok or other)",
+                "assert got == want",
+                "assert got != got"]
+        for line in fine:
+            self.assertEqual(self._scan(slop.empty_tests, "def test_a():\n    %s\n" % line), [],
+                             line)
+
     def test_stale_and_dead(self):
         d = tempfile.mkdtemp()
         mod = os.path.join(d, "thing.py")

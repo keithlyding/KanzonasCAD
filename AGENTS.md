@@ -114,7 +114,8 @@ machine-written changes leave behind:
 - a function nothing calls;
 - a comment or docstring naming something that doesn't exist (after a rename or move);
 - filler words in the manual, release notes or README ("seamless", "robust", "leverage"...);
-- a test that checks nothing;
+- a test that checks nothing, or asserts something that is always true (`assertEqual(x, x)`,
+  `assertEqual(x, y or x)`, `x or True`);
 - commented-out code;
 - a block of 8 lines repeated.
 
