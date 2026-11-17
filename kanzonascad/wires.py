@@ -669,6 +669,13 @@ def join_at(ed, sheet, points):
         (a, ia), (b, ib) = sorted(ends, key=lambda t: (not t[0].num_lock, _order(t[0].id)))
         pa = list(a.points) if ia == -1 else list(reversed(a.points))
         pb = list(b.points) if ib == 0 else list(reversed(b.points))
+        # (not when b goes back along a: joined, the wire would fold back over itself, the
+        # battery, seed 306: a bus wire laid on another wire the other way, and a pin left in
+        # the middle of the fold)
+        da = (pa[-2][0] - p[0], pa[-2][1] - p[1])
+        db = (pb[1][0] - p[0], pb[1][1] - p[1])
+        if abs(da[0] * db[1] - da[1] * db[0]) <= TOL * TOL and da[0] * db[0] + da[1] * db[1] > 0:
+            continue
         merged = _tidy(pa + pb[1:])
         if len(merged) < 2:
             continue

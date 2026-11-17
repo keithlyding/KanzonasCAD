@@ -143,6 +143,13 @@ def check_sheet(sheet):
             assert len(e.points) >= 2, e.points
             for a, b in zip(e.points, e.points[1:]):
                 assert abs(a[0] - b[0]) > 1e-9 or abs(a[1] - b[1]) > 1e-9, e.points
+            # (no wire doubles back over itself: two wires joined end to end the wrong way,
+            # seed 306)
+            for a, b, c in zip(e.points, e.points[1:], e.points[2:]):
+                d1, d2 = (b[0] - a[0], b[1] - a[1]), (c[0] - b[0], c[1] - b[1])
+                assert not (abs(d1[0] * d2[1] - d1[1] * d2[0]) <= 1e-12 and
+                            d1[0] * d2[0] + d1[1] * d2[1] < 0), \
+                    "wire %s doubles back over itself: %s" % (eid, e.points)
     json.dumps(sheet.to_dict())
     check_groups(sheet)
     # (drawing slop: wire ends that look joined but aren't)
@@ -658,7 +665,10 @@ def random_editing(log, out, ops, seed, drawing=None):
         type_in(v, fmt(a), fmt(pin))
         finish()
         new = [w for i, w in s.entities.items() if i not in before and isinstance(w, M.Wire)]
-        mine = [w for w in new if pin in (w.points[0], w.points[-1])]
+        # (on it as the program joins: within TOL; the point is typed with 12 digits, so a
+        # pin at 6.000000000000001 is typed 6, seed 8)
+        mine = [w for w in new if min(G.dist(pin, w.points[0]), G.dist(pin, w.points[-1]))
+                <= wires.TOL]
         assert mine, "the wire to %s's pin %s didn't end on it" % (name, pin_name)
         w = mine[0]
         assert not wires._crosses(w.points, [(e, bb)]), \
@@ -924,7 +934,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         name = rnd.choice([n for n in syms if lib.get("symbol", n).pins and
                            len(lib.get("symbol", n).pins) == 6])
         turns = rnd.randint(0, 3)
-        a = pt()
+        # (in a clear spot: laid over other wires, which pin ends on which wire isn't defined,
+        # seed 306)
+        a = clear_of_drawing(s.k())
         up = turns % 2 == 1                     # (turned sideways: the bus runs up and down)
         L = 3.0
         with p.edit("bus to land on") as ed:

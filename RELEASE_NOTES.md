@@ -19,6 +19,9 @@ build fails without them.
 - Edit text: "Keep the text where it is on the drawing" no longer starts ticked.
 - A bus whose first wire passed just beside a symbol could run its other wires straight
   through it; now it goes around.
+- A wire drawn back along another wire from its end was joined to it as one wire doubling
+  back over itself; they now stay two wires.
+- Wire numbers on extremely long wires no longer slow the drawing down.
 
 ## 0.16.7
 
