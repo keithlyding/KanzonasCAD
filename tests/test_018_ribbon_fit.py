@@ -104,10 +104,14 @@ class RibbonFitsTest(unittest.TestCase):
         return strip.widget().minimumWidth(), strip.viewport().width(), r.compacted()
 
     def test_schematic_tab_fits_a_narrow_window(self):
+        full, _room, _small = self.fitted(4000, "Schematic")     # (as built: its whole width)
         for width in (1920, 1536, 1280, 1000):
             need, room, small = self.fitted(width, "Schematic")
             self.assertLessEqual(need, room, "the Schematic tab is %d wide in %d" % (need, room))
-            self.assertTrue(small)                      # (it took making groups smaller)
+            # (made smaller only when it didn't fit as built: fonts differ, Windows' fits 1920)
+            self.assertEqual(bool(small), full > room, (width, full, room, small))
+            if not small:
+                continue
             # smaller from the right: a group shown smaller has every group after it smaller
             order = ("large", "small", "icons")
             groups = self.win.ribbon._groups[self.win.ribbon.currentWidget().widget()]
