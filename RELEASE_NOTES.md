@@ -17,6 +17,8 @@ build fails without them.
 
 **Fixed**
 - Edit text: "Keep the text where it is on the drawing" no longer starts ticked.
+- A bus whose first wire passed just beside a symbol could run its other wires straight
+  through it; now it goes around.
 
 ## 0.16.7
 

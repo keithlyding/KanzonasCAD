@@ -52,6 +52,24 @@ class BusAroundRunsTest(unittest.TestCase):
             self.assertFalse(self.through(new, box), [w.points for w in new])
             self.p.undo()
 
+    def test_a_bus_whose_first_wire_just_misses_goes_round(self):
+        # (the battery, seed 8, on a 1:6 sheet: the first wire passed beside the symbol, the
+        # other two through it, and the bus went straight through)
+        box = self.box()                                # (x 4..7, y 3..5)
+        for flip in (False, True):
+            x = 7.25 if not flip else 3.75              # (the first wire beside it, the others
+            before = set(self.s.entities)               # toward it)
+            self.v.run(C.BusCmd)
+            if flip:
+                self.v.input_text("F")
+            type_in(self.v, "%r,8" % x, "%r,1" % x)
+            self.v.cmd.enter()
+            new = [e for i, e in self.s.entities.items() if i not in before]
+            self.assertEqual(len(new), 3)
+            self.assertTrue(any(abs(w.points[0][0] - x) < 1e-9 for w in new))
+            self.assertFalse(self.through(new, box), [w.points for w in new])
+            self.p.undo()
+
     def test_the_clearance_is_a_setting(self):
         box = self.box()
         got = {}

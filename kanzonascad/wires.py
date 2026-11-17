@@ -452,7 +452,11 @@ def route_around(sheet, a, b, plain, clear=CLEAR, extra=0.0):
     region = (min(a[0], b[0]) - pad, min(a[1], b[1]) - pad, max(a[0], b[0]) + pad,
               max(a[1], b[1]) + pad)
     boxes = _boxes(sheet, region, k)
-    if not boxes or not _crosses([a] + plain, boxes):
+    # (with extra, the box grown by it: a bus whose first wire just misses a symbol while the
+    # others run through it, the battery, seed 8 on a 1:6 sheet)
+    if not boxes or not _crosses([a] + plain, [(e, (bb[0] - extra, bb[1] - extra,
+                                                    bb[2] + extra, bb[3] + extra))
+                                               for e, bb in boxes]):
         return plain
     g = 0.125 * k                               # (corners on the 1/8" grid)
 
