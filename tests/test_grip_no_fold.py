@@ -21,6 +21,16 @@ class GripNoFoldTest(unittest.TestCase):
         self.assertEqual([tuple(q) for q in got.points],
                          [(10.5, 8.0), (10.5, 8.5), (2.75, 8.5), (2.75, 3.5)])
 
+    def test_end_dropped_on_its_corner(self):
+        # (seed 4101: the end on the corner before it: that point twice, a leg of no length)
+        got = M.Wire(PTS).with_grip(4, (2.75, 3.0))
+        self.assertEqual([tuple(q) for q in got.points],
+                         [(10.5, 8.0), (10.5, 8.5), (2.75, 8.5), (2.75, 3.0)])
+        # dragged onto its other end: as it was (no wire of one point)
+        w = M.Wire([(0.0, 0.0), (1.0, 0.0)])
+        self.assertEqual([tuple(q) for q in w.with_grip(1, (0.0, 0.0)).points],
+                         [(0.0, 0.0), (1.0, 0.0)])
+
     def test_picked_grips_together(self):
         win, v = window()
         try:

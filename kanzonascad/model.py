@@ -449,7 +449,10 @@ class Wire(Polyline):
         hidden fold, found by the long battery with Shift-picked grips, 0.18)."""
         got = super().with_grip(i, p)
         from .wires import straighten
-        pts = straighten(got.points)
+        # (and no point twice: an end dropped on the corner before it, seed 4101)
+        pts = _tidy(straighten(got.points))
+        if len(pts) < 2:
+            return self                 # (dragged onto its other end: no wire left; as it was)
         return got if len(pts) == len(got.points) else got.copy(points=[list(q) for q in pts])
 
     def grips(self):
