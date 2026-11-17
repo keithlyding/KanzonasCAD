@@ -1664,11 +1664,25 @@ class BusCmd(Command):
         main = self.points + (self._route(pins[0]) if new is None else new)
         if len(main) < 2:
             return None
-        ends = [q[-1] for q in self._paths(main)]
+        paths = self._paths(main)
+        ends = [q[-1] for q in paths]
         if len(ends) != len(pins) or any(G.dist(a, b) > 1e-6 for a, b in zip(ends, pins)):
             return "its poles run the other way from the bus's wires (wire 1 would land on " \
                 "its first pin, the others on nothing): turn or flip it (Rotate, Mirror) or " \
                 "come at it from its other end"
+        # every wire runs the way the bus does on every leg: a turn closer to the pins than
+        # the wires are apart sends the others backward, across each other (the battery, seed
+        # 292: a bus landed with wire 2 crossing wire 3)
+        for q in paths:
+            if len(q) != len(main):
+                return "the bus turns too close to the pins for its spacing: click a point " \
+                    "farther out first"
+            for j in range(len(q) - 1):
+                u = (q[j + 1][0] - q[j][0], q[j + 1][1] - q[j][1])
+                w = (main[j + 1][0] - main[j][0], main[j + 1][1] - main[j][1])
+                if u[0] * w[0] + u[1] * w[1] <= 1e-9:
+                    return "the bus turns too close to the pins for its spacing: click a " \
+                        "point farther out first"
         a, b = main[-2], main[-1]
         travel = (b[0] - a[0], b[1] - a[1])
         for e in sheet.query_point(p, 1e-6):

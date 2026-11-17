@@ -859,7 +859,14 @@ def random_editing(log, out, ops, seed, drawing=None):
                 assert isinstance(v.cmd, C.PickDeviceCmd), "picking stopped on another sheet"
                 got = dict(dev[1].pin_points())
                 q = next(iter(got.values())) if got else dev[1].pos
-                v.cmd.point(q)
+                hit = v.pick_entity(q, M.Insert)
+                if hit is None or not tags.is_device(hit):
+                    # (another symbol over that pin is what a click there picks, seeds 23 and
+                    # 292: the program says it isn't a device and waits; Esc stops, no box)
+                    v.escape()
+                    how = "esc"
+                else:
+                    v.cmd.point(q)
                 for _i in range(3):
                     APP.processEvents()
                 assert v.sheet() is here, "picking didn't come back to the box's sheet"
@@ -867,6 +874,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             del win.ask_dash_box
             finish()
         new = [e for i, e in here.entities.items() if i not in before and isinstance(e, M.DashBox)]
+        if how == "esc":
+            assert not new, "Esc while picking made a box"
+            BC.CHECKED["dashed box: Esc while picking"] += 1
+            return
         assert len(new) == 1, "Dashed box made %d boxes" % len(new)
         box = new[0]
         x0, x1 = sorted((a[0], b[0]))

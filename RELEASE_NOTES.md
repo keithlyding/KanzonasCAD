@@ -16,6 +16,11 @@ build fails without them.
   corners, note and tag by their grips; double-click it to change it.
 - When placing a contact, **P** lets you pick its coil or device on the drawing, on any sheet.
 
+**Fixed**
+- A bus landing on a symbol right after turning close to the pins it started from could land
+  with its wires running backward and crossing each other. It now takes a better route, or
+  says to click a point farther out first.
+
 ## 0.16.3
 
 **New**
