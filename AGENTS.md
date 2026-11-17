@@ -20,6 +20,11 @@ builds are green (full releases, not pre-releases: the owner's choice). A merge 
 change `__version__` publishes nothing. The app's update box (`updates.py`) shows those notes
 and installs the release.
 
+**The owner's standard (Nov 2026):** "in order for this app to be truly useful, it must be
+capable, fast, and bug-free". A feature isn't done until it is all three: it does the whole
+job, stays within the speed budgets below, and the battery and tests find nothing wrong with
+it. When they pull against each other, say so and ask; don't trade one away quietly.
+
 ## Branches and merging (several agents work here at once)
 - Start every task from the latest `main`, on a new branch of your own named
   `<agent>/<task>` (for example `chatgpt/wire-numbers`, `grok/symbol-library`).
@@ -34,7 +39,7 @@ and installs the release.
   number (0.2, 0.3) for a significant new capability (a new kind of work: wires, symbols,
   wire numbers, cross-references, reports...); everything else bumps the last number
   (0.2 -> 0.2.1). Plain numbers only (0.2, not 0.20).
-- Every push to any branch runs both builds, as in KanzonasPDF (no separate pull-request
+- Every push to any branch (but a `sweep/` one) runs both builds, as in KanzonasPDF (no separate pull-request
   run). Push when a piece of work is done, not after every small edit; then open its pull
   request and merge once the branch's builds are green: build and publish in one go (the
   owner's choice). Never hold builds back with GitHub's skip-ci marker: a branch whose newest
@@ -95,7 +100,8 @@ nothing.
   quick way: the **Battery sweep** workflow (`.github/workflows/battery-sweep.yml`), twelve
   seeds side by side on GitHub's machines in about half an hour: push the branch's head to a
   branch named `sweep/<anything>` (or, once the workflow is on main, Actions > Battery sweep >
-  Run workflow). Locally, a four-core machine takes two hours or more for ten.
+  Run workflow). A `sweep/` branch doesn't run the builds (the owner's choice:
+  its commit is built on its own branch). Locally, a four-core machine takes two hours or more for ten.
 - `--drawing YOUR.dwg` starts from your own drawing, on your computer.
 - `BATTERY_DUMP_AT=N` saves the project as it was before step N, to look into a failure.
 
