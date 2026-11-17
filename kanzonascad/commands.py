@@ -2007,7 +2007,9 @@ class BusCmd(Command):
                     pts += [tuple(j1), tuple(j2)]
                 pts.append(tuple(pin))
                 out.append([tuple(q) for q in M._tidy(pts)])
-            if _paths_cross(out):
+            # (none doubling back over itself: a jog onto its pin back along its last leg,
+            # the battery, 0.17.5, seed 12)
+            if _paths_cross(out) or any(doubles_back(q) for q in out):
                 continue
             bb = None
             for q in out:

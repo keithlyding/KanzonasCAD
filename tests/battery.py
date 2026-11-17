@@ -1387,8 +1387,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert got.num_lock == lock, "the lock wasn't as ticked"
             BC.CHECKED["cross-reference by a number typed"] += 1
         elif how == "same":
-            assert not new and got.num == num and got.num_lock == lock, \
-                "just the same number: %s locked %s" % (got.num, got.num_lock)
+            # (locked whatever was ticked: an unlocked duplicate would be numbered again)
+            assert not new and got.num == num and got.num_lock, \
+                "just the same number %s (locked %s): the wire has %s, locked %s; %d new " \
+                "connector(s)" % (num, lock, got.num, got.num_lock, len(new))
             BC.CHECKED["the same number, as typed"] += 1
         else:
             assert not new and got.num == a.num, "cancelled, yet the number changed"

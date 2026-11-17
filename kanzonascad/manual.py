@@ -715,7 +715,8 @@ pair of arrows with a new name on the open end of each wire (the end on nothing)
 arrow</b> pointing out where the wire leaves and a <b>Destination arrow</b> pointing in where it
 arrives. They are then one wire with that number, and each shows
 the other's place under it (7-A2). One step: Undo takes it all back. <b>No: just the same
-number</b> gives this wire the number as typed, without connectors. A wire with no open end
+number</b> gives this wire the number as typed, without connectors, and locks it (numbering
+would give an unlocked one a free number again). A wire with no open end
 (both ends on pins or wires) says so: draw it out to where it leaves the sheet first.</li>
 <li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
 as device tags do.</li>

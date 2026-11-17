@@ -112,8 +112,10 @@ class WireLockXrefTest(unittest.TestCase):
         before = self.num(self.s1, self.a)
         self.type_number(other, answer=None)                    # (cancelled)
         self.assertEqual(self.num(self.s1, self.a), before)
-        self.type_number(other, answer="same")
+        self.type_number(other, lock=False, answer="same")
         self.assertEqual(self.num(self.s1, self.a), other)
+        # (locked though unticked: numbering would give an unlocked duplicate a free number)
+        self.assertTrue(self.s1.entities[self.a.id].num_lock)
         self.assertEqual([e for e in self.s1.inserts() if e.defn.wiring == "link"], [])
 
     def test_no_open_end_says_so(self):

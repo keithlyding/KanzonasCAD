@@ -2624,9 +2624,16 @@ class MainWindow(BlockEditing, QMainWindow):
             (cur.num_lock or not num or own != cur.own_num)
         if same and own == cur.own_num:
             return
-        if num and num != (cur.num or "") and \
-                not self._cross_reference(v, cur, num, lock):
-            return
+        if num and num != (cur.num or ""):
+            go = self._cross_reference(v, cur, num, lock)
+            if not go:
+                return
+            if go == "lock" and not lock:
+                # (two wires with one number: only a locked one stays, numbering gives an
+                # unlocked one a free number again; the battery, 0.17.5, seed 77)
+                lock = True
+                self._say("Wire %s locked: another wire has that number, and numbering "
+                          "would change an unlocked one" % num)
         with v.project.edit("Wire number") as ed:
             if own != cur.own_num:
                 # (its own number where it taps another, or back to that wire's: numbering
@@ -2643,8 +2650,9 @@ class MainWindow(BlockEditing, QMainWindow):
         reference (the owner, 0.17.5: "it should ask me if it's a cross reference and whether
         it's a source or destination"). Source or destination: off-sheet connectors of a new
         name on the open ends of both, and the number on the one wire they make, in one step;
-        True to go on as typed (no other wire has it, or "just the same number"); False when
-        it is done here or cancelled."""
+        True to go on as typed (no other wire has it), "lock" to go on with it locked ("just
+        the same number": only a locked number stays beside another wire's); False when it is
+        done here or cancelled."""
         from . import wirenums
         project, sheet = v.project, v.sheet()
         others = wirenums.others_numbered(project, sheet, cur, num)
@@ -2657,7 +2665,7 @@ class MainWindow(BlockEditing, QMainWindow):
         if how is None:
             return False
         if how == "same":
-            return True
+            return "lock"
         mine = wirenums.group_of(project, sheet, cur)
         here = wirenums.open_end(mine[1] if mine else [(sheet, cur)], first=cur)
         there = wirenums.open_end(others[0][1])
