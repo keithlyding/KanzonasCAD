@@ -1741,27 +1741,54 @@ class Rail(Run):
 
 @_register
 class Duct(Run):
-    """Wire duct (wireway): its outline, its walls and their finger slots. The depth isn't
-    drawn (a plan view) but is part of its size."""
+    """Wire duct (wireway): its outline, the finger slots along both edges (notches cut in
+    from each side, a finger between) with the base line under them, and mounting holes along
+    its middle (the owner, 0.18: "I don't love the look of panduit on the drawing. I think it
+    needs some basic mask and/or hole pattern"; asked: fingers and holes, a light hatch as an
+    option: attribute HATCH "1", Panel settings). The depth isn't drawn (a plan view) but is
+    part of its size."""
     kind = "duct"
     __slots__ = ()
-    WALL = 0.08
-    PITCH = 0.5
+    PITCH = 0.5             # finger slots, one every half inch
+    SLOT = 0.25             # a slot's width
+    HOLES = 3.0             # mounting holes along the middle, this far apart
+    HOLE_R = 0.09
+    HATCH = 0.35            # the light hatch's spacing (on: attribute HATCH)
 
     def name(self):
         return "Wire duct " + size_text(self.width, self.depth)
 
     def _details(self):
-        L, h, t = self.length(), self.width / 2, min(self.WALL, self.width / 6)
-        out = [Line(self.at(0, -(h - t)), self.at(L, -(h - t))),
-               Line(self.at(0, h - t), self.at(L, h - t))]
-        s = self.PITCH
-        n = 0
-        while s < L - 1e-9 and n < 4000:
-            out.append(Line(self.at(s, -h), self.at(s, -(h - t))))
-            out.append(Line(self.at(s, h), self.at(s, h - t)))
+        L, h = self.length(), self.width / 2
+        d = min(0.3, self.width / 5)                  # (how deep the slots are)
+        out = [Line(self.at(0, -(h - d)), self.at(L, -(h - d))),
+               Line(self.at(0, h - d), self.at(L, h - d))]
+        s, n = self.PITCH / 2, 0
+        while s + self.SLOT < L - 1e-9 and n < 4000:
+            for side in (-1, 1):
+                edge, base = side * h, side * (h - d)
+                out.append(Polyline([self.at(s, edge), self.at(s, base),
+                                     self.at(s + self.SLOT, base),
+                                     self.at(s + self.SLOT, edge)]))
             s += self.PITCH
             n += 1
+        # mounting holes along the middle, centered on its length
+        if L > 2 * self.HOLE_R:
+            k = max(0, int((L - 1.5) // self.HOLES))
+            s0 = (L - k * self.HOLES) / 2.0
+            for i in range(k + 1):
+                if self.HOLE_R < s0 + i * self.HOLES < L - self.HOLE_R:
+                    out.append(Circle(self.at(s0 + i * self.HOLES, 0.0), self.HOLE_R))
+        if self.attrs.get("HATCH") == "1":
+            # light diagonals between the slots' base lines (s - t = c, clipped)
+            w = h - d
+            c, n = -w, 0
+            while c < L + w and n < 20000:
+                a0, a1 = max(0.0, c - w), min(L, c + w)
+                if a1 > a0 + 1e-9:
+                    out.append(Line(self.at(a0, a0 - c), self.at(a1, a1 - c)))
+                c += self.HATCH
+                n += 1
         return out
 
 

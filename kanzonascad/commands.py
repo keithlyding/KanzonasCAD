@@ -3721,7 +3721,8 @@ class DuctCmd(_RunCmd):
 
     def make(self, a, b):
         w, d = self._size()
-        return M.Duct(a, b, "", w, d)
+        hatch = {"HATCH": "1"} if self.ctx.project.settings.get("duct_hatch") else None
+        return M.Duct(a, b, "", w, d, attrs=hatch)
 
     # (from a corner, not its middle: the owner, 0.18, "For adding wire duct, the start point
     # needs to be at the corner, not the middle": the two points are one edge, corner to

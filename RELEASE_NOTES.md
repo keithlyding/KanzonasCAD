@@ -31,7 +31,8 @@ build fails without them.
 - Whether wire numbers follow the tags' order is a project setting (Project properties,
   Schematic) and a sheet setting (Sheet properties) that can override it.
 - **Wire duct** is drawn from a corner: click one corner and the other end of that edge; the
-  duct goes on the side the cursor is (F for the other side).
+  duct goes on the side the cursor is (F for the other side). It now shows its finger slots
+  and mounting holes, and Panel settings can add a light hatch to every duct.
 - A connector's cross-reference text is always outside it, on the side away from its wire,
   however the connector is turned.
 - Cross-reference text is on a layer of its own, **XREFS**, in cyan, and a little smaller.

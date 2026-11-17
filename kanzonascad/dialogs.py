@@ -451,6 +451,12 @@ def project_properties(parent, project, tab=0):
         b.setToolTip("1 m = 39.37 in, 2 m = 78.74 in, 6 ft = 72 in")
         stocks[key] = b
         form.addRow(label, b)
+    hatch = QCheckBox("Wire duct drawn with a light hatch (as a mask)")
+    hatch.setObjectName("duct_hatch")
+    hatch.setChecked(bool(st.get("duct_hatch", False)))
+    hatch.setToolTip("Light diagonal lines across every wire duct in the project, besides its "
+                     "finger slots and mounting holes")
+    form.addRow("", hatch)
     form.addRow(_gray("Objects take their layer's color (ByLayer), as in AutoCAD, unless you "
                       "give them their own (Modify > Color...). Panel scale and dimension "
                       "settings come with the dimension tools."))
@@ -493,6 +499,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_clear"] = wclear.value()
     settings["wire_gauge_shown"] = wgauge.isChecked()
     settings["footprint_label"] = fp_show.currentData()
+    settings["duct_hatch"] = hatch.isChecked()
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():
@@ -522,6 +529,18 @@ def project_properties(parent, project, tab=0):
                 ed.add(tb, e)
         if settings != st:
             ed.project_settings(settings)
+        if bool(settings.get("duct_hatch")) != bool(st.get("duct_hatch", False)):
+            # (every duct in the project takes it: kept on each, HATCH)
+            on = bool(settings.get("duct_hatch"))
+            for s in project.sheets:
+                for e in list(s.entities.values()):
+                    if isinstance(e, M.Duct) and (e.attrs.get("HATCH") == "1") != on:
+                        attrs = dict(e.attrs)
+                        if on:
+                            attrs["HATCH"] = "1"
+                        else:
+                            attrs.pop("HATCH", None)
+                        ed.change(s, e.copy(attrs=attrs))
         for name, color in changed_colors.items():
             lay = project.layers.get(name)
             before = lay.to_dict() if lay else None

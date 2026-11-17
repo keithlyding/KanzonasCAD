@@ -1060,8 +1060,10 @@ so the gaps between them are equal. With Snap on, each move is rounded to the sn
 symbols' pins stay on the grid and wires still meet them (the gaps can then differ by up to
 one snap step); wires on a moved symbol's pins follow. One Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
-one end to the other (a rail along its middle, a duct along one edge, from a corner): the rail's outline, lips and mounting slots, the duct's walls and finger
-slots. They always go straight across or straight up and down (a snap off that line only sets
+one end to the other (a rail along its middle, a duct along one edge, from a corner): the rail's outline, lips and mounting slots; the duct's outline, its finger slots
+along both edges (one every half inch) and its mounting holes along the middle (every 3
+inches). <b>Wire duct drawn with a light hatch</b> (Panel settings) adds light diagonal lines
+across every duct, as a mask; new ducts take it too. They always go straight across or straight up and down (a snap off that line only sets
 the length), and their end grips stretch them along their own line. Stretch one
 with its end grips (or double-click it and type its length), move it with its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its
 size: it goes on the materials list and the bill of materials. Double-click a piece for its

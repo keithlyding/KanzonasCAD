@@ -93,5 +93,61 @@ class DuctFromACornerTest(unittest.TestCase):
         self.assertAlmostEqual(bb[3], 10.0)
 
 
+class DuctLookTest(unittest.TestCase):
+    """The owner, 0.18: "I don't love the look of panduit on the drawing. I think it needs some
+    basic mask and/or hole pattern" (asked: finger slots and mounting holes, a light hatch as a
+    Panel setting)."""
+
+    def test_slots_holes_and_the_hatch(self):
+        d = M.Duct((0.0, 0.0), (12.0, 0.0), "", 2.0, 3.0)
+        parts = d.exploded()
+        slots = [e for e in parts if isinstance(e, M.Polyline) and not e.closed]
+        holes = [e for e in parts if isinstance(e, M.Circle)]
+        self.assertEqual(len(slots), 2 * 23)                 # (every 1/2" from 1/4" in)
+        self.assertEqual(len(holes), 4)                      # (every 3", centered)
+        self.assertTrue(all(abs(c.center[1]) < 1e-9 for c in holes))
+        xs = sorted(c.center[0] for c in holes)
+        self.assertAlmostEqual(xs[0], 12.0 - xs[-1])         # (centered on its length)
+        hatched = d.copy(attrs={"HATCH": "1"})
+        n_plain = len([x for x in d.exploded() if isinstance(x, M.Line)])
+        n_hatch = len([x for x in hatched.exploded() if isinstance(x, M.Line)])
+        self.assertGreater(n_hatch, n_plain + 20)
+        # all inside its outline
+        bb = d.bbox()
+        for e in parts:
+            b = e.bbox()
+            self.assertTrue(bb[0] - 1e-9 <= b[0] and b[2] <= bb[2] + 1e-9 and
+                            bb[1] - 1e-9 <= b[1] and b[3] <= bb[3] + 1e-9)
+
+    def test_the_panel_setting(self):
+        from kanzonascad import dialogs
+        from PySide6.QtWidgets import QDialog, QCheckBox, QTabWidget
+        win, v = window()
+        try:
+            p, s = v.project, v.sheet()
+            with p.edit("x") as ed:
+                old = ed.add(s, M.Duct((1.0, 1.0), (8.0, 1.0), "", 2.0, 3.0))
+
+            def answer(dlg):
+                dlg.findChild(QCheckBox, "duct_hatch").setChecked(True)
+                return QDialog.Accepted
+            real = dialogs.QDialog.exec
+            dialogs.QDialog.exec = answer
+            try:
+                win.project_properties(2)
+            finally:
+                dialogs.QDialog.exec = real
+            self.assertTrue(p.settings["duct_hatch"])
+            self.assertEqual(s.entities[old.id].attrs.get("HATCH"), "1")   # (the ones there)
+            v.osnap_on = v.snap_on = v.ortho_on = v.polar_on = False
+            v.run(C.DuctCmd)
+            type_in(v, "1,5", "8,5")
+            new = [e for e in s.entities.values() if isinstance(e, M.Duct)][-1]
+            self.assertEqual(new.attrs.get("HATCH"), "1")                   # (new ones)
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            win.close()
+
+
 if __name__ == "__main__":
     unittest.main()
