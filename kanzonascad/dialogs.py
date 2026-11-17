@@ -1549,7 +1549,8 @@ def attribute_visibility(parent, project, sheet, inserts):
     for n in names:
         ents = have[n]
         hid = sum(1 for e in ents if n in e.hidden)
-        c = QCheckBox("%s   (on %d block%s%s)" % (n, len(ents), "" if len(ents) == 1 else "s",
+        c = QCheckBox("%s   (on %d block%s%s)" % ("Pin names" if n == "PINS" else n, len(ents),
+                                                  "" if len(ents) == 1 else "s",
                                                   ", hidden on %d" % hid if 0 < hid < len(ents)
                                                   else ""))
         c.setObjectName("show_" + n)
@@ -1697,3 +1698,110 @@ def dash_box_dialog(parent, project, box):
                 continue
             device = got[1]
         return {"text": text, "device": device, "pick": False}
+
+
+def numbering_dialog(parent, count, last=None):
+    """How to number count selected texts (NumberCmd): {"sequence", "start", "step",
+    "digits", "prefix", "suffix", "letter_start", "order", "mode"}, or None. last: the
+    answers given last time (the window starts with them)."""
+    from . import numbering as N
+    last = dict(last or {})
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Number texts")
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel("%d text%s selected." % (count, "" if count == 1 else "s")))
+    form = QFormLayout()
+    seq = QComboBox()
+    for key, label in (("number", "1, 2, 3 ..."), ("letter", "A, B, C ..."),
+                       ("lower", "a, b, c ..."), ("letter_number", "A1, B2, C3 ...")):
+        seq.addItem(label, key)
+    seq.setCurrentIndex(max(seq.findData(last.get("sequence", "number")), 0))
+    form.addRow("Numbering", seq)
+    prefix = QLineEdit(last.get("prefix", ""))
+    prefix.setPlaceholderText("S for S1, S2, S3...; TB1- for TB1-1, TB1-2...")
+    form.addRow("Before each (prefix)", prefix)
+    start = QLineEdit(last.get("start", "1"))
+    form.addRow("Start at", start)
+    letter_start = QLineEdit(last.get("letter_start", "A"))
+    form.addRow("Letter to start at", letter_start)
+    step = QSpinBox()
+    step.setRange(-1000, 1000)
+    step.setValue(int(last.get("step", 1)) or 1)
+    form.addRow("Step", step)
+    digits = QSpinBox()
+    digits.setRange(0, 6)
+    digits.setValue(int(last.get("digits", 0)))
+    digits.setSpecialValueText("as they are (1, 2 ... 10)")
+    form.addRow("Digits (01, 02...)", digits)
+    suffix = QLineEdit(last.get("suffix", ""))
+    form.addRow("After each (suffix)", suffix)
+    order = QComboBox()
+    order.addItem("Top to bottom, then left to right", "down")
+    order.addItem("Left to right, then top to bottom", "across")
+    order.setCurrentIndex(max(order.findData(last.get("order", "down")), 0))
+    form.addRow("Order", order)
+    mode = QComboBox()
+    mode.addItem("Replaces the text", "replace")
+    mode.addItem("Goes in front of the text", "before")
+    mode.addItem("Goes after the text", "after")
+    mode.setCurrentIndex(max(mode.findData(last.get("mode", "replace")), 0))
+    form.addRow("The number", mode)
+    lay.addLayout(form)
+    preview = QLabel()
+    preview.setWordWrap(True)
+    lay.addWidget(preview)
+
+    def answers():
+        return {"sequence": seq.currentData(), "start": start.text().strip() or "1",
+                "step": step.value(), "digits": digits.value(), "prefix": prefix.text(),
+                "suffix": suffix.text(), "letter_start": letter_start.text().strip() or "A",
+                "order": order.currentData(), "mode": mode.currentData()}
+
+    def problem(a):
+        if a["sequence"] in ("number", "letter_number"):
+            try:
+                int(a["start"])
+            except ValueError:
+                return "Start at must be a whole number (1, 10, 101...)"
+        if a["sequence"] in ("letter", "lower") and N.letter_index(a["start"]) is None:
+            return "Start at must be a letter (A, B... or AA)"
+        if a["sequence"] == "letter_number" and N.letter_index(a["letter_start"]) is None:
+            return "Letter to start at must be a letter"
+        return None
+
+    def refresh():
+        a = answers()
+        letter_start.setEnabled(a["sequence"] == "letter_number")
+        digits.setEnabled(a["sequence"] in ("number", "letter_number"))
+        if a["sequence"] in ("letter", "lower") and N.letter_index(a["start"]) is None:
+            start.setText("A" if a["sequence"] == "letter" else "a")
+            return
+        if a["sequence"] in ("number", "letter_number") and problem(a):
+            start.setText("1")
+            return
+        why = problem(a)
+        if why:
+            preview.setText(why)
+            return
+        got = N.labels(min(count, 6), a["sequence"], a["start"], a["step"], a["digits"],
+                       a["prefix"], a["suffix"], a["letter_start"])
+        preview.setText("Gives: %s%s" % (", ".join(got), " ..." if count > 6 else ""))
+    for w in (seq, order, mode):
+        w.currentIndexChanged.connect(lambda *_a: refresh())
+    for w in (prefix, start, letter_start, suffix):
+        w.textChanged.connect(lambda *_a: refresh())
+    for w in (step, digits):
+        w.valueChanged.connect(lambda *_a: refresh())
+    refresh()
+    box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    box.accepted.connect(dlg.accept)
+    box.rejected.connect(dlg.reject)
+    lay.addWidget(box)
+    while True:
+        if dlg.exec() != QDialog.Accepted:
+            return None
+        a = answers()
+        why = problem(a)
+        if why is None:
+            return a
+        QMessageBox.warning(dlg, "Number texts", why)

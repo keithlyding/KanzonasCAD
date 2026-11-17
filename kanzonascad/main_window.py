@@ -389,6 +389,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("mirror", "M&irror", C.MirrorCmd, "Mirror")
         self._cmd_act("array", "Arra&y", C.ArrayCmd, "Array")
         self._cmd_act("offset", "O&ffset", C.OffsetCmd, "Offset")
+        self._cmd_act("number", "&Number texts", C.NumberCmd, "Number texts")
         self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
         self._cmd_act("scoot", "Sc&oot", C.ScootCmd, "Scoot")
@@ -595,7 +596,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "array", "offset", "erase",
-                  "trim", None,
+                  "trim", "number", None,
                   "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
@@ -652,7 +653,7 @@ class MainWindow(BlockEditing, QMainWindow):
         r = self.ribbon = Ribbon()
         r.add_tab("Home", [
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
-                               a["arc"], a["text"], a["mtext"], a["hatch"]]),
+                               a["arc"], a["text"], a["mtext"], a["hatch"], a["number"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
                                  a["array"], a["offset"], a["erase"], a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
@@ -2395,6 +2396,13 @@ class MainWindow(BlockEditing, QMainWindow):
         self._update_ui()
 
     # ---- dashed boxes, and devices picked on the drawing ----------------------------------
+    def ask_numbering(self, count):
+        """Number texts' window, starting with the answers given last time."""
+        got = dialogs.numbering_dialog(self, count, getattr(self, "_numbering", None))
+        if got is not None:
+            self._numbering = got
+        return got
+
     def ask_dash_box(self, box):
         """A dashed box's window (DashBoxCmd, double-click): its note and the device it
         belongs to. {"text", "device": an Insert or None, "pick": True to pick it on the
@@ -2667,7 +2675,8 @@ class MainWindow(BlockEditing, QMainWindow):
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
-                  "scale", "mirror", "array", "offset", "dash_box", "erase", "trim", "paste",
+                  "scale", "mirror", "array", "offset", "dash_box", "number", "erase", "trim",
+                  "paste",
                   "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "del_wire", "del_dot", "clean_wires",
                   "del_comp"):
             a[k].setEnabled(has)
@@ -3053,21 +3062,114 @@ class MainWindow(BlockEditing, QMainWindow):
         self.manual_dialog(anchor).exec()
 
     def manual_dialog(self, anchor=None):
+        """Help > User manual: its chapters (and their sections) on the left, a search box
+        over it (the owner, 0.16: "Can you add chapters and search function to help
+        manual?"): typing narrows the chapters to those that mention it, with how often,
+        lights every match, and Next / Previous (Enter / Shift+Enter) go through them."""
+        from PySide6.QtWidgets import (QSplitter, QTreeWidget, QTreeWidgetItem, QTextEdit,
+                                       QLineEdit, QPushButton, QHBoxLayout)
+        from PySide6.QtGui import QTextCursor, QTextCharFormat, QColor
         from . import manual
         dlg = QDialog(self)
         dlg.setWindowTitle("KanzonasCAD user manual")
-        dlg.resize(820, 700)
+        dlg.resize(1000, 720)
         lay = QVBoxLayout(dlg)
+        top = QHBoxLayout()
+        find = dlg.search = QLineEdit()
+        find.setPlaceholderText("Search the manual (Enter: next, Shift+Enter: previous)")
+        find.setClearButtonEnabled(True)
+        prev_b, next_b = QPushButton("Previous"), QPushButton("Next")
+        count = dlg.count = QLabel("")
+        count.setMinimumWidth(90)
+        top.addWidget(find, 1)
+        top.addWidget(prev_b)
+        top.addWidget(next_b)
+        top.addWidget(count)
+        lay.addLayout(top)
+        split = QSplitter()
+        tree = dlg.chapters = QTreeWidget()
+        tree.setHeaderHidden(True)
         tb = dlg.browser = QTextBrowser()
         tb.setOpenExternalLinks(True)
         tb.setHtml(manual.html())
-        lay.addWidget(tb)
+        items = []
+        parent = None
+        for level, title, anc, body in manual.chapters():
+            it = QTreeWidgetItem([title])
+            it.setData(0, Qt.UserRole, anc)
+            if level == 2 or parent is None:
+                tree.addTopLevelItem(it)
+                parent = it
+            else:
+                parent.addChild(it)
+            items.append((it, title, body.lower() + " " + title.lower()))
+        tree.expandAll()
+        tree.itemClicked.connect(lambda it, _c: tb.scrollToAnchor(it.data(0, Qt.UserRole)))
+        split.addWidget(tree)
+        split.addWidget(tb)
+        split.setSizes([260, 740])
+        lay.addWidget(split, 1)
+        state = {"hits": [], "at": -1}
+
+        def search():
+            words = find.text().strip()
+            low = words.lower()
+            # the chapters that mention it, with how often
+            for it, title, body in items:
+                n = body.count(low) if low else 0
+                it.setHidden(bool(low) and n == 0 and not any(
+                    not it.child(k).isHidden() for k in range(it.childCount())))
+                it.setText(0, "%s  (%d)" % (title, n) if low and n else title)
+            for it, _t, _b in items:
+                # (a chapter stays when one of its sections matches)
+                if low and it.childCount() and any(not it.child(k).isHidden()
+                                                   for k in range(it.childCount())):
+                    it.setHidden(False)
+            # every match lit in the text
+            hits = []
+            if low:
+                doc = tb.document()
+                cur = doc.find(words, 0)
+                while not cur.isNull():
+                    hits.append(QTextCursor(cur))
+                    cur = doc.find(words, cur)
+            fmt = QTextCharFormat()
+            fmt.setBackground(QColor(255, 220, 60))
+            fmt.setForeground(QColor(0, 0, 0))
+            sels = []
+            for c in hits:
+                sel = QTextEdit.ExtraSelection()
+                sel.cursor, sel.format = c, fmt
+                sels.append(sel)
+            tb.setExtraSelections(sels)
+            state["hits"], state["at"] = hits, -1
+            count.setText(("%d found" % len(hits)) if low else "")
+            if hits:
+                go(1)
+
+        def go(step):
+            hits = state["hits"]
+            if not hits:
+                return
+            state["at"] = (state["at"] + step) % len(hits)
+            tb.setTextCursor(hits[state["at"]])
+            tb.ensureCursorVisible()
+            count.setText("%d of %d" % (state["at"] + 1, len(hits)))
+        dlg.go = go
+        find.textChanged.connect(lambda _t: search())
+
+        def enter():
+            go(-1 if QApplication.keyboardModifiers() & Qt.ShiftModifier else 1)
+        find.returnPressed.connect(enter)
+        next_b.clicked.connect(lambda: go(1))
+        prev_b.clicked.connect(lambda: go(-1))
         b = QDialogButtonBox(QDialogButtonBox.Close)
         b.rejected.connect(dlg.accept)
         lay.addWidget(b)
         if anchor:
             # (once it is laid out: before that there is nowhere to scroll)
             QTimer.singleShot(0, tb, lambda: tb.scrollToAnchor(anchor))
+        find.setFocus()
         return dlg
 
     def about_dialog(self):

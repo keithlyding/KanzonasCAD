@@ -1737,7 +1737,7 @@ class BlockDef:
     def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
                  category="", description="", role="device", contact="", prefix="",
                  builtin=False, wiring="", attr_texts=(), manufacturer="", family="",
-                 series="", catalog="", rail_pos=None, own_colors=False):
+                 series="", catalog="", rail_pos=None, own_colors=False, show_pins=False):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -1777,6 +1777,9 @@ class BlockDef:
         # its pieces keep their own colors (a block from another program's drawing, as
         # AutoCAD shows it: a manufacturer's colored parts); else all in the copy's color
         self.own_colors = bool(own_colors)
+        # its pins' names drawn beside them (a symbol's terminal numbers: the owner, 0.16: "when
+        # making terminal numbers, will they show up?"); hidden on a copy as attribute PINS
+        self.show_pins = bool(show_pins)
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -1790,7 +1793,8 @@ class BlockDef:
                     if self.attr_texts else {}) | {
                     k: getattr(self, k) for k in MAKER_FIELDS if getattr(self, k)} | (
                     {"rail_pos": list(self.rail_pos)} if self.rail_pos is not None else {}) | (
-                    {"own_colors": True} if self.own_colors else {})
+                    {"own_colors": True} if self.own_colors else {}) | (
+                    {"show_pins": True} if self.show_pins else {})
 
     @classmethod
     def from_dict(cls, d, builtin=False):
@@ -1801,7 +1805,7 @@ class BlockDef:
                    d.get("prefix", ""), builtin, d.get("wiring", ""),
                    d.get("attr_texts", ()), d.get("manufacturer", ""), d.get("family", ""),
                    d.get("series", ""), d.get("catalog", ""), d.get("rail_pos"),
-                   d.get("own_colors", False))
+                   d.get("own_colors", False), d.get("show_pins", False))
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
@@ -1929,7 +1933,32 @@ class Insert(Entity):
         if d is None:
             return []
         out = ["TAG"] if d.kind == "symbol" and d.tag_pos is not None else []
-        return out + [a["attr"] for a in d.attr_texts if a["attr"] not in out]
+        out += [a["attr"] for a in d.attr_texts if a["attr"] not in out]
+        if d.kind == "symbol" and d.show_pins and d.pins:
+            out.append("PINS")              # (its pins' names: shown or hidden as one)
+        return out
+
+    def pin_texts(self):
+        """Its pins' names beside them, read across however it is turned (Show pin names):
+        just inside each pin, above the wire for a pin on a side, beside it for one at the
+        top or bottom."""
+        d = self.defn
+        if d is None or not d.show_pins or "PINS" in self.hidden:
+            return []
+        h = 0.6 * (self.tag_h or d.tag_height) * self.scale
+        g = 0.35 * h
+        mx, my = self.to_world(d.middle())
+        out = []
+        for p in d.pins:
+            x, y = self.to_world(p["pos"])
+            dx, dy = mx - x, my - y
+            if abs(dx) >= abs(dy):
+                out.append(Text((x + (g if dx >= 0 else -g), y + g), p["name"], h, 0.0,
+                                "left" if dx >= 0 else "right", "bottom"))
+            else:
+                out.append(Text((x + g, y + (g if dy >= 0 else -g)), p["name"], h, 0.0,
+                                "left", "bottom" if dy >= 0 else "top"))
+        return out
 
     def tag_text(self):
         """The tag shown on the sheet (None for a footprint or a symbol without a tag spot, or
@@ -2018,6 +2047,7 @@ class Insert(Entity):
                 t = self.tag_text()
                 if t is not None:
                     out.append(t)
+                out += self.pin_texts()
                 for a in d.attr_texts:
                     name = a["attr"]
                     v = self.attrs.get(name, "")

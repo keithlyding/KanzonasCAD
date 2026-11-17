@@ -208,7 +208,7 @@ timed contacts, pushbuttons, E-stop, selector, limit/pressure/temperature/float 
 fuse, breaker, disconnect, overload heater and contact, pilot light, motor, solenoid, control
 transformer, terminal strip and terminal, ground, distribution block, off-sheet connector;
 three-phase: 3-pole breaker, disconnect and fuses, fused disconnect, contactor power contacts,
-overload heaters, starter, motor, variable frequency drive; power supply; PLC I/O card with input and output points).
+overload heaters, starter, motor, drive control terminals, variable frequency drive; power supply; PLC I/O card with input and output points).
 A symbol of yours with the same name replaces a built-in one.</li>
 <li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.
 KanzonasCAD comes with generic ones at typical sizes, in the Generic categories: breakers 1, 2
@@ -263,7 +263,12 @@ footprint on a panel sheet, on schematic symbol otherwise), category and descrip
 if you like, its manufacturer, family, series and catalog number (see below). For a symbol also: its part in cross-references (a device on its own, a coil or
 operator with contacts elsewhere, or a contact), the contact type, the tag prefix (CR, M, PB...),
 what wire numbers do through it (nothing; a distribution block; an off-sheet connector: see
-Wire numbers) and the pin names.</li>
+Wire numbers) and the pin names, and whether the <b>pin names show on the drawing</b>
+(ticked to start for a symbol you make: its terminal numbers, 13, 14, A1, written just inside
+each pin, above the wire or beside it, read across however the symbol is turned; untick it
+when your drawing already has them as text). Block properties changes it later (Update
+blocks from library brings it to a project), and on one copy it is <b>Pin names</b> in the
+attributes window's Shown on the drawing (or Show or hide attributes).</li>
 <li>For a symbol, click each <b>pin</b> in order and press Enter, then click where the
 <b>tag</b> goes (Enter puts it above).</li>
 </ol>
@@ -593,6 +598,13 @@ and list under it.</li>
 rating under them). Each is 1 inch long, L1-L3 in on the left and T1-T3 out on the right,
 and lines up with the other three-pole symbols. The <b>Overload contact NC</b> in the coil's
 rung belongs to the same coil.</li>
+<li><b>Drive control terminals</b> (JIC/Power): a small AC drive's control terminals in one
+column, 1/4 inch apart, wires landing on the left: S1, S2, S+ (safety), 01-08 (stop and
+digital inputs), 11-19 (+24V, +10V, analog in and out, opto outputs), R1, R2, R5, R6 (relays)
+and C1, C2 (comms), each number in its box and what it is beside it. It is a contact of its
+<b>Variable frequency drive</b>: placed, it asks which drive (as a contact asks for its coil),
+shows the drive's tag (VFD101) and is listed under it. A drive with other terminals: Edit block
+and change the texts and pins, then save it under a name of your own.</li>
 <li><b>Terminals</b> belong to a <b>Terminal strip</b> (place the strip first, anywhere: it
 takes a tag, TB601). Placing a terminal asks which strip, as a contact asks for its coil; it
 shows the strip's tag and numbers itself on the strip: 1, 2, 3... (the lowest free number;
@@ -719,6 +731,15 @@ the last one), pick the object, click the side; it goes on with the same distanc
 Enter. <b>T</b> (Through) instead of a distance: the copy passes through the point you click.
 A shape offset inward past its middle is refused (it would turn inside out); wires aren't
 offset (draw a bus).</td></tr>
+<tr><td>Number texts</td><td>NUMBER, NUM, TCOUNT</td><td>Numbers the selected texts (single-
+and multi-line) in order, as AutoCAD's TCOUNT: <b>1, 2, 3</b>; <b>A, B, C</b> (Z, then AA,
+AB); <b>a, b, c</b>; or <b>A1, B2, C3</b> (the letter and the number together), from the start
+you give (a number, or a letter), by the step (2: 1, 3, 5), with as many digits as you ask
+(01, 02), a prefix before each (S: S1, S2, S3; TB1-: TB1-1...) and a suffix after. The
+<b>order</b>: top to bottom, then the next column to the right; or left to right, then the
+next row down (texts lined up on their insertion points make a column or a row, however long
+each is). The number <b>replaces</b> the text, or goes in front of it or after it. The
+window shows what it gives and remembers your choices; one Undo puts the texts back.</td></tr>
 <tr><td>Erase</td><td>ERASE, E, or Delete</td><td>Removes the selected objects.</td></tr>
 <tr><td>Trim</td><td>TRIM, TR</td><td>Click the part of an object to cut away: it is trimmed
 back to the nearest crossing objects on either side (every object is a cutting edge, as in
@@ -1260,7 +1281,11 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 </table>
 
 <h2>Help</h2>
-<p><b>User manual</b> (F1) opens this page. <b>About KanzonasCAD</b> shows the logo, the version and where the source code is.</p>
+<p><b>User manual</b> (F1) opens this page: its <b>chapters</b> on the left (click one to go
+there; a chapter's sections under it) and a <b>search</b> box over it. Type in it: the chapters
+narrow to those that mention it, with how many times, every match lights up, and
+<b>Next</b> and <b>Previous</b> (Enter and Shift+Enter) go from one to the next ("3 of 17").
+<b>About KanzonasCAD</b> shows the logo, the version and where the source code is.</p>
 
 <h2>Installing</h2>
 <p>On Windows, <b>KanzonasCAD-v&lt;version&gt;-setup.exe</b> from the Releases page installs
@@ -1343,7 +1368,38 @@ turns the daily check on or off.</p>
 
 
 def html():
-    return _HTML.format(version=__version__)
+    """The manual, every chapter and section heading with an anchor of its own (chapters())."""
+    import re
+    out, n = [], 0
+    last = 0
+    text = _HTML.format(version=__version__)
+    for m in re.finditer(r"<h([23])>", text):
+        out.append(text[last:m.start()])
+        n += 1
+        out.append('<a name="ch-%d"></a>' % n)
+        last = m.start()
+    out.append(text[last:])
+    return "".join(out)
+
+
+def chapters():
+    """[(level, title, anchor, its text)]: the manual's chapters (2) and their sections (3),
+    in order, each with the plain text under it up to the next heading (for Help's search)."""
+    import re
+    text = html()
+    heads = list(re.finditer(r'<a name="(ch-\d+)"></a><h([23])>(.*?)</h[23]>', text, re.S))
+    out = []
+    for i, m in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        body = re.sub(r"<[^>]+>", " ", text[m.end():end])
+        title = re.sub(r"<[^>]+>", "", m.group(3)).replace("&amp;", "&")
+        out.append((int(m.group(2)), title, m.group(1), _unescape(body)))
+    return out
+
+
+def _unescape(s):
+    return s.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace(
+        "&quot;", '"')
 
 
 def plain_text():
