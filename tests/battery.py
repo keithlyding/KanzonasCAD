@@ -1402,7 +1402,8 @@ def random_editing(log, out, ops, seed, drawing=None):
             other = s.entities.get(b.id)
             assert other is not None and got.num == other.num == num, \
                 "a cross-reference left two numbers: %s, %s" % (got.num, other and other.num)
-            assert got.num_lock == lock, "the lock wasn't as ticked"
+            # (unticked, it is locked when numbering would change it: the typed number stays)
+            assert got.num_lock or not lock, "the lock wasn't as ticked"
             BC.CHECKED["cross-reference by a number typed"] += 1
         elif how == "same":
             # (locked whatever was ticked: an unlocked duplicate would be numbered again)

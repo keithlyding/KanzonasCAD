@@ -49,13 +49,16 @@ def make(prefix, page, count):
     return "%s%s%02d" % (prefix, page, count)
 
 
-def used_counts(project, prefix, page, skip=()):
+def used_counts(project, prefix, page, skip=(), on=None):
     """Counts already taken for prefix on page, over the whole project (a tag typed by hand on
-    another sheet still takes its number). Contacts don't count: their tag is their device's."""
+    another sheet still takes its number). Contacts don't count: their tag is their device's.
+    skip: ids of devices on sheet on (or on every sheet when on is None) not to count: ids are
+    a sheet's own, so another sheet's device with the same id still counts (the long battery,
+    0.18, seed 3152: two DS404 after Update numbers)."""
     out = set()
     for s in project.sheets:
         for e in s.inserts():
-            if e.id in skip or is_child(e):
+            if (e.id in skip and (on is None or s is on)) or is_child(e):
                 continue
             got = split(e.attrs.get("TAG", ""), prefix)
             if got and got[0] == page:
@@ -202,7 +205,7 @@ def renumber_sheet(ed, project, sheet):
     for prefix in sorted({e.defn.prefix for e in devices}):
         group = [e for e in devices if e.defn.prefix == prefix and not locked(e)]
         group.sort(key=lambda e: pos[e.id])
-        taken = used_counts(project, prefix, page, skip={e.id for e in group})
+        taken = used_counts(project, prefix, page, skip={e.id for e in group}, on=sheet)
         n = 0
         for e in group:
             n = lowest_free(taken | set(range(1, n + 1)))
@@ -241,16 +244,24 @@ def fix_sheet(ed, project, sheet):
     page = project.sheet_number(sheet)
     changed = 0
     key = order_key(sheet, sheet.number_order)
+    # (a tag two devices have is fixed too: the later in order takes a free one; the tags of
+    # other sheets' devices and of this sheet's locked ones are kept)
+    seen = {e.attrs.get("TAG", "") for s in project.sheets for e in s.inserts()
+            if is_device(e) and (s is not sheet or locked(e))}
     for e in sorted((e for e in sheet.entities.values() if is_device(e) and not locked(e)),
                     key=lambda e: key(e.pos, [q for _n, q in e.pin_points()])):
         prefix = e.defn.prefix
         got = split(e.attrs.get("TAG", ""), prefix)
-        if got is not None and got[0] == page:
+        if got is not None and got[0] == page and e.attrs.get("TAG") not in seen:
+            seen.add(e.attrs["TAG"])
             continue
-        taken = used_counts(project, prefix, page, skip={e.id})
+        taken = used_counts(project, prefix, page, skip={e.id}, on=sheet)
+        if got is not None and got[0] == page:
+            taken.add(got[1])                   # (a duplicate: not its own count again)
         n = got[1] if got is not None and got[1] not in taken else lowest_free(taken)
         attrs = dict(e.attrs, TAG=make(prefix, page, n))
         attrs.setdefault("DEV", uuid.uuid4().hex[:12])
+        seen.add(attrs["TAG"])
         ed.change(sheet, e.copy(attrs=attrs))
         changed += 1
     return changed
@@ -267,7 +278,7 @@ def sync_pages(ed, project):
             got = split(e.attrs.get("TAG", ""), e.defn.prefix)
             if got is None or got[0] == page:
                 continue
-            taken = used_counts(project, e.defn.prefix, page, skip={e.id})
+            taken = used_counts(project, e.defn.prefix, page, skip={e.id}, on=s)
             n = got[1] if got[1] not in taken else lowest_free(taken)
             attrs = dict(e.attrs, TAG=make(e.defn.prefix, page, n))
             ed.change(s, e.copy(attrs=attrs))

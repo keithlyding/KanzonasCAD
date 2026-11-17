@@ -155,6 +155,41 @@ class ArrowsAndUpdateTest(unittest.TestCase):
         # CR733 isn't of sheet 2's page: fixed, its count kept when free
         self.assertEqual(got, "CR%s33" % p2 if p2 != "7" else "CR733")
 
+    def test_same_ids_on_two_sheets_dont_share_a_tag(self):
+        # (ids are a sheet's own: renumbering one sheet skipped the other sheet's device of
+        # the same id when it counted the numbers taken; the long battery, seed 3152)
+        lib = self.win.library
+        d = lib.get("symbol", "Disconnect 1-pole")
+        p2 = self.p.sheet_number(self.s2)
+        with self.p.edit("x") as ed:
+            ed.block(d)
+            pd = self.p.blocks[d.name]
+            mine = [ed.add(self.s2, M.Insert(d.name, (1.0 + 1.5 * i, 7.0), defn=pd,
+                                             attrs={"TAG": "DS?", "DEV": "b%d" % i}))
+                    for i in range(5)]
+            # a device on sheet 1 with the first one's id, holding a count of sheet 2's page
+            ed.add(self.s1, M.Insert(d.name, (4.0, 7.0), defn=pd, id=mine[0].id,
+                                     attrs={"TAG": "DS%s03" % p2, "DEV": "a"}))
+        self.run_update(sheets=[self.s2], wires=False, xrefs=False)
+        tags_now = [e.attrs.get("TAG") for s in self.p.sheets for e in s.inserts()
+                    if e.block == d.name]
+        self.assertEqual(len(tags_now), len(set(tags_now)), tags_now)
+
+    def test_keep_fixes_a_tag_two_devices_have(self):
+        lib = self.win.library
+        d = lib.get("symbol", "Disconnect 1-pole")
+        p1 = self.p.sheet_number(self.s1)
+        with self.p.edit("x") as ed:
+            ed.block(d)
+            pd = self.p.blocks[d.name]
+            for x in (3.0, 9.0):
+                ed.add(self.s1, M.Insert(d.name, (x, 7.0), defn=pd,
+                                         attrs={"TAG": "DS%s04" % p1, "DEV": "d%g" % x}))
+        self.run_update(renumber=False, sheets=[self.s1], wires=False, xrefs=False)
+        got = sorted(e.attrs["TAG"] for e in self.s1.inserts() if e.block == d.name)
+        self.assertEqual(len(set(got)), 2, got)
+        self.assertIn("DS%s04" % p1, got)                    # (the first in order keeps it)
+
     def test_the_window(self):
         from PySide6.QtWidgets import QDialog, QRadioButton, QCheckBox
         from kanzonascad import dialogs

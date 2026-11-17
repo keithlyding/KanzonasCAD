@@ -2781,8 +2781,15 @@ class MainWindow(BlockEditing, QMainWindow):
             name = wirenums.cross_reference(ed, project, here, there, out_def, in_def,
                                             how == "source")
             wirenums.set_number(ed, project, sheet, sheet.entities[cur.id], num, lock)
-        self._say("Wire %s: connectors %s here and at %s (Undo takes them back)"
-                  % (num, name, where))
+            if not lock:
+                wirenums.sync(ed, project)
+                if sheet.entities[cur.id].num != num:
+                    # (the one wire takes the number of the sheet it starts on: the number
+                    # typed stays only locked; the long battery, 0.18, seed 3152)
+                    wirenums.set_number(ed, project, sheet, sheet.entities[cur.id], num, True)
+                    lock = True
+        self._say("Wire %s%s: connectors %s here and at %s (Undo takes them back)"
+                  % (num, " (locked: numbering would change it)" if lock else "", name, where))
         return False
 
     def ask_cross_reference(self, num, where):

@@ -100,6 +100,14 @@ class WireLockXrefTest(unittest.TestCase):
         self.p.undo()
         self.assertEqual([e for e in self.s1.inserts() if e.defn.wiring == "link"], [])
 
+    def test_unticked_the_typed_number_still_stays(self):
+        # (one wire takes the number of the sheet it starts on: unticked, the number typed
+        # would go at once; it is locked instead, the long battery, seed 3152)
+        other = self.num(self.s2, self.b)
+        self.type_number(other, lock=False, answer="source")
+        self.assertEqual(self.num(self.s1, self.a), other)
+        self.assertEqual(self.num(self.s2, self.b), other)
+
     def test_destination_points_in_here(self):
         other = self.num(self.s2, self.b)
         self.type_number(other, answer="destination")

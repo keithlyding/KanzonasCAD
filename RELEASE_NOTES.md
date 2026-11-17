@@ -39,6 +39,8 @@ build fails without them.
   Projects made earlier get the layer and the new size when opened.
 
 **Fixed**
+- Renumbering a sheet could give a device the same tag as a device on another sheet. Update
+  numbers' "Keep the numbers" now also fixes a tag two devices share.
 - Scooting a device whose pin sits on the corner of a wire (not cut there) could slide the pin
   off the wire. It now refuses that move.
 
