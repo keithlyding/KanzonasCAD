@@ -56,7 +56,8 @@ build fails without them.
   duct goes on the side the cursor is (F for the other side). It now shows its finger slots
   and mounting holes, and Panel settings can add a light hatch to every duct.
 - A connector's cross-reference text is always outside it, on the side away from its wire,
-  however the connector is turned.
+  however the connector is turned, and moves over or under it when the wire comes back round
+  past that side.
 - Cross-reference text is on a layer of its own, **XREFS**, in cyan, and a little smaller.
   Projects made earlier get the layer and the new size when opened.
 - The ribbon fits the window: when a tab is too wide, its groups shrink from the right (big
@@ -75,6 +76,17 @@ build fails without them.
 - The Schematic tab ran off the screen.
 - Trim on a small circle, clicked right where something crosses it (or in its middle), left
   the circle whole. It now cuts it there.
+- Dragging a wire's end straight past its last corner, back along the wire, left a hidden
+  corner where the wire ran back over itself. The wire now runs straight to where you drop it.
+- **Intersection** didn't snap where a line (or a dimension's point, or a Copy or Move point)
+  crosses the edge of wire duct or DIN rail, or where duct and rail cross. It does now.
+- Scooting a breaker with everything attached could squeeze a short wire between the bus and
+  a wire that stayed down to nothing and leave it broken. That wire is now removed.
+- Copying or moving a footprint to a point you snapped to near DIN rail pulled it onto the
+  rail, away from the point you picked it up by. A snapped point now wins.
+- Placing a footprint with the same name as a symbol already in the project gave the
+  footprint the symbol's drawing. The footprint now keeps its own (as "name (footprint)"), and
+  updating one from the library no longer changes the other.
 
 ## 0.17.5
 

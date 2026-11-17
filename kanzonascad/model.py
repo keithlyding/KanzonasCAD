@@ -447,6 +447,18 @@ class Wire(Polyline):
                 return True
         return False
 
+    def with_grip(self, i, p):
+        """A corner or end dragged: with no corner left where it turns straight back along
+        itself (an end dragged onto the line of the leg before it ran back up that leg: a
+        hidden fold, found by the long battery with Shift-picked grips, 0.18)."""
+        got = super().with_grip(i, p)
+        from .wires import straighten
+        # (and no point twice: an end dropped on the corner before it, seed 4101)
+        pts = _tidy(straighten(got.points))
+        if len(pts) < 2:
+            return self                 # (dragged onto its other end: no wire left; as it was)
+        return got if len(pts) == len(got.points) else got.copy(points=[list(q) for q in pts])
+
     def grips(self):
         """Its corners and ends, then the middle of each straight run (dragged, the run moves
         sideways and the wires joined to it follow: wires.segment_drag, through GripCmd)."""
@@ -1992,6 +2004,29 @@ def attr_display(name, value):
     if got is not None and _PLAIN_NUMBER.match(v):
         return v + got[1]
     return value
+
+
+def project_block_name(project, name, kind):
+    """The name a library block of that kind goes by in project: its own, unless the project
+    already has a block of that name of the other kind (a symbol and a footprint both named
+    "VFD 10x15"): then "name (footprint)" or "name (symbol)" (the owner, 0.18: "I tried to
+    insert a footprint with the same name as a schematic and it changed the footprint to the
+    schematic in a panel drawing")."""
+    got = project.blocks.get(name)
+    if got is None or got.kind == kind:
+        return name
+    return "%s (%s)" % (name, kind)
+
+
+def library_block_name(name, kind):
+    """A project block's name in the library (project_block_name's other way)."""
+    tail = " (%s)" % kind
+    return name[:-len(tail)] if name.endswith(tail) else name
+
+
+def renamed_block(defn, name):
+    """A copy of a block definition under another name."""
+    return defn if defn.name == name else BlockDef.from_dict(dict(defn.to_dict(), name=name))
 
 
 # what a footprint's label shows (Footprint label): the attribute, or its block's name; and

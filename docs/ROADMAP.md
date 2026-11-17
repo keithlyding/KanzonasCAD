@@ -49,6 +49,11 @@ nobody understands).
   tab that only shows up when needed (or manually selected)"): a block's tools on a Block tab
   shown in a block's tab (or always, View > Block tab); a tab too wide for the window shows
   its groups smaller from the right, as Office does, rather than scrolling.
+- 0.18.1 (owner, Nov 2026): footprint labels: several lines at once, a grip for each, their
+  own height (0.08" to start: owner's choice), a linked device's ratings on its footprint,
+  edited from either one (owner's choice); duplicate tags and wire numbers marked red on the
+  drawing and said on the command line, over the whole project (owner's choices); wire numbers
+  out of the way, with a short line back to the wire when there's no room.
 - 0.18.1: footprint labels (owner, Nov 2026): several lines at once, a grip for each, their
   own height (0.08" to start: owner's choice), a linked device's ratings on its footprint,
   edited from either one (owner's choice).

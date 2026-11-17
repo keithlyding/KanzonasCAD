@@ -108,7 +108,8 @@ class BlockEditing:
                    if isinstance(e, M.Insert) and e.defn is not None]
             if len({e.block for e in ins}) == 1:
                 e = ins[0]
-                return e.defn.kind, self.library.get(e.defn.kind, e.block), e.defn
+                return e.defn.kind, self.library.get(
+                    e.defn.kind, M.library_block_name(e.block, e.defn.kind)), e.defn
         if self.library_dialog.isVisible():
             got = self.library_panel.current_block()
             if got is not None:
@@ -410,6 +411,13 @@ class BlockEditing:
         undoable step. Returns how many were updated."""
         if doc is None or is_block_doc(doc) or not self._is_open(doc):
             return 0
+        # (the project's block of that kind: "name (footprint)" beside a symbol named so, and
+        # never a block of the other kind with that name, 0.18)
+        pname = M.project_block_name(doc.project, old_name, defn.kind)
+        if pname != old_name:
+            old_name = pname
+            defn = M.renamed_block(defn, M.project_block_name(doc.project, defn.name,
+                                                              defn.kind))
         n = len(BE.copies(doc.project, old_name))
         if not n:
             return 0
@@ -442,7 +450,10 @@ class BlockEditing:
         lib = self.library
         changed = []
         for name, pdef in sorted(p.blocks.items()):
-            ldef = lib.get(pdef.kind, name)
+            # (by its name and kind: a footprint kept as "name (footprint)" beside a symbol)
+            ldef = lib.get(pdef.kind, M.library_block_name(name, pdef.kind))
+            if ldef is not None:
+                ldef = M.renamed_block(ldef, name)
             if ldef is not None and not ldef.same_as(pdef) and BE.copies(p, name):
                 changed.append(ldef)
         if not changed:

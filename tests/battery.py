@@ -1375,7 +1375,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         num = rnd.choice([b.num, b.num, "9%03d" % rnd.randint(0, 999)])
         lock = rnd.random() < 0.7
         how = rnd.choice(["source", "destination", "same", None])
-        links = {e.id for sh in p.sheets for e in sh.inserts()
+        # (by sheet and id: ids are a sheet's own, seed 4103)
+        links = {(sh.id, e.id) for sh in p.sheets for e in sh.inserts()
                  if e.defn is not None and e.defn.wiring == "link"}
         win.ask_wire_number = lambda n, tap_of=None, own=False, locked=False: (num, own, lock)
         asked = []
@@ -1386,7 +1387,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             win.__dict__.pop("ask_wire_number", None)
             win.__dict__.pop("ask_cross_reference", None)
         new = [e for sh in p.sheets for e in sh.inserts()
-               if e.defn is not None and e.defn.wiring == "link" and e.id not in links]
+               if e.defn is not None and e.defn.wiring == "link" and (sh.id, e.id) not in links]
         got = s.entities.get(a.id)
         if num != b.num or got is None:
             assert not new, "connectors placed for a number no other wire had"
