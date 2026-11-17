@@ -57,6 +57,7 @@ DEFAULT_SETTINGS = {
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
     "wire_order_tags": True,    # wire numbers in the tags' numbering order (else across/down)
+    "duct_hatch": False,        # wire duct drawn with a light hatch (Panel settings)
     "xref_height": 0.065,       # cross-reference text (0.08 before 0.18: "slightly smaller")
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
     "wire_number_height": 0.08,
