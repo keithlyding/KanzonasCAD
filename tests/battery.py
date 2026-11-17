@@ -1814,6 +1814,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         # scooted or turned through the commands: every pin keeps its wire
         k = s.k()
         o = clear_of_drawing(k)
+        if o is None:
+            return
         before = set(s.entities)
         v.run(C.InsertCmd, two_gnd, {})
         v.input_text(fmt(o))
