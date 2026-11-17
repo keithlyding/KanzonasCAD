@@ -651,6 +651,84 @@ def random_editing(log, out, ops, seed, drawing=None):
             "a wire to %s's pin %s ran through it: %s" % (name, pin_name, w.points)
         BC.CHECKED["wire goes around a symbol"] += 1
 
+    def op_bus_around():
+        # (0.16.7: a bus clicked across a symbol off on its own goes round it: none of its
+        # wires runs through it)
+        k = s.k()
+        o = (world["o"][0] + 500.0 * k + rnd.randint(0, 40) * k,
+             world["o"][1] + 500.0 * k + rnd.randint(0, 40) * k)
+        name = rnd.choice(["Drive control terminals", "Disconnect 3-pole", "Variable frequency drive"])
+        before = set(s.entities)
+        v.run(C.InsertCmd, lib.get("symbol", name), {})
+        v.input_text(fmt(o))
+        finish()
+        got = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(got) != 1:
+            return
+        e = got[0]
+        bb = wires.body_box(e)
+        cy = (bb[1] + bb[3]) / 2
+        a = (bb[0] - 3.0 * k, cy + rnd.choice([-1, 1]) * 0.25 * k)
+        b = (bb[2] + 3.0 * k, a[1])
+        before = set(s.entities)
+        v.run(C.BusCmd)
+        if rnd.random() < 0.5:
+            v.input_text("F")
+        v.input_text(fmt(a))
+        if v.cmd is not None:
+            v.input_text(fmt(b))
+        finish()
+        new = [w for i, w in s.entities.items() if i not in before and isinstance(w, M.Wire)]
+        assert new, "the bus drew nothing"
+        through = [w.points for w in new if wires._crosses(w.points, [(e, bb)])]
+        assert not through, "a bus across %s ran through it: %s" % (name, through[:1])
+        BC.CHECKED["bus goes around a symbol"] += 1
+
+    def op_wire_run():
+        # (0.16.7: a run of wire dragged sideways by its middle grip: it is where it was
+        # dragged, and every pin that had a wire on it still has one)
+        cands = []
+        for w in s.wires():
+            for i, (a, b) in enumerate(zip(w.points, w.points[1:])):
+                if (abs(a[0] - b[0]) < 1e-9) != (abs(a[1] - b[1]) < 1e-9):
+                    cands.append((w, i))
+        if not cands:
+            return
+        w, i = rnd.choice(cands)
+        a, b = w.points[i], w.points[i + 1]
+        wired = {q for e in s.inserts() for _n, q in e.pin_points() if wires.pins_on(s, q) and
+                 any(x.touches(q) for x in s.wires())}
+        to = pt()
+        # (a pin on the run's middle or a corner of it: refused, the wire left as it was;
+        # worked out here from the pins, seeds 11 and 23)
+        last = len(w.points) - 1
+        pinned = any(G.dist_to_segment(q, a, b) <= 1e-6 and
+                     not (i == 0 and G.dist(q, a) <= 1e-6) and
+                     not (i + 1 == last and G.dist(q, b) <= 1e-6)
+                     for e in s.inserts() for _n, q in e.pin_points())
+        v.set_selection(set())
+        v.run(C.GripCmd, w, len(w.points) + i)
+        v.input_text(fmt(to))
+        finish()
+        if w.id not in s.entities:
+            return                      # (cleaned up into another wire)
+        if pinned:
+            if s.entities[w.id].points == w.points:
+                BC.CHECKED["wire run with a pin on it left"] += 1
+                return
+            # (a wire carrying it on may have had the pin: then nothing moved either)
+            assert False, "a run with a pin on it was moved: %s" % s.entities[w.id].points
+        horiz = abs(a[1] - b[1]) < 1e-9
+        moved = any((abs(p[1] - to[1]) < 1e-9 and abs(q[1] - to[1]) < 1e-9) if horiz else
+                    (abs(p[0] - to[0]) < 1e-9 and abs(q[0] - to[0]) < 1e-9)
+                    for p, q in zip(s.entities[w.id].points, s.entities[w.id].points[1:]))
+        assert moved, "a run dragged to %s isn't there: %s" % (to, s.entities[w.id].points)
+        after = {q for e in s.inserts() for _n, q in e.pin_points() if
+                 any(x.touches(q) for x in s.wires())}
+        lost = wired - after
+        assert not lost, "dragging a run left pins %s without their wire" % sorted(lost)[:3]
+        BC.CHECKED["wire run dragged"] += 1
+
     def op_bus():
         # (0.16: started on a symbol's pins it takes them; S straight; L layers)
         sides = []
@@ -1688,7 +1766,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

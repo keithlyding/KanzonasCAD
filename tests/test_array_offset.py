@@ -159,9 +159,11 @@ class ArrayOffsetTest(unittest.TestCase):
         self.assertEqual([rnd9(q) for q in got.points],
                          [(1, 1), (4.5, 1), (4.5, 1.25), (1, 1.25)])
 
-    def test_a_wire_has_no_middle_grips(self):
+    def test_a_wire_has_its_corners_then_the_middles_of_its_runs(self):
+        # (0.16.7: a wire's run dragged by its middle grip, the wires on it following:
+        # tests/test_bus_around_runs.py)
         w = self.add(M.Wire([(1, 1), (5, 1), (5, 3)]))
-        self.assertEqual(w.grips(), [(1.0, 1.0), (5.0, 1.0), (5.0, 3.0)])
+        self.assertEqual(w.grips(), [(1.0, 1.0), (5.0, 1.0), (5.0, 3.0), (3.0, 1.0), (5.0, 2.0)])
 
 
 if __name__ == "__main__":

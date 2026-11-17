@@ -13,6 +13,11 @@ build fails without them.
   straight out of its side (a wire from above to a terminal on a drive's bottom edge goes
   down beside the drive and comes up into it). Nothing in the way, a wire is as before.
   Project properties, Schematic: "Wires go around the symbols in their way" turns it off.
+- A bus goes around symbols too, all its wires.
+- How far wires keep from symbols is a setting (Project properties, Schematic): 1/8 inch to
+  start, or 1/4 inch, or what you like.
+- Drag a run of wire sideways by the grip in its middle (or with Scoot): the wires on it
+  follow and stay connected.
 
 ## 0.16.6
 
