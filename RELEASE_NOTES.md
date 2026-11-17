@@ -51,6 +51,10 @@ build fails without them.
   mouse still comes first), and the dimension tools are on the Home and Schematic tabs too.
 - **Extension** snap: where the dotted tracking line crosses a line, a wire or a circle, that
   crossing snaps.
+- **Scoot** moves a device with everything attached to it: scoot a motor and its drive and
+  contactor come along with the wires between; its drops slide along the bus (or stretch, when
+  you scoot toward or away from the bus). Type O to slide only the selected device along its
+  own wire, as before.
 
 **Fixed**
 - Scoot no longer leaves a wire behind that runs straight through a device's pins across the
@@ -58,11 +62,7 @@ build fails without them.
 
 ## 0.17.3
 
-**New**
-- **Scoot** moves a device with everything attached to it: scoot a motor and its drive and
-  contactor come along with the wires between; its drops slide along the bus (or stretch, when
-  you scoot toward or away from the bus). Type O to slide only the selected device along its
-  own wire, as before.
+Not released on its own: its changes came out in 0.17.4.
 
 ## 0.17.2
 

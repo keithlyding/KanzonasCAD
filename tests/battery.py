@@ -527,6 +527,9 @@ def mouse_pan(v, rnd):
 
 
 # ---- 1. random editing -------------------------------------------------------------------------
+FAR = 1e7      # (inches: past this, doubles are coarser than 2e-9", see clear_of_drawing)
+
+
 def random_editing(log, out, ops, seed, drawing=None):
     """drawing: a DXF, DWG or project to start from (the owner's own drawings, on their
     computer: they never go in the repository) instead of an empty project."""
@@ -624,16 +627,27 @@ def random_editing(log, out, ops, seed, drawing=None):
         # a spot off on its own: just past the right of what is drawn (not hundreds of times
         # the scale away: on a 1:2000 sheet that was a million inches, and the wires later
         # steps drew out to it made every step crawl, the Linux build's seed 306)
+        # None when that spot is past FAR inches: each spot is 20 scales past the drawing, a Fit
+        # makes the scale bigger, and the next spot farther, until (CI's long run of 0.17, seed
+        # 3151: a 1:259,482,614 sheet) the spot was 13 billion inches out, where doubles are
+        # 2e-6" apart, coarser than the program's tolerance, and a pin can't be put exactly on a
+        # wire: no drawing is that big, and these steps, which check exact places, skip it)
         bb = s.extents()
         x = (bb[2] if bb is not None else world["o"][0]) + 20.0 * k
-        return (round((x + rnd.randint(0, 40) * k) / 0.25) * 0.25,
-                round((world["o"][1] + rnd.randint(0, 40) * k) / 0.25) * 0.25)
+        got = (round((x + rnd.randint(0, 40) * k) / 0.25) * 0.25,
+               round((world["o"][1] + rnd.randint(0, 40) * k) / 0.25) * 0.25)
+        if max(abs(got[0]), abs(got[1])) + 100.0 * k > FAR:
+            BC.CHECKED["clear spot too far out to be exact: skipped"] += 1
+            return None
+        return got
 
     def op_wire_around():
         # (0.16.7: a wire to a pin on the far side of a symbol goes round it, not through it,
         # and arrives straight out of the pin's side; off on its own, far from everything)
         k = s.k()
         o = clear_of_drawing(k)
+        if o is None:
+            return
         name = rnd.choice(["Drive control terminals", "Disconnect 3-pole", "Relay coil",
                            "Fuses 3-pole"])
         before = set(s.entities)
@@ -677,6 +691,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         # wires runs through it)
         k = s.k()
         o = clear_of_drawing(k)
+        if o is None:
+            return
         name = rnd.choice(["Drive control terminals", "Disconnect 3-pole", "Variable frequency drive"])
         before = set(s.entities)
         v.run(C.InsertCmd, lib.get("symbol", name), {})
@@ -979,6 +995,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         # (in a clear spot: laid over other wires, which pin ends on which wire isn't defined,
         # seed 306)
         a = clear_of_drawing(s.k())
+        if a is None:
+            return
         up = turns % 2 == 1                     # (turned sideways: the bus runs up and down)
         L = 3.0
         with p.edit("bus to land on") as ed:
@@ -1403,6 +1421,8 @@ def random_editing(log, out, ops, seed, drawing=None):
             return
         k = s.k()
         o = clear_of_drawing(k)
+        if o is None:
+            return
         a, b = o, (o[0] + 4.0 * k, o[1])
         with p.edit("a wire to tap") as ed:
             w = ed.add(s, M.Wire([a, b]))

@@ -243,6 +243,20 @@ def track_crossings(acquired, points, ents, p, r):
     lines = [(q0, u, True) for q0, u in acquired]
     for q0 in points:
         lines += [(q0, (1.0, 0.0), False), (q0, (0.0, 1.0), False)]
+    # (only a tracking line passing within r of p can have a crossing there: the others, and
+    # the pieces of every object near p, aren't looked at; on a 60,000-line sheet zoomed out
+    # that was most of a mouse move, the Windows build of 0.17.4: 41 ms)
+    near = []
+    for q0, u, ray in lines:
+        L = math.hypot(u[0], u[1]) or 1.0
+        t = ((p[0] - q0[0]) * u[0] + (p[1] - q0[1]) * u[1]) / L
+        if ray and t < -r:
+            continue
+        if abs((p[0] - q0[0]) * u[1] - (p[1] - q0[1]) * u[0]) / L <= r:
+            near.append((q0, u, ray))
+    lines = near
+    if not lines:
+        return []
     pieces = [pc for e in ents for pc in _segments_and_curves(e)]
     out = []
     for q0, u, ray in lines:
