@@ -151,6 +151,9 @@ def check_sheet(sheet):
     assert not near, "%d wire end(s) almost meet something without joining it: %s" % (
         len(near), ["%s %.2g from a %s" % (tuple(round(c, 4) for c in p), d, k)
                     for _i, p, k, d in near[:3]])
+    back = BC.folds(sheet)
+    assert not back, "%d wire(s) double back over themselves: %s" % (
+        len(back), [tuple(round(c, 4) for c in q) for _i, q in back[:3]])
 
 
 def _partition(groups):
@@ -1351,6 +1354,65 @@ def random_editing(log, out, ops, seed, drawing=None):
                 "Trim lit %.6g of %.6g and left %.6g" % (cut, whole, kept)
             BC.CHECKED["trim lights what it cuts"] += 1
 
+    def op_wire_xref():
+        # (0.17.5) a wire's number typed in the Wire number window, as a double-click opens it:
+        # one another wire has (a cross-reference: Source, Destination or just the same
+        # number) or a new one, locked or not. Source or Destination: a pair of off-sheet
+        # connectors of one new name on the two open ends (out where it leaves, in where it
+        # arrives) and one number on both; the same number: as typed; the lock as ticked
+        if not wirenums.enabled(p):
+            return
+        from kanzonascad import wires as W
+        ws = [w for w in s.wires() if w.num and any(
+            not W.connects_at(s, q, exclude=w.id) for q in (w.points[0], w.points[-1]))]
+        if len(ws) < 2:
+            return
+        a, b = rnd.sample(ws, 2)
+        if wirenums.group_of(p, s, a)[0] == wirenums.group_of(p, s, b)[0]:
+            return
+        num = rnd.choice([b.num, b.num, "9%03d" % rnd.randint(0, 999)])
+        lock = rnd.random() < 0.7
+        how = rnd.choice(["source", "destination", "same", None])
+        links = {e.id for sh in p.sheets for e in sh.inserts()
+                 if e.defn is not None and e.defn.wiring == "link"}
+        win.ask_wire_number = lambda n, tap_of=None, own=False, locked=False: (num, own, lock)
+        asked = []
+        win.ask_cross_reference = lambda n, where: asked.append(n) or how
+        try:
+            win.edit_wire_number(s.entities[a.id])
+        finally:
+            win.__dict__.pop("ask_wire_number", None)
+            win.__dict__.pop("ask_cross_reference", None)
+        new = [e for sh in p.sheets for e in sh.inserts()
+               if e.defn is not None and e.defn.wiring == "link" and e.id not in links]
+        got = s.entities.get(a.id)
+        if num != b.num or got is None:
+            assert not new, "connectors placed for a number no other wire had"
+            return
+        assert asked == [num], "a number another wire has wasn't asked about: %r" % asked
+        if how in ("source", "destination"):
+            assert len(new) == 2 and new[0].attrs["TAG"] == new[1].attrs["TAG"], \
+                "a cross-reference didn't place one pair of connectors: %r" % (
+                    [(e.block, e.attrs.get("TAG")) for e in new])
+            mine = [e for e in new if e.id in s.entities and
+                    any(G.dist(q, r) < 1e-9 for _n, q in e.pin_points()
+                        for r in (got.points[0], got.points[-1]))]
+            want = "Source arrow" if how == "source" else "Destination arrow"
+            assert any(e.block == want for e in mine), "%s: no %s on the wire" % (how, want)
+            other = s.entities.get(b.id)
+            assert other is not None and got.num == other.num == num, \
+                "a cross-reference left two numbers: %s, %s" % (got.num, other and other.num)
+            assert got.num_lock == lock, "the lock wasn't as ticked"
+            BC.CHECKED["cross-reference by a number typed"] += 1
+        elif how == "same":
+            # (locked whatever was ticked: an unlocked duplicate would be numbered again)
+            assert not new and got.num == num and got.num_lock, \
+                "just the same number %s (locked %s): the wire has %s, locked %s; %d new " \
+                "connector(s)" % (num, lock, got.num, got.num_lock, len(new))
+            BC.CHECKED["the same number, as typed"] += 1
+        else:
+            assert not new and got.num == a.num, "cancelled, yet the number changed"
+
     def op_tap():
         # (0.17.2: a wire drawn off the middle of another asks; Enter: its number, N: one of
         # its own; worked out from the numbers after. On a wire of its own, just past the
@@ -1688,6 +1750,107 @@ def random_editing(log, out, ops, seed, drawing=None):
                     h = set(e.hidden)
                     (h.add if hide else h.discard)(name)
                     ed.change(s, e.copy(hidden=sorted(h)))
+
+    def op_ratings():
+        # (0.17.5) a symbol's attributes window, as a double-click opens it: its ratings typed
+        # (a plain number or words), one hidden or shown, one turned; the drawing shows each
+        # shown value (a plain number with its unit) at the angle asked, one step
+        from PySide6.QtWidgets import QDialog, QDoubleSpinBox, QLineEdit, QCheckBox
+        from kanzonascad import library_panel
+        ins = [e for e in s.entities.values() if isinstance(e, M.Insert) and e.defn is not None
+               and any(a["attr"] in M.RATING_FIELDS for a in e.defn.attr_texts)]
+        if not ins:
+            return
+        e = rnd.choice(ins)
+        fields = [a["attr"] for a in e.defn.attr_texts if a["attr"] in M.RATING_FIELDS]
+        typed = {f: rnd.choice(["", "5", "460", "7.6", "1/2", "3 PH"]) for f in fields}
+        turn = rnd.choice([n for n in e.shown_names() if n != "PINS"])
+        ang = rnd.choice([0.0, 90.0, 270.0, 45.0])
+        hide = rnd.choice(fields)
+        hidden = rnd.random() < 0.3
+
+        def answer(dlg):
+            for f, t in typed.items():
+                dlg.findChild(QLineEdit, "attr_" + f).setText(t)
+            dlg.findChild(QDoubleSpinBox, "angle_" + turn).setValue(ang)
+            dlg.findChild(QCheckBox, "show_" + hide).setChecked(not hidden)
+            return QDialog.Accepted
+        real = library_panel.QDialog.exec
+        library_panel.QDialog.exec = answer
+        try:
+            win.edit_attributes(e)
+        finally:
+            library_panel.QDialog.exec = real
+        got = s.entities[e.id]
+        texts = [t for t in got.world_entities() if isinstance(t, M.Text)]
+        for f, t in typed.items():
+            want = M.attr_display(f, t)
+            shown = [x for x in texts if x.text == want]
+            if t and f not in got.hidden:
+                assert shown, "%s typed %r: not shown on %s" % (f, t, got.block)
+                if f == turn:
+                    assert any(abs((x.angle - ang + 180.0) % 360.0 - 180.0) < 1e-6
+                               for x in shown), "%s turned to %r: drawn at %r" % (
+                        f, ang, [x.angle for x in shown])
+                    BC.CHECKED["attribute turned"] += 1
+            BC.CHECKED["rating shown as typed"] += 1
+        assert (hide in got.hidden) == hidden, "%s %s, asked %s" % (
+            hide, "hidden" if hide in got.hidden else "shown", "hidden" if hidden else "shown")
+        assert abs((got.attr_angle(turn) - ang + 180.0) % 360.0 - 180.0) < 1e-6, \
+            "%s's angle %r, asked %r (%s)" % (turn, got.attr_angle(turn), ang, got.block)
+
+    # (0.17.5, the owner's drive with two pins named GND: moved, the wire on one stayed behind)
+    two_gnd = M.BlockDef("Battery drive two grounds", "symbol",
+                         [M.Polyline([(0.0, -0.75), (1.0, -0.75), (1.0, 0.75), (0.0, 0.75)],
+                                     True)],
+                         pins=[{"name": "L1", "pos": (0.0, 0.5)},
+                               {"name": "GND", "pos": (0.0, -0.5)},
+                               {"name": "T1", "pos": (1.0, 0.5)},
+                               {"name": "GND", "pos": (1.0, -0.5)}],
+                         prefix="VFD", tag_pos=(0.5, 0.9), role="device")
+
+    def op_same_name_pins():
+        # a symbol with two pins of one name, a wire on each pin, off on its own; moved,
+        # scooted or turned through the commands: every pin keeps its wire
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        before = set(s.entities)
+        v.run(C.InsertCmd, two_gnd, {})
+        v.input_text(fmt(o))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) != 1:
+            return
+        e = new[0]
+        for _n, q in e.pin_points():
+            out = -1.0 if q[0] < e.pos[0] + 0.5 * k else 1.0
+            v.run(C.WireCmd)
+            type_in(v, fmt(q), fmt((q[0] + out * k, q[1])))
+            finish()
+        e = s.entities[e.id]
+        if not all(any(w.touches(q) for w in s.wires()) for _n, q in e.pin_points()):
+            return                              # (a wire refused: nothing to check)
+        how = rnd.choice(["move", "scoot", "rotate"])
+        v.set_selection({e.id})
+        if how == "move":
+            v.run(C.MoveCmd)
+            type_in(v, fmt(e.pos), fmt((e.pos[0] + 0.5 * k, e.pos[1] + 1.0 * k)))
+        elif how == "scoot":
+            v.run(C.ScootCmd)
+            q = e.pin_points()[0][1]
+            type_in(v, fmt(q), fmt((q[0], q[1] + 0.5 * k)))
+        else:
+            v.run(C.RotateCmd)
+            type_in(v, fmt(e.pos), "90")
+        finish()
+        e = s.entities.get(e.id)
+        if e is None:
+            return
+        left = [(n, q) for n, q in e.pin_points() if not any(w.touches(q) for w in s.wires())]
+        assert not left, "%s: pins left without their wire: %s" % (how, left)
+        BC.CHECKED["two pins of one name keep their wires"] += 1
 
     def op_run_props():
         # a DIN rail's or wire duct's Properties window, as a double-click opens it (with other
@@ -2080,7 +2243,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2),
+             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
@@ -2301,6 +2464,16 @@ def mixed_project(win):
             v.input_text("")
     v.run(C.InsertCmd, lib.get("symbol", "Circuit breaker 3-pole"), {"TAG": "CB1"})
     type_in(v, "3,2")
+    # (0.17.5) a motor with its ratings, one hidden, one and its tag turned
+    v.run(C.InsertCmd, lib.get("symbol", "Motor 3-phase"), {"TAG": "MTR1"})
+    type_in(v, "6,2")
+    while v.cmd is not None:
+        v.cmd.enter()
+    mtr = [e for e in v.sheet().inserts() if e.block == "Motor 3-phase"][-1]
+    with p.edit("ratings") as ed:
+        ed.change(v.sheet(), mtr.copy(attrs=dict(mtr.attrs, HP="5", VOLTS="460", FLA="7.6"),
+                                      hidden=["FLA"]).with_attr_angle("HP", 90.0)
+                  .with_attr_angle("TAG", 30.0))
     coil = [e for e in v.sheet().inserts() if e.attrs.get("TAG", "").startswith("CR")][0]
     pin = max((q for _n, q in coil.pin_points()), key=lambda q: q[0])
     v.run(C.WireCmd)

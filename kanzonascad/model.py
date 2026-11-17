@@ -8,6 +8,7 @@ through an Edit, which records before/after for Undo. Anything cached on an enti
 (its bounding box, snap points) therefore never goes stale.
 """
 
+import re
 import json
 import math
 import os
@@ -1812,6 +1813,8 @@ class BlockDef:
                 t["valign"] = a["valign"]
             if float(a.get("angle", 0.0) or 0.0) % 360.0:
                 t["angle"] = float(a["angle"]) % 360.0
+            if a.get("stack"):
+                t["stack"] = True       # (a rating: see Insert.attr_spots)
             self.attr_texts.append(t)
         # who makes it, for finding and grouping blocks (optional; see the manual's
         # "Manufacturer, family and series"): Allen-Bradley / ControlLogix / B...
@@ -1889,6 +1892,44 @@ class BlockDef:
         return bb or (0.0, 0.0, 0.0, 0.0)
 
 
+def pin_keys(pins):
+    """{(pin name, which of that name: 0, 1...): point} of [(pin name, point)]: a symbol's
+    pins told apart when two have one name (the owner's drive, 0.17.5: two GND, its line and
+    load side; matched by name alone, the wire on one of them stayed behind when it moved)."""
+    out, seen = {}, {}
+    for n, q in pins:
+        k = seen.get(n, 0)
+        seen[n] = k + 1
+        out[(n, k)] = q
+    return out
+
+
+# A device's ratings, one attribute each (the owner, 0.17.5: "Electrical symbols need to have
+# voltage, amps, hp, etc (as applicable) for attributes. I'm working on a motor right now"):
+# {name: (what the attributes window calls it, what a plain number gets after it)}. Typed as a
+# plain number (5, 1/2, 7.6) it is shown with its unit (5HP); anything else as typed.
+RATING_FIELDS = {
+    "HP": ("Horsepower", "HP"),
+    "VOLTS": ("Volts", "V"),
+    "AMPS": ("Amps", "A"),
+    "FLA": ("Full-load amps", "A FLA"),
+    "VA": ("VA", "VA"),
+    "PRI": ("Primary volts", "V PRI"),
+    "SEC": ("Secondary volts", "V SEC"),
+}
+_PLAIN_NUMBER = re.compile(r"^\d+(\.\d+)?([- ]\d+)?(/\d+)?$")
+
+
+def attr_display(name, value):
+    """An attribute's value as the drawing shows it: a rating typed as a plain number with
+    its unit after it (HP 5: 5HP; FLA 7.6: 7.6A FLA), anything else as typed."""
+    got = RATING_FIELDS.get(name)
+    v = value.strip()
+    if got is not None and _PLAIN_NUMBER.match(v):
+        return v + got[1]
+    return value
+
+
 # what a footprint's label shows (Footprint label): the attribute, or its block's name
 LABELS = {"tag": "TAG", "cat": "CAT", "desc": "DESC", "name": None}
 LABEL_NAMES = {"tag": "Tag", "cat": "Part number", "desc": "Description", "name": "Block name"}
@@ -1902,10 +1943,10 @@ class Insert(Entity):
     what a footprint shows on it ("" nothing, or a key of LABELS)."""
     kind = "insert"
     __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "label",
-                 "hidden", "attr_at", "_world", "_body")
+                 "hidden", "attr_at", "attr_rot", "_world", "_body")
 
     def __init__(self, block, pos, angle=0.0, scale=1.0, mirror=False, attrs=None, defn=None,
-                 tag_h=None, label="", hidden=(), attr_at=None, **kw):
+                 tag_h=None, label="", hidden=(), attr_at=None, attr_rot=None, **kw):
         super().__init__(**kw)
         self.block = str(block)
         self.pos = _pt(pos)
@@ -1923,6 +1964,10 @@ class Insert(Entity):
         self.hidden = frozenset(str(h) for h in (hidden or ()))
         self.attr_at = {str(k): (float(v[0]), float(v[1]), float(v[2]) if len(v) > 2 else 0.0)
                         for k, v in (attr_at or {}).items()}
+        # an attribute turned on this copy (the owner, 0.17.5: "I need to be able to rotate
+        # attributes"): {name: degrees in the block's own coordinates}, so it turns with the
+        # block afterward, as in AutoCAD; one not listed is drawn as its block says
+        self.attr_rot = {str(k): float(v) % 360.0 for k, v in (attr_rot or {}).items()}
         self._world = None
         self._body = None                   # (its drawing's box: wires.body_box)
 
@@ -1939,6 +1984,8 @@ class Insert(Entity):
             d["hidden"] = sorted(self.hidden)
         if self.attr_at:
             d["attr_at"] = {k: list(v) for k, v in self.attr_at.items()}
+        if self.attr_rot:
+            d["attr_rot"] = dict(self.attr_rot)
         return d
 
     @classmethod
@@ -1946,7 +1993,7 @@ class Insert(Entity):
         return cls(d["block"], d["pos"], d.get("angle", 0.0), d.get("scale", 1.0),
                    d.get("mirror", False), d.get("attrs", {}), blocks.get(d["block"]),
                    d.get("tag_h"), d.get("label", ""), d.get("hidden", ()), d.get("attr_at"),
-                   layer=d.get("layer", "0"), color=d.get("color"), id=d.get("id"))
+                   d.get("attr_rot"), layer=d.get("layer", "0"), color=d.get("color"), id=d.get("id"))
 
     def copy(self, **changes):
         d = self.to_dict()
@@ -1982,7 +2029,9 @@ class Insert(Entity):
         if d is None:
             return []
         out = ["TAG"] if d.kind == "symbol" and d.tag_pos is not None else []
-        out += [a["attr"] for a in d.attr_texts if a["attr"] not in out]
+        for a in d.attr_texts:
+            if a["attr"] not in out:            # (a three-pole fuse's rating: once)
+                out.append(a["attr"])
         if d.kind == "symbol" and d.show_pins and d.pins:
             out.append("PINS")              # (its pins' names: shown or hidden as one)
         return out
@@ -2022,14 +2071,78 @@ class Insert(Entity):
         spot = at[:2] if at else d.tag_pos
         align, valign = "center", "baseline"
         a = self.angle % 180.0
+        h = (self.tag_h or d.tag_height) * self.scale
+        text = tag or (d.prefix + "?" if d.prefix else "?")
+        if "TAG" in self.attr_rot:
+            return Text(self.to_world(spot), text, h, self._turned("TAG"), align, valign)
         if 45.0 <= a < 135.0:
             # turned sideways: the tag (still read across) beside the symbol, starting at its
             # spot and running away from it, not centered over the outer pole (the owner, 0.16:
             # "I don't like the location of the tag when rotated sideways")
             p, axis = self.to_world(spot), self.to_world((spot[0], 0.0))
             align, valign = ("left" if p[0] >= axis[0] else "right"), "middle"
-        return Text(self.to_world(spot), tag or (d.prefix + "?" if d.prefix else "?"),
-                    (self.tag_h or d.tag_height) * self.scale, 0.0, align, valign)
+        return Text(self.to_world(spot), text, h, 0.0, align, valign)
+
+    def _turned(self, name):
+        """The angle on the drawing of an attribute turned on this copy (attr_rot)."""
+        r = self.attr_rot[name]
+        return (self.angle + (-r if self.mirror else r)) % 360.0
+
+    def attr_spots(self):
+        """[(attribute name, its text's world point, world angle, its spot)]: each attribute of
+        the block's shown on this copy (a value, not hidden), the tag apart (tag_text). The
+        ratings stack (a spot with "stack"): those shown take the stack's spots in order, so
+        an empty one leaves no gap; one dragged to a place of its own (attr_at) keeps it."""
+        d = self.defn
+        if d is None:
+            return []
+        stack = [a["pos"] for a in d.attr_texts if a.get("stack")]
+        out, k = [], 0
+        for a in d.attr_texts:
+            name = a["attr"]
+            if not self.attrs.get(name, "") or name in self.hidden:
+                continue
+            at = self.attr_at.get(name)
+            if at:
+                pos = at[:2]
+            elif a.get("stack"):
+                pos, k = stack[k], k + 1
+            else:
+                pos = a["pos"]
+            if name in self.attr_rot:
+                ang = self._turned(name)
+            else:
+                ang = at[2] if at else a.get("angle", 0.0)
+                if at or "angle" in a:
+                    ang = (ang + self.angle) % 360.0      # (turned with the block)
+            out.append((name, self.to_world(pos), ang, a))
+        return out
+
+    def attr_angle(self, name):
+        """The angle on the drawing an attribute's text is drawn at (the attributes window's
+        Angle; an attribute not shown: where it would be)."""
+        if name in self.attr_rot:
+            return self._turned(name)
+        if name == "TAG":
+            t = self.tag_text()
+            return t.angle if t is not None else 0.0
+        for a in (self.defn.attr_texts if self.defn is not None else []):
+            if a["attr"] == name:
+                at = self.attr_at.get(name)
+                ang = at[2] if at else a.get("angle", 0.0)
+                return (ang + self.angle) % 360.0 if at or "angle" in a else ang % 360.0
+        return 0.0
+
+    def with_attr_angle(self, name, angle):
+        """A copy with that attribute's text drawn at angle (degrees on the drawing); from then
+        on it turns with the block. Its block's own angle: back to as the block draws it."""
+        rot = dict(self.attr_rot)
+        rot.pop(name, None)
+        plain = self.copy(attr_rot=rot).attr_angle(name)
+        if abs((float(angle) - plain + 180.0) % 360.0 - 180.0) > 1e-9:
+            r = (float(angle) - self.angle) % 360.0
+            rot[name] = (-r if self.mirror else r) % 360.0
+        return self.copy(attr_rot=rot)
 
     def text_grips(self):
         """[(attribute name, world point)]: the texts of this copy that can be dragged to a
@@ -2042,15 +2155,12 @@ class Insert(Entity):
         t = self.tag_text()
         if t is not None:
             out.append(("TAG", t.pos))
-        spots = {}
+        count = {}
         for a in d.attr_texts:
-            spots.setdefault(a["attr"], []).append(a)
-        for name, got in spots.items():
-            if len(got) != 1 or name == "TAG" or not self.attrs.get(name) or \
-                    name in self.hidden:
-                continue
-            at = self.attr_at.get(name)
-            out.append((name, self.to_world(at[:2] if at else got[0]["pos"])))
+            count[a["attr"]] = count.get(a["attr"], 0) + 1
+        for name, q, _ang, _a in self.attr_spots():
+            if count[name] == 1 and name != "TAG":
+                out.append((name, q))
         return out
 
     def label_value(self):
@@ -2097,17 +2207,10 @@ class Insert(Entity):
                 if t is not None:
                     out.append(t)
                 out += self.pin_texts()
-                for a in d.attr_texts:
-                    name = a["attr"]
-                    v = self.attrs.get(name, "")
-                    if not v or name in self.hidden:
-                        continue
-                    at = self.attr_at.get(name)
-                    pos, ang = (at[:2], at[2]) if at else (a["pos"], a.get("angle", 0.0))
-                    if at or "angle" in a:
-                        ang = (ang + self.angle) % 360.0      # (turned with the block)
-                    out.append(Text(self.to_world(pos), v, a["height"] * self.scale, ang,
-                                    a.get("align", "center"), a.get("valign", "baseline")))
+                for name, q, ang, a in self.attr_spots():
+                    out.append(Text(q, attr_display(name, self.attrs[name]),
+                                    a["height"] * self.scale, ang, a.get("align", "center"),
+                                    a.get("valign", "baseline")))
             own = d is not None and d.own_colors
             for w in out:
                 keep = own and w.color is not None
@@ -2745,7 +2848,7 @@ class Edit:
             ent.id = sheet.new_id()
         old = sheet.entities.get(ent.id)
         if isinstance(old, Insert) and isinstance(ent, Insert):
-            self.pin_moves.append((sheet, dict(old.pin_points()), dict(ent.pin_points())))
+            self.pin_moves.append((sheet, pin_keys(old.pin_points()), pin_keys(ent.pin_points())))
         op = self._remember(sheet, ent.id)
         sheet._put(ent)
         op[4] = ent.to_dict()

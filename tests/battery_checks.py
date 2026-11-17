@@ -251,6 +251,23 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
     return out
 
 
+def folds(sheet):
+    """Wires that double back over themselves (a run going one way, the next straight back
+    along it): the owner's bus wires, 0.17.5, ran out past the last drive and back, and the
+    corner showed a dot with nothing tapped off. [(wire id, the corner)]."""
+    out = []
+    for w in sheet.wires():
+        pts = w.points
+        for a, b, c in zip(pts, pts[1:], pts[2:]):
+            u = (b[0] - a[0], b[1] - a[1])
+            v = (c[0] - b[0], c[1] - b[1])
+            if abs(u[0] * v[1] - u[1] * v[0]) <= 1e-9 * max(1.0, G.dist(a, b) * G.dist(b, c)) \
+                    and u[0] * v[0] + u[1] * v[1] < 0:
+                out.append((w.id, b))
+    CHECKED["wires doubling back"] += 1
+    return out
+
+
 def same_place(a, b, what):
     """a and b (entities) are where each other is, exactly but for float rounding: their
     boxes and snap points."""

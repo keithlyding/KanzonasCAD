@@ -86,11 +86,29 @@ def connects_at(sheet, p, exclude=None, tol=TOL):
     return False
 
 
+def _ways_out(e, p):
+    """The directions (rounded unit vectors) wire e leaves p by: one from an end, two from a
+    point along it, none where it doesn't pass."""
+    out = set()
+    pts = e.points
+    for a, b in zip(pts, pts[1:]):
+        L = G.dist(a, b)
+        if L <= TOL or G.dist_to_segment(p, a, b) > TOL:
+            continue
+        for q, r in ((a, b), (b, a)):
+            if G.dist(p, r) > TOL:              # (a way out toward r, unless p is r)
+                out.add((round((r[0] - q[0]) / L, 6), round((r[1] - q[1]) / L, 6)))
+    return out
+
+
 def _dot_at(sheet, p):
-    """Does a junction dot belong at p: a wire end on the middle (or a corner) of another
-    wire, or three or more wire ends with no pin there (on a pin, the pin is the
-    connection)?"""
-    ends, middle = 0, False
+    """Does a junction dot belong at p: a wire end where wires go off three or more ways (an
+    end on another wire's middle or corner: a tap; three or more ends), with no pin there
+    when it is only wire ends (on a pin, the pin is the connection)? Two ways is no tap (the
+    owner, 0.17.5: "Connection markers on wires should only show if another wire taps off of
+    it"): two wires end to end, or the corner where a wire doubles back over itself, a wire
+    end meeting it carried straight on."""
+    ends, middle, ways = 0, False, set()
     for e in sheet.query_point(p, TOL):
         if not isinstance(e, Wire):
             continue
@@ -99,7 +117,8 @@ def _dot_at(sheet, p):
             ends += n
         elif e.touches(p, TOL):
             middle = True
-    if not ends:
+        ways |= _ways_out(e, p)
+    if not ends or len(ways) < 3:
         return False
     return middle or (ends >= 3 and not pins_on(sheet, p))
 
@@ -725,11 +744,56 @@ def tidy_new(ed, sheet, w):
     return "joined" if join_at(ed, sheet, _ends([w])) else None
 
 
+def doubles_back(pts):
+    """Does the path turn straight back along itself anywhere (a leg running back over the one
+    before it)? Such a wire looks like one straight wire but has a hidden corner, and a dot
+    showed there (the owner's bus wires, 0.17.5: out past the last drive, then a click back)."""
+    for a, b, c in zip(pts, pts[1:], pts[2:]):
+        u = (b[0] - a[0], b[1] - a[1])
+        v = (c[0] - b[0], c[1] - b[1])
+        if abs(u[0] * v[1] - u[1] * v[0]) <= 1e-9 * max(1.0, G.dist(a, b) * G.dist(b, c)) \
+                and u[0] * v[0] + u[1] * v[1] < 0:
+            return True
+    return False
+
+
+def straighten(pts):
+    """A route's points without the corners where it turns straight back along itself (a jog
+    over and straight back: a dead end of no use, it goes on from there along the same line)."""
+    out = [tuple(q) for q in pts]
+    i = 1
+    while 0 < i < len(out) - 1:
+        if doubles_back(out[i - 1:i + 2]):
+            del out[i]
+            i = max(1, i - 1)
+        else:
+            i += 1
+    return out
+
+
+def unfold(sheet, pts):
+    """A wire's points without a last (or first) leg running straight back over the one
+    before it and ending on it: that end goes, the wire keeps its length (the owner's bus
+    wires, 0.17.5, drawn out past the last drive and then back: a hidden corner with a dot).
+    An end on a pin stays (the pin is connected there)."""
+    pts = [tuple(q) for q in pts]
+    for _side in (0, 1):
+        while len(pts) >= 3:
+            a, b, c = pts[-3], pts[-2], pts[-1]
+            if not doubles_back([a, b, c]) or G.dist_to_segment(c, a, b) > TOL or \
+                    pins_on(sheet, c):
+                break
+            pts.pop()
+        pts.reverse()
+    return pts
+
+
 def cleanup(ed, sheet, ws=None):
     """Clean up wires (the given ones, or every wire on the sheet): wires of no length go,
     repeated and in-line points go, a wire drawn over another goes, and wires meeting end to
     end with nothing else there become one. Returns the counts, with the wire ends left
-    connected to nothing ("loose")."""
+    connected to nothing ("loose"). A wire that doubles back over itself at an end loses the
+    doubled piece (unfold)."""
     from .model import _tidy
     ws = list(sheet.wires() if ws is None else ws)
     got = {"empty": 0, "tidied": 0, "duplicates": 0, "joined": 0, "loose": 0}
@@ -737,7 +801,7 @@ def cleanup(ed, sheet, ws=None):
         cur = sheet.entities.get(w.id)
         if not isinstance(cur, Wire):
             continue
-        pts = _tidy(cur.points)
+        pts = _tidy(unfold(sheet, cur.points))
         if len(pts) < 2:
             ed.remove(sheet, cur.id)
             got["empty"] += 1

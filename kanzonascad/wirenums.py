@@ -359,14 +359,92 @@ def sync(ed, project, renumber=None):
                     ed.change(s, w.copy(num=num, num_lock=w.num_lock and g in fixed))
 
 
-def set_number(ed, project, sheet, wire, num):
-    """A number typed for the group of wire (locked), or "" to give it back to numbering."""
+def set_number(ed, project, sheet, wire, num, lock=True):
+    """A number typed for the group of wire, locked (or not: numbering may change it, the
+    owner, 0.17.5: "should there be a checkbox to check locked or unlocked?"), or "" to give
+    it back to numbering."""
     gs, _dist = groups(project)
     for ws in gs.values():
         if any(s is sheet and w.id == wire.id for s, w in ws):
             for s, w in ws:
-                ed.change(s, w.copy(num=num or None, num_lock=bool(num)))
+                ed.change(s, w.copy(num=num or None, num_lock=bool(num) and lock))
             return
+
+
+# ---- a number typed that another wire has: a cross-reference (0.17.5) ------------------------
+def group_of(project, sheet, wire):
+    """(group key, [(sheet, wire)]) of the group wire is in, or None."""
+    gs, _dist = groups(project)
+    for k, ws in gs.items():
+        if any(s is sheet and w.id == wire.id for s, w in ws):
+            return k, ws
+    return None
+
+
+def others_numbered(project, sheet, wire, num):
+    """The groups other than wire's whose wires carry num: [(group key, [(sheet, wire)])]."""
+    gs, _dist = groups(project)
+    mine = group_of(project, sheet, wire)
+    return [(k, ws) for k, ws in gs.items() if (mine is None or k != mine[0])
+            and any(w.num == num for _s, w in ws)]
+
+
+def open_end(nodes, first=None):
+    """(sheet, point, direction out) of a wire end in nodes ([(sheet, wire)]) that connects
+    to nothing (no pin, no other wire): where a connector goes. first: a wire to look at
+    before the others (the one double-clicked). None when every end is connected."""
+    from .wires import connects_at
+    order = sorted(nodes, key=lambda t: 0 if first is not None and t[1].id == first.id else 1)
+    for s, w in order:
+        for i, j in ((-1, -2), (0, 1)):
+            q, r = w.points[i], w.points[j]
+            if not connects_at(s, q, exclude=w.id):
+                L = math.hypot(q[0] - r[0], q[1] - r[1]) or 1.0
+                return s, tuple(q), ((q[0] - r[0]) / L, (q[1] - r[1]) / L)
+    return None
+
+
+ARROWS = ("Source arrow", "Destination arrow")
+
+
+def number_at(sheet, ins):
+    """The number of the wire on a connector's pin ("" when none)."""
+    for _n, q in ins.pin_points():
+        for w in sheet.query_point(q, TOL):
+            if getattr(w, "kind", "") == "wire" and w.num and w.touches(q, TOL):
+                return w.num
+    return ""
+
+
+def new_link_name(project):
+    """The lowest connector name nobody uses yet (A, B... Z, AA...)."""
+    got = connectors(project)
+    i = 0
+    while letters(i) in got:
+        i += 1
+    return letters(i)
+
+
+def cross_reference(ed, project, here, there, out_def, in_def, source):
+    """Join two wire ends by a pair of off-sheet connectors of a new name: here and there are
+    (sheet, point, direction out) (open_end); source: here is where the wire leaves (an
+    Source arrow, pointing out) and there where it arrives (Destination arrow);
+    else the other way round. Each sits on its end, turned to point along the wire. Returns
+    the name."""
+    from .model import Insert, Layer, ADAPTIVE
+    name = new_link_name(project)
+    for (s, q, d), defn in ((here, out_def if source else in_def),
+                            (there, in_def if source else out_def)):
+        if defn.name not in project.blocks:
+            ed.block(defn)
+        d2 = project.blocks[defn.name]
+        tag_h = project.settings.get("tag_height", 0.1) * s.k()
+        ins = Insert(d2.name, q, math.degrees(math.atan2(d[1], d[0])) % 360.0, 1.0, False,
+                     {"TAG": name}, d2, tag_h, layer="SYMBOLS")
+        if ins.layer not in project.layers:
+            ed.layer(ins.layer, None, Layer(ins.layer, ADAPTIVE).to_dict())
+        ed.add(s, ins)
+    return name
 
 
 # ---- showing ---------------------------------------------------------------------------------

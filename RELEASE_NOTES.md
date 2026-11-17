@@ -6,6 +6,42 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.17.5
+
+**New**
+- Motors, drives, starters, breakers, disconnects, fuses, overloads, the control transformer
+  and the power supply have fields for their ratings: horsepower, volts, amps (full-load amps
+  for a motor), VA and primary/secondary volts, as applies. Type a number (5) and it shows with
+  its unit (5HP), each on its own line under the symbol. The bill of materials lists them.
+- Double-click a symbol: each attribute in **Shown on the drawing** has an **Angle**, to turn
+  its text (the tag too). Hide or show any of them there, or for many symbols at once with
+  Modify > Show or hide attributes...
+- Projects started earlier get the new fields with **Update blocks from library...**.
+- The **Wire number** window has **Lock this number**, as tags have: it ticks itself when you
+  type a number; untick it to let numbering change the number later.
+- Typing a wire number another wire already has asks whether it's a cross-reference:
+  **Source** or **Destination** puts a **Source arrow** and a **Destination arrow** (new in the
+  Library, JIC/Wiring) on the open ends of the two wires, so they become one wire and each
+  shows where the other is. Or keep just the same number. A source arrow sits on the end of
+  its wire pointing away from the line, a destination arrow's tip touches the line pointing
+  into it, and past each the wire's number and the other's place (2046 / 7-A2).
+
+**Fixed**
+- Moving, scooting or turning a symbol with two pins of the same name (a drive with two GND
+  pins) left the wire on one of them behind. Both now come along.
+- A three-pole fuse block listed its Rating three times under Shown on the drawing.
+- Edit block lost the stacking and angle of a symbol's attribute texts when saving.
+- Junction dots show only where a wire taps off another. A wire drawn out and then clicked
+  straight back over itself made a hidden corner that showed a dot: Wire and Bus no longer take
+  that click, and **Clean up wires** straightens such wires in drawings you already have.
+- A bus clicked onto a 3-pole device whose pins line up with another device's (stacked half an
+  inch apart) could land one pin over, on the other device. It lands on the pins you click.
+- A bus fanned onto a device's pins could leave a wire jogging over and straight back along
+  itself.
+- Scoot with everything attached could leave a pin off its wire: a pin on a wire's corner, or
+  a device whose pin sits on the middle of a wire that moves along. That device now comes
+  along, or Scoot refuses the move.
+
 ## 0.17.4
 
 **New**

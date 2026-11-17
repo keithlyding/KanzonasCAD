@@ -221,8 +221,7 @@ def to_block(project, sess):
             if same and i is not None:
                 a = dict(old.attr_texts[i])
             elif stays and i is not None:
-                a = {"attr": e.text.strip().upper(), "pos": old.attr_texts[i]["pos"],
-                     "height": e.height}
+                a = dict(old.attr_texts[i], attr=e.text.strip().upper(), height=e.height)
             else:
                 a = {"attr": e.text.strip().upper(), "pos": back(e.pos), "height": e.height}
             if not a["attr"]:
@@ -287,8 +286,9 @@ def to_block(project, sess):
         base[rails[0][1]] = (s.entities[rails[0][1]].to_dict(), ("rail", 0))
     defn.attr_texts = []
     for k, a in enumerate(attrs):
-        defn.attr_texts.append({"attr": a[3]["attr"], "pos": M._pt(a[3]["pos"]),
-                                "height": float(a[3]["height"])})
+        # (its alignment, angle and place in a stack of ratings kept: 0.17.5)
+        defn.attr_texts.append(dict(a[3], pos=M._pt(a[3]["pos"]),
+                                    height=float(a[3]["height"])))
         base[a[2]] = (s.entities[a[2]].to_dict(), ("attr", k))
     defn.builtin = False
     return Result(defn, pin_map, warnings, base)
@@ -405,12 +405,15 @@ def update_copies(ed, project, defn, old_name=None, pin_map=None):
         cur = s.entities.get(eid)
         if cur is None:
             continue
-        new = dict(cur.pin_points())
-        old = {}
+        new = M.pin_keys(cur.pin_points())
+        old, seen = {}, {}
         for name, p in old_pts:
             to = pin_map.get(name, name) if pin_map is not None else name
-            if to is not None and to in new:
-                old[to] = p
+            # (two pins of one name: the first to the first of its new name, and so on)
+            k = seen.get(to, 0)
+            seen[to] = k + 1
+            if to is not None and (to, k) in new:
+                old[(to, k)] = p
                 continue
             # its pin is gone: a wire ending there stays where it is
             if any(G.dist(p, q) <= TOL for q in new.values()):

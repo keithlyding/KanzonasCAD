@@ -2443,9 +2443,14 @@ class MainWindow(BlockEditing, QMainWindow):
             got = tags.find_tag(v.project, attrs.get("TAG", ""))
             attrs = tags.link_footprint(attrs, got[1]) if got is not None else \
                 {k: x for k, x in attrs.items() if k != "PARENT"}
-        if attrs is not None and (attrs != ins.attrs or hidden != ins.hidden):
+        if attrs is None:
+            return
+        new = ins.copy(attrs=attrs, hidden=sorted(hidden))
+        for n, ang in shown.get("angles", {}).items():
+            new = new.with_attr_angle(n, ang)
+        if new.to_dict() != ins.to_dict():
             with v.project.edit("Attributes") as ed:
-                ed.change(v.sheet(), ins.copy(attrs=attrs, hidden=sorted(hidden)))
+                ed.change(v.sheet(), new)
 
     # ---- cross-references -----------------------------------------------------------------
     def update_xrefs(self):
@@ -2607,14 +2612,28 @@ class MainWindow(BlockEditing, QMainWindow):
         cur = v.sheet().entities.get(wire.id, wire)
         other = wirenums.taps(v.sheet(), cur)
         got = self.ask_wire_number(cur.num, other.num if other is not None else None,
-                                   cur.own_num) if other is not None or cur.own_num else \
-            self.ask_wire_number(cur.num)
+                                   cur.own_num, locked=cur.num_lock) \
+            if other is not None or cur.own_num else \
+            self.ask_wire_number(cur.num, locked=cur.num_lock)
         if got is None:
             return
-        num, own = got
-        same = num == (cur.num or "") and (cur.num_lock or not num or own != cur.own_num)
+        num, own = got[:2]
+        lock = got[2] if len(got) > 2 else (cur.num_lock if num == (cur.num or "") else
+                                            bool(num))
+        same = num == (cur.num or "") and lock == cur.num_lock and \
+            (cur.num_lock or not num or own != cur.own_num)
         if same and own == cur.own_num:
             return
+        if num and num != (cur.num or ""):
+            go = self._cross_reference(v, cur, num, lock)
+            if not go:
+                return
+            if go == "lock" and not lock:
+                # (two wires with one number: only a locked one stays, numbering gives an
+                # unlocked one a free number again; the battery, 0.17.5, seed 77)
+                lock = True
+                self._say("Wire %s locked: another wire has that number, and numbering "
+                          "would change an unlocked one" % num)
         with v.project.edit("Wire number") as ed:
             if own != cur.own_num:
                 # (its own number where it taps another, or back to that wire's: numbering
@@ -2624,12 +2643,58 @@ class MainWindow(BlockEditing, QMainWindow):
                 wirenums.sync(ed, v.project)
                 cur = v.sheet().entities[cur.id]
             if not same:
-                wirenums.set_number(ed, v.project, v.sheet(), cur, num)
+                wirenums.set_number(ed, v.project, v.sheet(), cur, num, lock)
 
-    def ask_wire_number(self, num, tap_of=None, own=False):
-        """The Wire number window: (number, own) or None (a test replaces it)."""
+    def _cross_reference(self, v, cur, num, lock):
+        """A number typed that another wire already has: asked whether this is a cross-
+        reference (the owner, 0.17.5: "it should ask me if it's a cross reference and whether
+        it's a source or destination"). Source or destination: off-sheet connectors of a new
+        name on the open ends of both, and the number on the one wire they make, in one step;
+        True to go on as typed (no other wire has it), "lock" to go on with it locked ("just
+        the same number": only a locked number stays beside another wire's); False when it is
+        done here or cancelled."""
+        from . import wirenums
+        project, sheet = v.project, v.sheet()
+        others = wirenums.others_numbered(project, sheet, cur, num)
+        if not others:
+            return True
+        s, w = next((s, w) for s, w in others[0][1] if w.num == num)
+        mid = w.points[len(w.points) // 2]
+        where = project.zone_text(s, mid[0], mid[1]) or "sheet %s" % project.sheet_number(s)
+        how = self.ask_cross_reference(num, where)
+        if how is None:
+            return False
+        if how == "same":
+            return "lock"
+        mine = wirenums.group_of(project, sheet, cur)
+        here = wirenums.open_end(mine[1] if mine else [(sheet, cur)], first=cur)
+        there = wirenums.open_end(others[0][1])
+        if here is None or there is None:
+            QMessageBox.information(
+                self, "Cross-reference", "%s has no open end for the connector: draw it out to "
+                "where it leaves the sheet (an end on nothing), then type the number again."
+                % ("This wire" if here is None else "Wire %s at %s" % (num, where)))
+            return False
+        out_def = self.library.get("symbol", "Source arrow")
+        in_def = self.library.get("symbol", "Destination arrow")
+        with project.edit("Cross-reference") as ed:
+            name = wirenums.cross_reference(ed, project, here, there, out_def, in_def,
+                                            how == "source")
+            wirenums.set_number(ed, project, sheet, sheet.entities[cur.id], num, lock)
+        self._say("Wire %s: connectors %s here and at %s (Undo takes them back)"
+                  % (num, name, where))
+        return False
+
+    def ask_cross_reference(self, num, where):
+        """A number already used: "source", "destination", "same" or None (a test replaces
+        it)."""
+        from .dialogs import cross_reference_question
+        return cross_reference_question(self, num, where)
+
+    def ask_wire_number(self, num, tap_of=None, own=False, locked=False):
+        """The Wire number window: (number, own, locked) or None (a test replaces it)."""
         from .dialogs import wire_number_dialog
-        return wire_number_dialog(self, num, tap_of, own)
+        return wire_number_dialog(self, num, tap_of, own, locked)
 
     def _toggle_title_block(self, on):
         v = self.view()

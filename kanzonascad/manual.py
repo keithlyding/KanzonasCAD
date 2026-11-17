@@ -285,10 +285,22 @@ have a <b>Rating</b> (30A, 5HP, 500VA...): typed there, it shows <b>in a fuse's 
 each of a three-pole fuse block's), and under the other symbols (at one height for every
 one-line symbol and another for every three-pole one, so a row's ratings line up), and on the bill of materials it is added to the description (two fuses without a catalog
 number but with different ratings are different lines). A project started before 0.16 gets the
-Rating with <b>Update blocks from library...</b>. Its <b>Shown on the drawing</b>
+Rating with <b>Update blocks from library...</b>. They also have a field for each of their
+ratings, as applies: a motor <b>Horsepower</b>, <b>Volts</b> and <b>Full-load amps</b>; a drive
+and a starter Horsepower, Volts and <b>Amps</b>; breakers and disconnects Amps and Volts; fuses
+Volts (their amps are the Rating in the box); overload heaters Amps; the control transformer
+<b>VA</b>, <b>Primary volts</b> and <b>Secondary volts</b>; the power supply Volts and Amps. A
+plain number gets its unit on the drawing (5 shows as 5HP, 460 as 460V, 7.6 as 7.6A FLA);
+anything else (1/2 HP, 480V 3PH) shows as typed. They show under the Rating, each on a line of
+its own; an empty or hidden one leaves no gap. The bill of materials adds them to the
+description (a 5HP motor and a 10HP one are different lines). A project started before 0.17.5
+gets them with <b>Update blocks from library...</b>. Its <b>Shown on the drawing</b>
 boxes choose which of its attributes (its tag, a terminal's number, an imported block's
 location, rating...) show on this copy; a hidden one keeps its value, and reports still use
-it. <b>Show or hide attributes...</b> (Modify menu; Schematic tab: Symbols, Panel tab:
+it. Beside each is its <b>Angle</b>, the angle its text is drawn at on the drawing (the arrows
+turn it 90 degrees at a time): turned, it turns with the symbol when the symbol is turned
+afterward, as in AutoCAD; set back to the symbol's own angle, it is drawn as the symbol draws
+it again (the tag read across). <b>Show or hide attributes...</b> (Modify menu; Schematic tab: Symbols, Panel tab:
 Footprints) does the same for every selected symbol and block at once: each attribute any of
 them shows is ticked when shown on all of them, unticked when hidden on all, partly ticked when
 it differs (left so); one undoable step. <b>Explode</b> (X) turns placed
@@ -386,7 +398,7 @@ drawing tab (for Edit block, the one it was opened from) has copies of the block
 asks <b>Update the copies of ... in ...?</b> Yes changes them in one step (Undo takes it back):
 they take the new drawing, a renamed block's copies take its new name, and their tags,
 descriptions, manufacturers and catalog numbers stay. Wires stay on the pins (matched by
-name) and stretch to where the pins moved; a wire on a pin that is gone stays where it was,
+name; two pins of one name in their order) and stretch to where the pins moved; a wire on a pin that is gone stays where it was,
 and the command line says how many. No keeps the old drawing. Other projects keep their own
 copies of the block as they were.</p>
 <p><b>Update blocks from library...</b> (Library menu) does the same for every block in the
@@ -564,8 +576,10 @@ settings, <b>A second wire on a pin leaves it on a 45-degree lead</b>, makes it 
 a short 45-degree lead (1/8 inch on paper) and then run beside the first, as drawn by hand (to
 the side the cursor is on; a third wire takes the other side; the lead keeps its angle when the
 symbol moves); it is off to start. Several wires on a pin get no dot: the pin is the connection.</li>
-<li><b>Junction dots</b>: a dot goes where <b>three or more wire ends meet</b>, or where a wire
-<b>ends on another wire's middle or bend</b> (a T). A wire carried on from a free end of another
+<li><b>Junction dots</b>: a dot goes only where a wire taps off another: where <b>three or more
+wire ends meet</b>, or where a wire <b>ends on another wire's middle or bend</b> (a T), so that
+wires leave the point three or more ways. Two wires meeting end to end get no dot, straight or
+turning a corner. A wire carried on from a free end of another
 joins it into one wire, with no dot; carried on from a point that is already a bend, or where
 two wires already meet end to end, it makes three: a dot (on the screen both look like the end
 of one wire). <b>Delete dot</b> (DELDOT, DD; Modify menu, Schematic tab: Edit wires): click a
@@ -574,7 +588,8 @@ same spot again (or Undo) to bring it back; keep clicking, Enter ends. It is kep
 sheet.</li>
 <li><b>Moving a symbol drags its wires</b>: the wire ends on its pins come along (Move, Rotate,
 Mirror, Scale, dragging it or its grip), staying straight across and up or down (a jog is added
-where needed). Select the wires too and they move with it instead.</li>
+where needed), on every pin, two pins with the same name too (a drive's two GND). Select the
+wires too and they move with it instead.</li>
 <li><b>Placing a symbol on a wire</b> cuts the wire between the symbol's pins, as AutoCAD
 Electrical does: drop a contact onto a rung and it is wired in.</li>
 <li><b>Scoot</b> (SCOOT, AESCOOT; Modify menu, Schematic tab): select devices (a motor, a
@@ -620,7 +635,11 @@ when none is selected, in one step (Undo puts it back): wires of no length and e
 (repeated, or in the middle of a straight run) go, a wire drawn over another goes, and two
 wires meeting end to end with nothing else there (no pin, no third wire) become one. The
 command line then says what it did and how many wire ends connect to nothing, which is
-usually a wire stopping short of where it should go.</li>
+usually a wire stopping short of where it should go. A wire that runs straight back over
+itself at an end (drawn out past where it was needed and clicked back) loses the doubled piece,
+so it is one straight wire again. <b>Wire</b> and <b>Bus</b> don't take such a click: the command
+line says so, and you click on past it or off to the side, U takes the last point back, or
+Enter ends the wire there.</li>
 <li><b>Cleanup as you draw</b>: a wire drawn exactly where one already runs isn't added twice,
 and a wire drawn on from another wire's free end joins it, so it is one wire. Trim wire and
 Delete wire join the wires they leave meeting end to end. Turn it off with <b>Clean up wires
@@ -685,9 +704,20 @@ or down then across) and then <b>kept</b>: drawing more doesn't renumber what's 
 wire takes the lowest free number of its page, so a deleted number comes back.</li>
 <li>When two wires are joined, the lower number stays; when one is cut in two (a symbol placed
 on it, Trim), the part later in order takes a new number.</li>
-<li><b>Double-click a wire</b> to type its number (for it and every wire joined to it). A typed
-number is locked: numbering leaves it alone. Clear it to let numbering give one back. For a
-tap, the same window has <b>A number of its own</b>.</li>
+<li><b>Double-click a wire</b> to type its number (for it and every wire joined to it).
+<b>Lock this number</b> ticks itself when you type one: numbering leaves a locked number alone.
+Untick it to keep the number for now but let numbering change it (Renumber sheet, a new page
+number, or a number that isn't of its sheet's page). Clear the number to let numbering give one
+back. For a tap, the same window has <b>A number of its own</b>.</li>
+<li>Typing a number another wire already has asks whether this is a <b>cross-reference</b>:
+<b>Source</b> (this wire goes on to that one) or <b>Destination</b> (it comes from there) puts a
+pair of arrows with a new name on the open end of each wire (the end on nothing): a <b>Source
+arrow</b> pointing out where the wire leaves and a <b>Destination arrow</b> pointing in where it
+arrives. They are then one wire with that number, and each shows
+the other's place under it (7-A2). One step: Undo takes it all back. <b>No: just the same
+number</b> gives this wire the number as typed, without connectors, and locks it (numbering
+would give an unlocked one a free number again). A wire with no open end
+(both ends on pins or wires) says so: draw it out to where it leaves the sheet first.</li>
 <li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
 as device tags do.</li>
 <li><b>Renumber sheet</b> also numbers the sheet's unlocked wires again, 001, 002... in
@@ -698,7 +728,11 @@ of the wire on its input with A, B, C... added (6001A, 6001B; after Z come AA, A
 and one where it comes back on another sheet, with the same name. Placing one asks its name:
 Enter takes the one offered (a connector still waiting for its other end, else the next free
 letter). The wire keeps the number of the sheet it starts on, and under each connector its
-other end's place shows (<b>7-A2</b>).</li>
+other end's place shows (<b>7-A2</b>). <b>Source arrow</b> and <b>Destination arrow</b>
+(Library, JIC/Wiring) are the same, drawn as arrows on the wire's end: a source arrow points
+away from the line where the wire leaves, a destination arrow's tip is on the line, pointing
+into it, where the wire arrives. Past each arrow's far end (not over the wire), the wire's
+number and the other arrow's place (<b>2046 / 7-A2</b>).</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
 numbers and cross-references.</li>
 <li>Wire numbers go into PDF and DXF exports as text.</li>
