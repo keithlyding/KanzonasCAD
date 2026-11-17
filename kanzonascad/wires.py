@@ -283,6 +283,29 @@ def segment_drag(sheet, w, k, to, _seen=None):
 
     def mv(q):
         return (q[0] + d[0], q[1] + d[1])
+    # a neighbour run shortened by the move: what was on the part it loses (a pin, a wire's
+    # end) would come off the wire (the battery, seed 31: a short run dragged far past the end
+    # of the long run beside it, which had two pins on it)
+    for j, c in ((k - 1, k), (k + 2, k + 1)):
+        if not 0 <= j <= last:
+            continue
+        f, old = pts[j], pts[c]
+        nw = mv(old)
+        nx0, nx1 = sorted((f[0], old[0]))
+        ny0, ny1 = sorted((f[1], old[1]))
+        for e in sheet.query((nx0 - TOL, ny0 - TOL, nx1 + TOL, ny1 + TOL)):
+            if isinstance(e, Insert):
+                spots = [q for _n, q in e.pin_points()]
+            elif isinstance(e, Wire) and e.id != w.id:
+                spots = [e.points[0], e.points[-1]]
+            else:
+                continue
+            for q in spots:
+                # (at the corner itself it moves with it: a wire's end there follows, and a pin
+                # there is one on the run, refused above)
+                if G.dist(q, old) > TOL and G.dist_to_segment(q, f, old) <= TOL and \
+                        G.dist_to_segment(q, f, nw) > TOL:
+                    return None
     new = list(pts)
     new[k], new[k + 1] = mv(a), mv(b)
 

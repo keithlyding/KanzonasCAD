@@ -1227,8 +1227,9 @@ def _run_drag(ctx, w, k, p, say=False):
     got = segment_drag(sheet, w, k, p)
     if got is None:
         if say:
-            ctx.message("A symbol's pin sits on that run of wire: moved, the wire would leave "
-                        "it (move the symbol, or Scoot it along the wire)")
+            ctx.message("Moved there, the wire would leave a symbol's pin or a wire joined to "
+                        "it (a pin on that run, or on the part of the run beside it that would "
+                        "get shorter): move the symbol first, or drag the run less far")
         return {}
     return {i: sheet.entities[i].copy(points=[list(q) for q in pts])
             for i, pts in got.items() if i in sheet.entities}

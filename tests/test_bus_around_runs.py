@@ -120,7 +120,29 @@ class BusAroundRunsTest(unittest.TestCase):
         self.v.run(C.GripCmd, x, len(x.points))
         type_in(self.v, "1,1.5")
         self.assertEqual(self.s.entities[x.id].points, x.points)
-        self.assertIn("pin sits on that run", self.said[-1])
+        self.assertIn("would leave a symbol's pin", self.said[-1])
+
+    def test_a_run_dragged_past_the_end_of_its_neighbour_keeps_the_pins_on_it(self):
+        # (the battery, seed 31: a short run dragged far down past the end of the long run
+        # beside it, which shrank and turned over, leaving the two pins on it)
+        self.v.run(C.InsertCmd, self.win.library.get("symbol", "Relay coil"), {})
+        self.v.input_text("R")
+        type_in(self.v, "7.5,3")
+        while self.v.cmd is not None:
+            self.v.cmd.enter()
+        pins = [q for _n, q in self.s.inserts()[0].pin_points()]
+        with self.p.edit("w") as ed:
+            x = ed.add(self.s, M.Wire([(8.0, 8.5), (7.5, 8.5), (7.5, -2.0)]))
+        x = self.s.entities[x.id]
+        self.assertTrue(all(x.touches(q) for q in pins), pins)
+        self.v.run(C.GripCmd, x, len(x.points))              # (the short run across)
+        type_in(self.v, "7.75,-10")
+        self.assertEqual(self.s.entities[x.id].points, x.points)
+        self.assertIn("would leave a symbol's pin", self.said[-1])
+        # dragged less far, it moves
+        self.v.run(C.GripCmd, x, len(x.points))
+        type_in(self.v, "7.75,6")
+        self.assertEqual(self.s.entities[x.id].points[:2], [(8.0, 6.0), (7.5, 6.0)])
 
     def test_the_settings_window_has_the_clearance(self):
         from PySide6.QtWidgets import QDoubleSpinBox

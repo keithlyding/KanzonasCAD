@@ -635,10 +635,15 @@ def random_editing(log, out, ops, seed, drawing=None):
         e = got[0]
         bb = wires.body_box(e)
         pin_name, pin = rnd.choice(e.pin_points())
-        # from beyond the side across from the pin, a fair way off
-        cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
-        a = (2 * cx - pin[0] + (2.0 * k if pin[0] <= cx else -2.0 * k),
-             2 * cy - pin[1] + rnd.choice([-1, 1]) * 1.0 * k)
+        # from beyond the edge across from the pin's side, a fair way off (outside the
+        # symbol: turned, a point worked out across its middle was inside it, seed 31)
+        sides = [(abs(pin[0] - bb[0]), "left"), (abs(pin[0] - bb[2]), "right"),
+                 (abs(pin[1] - bb[1]), "bottom"), (abs(pin[1] - bb[3]), "top")]
+        side = min(sides)[1]
+        off = rnd.choice([-1, 1]) * 0.5 * k
+        a = {"left": (bb[2] + 2.0 * k, pin[1] + off), "right": (bb[0] - 2.0 * k, pin[1] + off),
+             "bottom": (pin[0] + off, bb[3] + 2.0 * k),
+             "top": (pin[0] + off, bb[1] - 2.0 * k)}[side]
         before = set(s.entities)
         v.run(C.WireCmd)
         type_in(v, fmt(a), fmt(pin))
@@ -706,6 +711,19 @@ def random_editing(log, out, ops, seed, drawing=None):
                      not (i == 0 and G.dist(q, a) <= 1e-6) and
                      not (i + 1 == last and G.dist(q, b) <= 1e-6)
                      for e in s.inserts() for _n, q in e.pin_points())
+        # (or a pin or a wire's end on the part of a run beside it that gets shorter: seed 31,
+        # a run dragged past the end of the long run beside it, which had two pins on it)
+        horiz0 = abs(a[1] - b[1]) < 1e-9
+        dd = (0.0, to[1] - a[1]) if horiz0 else (to[0] - a[0], 0.0)
+        for j, c in ((i - 1, i), (i + 2, i + 1)):
+            if pinned or not 0 <= j <= last:
+                continue
+            f, old = w.points[j], w.points[c]
+            nw = (old[0] + dd[0], old[1] + dd[1])
+            spots = [q for e in s.inserts() for _n, q in e.pin_points()] + \
+                [q for x in s.wires() if x.id != w.id for q in (x.points[0], x.points[-1])]
+            pinned = any(G.dist(q, old) > 1e-6 and G.dist_to_segment(q, f, old) <= 1e-6 and
+                         G.dist_to_segment(q, f, nw) > 1e-6 for q in spots)
         v.set_selection(set())
         v.run(C.GripCmd, w, len(w.points) + i)
         v.input_text(fmt(to))
