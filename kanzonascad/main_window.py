@@ -991,6 +991,26 @@ class MainWindow(BlockEditing, QMainWindow):
             self._fill_sheets()
             self._fill_layers()
             self._update_ui()
+            self._say_duplicates(d)
+
+    def _say_duplicates(self, d):
+        """A duplicate tag or wire number that wasn't there before the change: said on the
+        command line (they are marked red on the drawing until fixed: dupes.py)."""
+        from . import dupes
+        if getattr(d, "block_session", None) is not None:
+            return
+        dup_tags, dup_nums = dupes.find(d.project)
+        now = {("tag", t) for t in dup_tags} | {("num", n) for n in dup_nums}
+        before = getattr(d, "_dupes_seen", None)
+        d._dupes_seen = now
+        if before is None:
+            before = set()              # (a project opened with some: said once)
+        new = now - before
+        if new:
+            text = dupes.describe(d.project,
+                                  {t: g for t, g in dup_tags.items() if ("tag", t) in new},
+                                  {n: g for n, g in dup_nums.items() if ("num", n) in new})
+            self._say(text + " (marked red on the drawing)", 10000)
 
     def _tab_changed(self, _i):
         v = self.view()
@@ -2784,8 +2804,10 @@ class MainWindow(BlockEditing, QMainWindow):
             (cur.num_lock or not num or own != cur.own_num)
         if same and own == cur.own_num:
             return
+        go_same = False
         if num and num != (cur.num or ""):
             go = self._cross_reference(v, cur, num, lock)
+            go_same = go == "lock"
             if not go:
                 return
             if go == "lock" and not lock:
@@ -2804,6 +2826,11 @@ class MainWindow(BlockEditing, QMainWindow):
                 cur = v.sheet().entities[cur.id]
             if not same:
                 wirenums.set_number(ed, v.project, v.sheet(), cur, num, lock)
+            if go_same:
+                # ("No: just the same number": kept on purpose, so not marked as a duplicate)
+                kept = list(v.project.settings.get("same_numbers") or [])
+                if num not in kept:
+                    ed.project_settings({"same_numbers": kept + [num]})
 
     def _cross_reference(self, v, cur, num, lock):
         """A number typed that another wire already has: asked whether this is a cross-

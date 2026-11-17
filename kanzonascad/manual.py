@@ -768,8 +768,16 @@ arrow</b> pointing out where the wire leaves and a <b>Destination arrow</b> poin
 arrives. They are then one wire with that number, and each shows
 the other's place under it (7-A2). One step: Undo takes it all back. <b>No: just the same
 number</b> gives this wire the number as typed, without connectors, and locks it (numbering
-would give an unlocked one a free number again). A wire with no open end
+would give an unlocked one a free number again), and that number is then kept on purpose: it
+isn't marked as a duplicate. A wire with no open end
 (both ends on pins or wires) says so: draw it out to where it leaves the sheet first.</li>
+<li><b>Duplicates are marked.</b> A device tag two devices have, or a wire number two wires
+that aren't joined have, anywhere in the project, gets a <b>red frame</b> round it on the
+drawing, on every sheet it is on, until you fix it (on the screen only: it doesn't print). When
+one appears (a tag typed, something pasted, a number locked), the command line says which and
+on what sheets. Not duplicates: a contact or footprint showing its device's tag, wires joined
+by off-sheet connectors or source and destination arrows (one wire), and a number kept with
+"No: just the same number".</li>
 <li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
 as device tags do.</li>
 <li><b>Renumber sheet</b> also numbers the sheet's unlocked wires again, 001, 002... in
