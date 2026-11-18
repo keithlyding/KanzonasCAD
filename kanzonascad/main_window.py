@@ -429,6 +429,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("lay_unlock", "&Unlock all layers", C.LayerUnlockAllCmd, "Unlock all")
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
+        self._cmd_act("dim_units", "Dimension &units", C.DimUnitsCmd, "Units")
         self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
         self._cmd_act("dash_box", "Dashed bo&x", C.DashBoxCmd, "Dashed box")
         self._cmd_act("hatch", "&Hatch", C.HatchCmd, "Hatch")
@@ -639,7 +640,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "offset", "erase",
                   "trim", "number", None,
                   "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "del_wire", "del_dot", "clean_wires", "del_comp", None,
-                  "object_color", "FPLABEL", None, "lay_off", "lay_iso",
+                  "dim_units", "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             if k == "FPLABEL":
                 lm = m.addMenu("&Footprint label")
@@ -701,7 +702,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
             # (the owner, 0.17.4: "I also need the measuring tool repeated in home and
             # schematic tabs")
-            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
+                                      a["dim_units"]]),
             ("Layers", "small", [self.layer_box, self.layer_states, a["layers"], a["lay_off"],
                                  a["lay_iso"], a["lay_on"], a["lay_lock"], a["lay_unlock"]]),
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
@@ -712,7 +714,8 @@ class MainWindow(BlockEditing, QMainWindow):
             # (the owner: "Copy is not included in schematic and needs to be")
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["stretch"],
                                  a["erase"]]),
-            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
+                                      a["dim_units"]]),
             # (the owner, 0.18: "0.17.4's schematic ribbon goes off the screen. Block
             # properties should generally only be visible when editing/creating a block":
             # Edit block here, the rest on the Block tab; a tab too wide for the window
@@ -736,7 +739,8 @@ class MainWindow(BlockEditing, QMainWindow):
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
-            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
+                                      a["dim_units"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
             ("Arrange", "large", [a["align_obj"], a["distribute"]]),
             ("Parts", "small", [a["new_part"], a["panel_settings"]]),
@@ -1805,13 +1809,22 @@ class MainWindow(BlockEditing, QMainWindow):
         ents = self._selected()
         if not ents:
             return False
+        v = self.view()
         bb = None
         for e in ents:
             bb = G.bbox_union(bb, e.bbox())
         blocks = {e.block: e.defn.to_dict() for e in ents
                   if isinstance(e, M.Insert) and e.defn is not None}
+        # (their layers come along, with their colors and the rest: pasted into a project
+        # without them, they are added as they were; the owner, 0.18.4)
+        used = {e.layer for e in ents}
+        for e in ents:
+            if isinstance(e, M.Insert) and e.defn is not None:
+                used.update(x.layer for x in e.defn.entities)
+        lays = v.project.layers
         data = {"base": [bb[0], bb[1]], "entities": [e.to_dict() for e in ents],
-                "blocks": list(blocks.values())}
+                "blocks": list(blocks.values()),
+                "layers": [lays[n].to_dict() for n in sorted(used) if n in lays]}
         mime = QMimeData()
         mime.setData(CLIP_MIME, json.dumps(data).encode("utf-8"))
         mime.setText("%d KanzonasCAD object(s)" % len(ents))
@@ -1844,9 +1857,9 @@ class MainWindow(BlockEditing, QMainWindow):
         except (ValueError, KeyError, TypeError) as ex:
             self.statusBar().showMessage("The clipboard's objects can't be read: %s" % ex, 5000)
             return
-        for e in ents:
-            v.project.ensure_layer(e.layer)
-        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks)
+        layers = {d["name"]: d for d in data.get("layers", []) or []
+                  if isinstance(d, dict) and d.get("name")}
+        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks, layers)
         v.setFocus()
 
     def select_all(self):
@@ -3086,7 +3099,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "sheet_add", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
-                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext", "use_tb",
+                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",
                   "rail", "duct", "materials", "bom", "cables", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",

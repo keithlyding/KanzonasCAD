@@ -159,6 +159,20 @@ def sheet_properties(parent, project, sheet):
     worder.setToolTip("The order wire numbers go in on this sheet: the tags' numbering order "
                       "(along the wires too), or across and down")
     form.addRow("Wire numbers in", worder)
+    shows = {}
+    for key, label, what in (("show_border", "Border and zones", "border and zones"),
+                             ("show_title_block", "Title block", "title block")):
+        box = QComboBox()
+        box.setObjectName(key)
+        box.addItem("As the project (%s)" % ("shown" if project.settings.get(key, True)
+                                             else "off"), None)
+        box.addItem("Shown", True)
+        box.addItem("Off", False)
+        box.setCurrentIndex(max(box.findData(getattr(sheet, key)), 0))
+        box.setToolTip("This sheet's %s: as Project properties says, or shown or off on this "
+                       "sheet alone (drawn, printed and exported as shown here)" % what)
+        form.addRow(label, box)
+        shows[key] = box
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
     form.addRow(_gray("The page number starts each wire number (page 6: 6001, 6002 ...) and "
@@ -196,7 +210,9 @@ def sheet_properties(parent, project, sheet):
     changes = dict(title=title.text().strip(), number=number.text().strip() or None,
                    own_layout=own.isChecked(), fields=fields, kind=kind.currentData(),
                    number_order=order.currentData(), location=loc.text().strip(),
-                   wire_order_tags=worder.currentData())
+                   wire_order_tags=worder.currentData(),
+                   show_border=shows["show_border"].currentData(),
+                   show_title_block=shows["show_title_block"].currentData())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     new_scale = picked != (sheet.scale_name, sheet.scale)
@@ -320,6 +336,17 @@ def project_properties(parent, project, tab=0):
                     "one back.")
     tbpos.currentIndexChanged.connect(lambda _i: swap.setChecked(False))
     form.addRow("", swap)
+    show_border = QCheckBox("Border and zones (the zone letters and numbers)")
+    show_border.setObjectName("show_border")
+    show_border.setChecked(bool(st.get("show_border", True)))
+    show_tb = QCheckBox("Title block")
+    show_tb.setObjectName("show_title_block")
+    show_tb.setChecked(bool(st.get("show_title_block", True)))
+    for b in (show_border, show_tb):
+        b.setToolTip("On every sheet that doesn't say otherwise in its Sheet properties: drawn, "
+                     "printed and exported, or left off")
+    form.addRow("Show on sheets", show_border)
+    form.addRow("", show_tb)
     tabs.addTab(page, "General")
 
     # ---- Schematic -------------------------------------------------------------------------
@@ -442,6 +469,20 @@ def project_properties(parent, project, tab=0):
     dim_h.setSuffix(" in")
     dim_h.setValue(float(st.get("dim_height", 0.1)))
     form.addRow("Dimension text height (on paper)", dim_h)
+    dim_u = QComboBox()
+    dim_u.setObjectName("dim_units")
+    for key, text in (("decimal", "Decimal (12.50\")"), ("1/8", "Fractional, to 1/8\""),
+                      ("1/16", "Fractional, to 1/16\" (1-9/16\")"),
+                      ("1/32", "Fractional, to 1/32\""), ("1/64", "Fractional, to 1/64\"")):
+        dim_u.addItem(text, key)
+    dim_u.setCurrentIndex(max(dim_u.findData(M.dim_units(st.get("dim_units"))), 0))
+    form.addRow("Dimension units", dim_u)
+    dim_all = QCheckBox("Change the dimensions already drawn too")
+    dim_all.setObjectName("dim_units_all")
+    dim_all.setChecked(True)
+    dim_all.setToolTip("Unticked, only new dimensions read the new way; Dimension units (Modify "
+                       "menu) changes the dimensions you pick")
+    form.addRow("", dim_all)
     fp_show = QComboBox()
     for key, text in (("tag", "Its tag (the device it is)"), ("cat", "Its part number"),
                       ("desc", "Its description"), ("name", "Its block name"),
@@ -506,6 +547,8 @@ def project_properties(parent, project, tab=0):
     settings.update(layout.values())
     settings["text_height"] = text_h.value()
     settings["tb_position"] = tbpos.currentData()
+    settings["show_border"] = show_border.isChecked()
+    settings["show_title_block"] = show_tb.isChecked()
     settings["tag_height"] = tag_h.value()
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_number_height"] = num_h.value()
@@ -524,6 +567,7 @@ def project_properties(parent, project, tab=0):
     settings["xref_height"] = xref_h.value()
     settings["fp_label_height"] = fp_h.value()
     settings["dim_height"] = dim_h.value()
+    settings["dim_units"] = dim_u.currentData()
     for key, b in stocks.items():
         # (a length the box can only show rounded, 1 m = 39.3700787 in, stays as it was
         # unless changed: OK alone changed it and marked the project modified)
@@ -563,6 +607,12 @@ def project_properties(parent, project, tab=0):
                         else:
                             attrs.pop("HATCH", None)
                         ed.change(s, e.copy(attrs=attrs))
+        if dim_all.isChecked() and settings["dim_units"] != M.dim_units(st.get("dim_units")):
+            # (every dimension in the project reads the new way)
+            for sh in project.sheets:
+                for e in list(sh.entities.values()):
+                    if isinstance(e, M.Dimension) and e.units != settings["dim_units"]:
+                        ed.change(sh, e.copy(units=settings["dim_units"]))
         for name, color in changed_colors.items():
             lay = project.layers.get(name)
             before = lay.to_dict() if lay else None

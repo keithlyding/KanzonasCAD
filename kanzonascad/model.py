@@ -72,6 +72,14 @@ DEFAULT_SETTINGS = {
     "tap_numbers": "suffix",
     "wire_number_height": 0.08,
     "dim_height": 0.1,          # dimension text, paper inches
+    # the border with its zones and the title block drawn and printed on every sheet that
+    # doesn't say otherwise (Sheet properties; the owner, 0.18.4: "turn the title block and/or
+    # grid off and on, for the whole project and for individual sheets")
+    "show_border": True,
+    # new dimensions read decimal (12.50") or fractional to the nearest 1/16 (1-9/16"): "decimal",
+    # "1/8", "1/16", "1/32", "1/64"; each dimension keeps its own (Dimension units)
+    "dim_units": "decimal",
+    "show_title_block": True,
     "tb_position": "corner",    # the title block: in the lower right corner, or a strip down
                                 # the right ("right") or along the bottom ("bottom") that the
                                 # zone grid stops at
@@ -894,6 +902,34 @@ def fmt_inches(v, places=2):
     return "%.*f\"" % (places, v)
 
 
+DIM_UNITS = ("decimal", "1/8", "1/16", "1/32", "1/64")
+
+
+def dim_units(text):
+    """A dimension format typed or kept ("decimal", "1/16"...; "" and anything else: decimal)."""
+    t = str(text or "").strip().lower()
+    return t if t in DIM_UNITS else "decimal"
+
+
+def fmt_length(v, units="decimal"):
+    """A length in a dimension's format: decimal (12.50\") or fractional to the nearest 1/8,
+    1/16, 1/32 or 1/64, reduced, a dash between the whole inches and the fraction as US
+    drawings write it (1-9/16\", 3/4\", 2\"; the owner, 0.18.4: "change dimensions to decimal
+    or fractional")."""
+    units = dim_units(units)
+    if units == "decimal":
+        return fmt_inches(v)
+    den = int(units.split("/")[1])
+    n = int(round(abs(v) * den))
+    whole, num = divmod(n, den)
+    sign = "-" if v < 0 and n else ""
+    if not num:
+        return "%s%d\"" % (sign, whole)
+    g = math.gcd(num, den)
+    frac = "%d/%d" % (num // g, den // g)
+    return "%s%s%s\"" % (sign, ("%d-" % whole) if whole else "", frac)
+
+
 class Composite(Entity):
     """An object drawn as several plain pieces (lines, texts) worked out from a few values:
     dimensions, DIN rail, wire duct. Subclasses give parts(); hit tests, boxes and export
@@ -939,17 +975,20 @@ class Dimension(Composite):
     (across or up and down, whichever loc points to) or "aligned" (along p1-p2). height: its
     text height, in drawing units (on a scaled panel sheet, the paper height times the
     scale's factor: it reads the same on paper at any scale). text: what to show instead of
-    the measured length ("" measures; <> in it stands for the measured length)."""
+    the measured length ("" measures; <> in it stands for the measured length). units: how
+    the length reads, "decimal" (12.50\") or a fraction's precision ("1/16": 1-9/16\")."""
     kind = "dimension"
-    __slots__ = ("p1", "p2", "loc", "mode", "height", "text", "_parts")
+    __slots__ = ("p1", "p2", "loc", "mode", "height", "text", "units", "_parts")
 
-    def __init__(self, p1, p2, loc, mode="linear", height=0.1, text="", **kw):
+    def __init__(self, p1, p2, loc, mode="linear", height=0.1, text="", units="decimal",
+                 **kw):
         kw.setdefault("layer", "DIMENSIONS")
         super().__init__(**kw)
         self.p1, self.p2, self.loc = _pt(p1), _pt(p2), _pt(loc)
         self.mode = "aligned" if mode == "aligned" else "linear"
         self.height = float(height)
         self.text = str(text or "")
+        self.units = dim_units(units)
         self._parts = None
 
     def _data(self):
@@ -957,13 +996,15 @@ class Dimension(Composite):
              "height": self.height}
         if self.text:
             d["text"] = self.text
+        if self.units != "decimal":
+            d["units"] = self.units
         return d
 
     @classmethod
     def _from(cls, d):
         return cls(d["p1"], d["p2"], d["loc"], d.get("mode", "linear"), d.get("height", 0.1),
-                   d.get("text", ""), layer=d.get("layer", "DIMENSIONS"), color=d.get("color"),
-                   id=d.get("id"))
+                   d.get("text", ""), d.get("units", "decimal"),
+                   layer=d.get("layer", "DIMENSIONS"), color=d.get("color"), id=d.get("id"))
 
     # ---- geometry --------------------------------------------------------------------------
     def direction(self):
@@ -986,7 +1027,7 @@ class Dimension(Composite):
         return self.direction()[1]
 
     def label(self):
-        v = fmt_inches(self.value())
+        v = fmt_length(self.value(), self.units)
         if not self.text:
             return v
         return self.text.replace("<>", v)
@@ -2713,6 +2754,10 @@ class Sheet:
         # says (None: Project properties' "Wire numbers follow the tags' order"; the owner,
         # 0.18: "both a sheet and project setting")
         self.wire_order_tags = None
+        # the border and zones, the title block: shown (True), not (False), or as the project
+        # says (None: Project properties, Schematic)
+        self.show_border = None
+        self.show_title_block = None
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
@@ -2940,6 +2985,8 @@ class Sheet:
              "number_order": self.number_order,
              "number_from": self.number_from,
              "wire_order_tags": self.wire_order_tags,
+             "show_border": self.show_border,
+             "show_title_block": self.show_title_block,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
              "rotation": self.rotation,
@@ -2973,6 +3020,8 @@ class Sheet:
             "down", "wires") else "across"
         self.number_from = d.get("number_from")
         self.wire_order_tags = d.get("wire_order_tags")
+        self.show_border = d.get("show_border")
+        self.show_title_block = d.get("show_title_block")
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         try:

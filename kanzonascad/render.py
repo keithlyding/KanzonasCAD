@@ -18,7 +18,7 @@ from PySide6.QtGui import (QPainter, QPainterPath, QPen, QColor, QBrush, QFont, 
 
 from . import model as M
 from . import geometry as G
-from .sheetframe import border_entities, title_block_entities
+from .sheetframe import border_entities, title_block_entities, shows, frame_sig
 
 CHUNK = 256
 FONT_PX = 100.0                 # glyphs are made at this size, then scaled to the text height
@@ -314,17 +314,17 @@ class SheetRenderer:
                p.sheet_number(s),
                len(p.sheets),
                tuple(sorted(p.fields.items())), p.title_block.version, self._layer_sig(),
-               self.pal.dark)
+               self.pal.dark, frame_sig(p, s))
         if sig != self._frame_sig:
             self._frame_sig = sig
             lines, texts = QPainterPath(), []
-            for e in border_entities(s):
+            for e in (border_entities(s) if shows(p, s, "border") else ()):
                 if isinstance(e, M.Text):
                     texts.append(text_item(e))
                 else:
                     add_entity(lines, e)
             tb = _Chunk()
-            if s is not p.title_block:
+            if s is not p.title_block and shows(p, s, "title_block"):
                 self._fill_chunk(tb, title_block_entities(p, s))
             self._frame = (lines, texts, tb)
         return self._frame

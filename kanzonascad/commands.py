@@ -1168,10 +1168,11 @@ class PasteCmd(Command):
     name, title = "PASTE", "Paste"
     repeatable = False
 
-    def __init__(self, ctx, ents, base, blocks=None):
+    def __init__(self, ctx, ents, base, blocks=None, layers=None):
         super().__init__(ctx)
         self.ents, self.base_pt = ents, base
         self.blocks = blocks or {}
+        self.layers = layers or {}          # {name: Layer dict} copied with them
 
     def begin(self):
         self.ctx.prompt("Specify insertion point")
@@ -1190,6 +1191,17 @@ class PasteCmd(Command):
         ids = set()
         with self.ctx.edit("Paste") as ed:
             project = self.ctx.project
+            # (their layers the project doesn't have, as they were where they were copied:
+            # color, line type, wire size...; a layer it has keeps its own, the owner, 0.18.4)
+            used = {e.layer for e in self.ents}
+            for e in self.ents:
+                if isinstance(e, M.Insert) and e.block in self.blocks:
+                    used.update(x.layer for x in self.blocks[e.block].entities)
+            for name in sorted(used):
+                if name and name not in project.layers:
+                    d = self.layers.get(name)
+                    ed.layer(name, None, M.Layer.from_dict(d).to_dict() if d is not None
+                             else M.Layer(name).to_dict())
             names = {}
             for e in self.ents:
                 if isinstance(e, M.Insert) and e.block in self.blocks:
@@ -3377,6 +3389,9 @@ class DimLinearCmd(Command):
     def _height(self):
         return float(self.ctx.project.settings.get("dim_height", 0.1)) * self.ctx.sheet().k()
 
+    def _units(self):
+        return M.dim_units(self.ctx.project.settings.get("dim_units", "decimal"))
+
     # (its two points follow Ortho and Polar as any point does, an object snap near the mouse
     # first: the owner, 0.17.4, "Linear measurement is not following polar or ortho"; until
     # then they went where picked)
@@ -3390,7 +3405,8 @@ class DimLinearCmd(Command):
         elif len(self.pts) == 2:
             self.ctx.prompt("Specify dimension line location")
         else:
-            d = M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height())
+            d = M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height(),
+                            units=self._units())
             with self.ctx.edit(self.title) as ed:
                 if d.layer not in self.ctx.project.layers:
                     ed.layer(d.layer, None, M.Layer(d.layer, "#00c8c8").to_dict())
@@ -3402,7 +3418,8 @@ class DimLinearCmd(Command):
         if len(self.pts) == 1:
             return [M.Line(self.pts[0], p)]
         if len(self.pts) == 2:
-            return [M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height())]
+            return [M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height(),
+                                units=self._units())]
         return []
 
 
@@ -4539,6 +4556,74 @@ class WireSizeCmd(Command):
         self.finish()
 
 
+class DimUnitsCmd(Command):
+    """DIMUNITS (Dimension units): the selected dimensions, or dimensions clicked one by one,
+    read decimal (12.50") or fractional (1-9/16"; the owner, 0.18.4: "change dimensions to
+    decimal or fractional"). D: decimal; F: fractional, to the project's precision (1/16
+    unless it says otherwise); or type the precision: 1/8, 1/16, 1/32, 1/64."""
+    name, title = "DIMUNITS", "Dimension units"
+
+    def begin(self):
+        self.dims = [e.id for e in _selected(self.ctx) if isinstance(e, M.Dimension)]
+        if self.dims:
+            self._ask()
+            return
+        self.picking = True
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click the dimensions to change (Enter when done)")
+
+    def pick(self, p):
+        e = self.ctx.pick_entity(p, M.Dimension)
+        if e is None:
+            self.ctx.message("Click a dimension")
+            return
+        if e.id not in self.dims:
+            self.dims.append(e.id)
+            self.ctx.set_selection(set(self.dims))
+
+    def _ask(self):
+        self.picking = False
+        sheet = self.ctx.sheet()
+        now = sorted({sheet.entities[i].units for i in self.dims if i in sheet.entities})
+        self.ctx.prompt("Units for %d dimension(s), now %s: D decimal, F fractional, or 1/8, "
+                        "1/16, 1/32, 1/64" % (len(self.dims), now[0] if len(now) == 1
+                                               else "mixed"),
+                        [("Decimal", "D"), ("Fractional", "F")])
+
+    def text(self, s):
+        if self.picking:
+            return False
+        k = s.strip().upper()
+        if k in ("D", "DECIMAL"):
+            got = "decimal"
+        elif k in ("F", "FRACTIONAL", "FRACTION"):
+            st = M.dim_units(self.ctx.project.settings.get("dim_units", "decimal"))
+            got = st if st != "decimal" else "1/16"
+        elif s.strip() in M.DIM_UNITS[1:]:
+            got = s.strip()
+        else:
+            self.ctx.message("Type D (decimal), F (fractional), or 1/8, 1/16, 1/32 or 1/64")
+            return True
+        sheet = self.ctx.sheet()
+        ds = [sheet.entities[i] for i in self.dims if i in sheet.entities]
+        changed = [d for d in ds if d.units != got]
+        if changed:
+            with self.ctx.edit(self.title) as ed:
+                for d in changed:
+                    ed.change(sheet, d.copy(units=got))
+        self.ctx.message("%d dimension(s): %s" % (len(ds), "decimal" if got == "decimal"
+                                                   else "fractional, to %s\"" % got))
+        self.ctx.set_selection(set())
+        self.finish()
+        return True
+
+    def enter(self):
+        if self.picking and self.dims:
+            self._ask()
+            return
+        self.finish()
+
+
 class DeleteWireCmd(Command):
     """DELWIRE (AutoCAD Electrical's Delete Wires): the selected wires go (anything else
     selected stays), or click wires one by one. Wires left meeting end to end become one."""
@@ -4878,6 +4963,7 @@ COMMANDS = {
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
     "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
     "WIRESIZE": (WireSizeCmd, ["WSZ"]),
+    "DIMUNITS": (DimUnitsCmd, ["DU"]),
     "STRETCH": (StretchCmd, ["S"]),
     "NUMSOURCE": (NumberSourceCmd, ["NSRC"]),
     "SIGARROW": (SignalArrowsCmd, ["SDA", "SOURCEARROW", "XARROW"]),

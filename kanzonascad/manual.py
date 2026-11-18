@@ -212,6 +212,11 @@ PROJECT), revision rows (REV1, REV1DET, BY1, RD1: <code>{{Rev 1}}</code>, its de
 date; KanzonasCAD's Rev 1 is the latest revision), any other its own name, a field of the
 project to fill in Project properties. Their values come along into Project properties when the
 project's are empty. The sheet must be upright (not turned) to do it.</p>
+<p><b>Show on sheets</b> (Project properties, General): untick <b>Border and zones</b> or
+<b>Title block</b> to leave them off every sheet: not drawn, printed or exported. A sheet can
+say otherwise in its Sheet properties: <b>Border and zones</b> and <b>Title block</b> there are
+<b>As the project</b> (to start), <b>Shown</b> or <b>Off</b>, for that sheet alone. Grid
+references (6-D1) still follow the zones when the border is off.</p>
 <p><b>Title block position</b> (Project properties, General) says where the title block sits:</p>
 <ul>
 <li><b>Lower right corner</b> (to start): the zones run the full width and height of the
@@ -972,6 +977,8 @@ object, only the piece a click there would cut away lights up. U undoes the last
 then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>
 <tr><td>Aligned dimension</td><td>DIMALIGNED, DAL</td><td>The same, measured along the line
 between the two points (slanted too).</td></tr>
+<tr><td>Dimension units</td><td>DIMUNITS, DU</td><td>The selected (or clicked) dimensions:
+D decimal, F fractional, or 1/8, 1/16, 1/32, 1/64.</td></tr>
 <tr><td>Hatch</td><td>HATCH, H, BHATCH, BH, FILL</td><td>Click inside a closed shape to fill it
 (SOLID, ANSI31, ANSI37, LINES pick the pattern; SP the spacing, AN the angle); Enter
 ends.</td></tr>
@@ -1225,11 +1232,18 @@ CSV...</b> writes it for a spreadsheet or a purchase order. The bill of material
 in.</li>
 <li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Home,
 Schematic and Panel tabs (Dimensions), measure the true distance, so they're right at any scale; they show inches with two
-decimals (12.50"). The second point follows Ortho and Polar from the first, as any point
+decimals (12.50") or, as Project properties, Panel, <b>Dimension units</b> says, fractional
+to the nearest 1/8, 1/16, 1/32 or 1/64 (1-9/16", 3/4"). Changing it there changes the
+dimensions already drawn too, unless you untick <b>Change the dimensions already drawn
+too</b>. The second point follows Ortho and Polar from the first, as any point
 does, except that an object snap at the mouse is taken first (so a corner off the Ortho line
 still snaps). Their grips move the measured points
 and the line; they go on layer DIMENSIONS (its color: Project properties, Panel). Dimension
 text height: Project properties.</li>
+<li><b>Dimension units</b> (DIMUNITS, DU; Modify menu, and Dimensions on the Home, Schematic and
+Panel tabs): the selected dimensions, or dimensions you click (Enter when done), read
+<b>D</b> decimal or <b>F</b> fractional (to the project's precision, 1/16 unless it says
+another), or type the precision: 1/8, 1/16, 1/32, 1/64. Each dimension keeps its own.</li>
 <li><b>Hatch</b> (H; Draw menu, Home tab) fills an area: click inside a closed shape (a closed
 polyline, a rectangle, a circle) and it is filled, the smallest shape around the click; closed
 shapes inside it stay open (islands: a cutout's holes, a label). The buttons, or typing their
@@ -1327,7 +1341,9 @@ sheet and layer changes, can be undone. Their arrows also sit right after the me
 Edit, View...), always a click away.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
 insertion point (the copied objects' lower left corner lands there). Works between projects,
-and after KanzonasCAD is closed and started again.</li>
+and after KanzonasCAD is closed and started again. Their layers come with them: a layer the
+project you paste into doesn't have is added as it was (its color, line type, wire size and
+color); a layer it already has keeps its own.</li>
 <li><b>Delete</b> erases the selection.</li>
 </ul>
 
@@ -1465,7 +1481,9 @@ and never turn the drawing.</li>
 paper around it; <b>Display</b>, what the drawing window shows now; <b>Window</b>, two corners
 you pick: choosing it hides the Print window, you pick the corners on the drawing (snaps
 work; Esc goes back without one), and the Print window comes back. <b>Pick window &lt;</b>
-picks again. Display and Window print the sheet shown.</li>
+picks again. Display and Window print the sheet shown. To print only part of a sheet (a
+few devices, one rung), use Window, as in AutoCAD. A border or title block turned off
+(Project or Sheet properties) isn't printed.</li>
 <li><b>Sheets</b>: <b>This sheet</b> (the one shown), <b>All sheets</b>, or <b>These
 sheets</b>, ticked in the list (<b>Tick all</b>, <b>Tick none</b>). With several sheets
 selected in the Sheets panel (Ctrl+click, Shift+click), the window starts with those ticked.

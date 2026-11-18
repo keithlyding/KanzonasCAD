@@ -560,12 +560,12 @@ class CadView(QWidget):
         title block, so snaps reach them as they reach the drawing (they are drawn apart from
         it and are not the sheet's entities: never picked or selected). Kept until the frame
         changes; ids are negative so they never meet a sheet entity's."""
-        from .sheetframe import frame_entities
+        from .sheetframe import frame_entities, frame_sig
         p, s = self.project, self.sheet()
         key = (id(s), s.size, s.rotation, s.scale, s.scale_name, s.reserve, s.cols, s.rows,
                s.col_start, s.row_start, s.title, p.sheet_number(s), len(p.sheets),
                tuple(sorted(p.fields.items())), p.title_block.version,
-               s is p.title_block)
+               s is p.title_block, frame_sig(p, s))
         got = getattr(self, "_frame_snap", None)
         if got is not None and got[0] == key:
             return got[1], got[2]

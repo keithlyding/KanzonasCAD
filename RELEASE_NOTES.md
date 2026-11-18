@@ -6,6 +6,20 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.4
+
+**New**
+- Turn the border and zones, and the title block, off and on: for every sheet in Project
+  properties (General, "Show on sheets"), or for one sheet in its Sheet properties (as the
+  project, shown, or off). What's off isn't drawn, printed or exported.
+- Dimensions in fractions: Project properties, Panel, "Dimension units" (decimal, or to the
+  nearest 1/8, 1/16, 1/32 or 1/64: 1-9/16"). Dimension units (Modify menu, DU) changes the
+  dimensions you select: D decimal, F fractional, or type 1/32.
+
+**Fixed**
+- Pasting into another project brings the layers that project doesn't have with their colors
+  and settings; a layer it already has keeps its own.
+
 ## 0.18.3
 
 **New**

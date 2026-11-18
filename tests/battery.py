@@ -2005,6 +2005,71 @@ def random_editing(log, out, ops, seed, drawing=None):
                 v.input_text(fmt(q))
         finish()
 
+    def op_dim_units():
+        # (0.18.4: Dimension units on the selected dimensions, D, F or a precision typed; new
+        # dimensions as the project says, now and then changed; each reads its true length in
+        # its format, worked out here from its two points)
+        if rnd.random() < 0.2:
+            with p.edit("dim units") as ed:
+                ed.project_settings({"dim_units": rnd.choice(M.DIM_UNITS)})
+        ds = [e for e in s.entities.values() if isinstance(e, M.Dimension)]
+        if not ds:
+            return
+        pick = rnd.sample(ds, min(len(ds), rnd.randint(1, 3)))
+        v.set_selection({d.id for d in pick})
+        v.run(C.DimUnitsCmd)
+        typed = rnd.choice(["D", "F", "1/8", "1/16", "1/32", "1/64"])
+        v.input_text(typed)
+        finish()
+        proj = M.dim_units(p.settings.get("dim_units"))
+        want = {"D": "decimal", "F": proj if proj != "decimal" else "1/16"}.get(typed, typed)
+        for d in pick:
+            got = s.entities.get(d.id)
+            if got is None or got.text:
+                continue
+            a, b = got.p1, got.p2
+            u, val = got.direction()
+            true = abs((b[0] - a[0]) * u[0] + (b[1] - a[1]) * u[1])
+            assert got.units == want, "Dimension units %r gave %s, not %s" % (typed, got.units,
+                                                                                 want)
+            if want == "decimal":
+                expect = "%.2f\"" % true
+            else:
+                den = int(want.split("/")[1])
+                n = int(round(true * den))
+                w_, r_ = divmod(n, den)
+                if r_:
+                    import math as _m
+                    g = _m.gcd(r_, den)
+                    expect = "%s%d/%d\"" % ("%d-" % w_ if w_ else "", r_ // g, den // g)
+                else:
+                    expect = "%d\"" % w_
+            assert got.label() == expect, "a dimension of %r reads %s, not %s" % (
+                true, got.label(), expect)
+            BC.CHECKED["dimension reads in its units"] += 1
+
+    def op_frame():
+        # (0.18.4: border and zones, title block, off and on for the project or a sheet: what
+        # is drawn is what the sheet's say, else the project's)
+        what = rnd.choice(["show_border", "show_title_block"])
+        with p.edit("frame") as ed:
+            if rnd.random() < 0.5:
+                ed.project_settings({what: rnd.random() < 0.6})
+            else:
+                ed.sheet_meta(s, **{what: rnd.choice([None, True, False])})
+        on = {}
+        for k in ("show_border", "show_title_block"):
+            own = getattr(s, k)
+            on[k] = bool(p.settings.get(k, True)) if own is None else own
+        ents = sheetframe.frame_entities(p, s)
+        n_b = len(sheetframe.border_entities(s)) if on["show_border"] else 0
+        assert (len(ents) > n_b) == (on["show_title_block"] and bool(
+            p.title_block.entities)), "the title block %s drawn, the sheet says %s" % (
+                "is" if len(ents) > n_b else "isn't", on["show_title_block"])
+        assert sum(1 for e in ents if e.layer == sheetframe.FRAME_LAYER) >= (
+            1 if on["show_border"] else 0), "the border isn't drawn"
+        BC.CHECKED["border and title block as set"] += 1
+
     texts = ["NOTE", "SEE DETAIL A", "LINE ONE\nLINE TWO", "A LONGER NOTE THAT WRAPS"]
     win.ask_mtext = lambda text="": rnd.choice(texts + [""])
     from kanzonascad import bom, sheetframe, pull
@@ -2702,7 +2767,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -2966,6 +3031,9 @@ def mixed_project(win):
         ed.add(panel, M.Rail((4, 4), (34, 4), "TS35x7.5", *M.RAIL_PROFILES["TS35x7.5"][1:]))
         ed.add(panel, M.Duct((4, 10), (34, 10), "", 2, 3))
         ed.add(panel, M.Dimension((4, 4), (34, 4), (19, 1), height=0.125 * panel.k()))
+        ed.add(panel, M.Dimension((4, 10), (5.5625, 10), (5, 12), height=0.125 * panel.k(),
+                                  units="1/16"))
+        ed.sheet_meta(panel, show_title_block=False)
     with p.edit("notes") as ed:
         s = p.sheets[0]
         ed.add(s, M.Leader([(14, 9), (15, 10), (16, 10)], "SEE NOTE 1"))

@@ -392,16 +392,36 @@ def border_entities(sheet):
     return _turned(sheet, out)
 
 
+def shows(project, sheet, what):
+    """Whether a sheet shows its "border" (the border and zone strips) or its "title_block":
+    its own say (Sheet properties), else the project's. The title block's own sheet always
+    shows its border (it is drawn on it)."""
+    if sheet is project.title_block:
+        return True
+    own = getattr(sheet, "show_" + what, None)
+    if own is not None:
+        return bool(own)
+    return bool(project.settings.get("show_" + what, True))
+
+
+def frame_sig(project, sheet):
+    """What of shows() a cached frame depends on."""
+    return (shows(project, sheet, "border"), shows(project, sheet, "title_block"))
+
+
 def frame_entities(project, sheet):
-    """Border, zones and (on a real sheet) the filled-in title block."""
-    out = border_entities(sheet)
-    if sheet is not project.title_block:
+    """Border, zones and (on a real sheet) the filled-in title block, those the sheet
+    shows."""
+    out = border_entities(sheet) if shows(project, sheet, "border") else []
+    if sheet is not project.title_block and shows(project, sheet, "title_block"):
         out += title_block_entities(project, sheet)
     return out
 
 
 def title_block_rect(project, sheet):
-    """The title block's box on `sheet`, or None when it is empty."""
+    """The title block's box on `sheet`, or None when it is empty or not shown."""
+    if not shows(project, sheet, "title_block"):
+        return None
     bb = project.title_block.extents()
     if bb is None:
         return None
