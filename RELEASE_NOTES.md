@@ -80,8 +80,19 @@ build fails without them.
   corner where the wire ran back over itself. The wire now runs straight to where you drop it.
 - **Intersection** didn't snap where a line (or a dimension's point, or a Copy or Move point)
   crosses the edge of wire duct or DIN rail, or where duct and rail cross. It does now.
-- Scooting a breaker with everything attached could squeeze a short wire between the bus and
-  a wire that stayed down to nothing and leave it broken. That wire is now removed.
+- Carrying a bus on from its open ends with a symbol in the way could route one wire onto the
+  bus's own other ends (a stray dot and tangled wires). The bus now leaves its ends straight
+  on, and a way round whose wires would touch isn't used.
+- Moving or stretching something so a wire's end went back along its own last leg left a
+  hidden corner where the wire ran back over itself. The wire now runs straight. Clean up
+  wires could also join two wires into one that ran back over itself; it no longer does.
+- Typing a wire number that two other wires already had (one kept with "just the same
+  number") and answering Source or Destination could say there was no open end when one of
+  them had one. The arrow now goes on the one with an open end.
+- Dragging a run of wire by its middle grip could leave a symbol's pin with no wire, when a
+  wire tapping that run passed through the pin. Such a drag is now refused, with the reason.
+- Scooting a breaker with everything attached, or stretching a wire's end onto its other end,
+  could squeeze a wire down to nothing and leave it broken. That wire is now removed.
 - Copying or moving a footprint to a point you snapped to near DIN rail pulled it onto the
   rail, away from the point you picked it up by. A snapped point now wins.
 - Placing a footprint with the same name as a symbol already in the project gave the

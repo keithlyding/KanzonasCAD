@@ -503,7 +503,7 @@ class Wire(Polyline):
                     pts[at:at] = jog if j == 0 else jog[::-1]
                 else:
                     pts[m][0] += dx
-            return self.copy(points=_tidy(pts))
+            return self.copy(points=_unfolded(pts))
         if n >= 3:
             if horiz and not vert:
                 pts[k][1] += dy
@@ -520,7 +520,7 @@ class Wire(Polyline):
             else:
                 ym = (a[1] + b[1]) / 2
                 pts = [a, [a[0], ym], [b[0], ym], b]
-        return self.copy(points=_tidy(pts))
+        return self.copy(points=_unfolded(pts))
 
 
 @_register
@@ -572,6 +572,14 @@ class WireCross(Entity):
 
     def _map(self, fn, **_kw):
         return self.copy(pos=list(fn(self.pos)))
+
+
+def _unfolded(pts):
+    """_tidy, and with no corner where the path turns straight back along itself (an end moved
+    back along its own last leg: Stretch, seed 3272; a symbol moved with its wires, seed 3273,
+    the long battery on GitHub)."""
+    from .wires import straighten
+    return _tidy(straighten(_tidy(pts)))
 
 
 def _tidy(pts):

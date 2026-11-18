@@ -164,21 +164,28 @@ def _outside(sheet, c, text, hh):
     gap = 0.4 * hh
     tw = text_width(text, hh)
     mid = (bb[0] + bb[2]) / 2.0
-    beside = [(bb[2] + gap + tw / 2.0, pin[1] - 0.35 * hh),         # right of it
-              (bb[0] - gap - tw / 2.0, pin[1] - 0.35 * hh)]         # left of it
-    over = [(mid, bb[3] + gap), (mid, bb[1] - gap - hh)]           # over it, under it
+    # (each spot with the way it moves out from the connector)
+    right = ((bb[2] + gap + tw / 2.0, pin[1] - 0.35 * hh), (1.0, 0.0))
+    left = ((bb[0] - gap - tw / 2.0, pin[1] - 0.35 * hh), (-1.0, 0.0))
+    over = ((mid, bb[3] + gap), (0.0, 1.0))
+    under = ((mid, bb[1] - gap - hh), (0.0, -1.0))
     if abs(d[0]) >= abs(d[1]):
         # the wire comes in across: past its far end first, then over or under it
-        spots = [beside[0] if d[0] > 0 else beside[1]] + over
+        spots = [right if d[0] > 0 else left, over, under]
     else:
-        spots = [(pin[0], over[0][1]) if d[1] > 0 else (pin[0], over[1][1])] + beside
-    # (the first of them clear of its own wire: a wire that comes back round past the
-    # connector, found by the long battery, seed 3152, ran under the text)
-    for x, y in spots:
-        tb = Text((x, y), text, hh, 0.0, "center").bbox()
-        if not any(segment_hits_rect(a, b, tb) for a, b in zip(wire.points, wire.points[1:])):
-            return x, y
-    return spots[0]
+        spots = [((pin[0], over[0][1]), over[1]) if d[1] > 0 else
+                 ((pin[0], under[0][1]), under[1]), right, left]
+    # (the first of them clear of its own wire, a little farther out where the wire passes
+    # close: a wire that comes back round past the connector, the long battery, seed 3152,
+    # and one wrapped round three sides of it, seed 3263)
+    for step in (0.0, 1.5, 3.0, 4.5, 6.0):
+        for (x, y), (ux, uy) in spots:
+            q = (x + ux * step * hh, y + uy * step * hh)
+            tb = Text(q, text, hh, 0.0, "center").bbox()
+            if not any(segment_hits_rect(a, b, tb)
+                       for a, b in zip(wire.points, wire.points[1:])):
+                return q
+    return spots[0][0]
 
 
 def live(project, sheet):

@@ -4,7 +4,9 @@ name: Build Windows and Linux apps
 # separate pull-request run), and a push to main builds and then publishes the release
 on:
   push:
-    branches: ["**"]
+    # (not a sweep/ branch: a copy of a commit its own branch already builds, pushed only to
+    # run the Battery sweep; the owner, Nov 2026)
+    branches: ["**", "!sweep/**"]
   workflow_dispatch:
 
 permissions:

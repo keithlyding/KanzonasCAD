@@ -1054,6 +1054,17 @@ class GripCmd(Command):
         return list(self._dragged(p).values())
 
 
+def put_changed(ed, sheet, got):
+    """Write changed copies; a wire squeezed to nothing (fewer than two points: an end moved
+    onto its other end) goes instead, as Clean up wires takes wires of no length (the long
+    battery: Scoot, seed 4101; Stretch, seed 3252)."""
+    for e in got:
+        if isinstance(e, M.Wire) and len(e.points) < 2:
+            ed.remove(sheet, e.id)
+        else:
+            ed.change(sheet, e)
+
+
 def stretched(sheet, rect, dx, dy):
     """STRETCH (as AutoCAD's): what a crossing window rect (x0, y0, x1, y1) moved by dx, dy
     does: an object wholly inside moves; a wire's ends inside move, its next corner sliding
@@ -1129,8 +1140,7 @@ class StretchCmd(Command):
                             p[1] - self.base[1])
             if got:
                 with self.ctx.edit(self.title) as ed:
-                    for e in got:
-                        ed.change(self.ctx.sheet(), e)
+                    put_changed(ed, self.ctx.sheet(), got)
             self.finish()
 
     def preview(self, p):
@@ -1379,12 +1389,38 @@ class WireCmd(Command):
         return [M.Wire(self.points + self._route(p), layer=wire_layer(self.ctx))]
 
 
+def _strands_a_pin(sheet, got):
+    """Would wires changed to got ({id: points}) leave a pin that one of them was on with no
+    wire? (A wire tapping the dragged run, a pin on its middle, followed the run past its other
+    end and left that pin behind: the battery, seed 6006.)"""
+    old = [sheet.entities[i] for i in got if i in sheet.entities]
+    if not old:
+        return False
+    new = {i: M.Wire(pts) for i, pts in got.items()}
+    bb = None
+    for e in old:
+        bb = G.bbox_union(bb, e.bbox())
+    for e in sheet.query(bb):
+        if not isinstance(e, M.Insert):
+            continue
+        for _n, q in e.pin_points():
+            if not any(x.touches(q) for x in old):
+                continue
+            near = [x for x in sheet.query((q[0] - 1e-6, q[1] - 1e-6, q[0] + 1e-6, q[1] + 1e-6))
+                    if isinstance(x, M.Wire) and x.id not in got]
+            if not any(x.touches(q) for x in list(new.values()) + near):
+                return True
+    return False
+
+
 def _run_drag(ctx, w, k, p, say=False):
     """{id: new wire} for wire w's run k dragged to p (wires.segment_drag); {} when it can't
     move, saying why when say."""
     from .wires import segment_drag
     sheet = ctx.sheet()
     got = segment_drag(sheet, w, k, p)
+    if got is not None and _strands_a_pin(sheet, got):
+        got = None
     if got is None:
         if say:
             ctx.message("Moved there, the wire would leave a symbol's pin or a wire joined to "
@@ -1439,6 +1475,32 @@ def bus_paths(points, count, spacing, flip=False):
         if len(line) >= 2:
             out.append(line)
     return out
+
+
+def _same_way(a, b, c):
+    """Do a-b and a-c leave a the same way (across or up and down, and the same direction)?"""
+    u = (b[0] - a[0], b[1] - a[1])
+    w = (c[0] - a[0], c[1] - a[1])
+    return u[0] * w[0] + u[1] * w[1] > 0 and abs(u[0] * w[1] - u[1] * w[0]) <= 1e-9 * max(
+        1.0, abs(u[0]) + abs(u[1])) * max(1.0, abs(w[0]) + abs(w[1]))
+
+
+def _apart(paths):
+    """Do a bus's wires (their points) keep apart: none turns straight back along itself, and
+    no two touch or cross? (A bus carried on from its open ends round a symbol had a wire's
+    way round run onto another's end: joined there with a dot, the battery, seed 77.)"""
+    from .wires import doubles_back
+    from .trim import intersect
+    if any(doubles_back(q) for q in paths):
+        return False
+    segs = [[("seg", a, b) for a, b in zip(q, q[1:])] for q in paths]
+    for i in range(len(segs)):
+        for j in range(i + 1, len(segs)):
+            for sa in segs[i]:
+                for sb in segs[j]:
+                    if intersect(sa, sb):
+                        return False
+    return True
 
 
 def _paths_cross(paths):
@@ -1994,8 +2056,15 @@ class BusCmd(Command):
                                extra, on)
             if got is new:
                 continue
-            tail = [q[len(self.points) - 1:] for q in self._paths(self.points + got)]
-            if not any(_crosses(q, boxes) for q in tail):
+            if len(self.points) == 1 and getattr(self, "side_pins", None) and \
+                    not _same_way(self.points[0], new[0], got[0]):
+                # (a bus leaving pins or carried on from its ends leaves them square, the way
+                # it was clicked: a way round turning across them ran onto its own ends,
+                # the battery, seed 77)
+                continue
+            paths = self._paths(self.points + got)
+            tail = [q[len(self.points) - 1:] for q in paths]
+            if not any(_crosses(q, boxes) for q in tail) and _apart(tail):
                 return got
         return new
 
@@ -3846,13 +3915,8 @@ class ScootCmd(_TwoPoint):
             self.finish()
             return
         with self.ctx.edit(self.title) as ed:
-            for e in got:
-                if isinstance(e, M.Wire) and len(e.points) < 2:
-                    # (a wire squeezed to nothing between what moves and what stays: it goes,
-                    # as Clean up wires takes wires of no length; the battery, seed 4101)
-                    ed.remove(sheet, e.id)
-                else:
-                    ed.change(sheet, e)
+            # (a wire squeezed to nothing between what moves and what stays goes)
+            put_changed(ed, sheet, got)
         self.ctx.message("Scooted %s%s" % (M.fmt_inches(abs(d)), "" if self.only else
                                            " with everything attached (%d objects)"
                                            % len(got)))

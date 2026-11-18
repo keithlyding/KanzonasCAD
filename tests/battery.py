@@ -527,7 +527,13 @@ def mouse_pan(v, rnd):
 
 
 # ---- 1. random editing -------------------------------------------------------------------------
-FAR = 5e4      # (inches, 0.8 mile: past this the battery's own spots run away, see clear_of_drawing)
+# Drawings kept to a realistic size (the owner's choice, Nov 2026, asked: "cap to realistic
+# drawings"): sheets no bigger than 1:100 (MAX_K) and drawing within about 10,000 inches of the
+# origin (FAR). Before, Fit's scale grew with the drawing and each clear spot went 20 scales
+# past it, until sheets of 1:68,593 had wires 500,000 inches out, where a slanted wire's chance
+# crossing left 0.001" gaps that no real drawing has. Every check is as strict as before.
+FAR = 1e4
+MAX_K = 100.0
 
 
 def random_editing(log, out, ops, seed, drawing=None):
@@ -791,6 +797,18 @@ def random_editing(log, out, ops, seed, drawing=None):
                 return
             # (a wire carrying it on may have had the pin: then nothing moved either)
             assert False, "a run with a pin on it was moved: %s" % s.entities[w.id].points
+        if s.entities[w.id].points == w.points:
+            # (refused, as it must be when the drag would leave a pin with no wire: a wire
+            # tapping the run, a pin on its middle, followed past its other end, seed 6006;
+            # worked out here from the drag the run would make and every pin by it)
+            got = wires.segment_drag(s, w, i, to)
+            if got is not None:
+                after_w = [M.Wire(pts) if x.id in got else x for x in s.wires()
+                           for pts in [got.get(x.id)]]
+                lost = [q for q in wired if not any(x.touches(q) for x in after_w)]
+                if lost:
+                    BC.CHECKED["wire run that would leave a pin refused"] += 1
+                    return
         horiz = abs(a[1] - b[1]) < 1e-9
         moved = any((abs(p[1] - to[1]) < 1e-9 and abs(q[1] - to[1]) < 1e-9) if horiz else
                     (abs(p[0] - to[0]) < 1e-9 and abs(q[0] - to[0]) < 1e-9)
@@ -1374,6 +1392,11 @@ def random_editing(log, out, ops, seed, drawing=None):
             return
         num = rnd.choice([b.num, b.num, "9%03d" % rnd.randint(0, 999)])
         lock = rnd.random() < 0.7
+        if num == a.num:
+            # (it has that number already: two groups kept with one number on purpose, "just
+            # the same number" earlier; typing it again changes nothing and asks nothing,
+            # seed 3262)
+            return
         how = rnd.choice(["source", "destination", "same", None])
         # (by sheet and id: ids are a sheet's own, seed 4103)
         links = {(sh.id, e.id) for sh in p.sheets for e in sh.inserts()
@@ -1466,7 +1489,9 @@ def random_editing(log, out, ops, seed, drawing=None):
             # sheet, where the other's may be the nearer one: any text of the arrow's kind
             # beside it, clear of the arrow and of its wire, will do)
             eb = e.bbox()
-            reach = 2.0 * float(p.settings.get("xref_height", 0.065)) * s.k()
+            # (its text can go a few heights farther out, clear of a wire that wraps round
+            # it: xrefs._outside)
+            reach = 8.0 * float(p.settings.get("xref_height", 0.065)) * s.k()
 
             def beside(box):
                 return box[0] <= eb[2] + reach and box[2] >= eb[0] - reach and \
@@ -1719,7 +1744,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert len(now.labels) == len(w.labels) - 1, (w.labels, now.labels)
         else:
             assert len(now.labels) == len(w.labels) + 1, (w.labels, now.labels)
-            assert any(abs(x - t) < 1e-6 for x in now.labels), (t, now.labels)
+            # (where it was clicked, on the drawing: a wire that crosses itself has that point
+            # at two distances along it, and the label may go at the first, seed 105)
+            assert any(abs(x - t) < 1e-6 or G.dist(now.at_length(x)[0], q) < 1e-6
+                       for x in now.labels), (t, now.labels, q)
         if wirenums.enabled(p) and now.num:
             shown = {(round(x.pos[0], 6), round(x.pos[1], 6)): x.text
                      for x in wirenums.labels(p, s)}
@@ -2211,13 +2239,16 @@ def random_editing(log, out, ops, seed, drawing=None):
             name, val = rnd.choice(scalefit.presets_like(s.scale_name))
             win._set_scale(name, val)
         elif scalefit.fit_for(p, s) is not None:        # (else it opens the Sheet scale window)
+            if 1.0 / scalefit.fit_for(p, s)[1] > MAX_K:
+                BC.CHECKED["Fit past 1:100 left out (drawings kept realistic)"] += 1
+                return
             win.fit_scale()
             BC.fit_oracle(p, s)
 
     # ---- sheets of every size, turn and scale, several of them -------------------------------
     def op_world():
         world["o"] = rnd.choice([(0.0, 0.0), (0.0, 0.0), (480.0, -250.0),
-                                 (-2400.0, 1700.0), (12000.0, 8000.0)])
+                                 (-2400.0, 1700.0), (4000.0, 3000.0)])
         world["k"] = rnd.choice([1.0, 1.0, 1.0, 4.0, 24.0])
 
     def op_sheet():

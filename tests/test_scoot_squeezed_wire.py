@@ -42,5 +42,30 @@ class ScootSqueezedWireTest(unittest.TestCase):
         self.assertTrue(APP)
 
 
+class StretchSqueezedWireTest(unittest.TestCase):
+    def test_wire_stretched_onto_its_other_end_goes(self):
+        # (the long battery on GitHub, seed 3252: Stretch moved one end of a wire onto its
+        # other end and left a wire of one point)
+        win, v = window()
+        try:
+            v.osnap_on = v.snap_on = v.ortho_on = v.polar_on = False
+            p, s = v.project, v.sheet()
+            with p.edit("x") as ed:
+                w = ed.add(s, M.Wire([(2.0, 2.0), (3.0, 2.0)]))
+                ed.add(s, M.Wire([(5.0, 2.0), (6.0, 2.0)]))
+            v.run(C.StretchCmd)
+            type_in(v, "2.9,1.9", "3.1,2.1", "3,2", "2,2")
+            while v.cmd is not None:
+                v.cmd.enter()
+            self.assertEqual([x.points for x in s.wires() if len(x.points) < 2], [])
+            self.assertNotIn(w.id, s.entities)
+            p.undo()
+            self.assertIn(w.id, s.entities)                     # (Undo brings it back)
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            win.close()
+        self.assertTrue(APP)
+
+
 if __name__ == "__main__":
     unittest.main()

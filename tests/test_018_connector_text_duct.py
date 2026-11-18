@@ -81,6 +81,39 @@ class ConnectorTextClearOfALoopTest(unittest.TestCase):
         self.assertTrue(APP)
 
 
+class ConnectorTextClearOfAWrapTest(unittest.TestCase):
+    def test_wire_round_three_sides(self):
+        # (the long battery on GitHub, seed 3263: the wire comes in from the left, goes up
+        # over the connector and down past its far side: past it, over and under it all lay
+        # on the wire; the text goes a little farther out instead)
+        win, v = window()
+        try:
+            p, s = v.project, v.sheet()
+            d = win.library.get("symbol", "Off-sheet connector")
+            with p.edit("x") as ed:
+                ed.block(d)
+                pd = p.blocks[d.name]
+                c = ed.add(s, M.Insert(d.name, (5.0, 8.0), defn=pd, attrs={"TAG": "A"}))
+                pin = c.pin_points()[0][1]
+                bb = c.bbox()
+                # (each leg through where the text went: past it, over it, under it)
+                w = ed.add(s, M.Wire([pin, (pin[0] - 1.0, pin[1]), (pin[0] - 1.0, bb[3] + 0.06),
+                                      (bb[2] + 0.06, bb[3] + 0.06), (bb[2] + 0.06, bb[1] - 0.06),
+                                      (bb[0] - 0.3, bb[1] - 0.06)]))
+                ed.add(s, M.Wire([(20.0, 5.0), (23.0, 5.0)]))
+                ed.add(s, M.Insert(d.name, (23.0, 5.0), defn=pd, attrs={"TAG": "A"}))
+            t = min(xrefs.texts(p, s), key=lambda t: G.dist(t.pos, pin))
+            box = t.bbox()
+            for a, b in zip(w.points, w.points[1:]):
+                self.assertFalse(G.segment_hits_rect(a, b, box), (t.text, box, w.points))
+            self.assertFalse(box[0] < bb[2] and box[2] > bb[0] and box[1] < bb[3]
+                             and box[3] > bb[1])
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            win.close()
+        self.assertTrue(APP)
+
+
 class DuctFromACornerTest(unittest.TestCase):
     def setUp(self):
         self.win, self.v = window()
