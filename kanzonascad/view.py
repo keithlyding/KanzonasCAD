@@ -167,6 +167,7 @@ class CadView(QWidget):
         self.picked_grips = set()       # {(entity id, grip index)}: grips picked with Shift
         self._picture = None            # (key, QPixmap): the drawing as last drawn
         self._lit = None                # (key, QPixmap): that, with the selection lit
+        self._sel_picture = None        # (key, QPixmap): the picture with the selection
         self._shift_cache = None        # (key, objects, paths): what a Move preview slides
         self._glow_paths = {}           # id -> (entity, paths): the hover glow's, kept
         self.overlay = None             # f(painter, view): more drawn into the picture (the
@@ -1367,12 +1368,30 @@ class CadView(QWidget):
                 p.end()
             self._lit = (key, pm)
             return pm
-        pm = QPixmap(base)
+        # (the selection drawn once on a picture of its own, the hover and preview lit over a
+        # copy of it: with a whole panel selected, lighting it again on every hover change
+        # took 0.6 s a mouse move, the owner, 0.18.2: "When I select everything on that
+        # first panel page, it's very laggy")
+        sel_key = (self._picture[0], key[1])
+        got = self._sel_picture
+        if got is None or got[0] != sel_key:
+            spm = QPixmap(base)
+            p = QPainter(spm)
+            try:
+                p.setRenderHint(QPainter.Antialiasing, True)
+                p.setTransform(self.transform())
+                self._paint_selected(p, pal)
+            finally:
+                # (an error while painting must not leave the painter open: the
+                # picture would be destroyed while painted on, and Qt may crash)
+                p.end()
+            self._sel_picture = got = (sel_key, spm)
+        pm = QPixmap(got[1])
         p = QPainter(pm)
         try:
             p.setRenderHint(QPainter.Antialiasing, True)
             p.setTransform(self.transform())
-            self._paint_selection(p, pal)
+            self._paint_lit(p)
         finally:
             # (an error while painting must not leave the painter open: the
             # picture would be destroyed while painted on, and Qt may crash)
@@ -1535,6 +1554,11 @@ class CadView(QWidget):
         p.restore()
 
     def _paint_selection(self, p, pal):
+        self._paint_selected(p, pal)
+        self._paint_lit(p)
+
+    def _paint_selected(self, p, pal):
+        """The selected objects, dashed."""
         s = self.sheet()
         key = (s.version, frozenset(self.sel))
         if self._sel_cache is None or self._sel_cache[0] != key:
@@ -1554,6 +1578,10 @@ class CadView(QWidget):
         p.setBrush(QColor(51, 153, 255, 140))
         p.drawPath(fills)
         p.setRenderHint(QPainter.Antialiasing, smooth)
+
+    def _paint_lit(self, p):
+        """What a click (hover) or the window would select, lit."""
+        s = self.sheet()
         lit = [s.entities[i] for i in self._preview if i in s.entities]
         h = self._hover
         if h is not None and h.id in s.entities and self._window is None:

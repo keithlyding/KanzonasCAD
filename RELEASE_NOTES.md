@@ -19,6 +19,8 @@ build fails without them.
   printed.
 
 **Fixed**
+- With everything selected on a heavy sheet (a panel of maker drive footprints), every mouse
+  move lagged. It's quick now, and Select all itself takes about half the time it did.
 - Printing a heavy sheet (a panel with maker footprints, wire duct, rails and dimensions)
   could leave whole groups of objects off the paper on Windows, though the screen and a PDF
   were right. They print now.

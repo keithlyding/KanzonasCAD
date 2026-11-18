@@ -153,10 +153,14 @@ def add_entity(path, e):
         c, r = e.center, e.radius
         path.addEllipse(QPointF(c[0], c[1]), r, r)
     elif isinstance(e, M.Arc):
-        pts = G.arc_points(e.center, e.radius, e.start, e.end, 3.0)
-        path.moveTo(pts[0][0], pts[0][1])
-        for p in pts[1:]:
-            path.lineTo(p[0], p[1])
+        # (Qt's own arc, not a hundred points worked out here: a maker's drive footprints with
+        # 12,000 arcs took a second to light when all selected; Qt's angles turn clockwise in
+        # y-down coordinates, so ours, y up, go in negated)
+        c, r = e.center, e.radius
+        sw = G.sweep(e.start, e.end)
+        q = G.polar(c, r, e.start)
+        path.moveTo(q[0], q[1])
+        path.arcTo(QRectF(c[0] - r, c[1] - r, 2 * r, 2 * r), -e.start, -sw)
 
 
 class Palette:
@@ -227,6 +231,9 @@ class PathList:
 
     def addEllipse(self, *a):
         self._cur().addEllipse(*a)
+
+    def arcTo(self, *a):
+        self.paths[-1].arcTo(*a)
 
     def addPath(self, path):
         self._cur().addPath(path)
