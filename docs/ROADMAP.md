@@ -180,7 +180,23 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 10. **Check out / check in** sheets: export chosen sheets (with their blocks, parts and
    settings) for someone else, lock them while out, check them back in matched by sheet id
    with a summary of changes; references and numbers recalculate.
-11. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
+11. **AutoCAD export with real blocks** (the owner, Nov 2026: "blocks stay as blocks and
+    doesn't come in as lines and text"; DXF export today explodes every block reference into
+    lines and texts, fileio.export_dxf). The middle ground, the owner's choice:
+    - Each symbol and footprint written as a BLOCK definition and placed as an INSERT (its
+      position, turn, scale, mirror), its attributes as real ATTDEF/ATTRIB (tag, description,
+      part number, maker, ratings; hidden ones hidden), so AutoCAD's attribute editor and data
+      extraction work on them. Layers with their names and colors; wires as polylines on
+      their layers; dimensions, hatches and multi-line text as their own kinds. DXF (AutoCAD
+      opens it and saves it as DWG); writing DWG would need the ODA File Converter.
+    - An option, **AutoCAD Electrical attribute names**: TAG1, MFG, CAT, DESC1-3, LOC, INST and
+      the terminal attributes, as KanzonasCAD's DWG/DXF import already reads them, so AutoCAD
+      Electrical can find tags and parts. Not promised: full AutoCAD Electrical intelligence
+      (its WD_M block, wire-number blocks, xdata, the .wdp project) - to be checked against
+      the owner's AutoCAD Electrical before going further.
+    - Tested by reading the export back (ezdxf: blocks, inserts, attributes match the
+      drawing) and by the owner opening it in AutoCAD.
+12. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
