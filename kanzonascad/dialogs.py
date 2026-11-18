@@ -440,6 +440,15 @@ def project_properties(parent, project, tab=0):
     fp_show.setToolTip("A footprint you place shows this to start (Footprint label changes "
                        "it later); one with no tag shows its part number or block name.")
     form.addRow("New footprints show", fp_show)
+    fp_h = QDoubleSpinBox()
+    fp_h.setObjectName("fp_label_height")
+    fp_h.setDecimals(4)
+    fp_h.setRange(0.01, 5)
+    fp_h.setSuffix(" in")
+    fp_h.setValue(float(st.get("fp_label_height", 0.08)))
+    fp_h.setToolTip("How tall what footprints show on them is, on paper (every footprint in "
+                    "the project)")
+    form.addRow("Footprint label height (on paper)", fp_h)
     stocks = {}
     for key, label in (("rail_stock", "DIN rail bought in lengths of"),
                        ("duct_stock", "Wire duct bought in lengths of")):
@@ -501,6 +510,7 @@ def project_properties(parent, project, tab=0):
     settings["footprint_label"] = fp_show.currentData()
     settings["duct_hatch"] = hatch.isChecked()
     settings["xref_height"] = xref_h.value()
+    settings["fp_label_height"] = fp_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():
         # (a length the box can only show rounded, 1 m = 39.3700787 in, stays as it was

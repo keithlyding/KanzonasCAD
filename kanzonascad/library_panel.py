@@ -794,6 +794,46 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
             bl.addWidget(a, i, 2)
             angle_boxes[n] = a
         v.addWidget(box)
+    # a footprint: its linked device's ratings (edited here or on the device: they are the
+    # same), and what it shows on it, several at once (the owner, 0.18.1)
+    label_boxes = {}
+    device = None
+    if kind_of(ins) == "footprint":
+        got = tags.parent_of(project, ins) if project is not None else None
+        device = got[1] if got is not None else None
+        if device is not None:
+            dform = QFormLayout()
+            names = [a["attr"] for a in (device.defn.attr_texts if device.defn else [])]
+            for k in tags.LINKED_ATTRS:
+                if k not in names and not device.attrs.get(k):
+                    continue
+                e = QLineEdit(device.attrs.get(k, ""))
+                e.setObjectName("linked_" + k)
+                unit = M.RATING_FIELDS.get(k)
+                if unit is not None:
+                    e.setPlaceholderText("a number shows as %s" % M.attr_display(k, "5"))
+                edits[k] = e
+                dform.addRow(M.label_name(k), e)
+            if dform.rowCount():
+                dbox = QGroupBox("From its device %s (changing them here changes the device)"
+                                 % (device.attrs.get("TAG") or "?"))
+                dbox.setLayout(dform)
+                v.addWidget(dbox)
+        keys = M.label_keys(ins.label)
+        offer = list(M.LABELS) + [k for k in tags.LINKED_ATTRS
+                                  if k in edits or ins.attrs.get(k)]
+        offer += [k for k in keys if k not in offer]
+        box = QGroupBox("Shown on it")
+        bl = QGridLayout(box)
+        for i, k in enumerate(offer):
+            c = QCheckBox(M.label_name(k))
+            c.setObjectName("label_" + k)
+            c.setChecked(k in keys)
+            bl.addWidget(c, i // 2, i % 2)
+            label_boxes[k] = c
+        bl.addWidget(_hint("Drag a shown line by its grip to put it where you want; "
+                           "Panel settings sets their size."), (len(offer) + 1) // 2, 0, 1, 2)
+        v.addWidget(box)
     kind = ins.defn.kind if ins.defn is not None else "symbol"
     parts = []
     try:
@@ -834,6 +874,13 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
     if desc_lines:
         out["DESC"] = " ".join(out.get(k, "").strip() for k in sorted(desc_lines)
                                if out.get(k, "").strip())
+    if shown is not None and label_boxes:
+        keys = [k for k in M.label_keys(ins.label) if label_boxes[k].isChecked()]
+        keys += [k for k, c in label_boxes.items() if c.isChecked() and k not in keys]
+        shown["label"] = ",".join(keys)
+        if device is not None:
+            # (the ratings typed here are the device's: edit_attributes puts them there)
+            shown["device"] = {k: out.get(k, "") for k in tags.LINKED_ATTRS if k in edits}
     if shown is not None:
         shown["hidden"] = frozenset(n for n, c in show_boxes.items() if not c.isChecked()) | \
             frozenset(h for h in ins.hidden if h not in show_boxes)
