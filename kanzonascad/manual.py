@@ -680,7 +680,10 @@ toward or away from it; the bus and the other branches stay. Type <b>O</b> (Only
 slide just the selected devices along their own wire, as AutoCAD Electrical's Scoot does,
 across a rung or up and down a vertical wire, however you move the mouse: the wires on their
 pins stretch on one side and shorten on the other, staying straight, and they stop short of a
-wire's far end or corner (<b>A</b> goes back to everything attached).</li>
+wire's far end or corner (<b>A</b> goes back to everything attached). A scoot that would
+pull a wire off a pin is refused and says why: a wire running uncut through a pin of what
+moves, across the way it goes, or a wire of the branch running on through a pin of a device
+that stays (cut it at that pin first with Trim wire, or select that device too).</li>
 <li><b>Align devices</b> (AEALIGN; Modify menu, Schematic tab), as AutoCAD Electrical's
 Align: click the device to line up with, then the devices to line up, and press Enter. Each
 slides along its own wire (as Scoot) into line: the same column on rungs across, the same row

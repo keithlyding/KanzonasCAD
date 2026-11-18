@@ -3843,6 +3843,12 @@ class ScootCmd(_TwoPoint):
     shortening, stopping short of a wire's far end or corner."""
     name, title = "SCOOT", "Scoot"
     only = False
+    ACROSS = ("A wire runs through a pin of what would move, across the way it goes: scoot "
+              "along that wire, or cut it at the pin first (Trim wire)")
+    STRANDS = ("A wire of what would move runs on through a pin of a device that stays: it "
+               "would come off that pin. Cut it at the pin first (Trim wire), or scoot that "
+               "device too")
+    why = ACROSS
 
     def begin(self):
         from . import scoot
@@ -3897,7 +3903,13 @@ class ScootCmd(_TwoPoint):
         from . import scoot
         if not self.only:
             dx, dy = self._branch_delta(p)
-            return scoot.branch_moved(self.ctx.sheet(), self.devs, dx, dy)
+            sheet = self.ctx.sheet()
+            got = scoot.branch_moved(sheet, self.devs, dx, dy)
+            self.why = self.ACROSS
+            if got is not None and scoot.strands(sheet, got):
+                self.why = self.STRANDS
+                return None
+            return got
         d = self._slide(p)
         return [e.moved(self.ax[0] * d, self.ax[1] * d) if scoot.axis(e) == self.ax else e
                 for e in self.devs]
@@ -3911,9 +3923,7 @@ class ScootCmd(_TwoPoint):
         sheet = self.ctx.sheet()
         got = self.result(p)
         if got is None:
-            self.ctx.message("A wire runs through a pin of what would move, across the way it "
-                             "goes: scoot along that wire, or cut it at the pin first (Trim "
-                             "wire)")
+            self.ctx.message(self.why)
             self.finish()
             return
         with self.ctx.edit(self.title) as ed:

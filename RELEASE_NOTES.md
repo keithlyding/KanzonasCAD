@@ -22,6 +22,8 @@ build fails without them.
 - A kcmil size showed "250 kcmil AWG"; it now shows "250 kcmil".
 - Wires of different layers or sizes meeting end to end are no longer made one wire (one would
   lose its layer or size).
+- Scoot with everything attached could pull a wire off another device's pins, when a wire of
+  the branch ran on through them. It now refuses that move and says why.
 
 ## 0.18.1
 
