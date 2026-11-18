@@ -64,6 +64,10 @@ nobody understands).
   -3 in the numbering order, a tap off a tap a, b, c (2007-1a); a project setting (that, the
   same number, or a number of its own), on for new projects, projects from before keep "same";
   per tap, S keeps the wire's number, N its own. Tracking picks up midpoints and centers.
+  Also: border and title block switches (project and sheet), layers carried by Paste,
+  fractional dimensions (Dimension units), gauge labels once per group, gauge only, in line
+  with the number (Wire color label per wire), arrows named by their wire and the source's
+  layer on the destination, Duplicate sheet.
   Still to come: power distribution block outputs with -1, -2 per phase (they keep letters
   today), AutomationDirect T1/T1E duct sizes (actual sizes from AD's spec sheets, waiting on
   the owner's look at the table).

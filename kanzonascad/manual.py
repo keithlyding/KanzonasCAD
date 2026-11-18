@@ -708,7 +708,8 @@ Align: click the device to line up with, then the devices to line up, and press 
 slides along its own wire (as Scoot) into line: the same column on rungs across, the same row
 on wires up and down. One that would leave its wire stops where its wire ends (the command
 line says so).</li>
-<li>Wires are ordinary objects otherwise: grips stretch their corners, Trim and Erase work on
+<li>Wires are ordinary objects otherwise: grips stretch their corners (an end dropped less than
+0.01" from a pin or another wire is put on it), Trim and Erase work on
 them (trimmed pieces stay wires), and they print and export (DXF) as polylines.</li>
 </ul>
 
@@ -964,7 +965,8 @@ the originals (the mirrored objects show while it asks). Text stays readable.</t
 three ends of a bus, say), then a base point and where it goes. Wire ends in the window move
 and their wires stay square (a corner slides along, or a jog is added); a line's ends and a
 polyline's corners in it move; an object wholly in it, and a symbol, text or circle whose
-insertion point or center is in it, moves whole (wires on a symbol's pins follow). One step.
+insertion point or center is in it, moves whole (wires on a symbol's pins follow). A wire
+end it leaves less than 0.01" from a pin or another wire is put on it. One step.
 </td></tr>
 <tr><td>Array</td><td>ARRAY, AR</td><td>Copies of the selected objects in rows and columns
 (R, to start: how many rows, how many columns, the distance between rows (up; negative: down)

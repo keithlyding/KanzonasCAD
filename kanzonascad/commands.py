@@ -1056,9 +1056,12 @@ class GripCmd(Command):
         if not got and self._run() is not None:
             _run_drag(self.ctx, self.ent, self._run(), p, say=True)
         if got:
+            from .wires import moved_ends, pull_on
+            ends = moved_ends(sheet, list(got.values()))
             with self.ctx.edit("Stretch") as ed:
                 for e in got.values():
                     ed.change(sheet, e)
+                pull_on(ed, sheet, ends)
         self.finish()
 
     def preview(self, p):
@@ -1147,11 +1150,14 @@ class StretchCmd(Command):
             self.base = self.last = p
             self.ctx.prompt("Second point")
         else:
-            got = stretched(self.ctx.sheet(), self.rect, p[0] - self.base[0],
-                            p[1] - self.base[1])
+            sheet = self.ctx.sheet()
+            got = stretched(sheet, self.rect, p[0] - self.base[0], p[1] - self.base[1])
             if got:
+                from .wires import moved_ends, pull_on
+                ends = moved_ends(sheet, got)
                 with self.ctx.edit(self.title) as ed:
-                    put_changed(ed, self.ctx.sheet(), got)
+                    put_changed(ed, sheet, got)
+                    pull_on(ed, sheet, ends)
             self.finish()
 
     def preview(self, p):

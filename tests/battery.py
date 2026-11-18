@@ -1655,9 +1655,24 @@ def random_editing(log, out, ops, seed, drawing=None):
                     # there, or on a pin it was taken to)
                     assert any(G.dist(r, want) < 1e-6 for y in s.wires()
                                for r in (y.points[0], y.points[-1])) or \
-                        wires.pins_on(s, want), "Stretch: an end at %s didn't go to %s" % (
+                        wires.pins_on(s, want) or pulled_on(want), \
+                        "Stretch: an end at %s didn't go to %s" % (
                             x.points[i], want)
         BC.CHECKED["stretch moves the ends in the window"] += 1
+
+    def pulled_on(want):
+        # (0.18.3, the owner's choice: an end left less than wires.PULL from a pin or another
+        # wire is put on it, the battery sweep, seed 1803; so an end may sit that near where
+        # it was sent, but only joined there: on a pin, or on another wire)
+        for y in s.wires():
+            for r in (y.points[0], y.points[-1]):
+                if G.dist(r, want) < wires.PULL and (wires.pins_on(s, r) or any(
+                        o.id != y.id and o.distance(r) <= wires.TOL
+                        for o in s.query((r[0] - 1e-6, r[1] - 1e-6, r[0] + 1e-6, r[1] + 1e-6))
+                        if isinstance(o, M.Wire))):
+                    BC.CHECKED["an end pulled on, joined"] += 1
+                    return True
+        return False
 
     def op_grips():
         # (0.18) several grips picked with Shift (the view's picked grips), one of them
@@ -1680,7 +1695,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         for (wid, i), g in start.items():
             want = (g[0] + d[0], g[1] + d[1])
             assert any(G.dist(r, want) < 1e-6 for y in s.wires() for r in y.points) or \
-                wires.pins_on(s, want), "a picked grip at %s didn't go to %s" % (g, want)
+                wires.pins_on(s, want) or pulled_on(want), \
+                "a picked grip at %s didn't go to %s" % (g, want)
         BC.CHECKED["picked grips move together"] += 1
 
     def op_lock_numbers():
