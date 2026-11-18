@@ -163,6 +163,19 @@ def _partition(groups):
     return sorted(sorted(g) for g in by.values())
 
 
+def _number_state(p, s, w):
+    """What numbering knew of wire w, for a failure's message."""
+    g = wirenums.group_of(p, s, w)
+    other = wirenums.taps(s, w)
+    return "taps %s; tap numbers %s; own %s, same %s; its group %s" % (
+        other.num if other is not None else None, wirenums.tap_mode(p), w.own_num, w.same_num,
+        [(x.id, x.num, x.num_lock) for _s, x in (g[1] if g else [])][:6])
+
+
+def _tap_pairs(sheet):
+    return sorted((k, tuple(q)) for k, q in sheet._wire_adj_split[2].items())
+
+
 def check_groups(sheet):
     """The wire groups kept up to date edit by edit are the ones worked out from scratch."""
     kept = _partition(wirenums._sheet_groups(sheet))
@@ -171,6 +184,15 @@ def check_groups(sheet):
     fresh = _partition(wirenums._sheet_groups(sheet))
     sheet._wire_groups, sheet._wire_adj = saved
     assert kept == fresh, "wire groups kept up to date differ from a fresh count"
+    # (taps numbered apart, 0.18.3: their groups and the taps found, kept edit by edit too)
+    kept = (_partition(wirenums._sheet_groups(sheet, True)), _tap_pairs(sheet))
+    saved = sheet._wire_groups_split, sheet._wire_adj_split
+    sheet._wire_groups_split = sheet._wire_adj_split = None
+    fresh = (_partition(wirenums._sheet_groups(sheet, True)), _tap_pairs(sheet))
+    sheet._wire_groups_split, sheet._wire_adj_split = saved
+    assert kept == fresh, "taps kept up to date differ from a fresh count: %s" % (
+        sorted(set(kept[1]) ^ set(fresh[1]))[:4],)
+    BC.CHECKED["taps kept up to date"] += 1
     kept = (wires.junctions(sheet), sorted(crossings.found(sheet)))
     saved = (sheet._junctions, sheet._junction_state, sheet._crossings,
              sheet._crossing_state)
@@ -1679,8 +1701,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         for w in target:
             got = s.entities.get(w.id)
             if got is not None and got.num:
-                assert got.num_lock == o["lock"], "wire %s %slocked after %s" % (
-                    got.num, "" if got.num_lock else "un", "Lock" if o["lock"] else "Unlock")
+                assert got.num_lock == o["lock"], "wire %s %slocked after %s (%s)" % (
+                    got.num, "" if got.num_lock else "un", "Lock" if o["lock"] else "Unlock",
+                    _number_state(p, s, got))
         BC.CHECKED["Lock numbers as asked"] += 1
 
     def op_number_bus():
@@ -1740,11 +1763,16 @@ def random_editing(log, out, ops, seed, drawing=None):
             ed.sheet_meta(s, number_order="across", number_from=None)
 
     def op_tap():
-        # (0.17.2: a wire drawn off the middle of another asks; Enter: its number, N: one of
-        # its own; worked out from the numbers after. On a wire of its own, just past the
-        # drawing: what the tap means is then known)
+        # (0.17.2: a wire drawn off the middle of another asks; 0.18.3: Enter numbers it as
+        # the project's tap numbers say (the same, the wire's with -1, or its own), S keeps
+        # the wire's number, N gives it one of its own; worked out from the numbers after. On
+        # a wire of its own, just past the drawing: what the tap means is then known)
         if not wirenums.enabled(p):
             return
+        if rnd.random() < 0.2:
+            with p.edit("tap numbers") as ed:
+                ed.project_settings({"tap_numbers": rnd.choice(["same", "suffix", "own"])})
+        mode = wirenums.tap_mode(p)
         k = s.k()
         o = clear_of_drawing(k)
         if o is None:
@@ -1762,16 +1790,27 @@ def random_editing(log, out, ops, seed, drawing=None):
             v.cmd.enter()
         asked = v.cmd is not None and v.cmd.tapped is not None
         assert asked, "a wire drawn off another's middle didn't ask about its number"
-        own = rnd.random() < 0.5
-        v.input_text("N" if own else "S")
+        said = rnd.choice(["N", "S", ""])
+        if said:
+            v.input_text(said)
+        else:
+            v.enter()
         finish()
         tap = [x for x in s.wires() if x.touches(to) and x.touches(m)]
         main = s.entities.get(w.id)
         assert len(tap) == 1 and main is not None, "the tap or the wire it taps is gone"
+        how = {"N": "own", "S": "same"}.get(said, mode)
         if main.num and tap[0].num:
-            assert (tap[0].num != main.num) == own, "a tap %s: %s, %s" % (
-                "with its own number" if own else "keeping the number", tap[0].num, main.num)
+            want = {"same": main.num, "suffix": main.num + ("a" if "-" in main.num else "-1")}
+            if how == "own":
+                assert tap[0].num != main.num, "a tap with its own number: %s, %s" % (
+                    tap[0].num, main.num)
+            else:
+                assert tap[0].num == want[how], "a tap (%s, %r typed) numbered %s off %s" % (
+                    mode, said, tap[0].num, main.num)
             BC.CHECKED["tap numbered as asked"] += 1
+            if how == "suffix":
+                BC.CHECKED["tap numbered -1 off the wire"] += 1
 
     def op_wire_size():
         # (0.18.2: Wire size: a wire clicked given a gauge of its own, or the layer's again;

@@ -772,12 +772,26 @@ side with a <b>short line</b> back to the wire (drawn, printed and exported with
 number you put with Wire number label stays where you put it. A wire longer than 6 inches on paper shows it near <b>both ends</b> instead (Project
 properties, Schematic: <b>Number near both ends of wires longer than</b>; Off for one).</p>
 <ul>
-<li><b>One number per connected wire</b>: wires joined end to end or in a T share it. A
-symbol's pins don't join wires, so the number changes through a device or a terminal.</li>
+<li><b>One number per connected wire</b>: wires joined end to end share it. A symbol's pins
+don't join wires, so the number changes through a device or a terminal.</li>
+<li><b>Taps</b> (a wire whose end is on the middle of another, with a dot: a drop off a bus) are
+numbered as Project properties, Schematic, <b>Wires tapped off a wire are numbered</b> says:
+<ul>
+<li><b>The wire's number with -1, -2, -3</b> (new projects): the drops off bus wire 2007 are
+2007-1, 2007-2, 2007-3 in the sheet's numbering order, those off 2008 are 2008-1, 2008-2...,
+and a tap off a tap takes a letter, 2007-1a, 2007-1b. The wires past the device a drop lands
+on are numbered as usual. Adding or removing a drop renumbers the others on that wire
+(unless their numbers are locked).</li>
+<li><b>The same number as the wire</b> (projects from before 0.18.3 keep this one): a tap is
+one wire with the wire it taps.</li>
+<li><b>A number of its own</b>: each tap takes the next free number of its page.</li>
+</ul>
+Changing it renumbers the taps in one step (Undo puts them back). A number you typed stays.</li>
 <li><b>Tapping off a wire</b>: draw a wire from (or to) the middle of another and the command line
-asks: <b>Enter</b> keeps that wire's number (they are one wire), <b>N</b> gives the tap a number
-of its own (it stays connected, with its dot; only the numbers differ). Double-click the tap
-to change it later: <b>A number of its own</b>.</li>
+asks: <b>Enter</b> numbers the tap as the project says, <b>S</b> gives it the same number as that
+wire whatever the project says (a branch of a ladder rung, say: a seal-in contact), <b>N</b>
+gives it a number of its own (it stays connected, with its dot; only the numbers differ).
+Double-click the tap to change it later: <b>Tapped off</b> has the same three choices.</li>
 <li><b>Wire number label</b> (WIRELABEL, WL; Modify menu, Schematic tab: Edit wires): click a
 wire anywhere along it and its number shows there too, as many places as you like. It always
 shows the wire's number as it is now, never a copy typed in, so renumbering changes every one.
@@ -793,7 +807,8 @@ on it, Trim), the part later in order takes a new number.</li>
 <b>Lock this number</b> ticks itself when you type one: numbering leaves a locked number alone.
 Untick it to keep the number for now but let numbering change it (Renumber sheet, a new page
 number, or a number that isn't of its sheet's page). Clear the number to let numbering give one
-back. For a tap, the same window has <b>A number of its own</b>.</li>
+back. For a tap, the same window has <b>Tapped off</b>: as the project numbers taps, the same
+number as the wire it taps, or a number of its own.</li>
 <li>Typing a number another wire already has asks whether this is a <b>cross-reference</b>:
 <b>Source</b> (this wire goes on to that one) or <b>Destination</b> (it comes from there) puts a
 pair of arrows with a new name on the open end of each wire (the end on nothing): a <b>Source

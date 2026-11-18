@@ -45,7 +45,10 @@ class WireNumberTest(unittest.TestCase):
         self.wire((1, 8), (5, 8))                       # upper rung
         self.wire((1, 4), (5, 4))                       # lower rung
         self.assertEqual((self.num_at(3, 8), self.num_at(3, 4)), ("6001", "6002"))
-        # a T joins a branch to the upper rung: same number
+        # a T joins a branch to the upper rung: same number (taps numbered as the wire's:
+        # -1, -2... in test_0183_tap_numbers)
+        with self.p.edit("taps") as ed:
+            ed.project_settings({"tap_numbers": "same"})
         self.wire((3, 8), (3, 6))
         self.assertEqual(self.num_at(3, 7), "6001")
         # a new wire drawn above both doesn't renumber what's there

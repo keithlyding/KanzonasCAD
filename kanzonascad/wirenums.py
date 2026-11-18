@@ -78,28 +78,48 @@ def _touching(sheet, p):
     return sheet.query_point(p, TOL)
 
 
-def _adjacent(sheet, w):
+def _adjacent(sheet, w, split_taps=False, tapped_out=None):
     """Ids of the wires w connects with: one whose middle or end w ends on, or one that ends
-    on w (its middle or end)."""
+    on w (its middle or end). split_taps: a wire tapped off another (its end on the other's
+    middle) is not joined to it (numbered apart: tap_numbers "suffix" or "own") unless it
+    keeps that wire's number (same_num). tapped_out: a dict given {(tap id, tapped id): the
+    tap's end there} of the taps kept apart, w's own and those off w."""
     def tapped(a, p, b):
         # (a's end p on b's middle, a with a number of its own: not one group for numbering,
         # the owner, 0.17.2)
-        return a.own_num and not any(abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
-                                     for q in (b.points[0], b.points[-1]))
+        return (a.own_num or (split_taps and not a.same_num)) and not any(
+            abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
+            for q in (b.points[0], b.points[-1]))
     out = set()
     for p in (w.points[0], w.points[-1]):
         for o in _touching(sheet, p):
-            if o is not w and o.kind == "wire" and o.touches(p, TOL) and not tapped(w, p, o):
-                out.add(o.id)
+            if o is not w and o.kind == "wire" and o.touches(p, TOL):
+                if not tapped(w, p, o):
+                    out.add(o.id)
+                elif tapped_out is not None:
+                    _note_tap(tapped_out, (w.id, o.id), p)
     x0, y0, x1, y1 = w.bbox()
     for o in sheet.query((x0 - TOL, y0 - TOL, x1 + TOL, y1 + TOL)):
-        if o is w or o.kind != "wire" or o.id in out:
+        if o is w or o.kind != "wire" or (o.id in out and tapped_out is None):
             continue
+        # (both ends looked at: one joined to w and the other tapping its middle is a tap
+        # too; the battery, 0.18.3, seed 37)
         for p in (o.points[0], o.points[-1]):
-            if w.touches(p, TOL) and not tapped(o, p, w):
-                out.add(o.id)
-                break
+            if w.touches(p, TOL):
+                if not tapped(o, p, w):
+                    out.add(o.id)
+                elif tapped_out is not None:
+                    _note_tap(tapped_out, (o.id, w.id), p)
     return out
+
+
+def _note_tap(found, k, p):
+    """A tap (tap id, tapped id) at p kept, at the lower of its ends when both tap: the same
+    whichever wire is looked at first."""
+    p = tuple(p)
+    q = found.get(k)
+    if q is None or p < q:
+        found[k] = p
 
 
 def taps(sheet, w):
@@ -114,39 +134,51 @@ def taps(sheet, w):
     return None
 
 
-def _sheet_groups(sheet):
+def tap_mode(project):
+    """How a wire tapped off another is numbered: "same", "suffix" or "own"."""
+    m = project.settings.get("tap_numbers", "same")
+    return m if m in ("same", "suffix", "own") else "same"
+
+
+def _sheet_groups(sheet, split_taps=False):
     """Wires of one sheet joined end to end / end to middle: {wire id: root id} (kept per
     sheet version). Which wires connect is kept per sheet and brought up to date for the
     wires an edit added, changed or removed only (entities are values: a changed wire is a
     new object), so an edit on a big sheet doesn't measure every wire again."""
-    got = getattr(sheet, "_wire_groups", None)
+    sfx = "_split" if split_taps else ""
+    got = getattr(sheet, "_wire_groups" + sfx, None)
     if got is not None and got[0] == sheet.version:
         return got[1]
     cur = {w.id: w for w in sheet.wires()}
-    st = getattr(sheet, "_wire_adj", None)
+    st = getattr(sheet, "_wire_adj" + sfx, None)
     if st is None:
-        adj = {i: _adjacent(sheet, w) for i, w in cur.items()}
+        pairs = {}
+        adj = {i: _adjacent(sheet, w, split_taps, pairs) for i, w in cur.items()}
     else:
-        old, adj = st
+        old, adj, pairs = st
         # (a wire whose points are the same, its number changed say, connects the same)
         stale = [i for i, w in cur.items() if old.get(i) is not w and
                  (old.get(i) is None or old[i].points != w.points or
-                  old[i].own_num != w.own_num)]
+                  old[i].own_num != w.own_num or old[i].same_num != w.same_num)]
         stale += [i for i in old if i not in cur]
         for i in stale:
             for n in adj.pop(i, ()):
                 ns = adj.get(n)
                 if ns is not None:
                     ns.discard(i)
+        if pairs and stale:
+            gone = set(stale)
+            for k in [k for k in pairs if k[0] in gone or k[1] in gone]:
+                del pairs[k]
         for i in stale:
             w = cur.get(i)
             if w is None:
                 continue
-            a = _adjacent(sheet, w)
+            a = _adjacent(sheet, w, split_taps, pairs)
             adj[i] = a
             for n in a:
                 adj.setdefault(n, set()).add(i)
-    sheet._wire_adj = (cur, adj)
+    setattr(sheet, "_wire_adj" + sfx, (cur, adj, pairs))
     out = {}
     for i in cur:                       # (each group named by its lowest wire id)
         if i in out:
@@ -163,7 +195,7 @@ def _sheet_groups(sheet):
         if root != i:
             for n in comp:
                 out[n] = root
-    sheet._wire_groups = (sheet.version, out)
+    setattr(sheet, "_wire_groups" + sfx, (sheet.version, out))
     return out
 
 
@@ -188,18 +220,19 @@ def wire_order(project, sheet):
     return "across"
 
 
-def _summary(sheet, how=None):
+def _summary(sheet, how=None, taps_mode="same"):
     """What numbering needs to know of one sheet, kept until the sheet changes: its local
     groups {root: (sort key, [wires], [numbers], locked number or None)}, its off-sheet
-    connectors' groups [(name, root)] and its distribution blocks [(input root, [output
-    roots])]."""
+    connectors' groups [(name, root)], its distribution blocks [(input root, [output
+    roots])] and its taps [(tapped root, tap root, sort key of where it taps)] (tap_numbers
+    "suffix": numbered from the wire they tap)."""
     how = how or sheet.number_order
     sig = (sheet.version, how, sheet.size, sheet.cols, sheet.rows,
-           sheet.col_start, sheet.row_start, sheet.number_from)
+           sheet.col_start, sheet.row_start, sheet.number_from, taps_mode)
     got = getattr(sheet, "_num_summary", None)
     if got is not None and got[0] == sig:
         return got[1]
-    roots = _sheet_groups(sheet)
+    roots = _sheet_groups(sheet, taps_mode != "same")
     zsig = sig[1:] + (sheet.scale, sheet.reserve) + (
         (sheet.version,) if how == "wires" else ())
     cache = getattr(sheet, "_num_keys", None)
@@ -240,7 +273,23 @@ def _summary(sheet, how=None):
         elif d.wiring == "distribution" and d.pins and d.pins[0]["name"] in at:
             dists.append((at[d.pins[0]["name"]],
                           [at[p["name"]] for p in d.pins[1:] if p["name"] in at]))
-    out = (local, links, dists)
+    tapl = []
+    if taps_mode == "suffix":
+        # (the taps kept apart, found with the wires' connections: only the wires an edit
+        # touched are looked at again; one per tap, off the lowest id it taps)
+        ws = sheet.entities
+        one = {}
+        for (a, b), q in sheet._wire_adj_split[2].items():
+            if a in roots and b in roots and (a not in one or b < one[a][0]):
+                one[a] = (b, q)
+        for a, (b, q) in one.items():
+            if ws[a].own_num or roots[a] == roots[b]:
+                continue                # (a number of its own, asked for: not from the wire)
+            k = known.get(q)
+            if k is None:
+                k = known[q] = key(q)
+            tapl.append((roots[b], roots[a], k))
+    out = (local, links, dists, tapl)
     sheet._num_summary = (sig, out)
     return out
 
@@ -253,19 +302,21 @@ def _count(num):
 def groups(project):
     """({group key: [(sheet, wire)...]}, distribution links [(input group, [output groups in
     pin order])]) of the whole project."""
-    gs, _info, dist = _assemble(project)
+    gs, _info, dist, _taps = _assemble(project)
     return {k: [(s, w) for s, ws in nodes for w in ws] for k, nodes in gs.items()}, dist
 
 
 def _assemble(project):
     """Local groups joined across sheets by off-sheet connectors: {group key: [(sheet,
-    [wires])]}, {group key: [home order, page sheet, numbers, locked]}, distribution links."""
+    [wires])]}, {group key: [home order, page sheet, numbers, locked]}, distribution links,
+    taps [(tapped group, tap group, (sheet index, sort key))]."""
     u = _Union()
     names = {}
     sums = []
+    mode = tap_mode(project)
     for i, s in enumerate(project.sheets):
-        local, links, dists = _summary(s, wire_order(project, s))
-        sums.append((i, s, local, dists))
+        local, links, dists, tapl = _summary(s, wire_order(project, s), mode)
+        sums.append((i, s, local, dists, tapl))
         for name, r in links:
             names.setdefault(name, []).append((s.id, r))
     for nodes in names.values():
@@ -273,7 +324,7 @@ def _assemble(project):
             u.join(nodes[0], n)
     find = (lambda n: u.find(n) if n in u.up else n)
     gs, info = {}, {}
-    for i, s, local, _d in sums:
+    for i, s, local, _d, _t in sums:
         for r, (k, ws, nums, locked) in local.items():
             g = find((s.id, r))
             gs.setdefault(g, []).append((s, ws))
@@ -286,11 +337,13 @@ def _assemble(project):
                     cur[0], cur[1] = order, s
                 cur[2] = sorted(set(cur[2]) | set(nums), key=_count)
                 cur[3] = cur[3] or locked
-    dist = []
-    for _i, s, _local, dists in sums:
+    dist, tapped = [], []
+    for i, s, _local, dists, tapl in sums:
         for a, bs in dists:
             dist.append((find((s.id, a)), [find((s.id, b)) for b in bs]))
-    return gs, info, dist
+        for a, b, k in tapl:
+            tapped.append((find((s.id, a)), find((s.id, b)), (i, k)))
+    return gs, info, dist, tapped
 
 
 # ---- numbering -------------------------------------------------------------------------------
@@ -300,7 +353,7 @@ def sync(ed, project, renumber=None):
     unlocked groups are numbered again from 001."""
     if not enabled(project):
         return
-    gs, info, dist = _assemble(project)
+    gs, info, dist, tapped = _assemble(project)
     again = [] if renumber is None else [renumber] if not isinstance(renumber, (list, tuple,
                                                                                set)) \
         else list(renumber)
@@ -320,7 +373,17 @@ def sync(ed, project, renumber=None):
     for src, outs in dist:
         for i, o in enumerate(outs):
             if o != src:
-                outputs.setdefault(o, (src, i))
+                outputs.setdefault(o, (src, letters(i)))
+    # taps (tap_numbers "suffix"): the tapped wire's number with -1, -2... in the numbering
+    # order of where they tap; a tap off a tap, a, b...
+    by_src = {}
+    for src, o, k in sorted(tapped, key=lambda t: t[2]):
+        if o != src and o not in outputs and o not in by_src.get(src, ()):
+            by_src.setdefault(src, []).append(o)
+    for src, outs in by_src.items():
+        for i, o in enumerate(outs):
+            outputs.setdefault(o, (src, i, "tap"))
+    _break_loops(outputs, info)
     want = dict(fixed)
     # groups keep a number of theirs when it's right (of their page, not taken earlier)
     todo = []
@@ -351,12 +414,17 @@ def sync(ed, project, renumber=None):
     # distribution outputs: the input's number with a letter (chains follow, in order)
     for _ in range(len(outputs) + 1):
         changed = False
-        for o, (src, i) in outputs.items():
+        for o, how in outputs.items():
             if o in fixed:
                 continue
+            src = how[0]
             base = want.get(src)
             if base:
-                v = base + letters(i)
+                if len(how) == 3:               # (a tap: -1, -2...; off a tap: a, b...)
+                    v = base + (letters(how[1]).lower() if "-" in base
+                                else "-%d" % (how[1] + 1))
+                else:
+                    v = base + how[1]
                 if want.get(o) != v:
                     want[o] = v
                     changed = True
@@ -374,6 +442,23 @@ def sync(ed, project, renumber=None):
             for w in ws:
                 if w.num != num:
                     ed.change(s, w.copy(num=num, num_lock=w.num_lock and g in fixed))
+
+
+def _break_loops(outputs, info):
+    """Outputs whose numbers come from each other round a loop (two wires each tapping the
+    other's middle) would have none: the first of the loop in numbering order is numbered as
+    a wire of its own (the battery, 0.18.3, seed 37)."""
+    done = set()
+    for o in sorted(outputs, key=lambda g: info[g][0]):
+        path, x = [], o
+        while x in outputs and x not in done and x not in path:
+            path.append(x)
+            x = outputs[x][0]
+        if x in path:
+            loop = path[path.index(x):]
+            first = min(loop, key=lambda g: info[g][0])
+            del outputs[first]
+        done.update(path)
 
 
 def set_number(ed, project, sheet, wire, num, lock=True):

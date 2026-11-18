@@ -78,7 +78,7 @@ def runs(project):
     [{"num", "lands": {location: [landing...]}}]}], in the order the locations first come in
     the project; and how many wires land in one location and on a sheet or device with none
     (they may need a location to show)."""
-    gs, info, _dist = wirenums._assemble(project)
+    gs, info, _dist, _taps = wirenums._assemble(project)
     order = {}
     for s in project.sheets:
         if s.location and s.location not in order:

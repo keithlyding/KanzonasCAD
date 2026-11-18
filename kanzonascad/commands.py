@@ -1299,7 +1299,7 @@ class WireCmd(Command):
 
     def point(self, p):
         if self.tapped is not None:
-            self.ctx.message("Enter keeps the wire's number, or N for a new one")
+            self.ctx.message(self._tap_choices())
             return
         from .wires import connects_at
         if not self.points:
@@ -1323,12 +1323,19 @@ class WireCmd(Command):
         k = s.strip().upper()
         if self.tapped is not None:
             if k in ("N", "S"):
+                from . import wirenums
                 sheet = self.ctx.sheet()
                 w = sheet.entities.get(self.tapped)
-                if k == "N" and w is not None:
+                mode = wirenums.tap_mode(self.ctx.project)
+                if w is not None and k == "N" and mode != "own":
                     with self.ctx.edit("Wire number of its own") as ed:
                         ed.change(sheet, w.copy(own_num=True))
                     self.ctx.message("The tap takes a number of its own")
+                elif w is not None and k == "S" and mode != "same":
+                    # (the wire's number whatever the project's tap numbers: a ladder branch)
+                    with self.ctx.edit("Same wire number") as ed:
+                        ed.change(sheet, w.copy(same_num=True))
+                    self.ctx.message("The tap keeps the number of the wire it taps")
                 self.finish()
                 return True
             return False
@@ -1377,11 +1384,21 @@ class WireCmd(Command):
                 if other is not None:
                     self.tapped = e.id
                     self.points = []
-                    self.ctx.prompt("Tapped off wire %s: Enter keeps its number, or N for a new "
-                                    "number" % (other.num or "?"),
+                    self.ctx.prompt("Tapped off wire %s: %s" % (other.num or "?",
+                                                              self._tap_choices()),
                                     [("Same number", "S"), ("New number", "N")])
                     return True
         return False
+
+    def _tap_choices(self):
+        """What Enter, S and N do at a tap: Enter, the project's tap numbers (0.18.3)."""
+        from . import wirenums
+        mode = wirenums.tap_mode(self.ctx.project)
+        if mode == "suffix":
+            return "Enter gives it the wire's number with -1, -2..., S the same number, N a new one"
+        if mode == "own":
+            return "Enter gives it a new number, S the wire's number"
+        return "Enter keeps its number, or N for a new number"
 
     def enter(self):
         if self.tapped is not None:

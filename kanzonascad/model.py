@@ -64,6 +64,12 @@ DEFAULT_SETTINGS = {
     "duct_hatch": False,        # wire duct drawn with a light hatch (Panel settings)
     "xref_height": 0.065,       # cross-reference text (0.08 before 0.18: "slightly smaller")
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
+    # a wire tapped off another (its end on the other's middle): "same" its number, "suffix"
+    # its number with -1, -2... in the numbering order (a tap off a tap: a, b...), "own" a
+    # number of its own (the owner, 0.18.3: "all three wires tapping off the bus are still
+    # the same wire number ... Those need to change where they tap off"; asked: -1, -2 per
+    # tap in order, on to start; a project from before keeps "same")
+    "tap_numbers": "suffix",
     "wire_number_height": 0.08,
     "dim_height": 0.1,          # dimension text, paper inches
     "tb_position": "corner",    # the title block: in the lower right corner, or a strip down
@@ -371,10 +377,10 @@ class Wire(Polyline):
     wires. What it connects is worked out from where its ends are (wires.py), never stored, so
     it can't go stale; moving a symbol drags the ends that sat on its pins."""
     kind = "wire"
-    __slots__ = ("num", "num_lock", "own_num", "labels", "awg")
+    __slots__ = ("num", "num_lock", "own_num", "labels", "awg", "same_num")
 
     def __init__(self, points, closed=False, num=None, num_lock=False, own_num=False,
-                 labels=(), awg="", **kw):
+                 labels=(), awg="", same_num=False, **kw):
         kw.setdefault("layer", "WIRES")
         super().__init__(points, False, **kw)
         # its wire number (every wire of a connected group has the same: wirenums.py) and
@@ -385,6 +391,9 @@ class Wire(Polyline):
         # not one group with it for numbering (the owner, 0.17.2: "when I tap off a wire, I
         # can either change the wire number or leave as is")
         self.own_num = bool(own_num)
+        # a tap that keeps the number of the wire it taps whatever the project's tap numbers
+        # (0.18.3: S at the tap's question; a branch of a ladder rung, say)
+        self.same_num = bool(same_num) and not self.own_num
         # its number shown again at these distances along it from its first point (Wire
         # number label: placed by hand; the number they show is never stored, so never stale)
         self.labels = sorted(round(float(t), 6) for t in (labels or ()) if float(t) >= 0)
@@ -400,6 +409,8 @@ class Wire(Polyline):
                 d["num_lock"] = True
         if self.own_num:
             d["own_num"] = True
+        if self.same_num:
+            d["same_num"] = True
         if self.labels:
             d["labels"] = list(self.labels)
         if self.awg:
@@ -410,6 +421,7 @@ class Wire(Polyline):
     def _from(cls, d):
         return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
                    d.get("own_num", False), d.get("labels") or (), d.get("awg", ""),
+                   d.get("same_num", False),
                    layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
 
     def length(self):
@@ -3450,6 +3462,8 @@ class Project:
         for bd in d.get("blocks", []) or []:
             b = BlockDef.from_dict(bd)
             p.blocks[b.name] = b
+        if "tap_numbers" not in (d.get("settings") or {}):
+            p.settings["tap_numbers"] = "same"      # (from before 0.18.3: numbers as they were)
         old_labels = "fp_label_height" not in (d.get("settings") or {})
         ratio = DEFAULT_SETTINGS["fp_label_height"] / float(p.settings.get("tag_height") or 0.1)
         for sd in d.get("sheets", []):

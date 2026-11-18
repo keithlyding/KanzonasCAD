@@ -359,6 +359,17 @@ def project_properties(parent, project, tab=0):
     worder.setToolTip("Unticked, wire numbers go across and down even on a sheet numbered along "
                       "the wires; a sheet can choose otherwise in its Sheet properties")
     form.addRow("", worder)
+    taps = QComboBox()
+    taps.setObjectName("tap_numbers")
+    for key, label in (("suffix", "The wire's number with -1, -2, -3 (2007-1, 2007-2...)"),
+                       ("same", "The same number as the wire"),
+                       ("own", "A number of its own")):
+        taps.addItem(label, key)
+    taps.setCurrentIndex(max(taps.findData(st.get("tap_numbers", "same")), 0))
+    taps.setToolTip("A wire tapped off another (its end on the other's middle, a dot): a drop "
+                    "off a bus. With -1, -2..., in the numbering order; a tap off a tap takes "
+                    "a, b... (2007-1a). A number typed on a wire stays.")
+    form.addRow("Wires tapped off a wire are numbered", taps)
     cross = QComboBox()
     for key, label in (("plain", "Plain: the wires just cross"),
                        ("gap", "Gap: one wire is broken where it crosses"),
@@ -500,6 +511,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_number_height"] = num_h.value()
     settings["wire_label_ends"] = ends.value()
     settings["wire_order_tags"] = worder.isChecked()
+    settings["tap_numbers"] = taps.currentData()
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
@@ -2023,11 +2035,12 @@ def pdf_import_dialog(parent, name, pages, k):
     return {"page": page.value(), "scale": scale.value(), "filled": filled.isChecked()}
 
 
-def wire_number_dialog(parent, num, tap_of=None, own=False, locked=False):
+def wire_number_dialog(parent, num, tap_of=None, own="", locked=False, mode="same"):
     """A wire's number (empty: numbering gives one), whether it is locked (the owner, 0.17.5:
     "should there be a checkbox to check locked or unlocked?": ticked by itself when a number
-    is typed), and, for a wire tapped off another (tap_of: that wire's number), whether it has
-    a number of its own. Returns (number, own, locked) or None."""
+    is typed), and, for a wire tapped off another (tap_of: that wire's number), how it is
+    numbered (own: "" as the project's tap numbers say (mode), "same" that wire's number,
+    "own" a number of its own). Returns (number, own, locked) or None."""
     dlg = QDialog(parent)
     dlg.setWindowTitle("Wire number")
     form = QFormLayout(dlg)
@@ -2045,15 +2058,21 @@ def wire_number_dialog(parent, num, tap_of=None, own=False, locked=False):
     form.addRow("", lock)
     box = None
     if tap_of is not None:
-        box = QCheckBox("A number of its own (not %s, the wire it taps off)" % (tap_of or "?"))
-        box.setChecked(own)
+        t = tap_of or "?"
+        box = QComboBox()
         box.setObjectName("own_num")
-        form.addRow("", box)
+        said = {"suffix": "%s with -1, -2... (%s-1)" % (t, t), "own": "a number of its own",
+                "same": "the same number, %s" % t}
+        box.addItem("As the project numbers taps: %s" % said.get(mode, said["same"]), "")
+        box.addItem("The same number as the wire it taps (%s)" % t, "same")
+        box.addItem("A number of its own (not %s)" % t, "own")
+        box.setCurrentIndex(max(box.findData(own or ""), 0))
+        form.addRow("Tapped off %s" % t, box)
     form.addRow(_buttons(dlg))
     if dlg.exec() != QDialog.Accepted:
         return None
     text = edit.text().strip().upper()
-    return text, (box.isChecked() if box is not None else own), bool(text) and lock.isChecked()
+    return text, (box.currentData() if box is not None else own), bool(text) and lock.isChecked()
 
 
 def _sheet_list(project, sheet, some):

@@ -2822,18 +2822,20 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         cur = v.sheet().entities.get(wire.id, wire)
         other = wirenums.taps(v.sheet(), cur)
+        was = "own" if cur.own_num else "same" if cur.same_num else ""
         got = self.ask_wire_number(cur.num, other.num if other is not None else None,
-                                   cur.own_num, locked=cur.num_lock) \
-            if other is not None or cur.own_num else \
+                                   was, locked=cur.num_lock) \
+            if other is not None or cur.own_num or cur.same_num else \
             self.ask_wire_number(cur.num, locked=cur.num_lock)
         if got is None:
             return
         num, own = got[:2]
+        own = "own" if own is True else "" if own is False else (own or "")
         lock = got[2] if len(got) > 2 else (cur.num_lock if num == (cur.num or "") else
                                             bool(num))
         same = num == (cur.num or "") and lock == cur.num_lock and \
-            (cur.num_lock or not num or own != cur.own_num)
-        if same and own == cur.own_num:
+            (cur.num_lock or not num or own != was)
+        if same and own == was:
             return
         go_same = False
         if num and num != (cur.num or ""):
@@ -2848,10 +2850,11 @@ class MainWindow(BlockEditing, QMainWindow):
                 self._say("Wire %s locked: another wire has that number, and numbering "
                           "would change an unlocked one" % num)
         with v.project.edit("Wire number") as ed:
-            if own != cur.own_num:
+            if own != was:
                 # (its own number where it taps another, or back to that wire's: numbering
                 # gives it one first, then a number typed takes over)
-                cur = cur.copy(own_num=own, num=None, num_lock=False)
+                cur = cur.copy(own_num=own == "own", same_num=own == "same", num=None,
+                               num_lock=False)
                 ed.change(v.sheet(), cur)
                 wirenums.sync(ed, v.project)
                 cur = v.sheet().entities[cur.id]
@@ -2919,10 +2922,14 @@ class MainWindow(BlockEditing, QMainWindow):
         from .dialogs import cross_reference_question
         return cross_reference_question(self, num, where)
 
-    def ask_wire_number(self, num, tap_of=None, own=False, locked=False):
-        """The Wire number window: (number, own, locked) or None (a test replaces it)."""
+    def ask_wire_number(self, num, tap_of=None, own="", locked=False):
+        """The Wire number window: (number, own: "", "same" or "own", locked) or None (a test
+        replaces it)."""
+        from . import wirenums
         from .dialogs import wire_number_dialog
-        return wire_number_dialog(self, num, tap_of, own, locked)
+        v = self.view()
+        mode = wirenums.tap_mode(v.project) if v is not None else "same"
+        return wire_number_dialog(self, num, tap_of, own, locked, mode)
 
     def _toggle_title_block(self, on):
         v = self.view()

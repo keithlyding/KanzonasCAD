@@ -59,6 +59,14 @@ nobody understands).
   BRN, YEL, WHT neutral, GRN ground, 12 AWG; 120 V RED, BLK, WHT neutral, 14 AWG; 24 VDC BLU
   and a BLU/WHT striped common, 16 AWG; Ethernet green, no size); a size per wire with the
   layer's as default (Wire size); two-color wire layers drawn striped.
+- 0.18.3 (owner, Nov 2026: "all three wires tapping off the bus are still the same wire number
+  ... Those need to change where they tap off"): taps numbered from the wire they tap, -1, -2,
+  -3 in the numbering order, a tap off a tap a, b, c (2007-1a); a project setting (that, the
+  same number, or a number of its own), on for new projects, projects from before keep "same";
+  per tap, S keeps the wire's number, N its own. Tracking picks up midpoints and centers.
+  Still to come: power distribution block outputs with -1, -2 per phase (they keep letters
+  today), AutomationDirect T1/T1E duct sizes (actual sizes from AD's spec sheets, waiting on
+  the owner's look at the table).
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,
