@@ -20,6 +20,9 @@ build fails without them.
   it later.
 
 **Fixed**
+- A wire crossing's loop (or gap) is drawn in the colors of its own wires, stripes too, and
+  exported on the jumping wire's layer. Before, it kept the default wire layer's color after
+  the wires were moved to another layer.
 - The text of a source or destination arrow turns with the arrow: on a wire running up and
   down it reads up, in line with the wire past the arrow's tip, instead of lying level.
 - Tracking (Extension) now picks up a midpoint, a center or a quadrant you hover, as AutoCAD

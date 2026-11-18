@@ -507,32 +507,58 @@ class SheetRenderer:
         jumps = crossings.jumps(self.project, self.sheet)
         if not jumps:
             return
+        from . import wirelayers
         r = crossings.size(self.sheet)
-        wire = self.pal.color(self.project, M.Wire([(0, 0), (1, 0)]))
+        default = M.Wire([(0, 0), (1, 0)])
+        ents, layers = self.sheet.entities, self.project.layers
         cosmetic = pen_width == 0
         wipe = QPen(self.pal.paper, 4 if cosmetic else pen_width * 4)
         wipe.setCosmetic(cosmetic)
         wipe.setCapStyle(Qt.FlatCap)
-        ink = QPen(wire, pen_width)
-        ink.setCosmetic(cosmetic)
-        ink.setCapStyle(Qt.FlatCap)
+
+        made = {}
+
+        def pens(wid):
+            # (each piece as its own wire draws: its layer's color, or its own, and a
+            # two-color wire's stripes over it; made once per layer and color a paint)
+            w = ents.get(wid, default) if wid is not None else default
+            got = made.get((w.layer, w.color))
+            if got is None:
+                got = made[(w.layer, w.color)] = make(w)
+            return got
+
+        def make(w):
+            ink = QPen(self.pal.color(self.project, w), pen_width)
+            ink.setCosmetic(cosmetic)
+            ink.setCapStyle(Qt.FlatCap)
+            out = [ink]
+            lay = layers.get(w.layer)
+            c = wirelayers.stripe(lay.wire_color) if lay is not None and not \
+                self.pal.mono else None
+            if c:
+                out.append(stripe_pen(QColor(c), pen_width))
+            return out
         painter.setBrush(Qt.NoBrush)
-        for p, u, cu, st in jumps:
+        for (p, u, cu, st), (jid, cid) in zip(jumps, crossings.jump_wires(self.project,
+                                                                          self.sheet)):
             a = QPointF(p[0] - u[0] * r, p[1] - u[1] * r)
             b = QPointF(p[0] + u[0] * r, p[1] + u[1] * r)
             painter.setPen(wipe)
             painter.drawLine(a, b)
-            painter.setPen(ink)
             if cu is not None:
                 k = r * 1.6
-                painter.drawLine(QPointF(p[0] - cu[0] * k, p[1] - cu[1] * k),
-                                 QPointF(p[0] + cu[0] * k, p[1] + cu[1] * k))
+                for pen in pens(cid):
+                    painter.setPen(pen)
+                    painter.drawLine(QPointF(p[0] - cu[0] * k, p[1] - cu[1] * k),
+                                     QPointF(p[0] + cu[0] * k, p[1] + cu[1] * k))
             if st == "loop":
                 pts = crossings.loop_points(p, u, r)
                 path = QPainterPath(QPointF(*pts[0]))
                 for q in pts[1:]:
                     path.lineTo(QPointF(*q))
-                painter.drawPath(path)
+                for pen in pens(jid):
+                    painter.setPen(pen)
+                    painter.drawPath(path)
 
 
 DOT_RADIUS = 0.03
