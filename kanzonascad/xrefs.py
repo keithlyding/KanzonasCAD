@@ -110,12 +110,14 @@ def live_all(project):
                 num = number_at(s, c)
                 if num:
                     text = "%s / %s" % (num, text)
-                x, y = _past_arrow(c, text, hh)
-                out[s.id].append((round(x, 6), round(y, 6), text, hh))
-                continue
-            bb = c.bbox()
-            out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - hh, 6),
-                              text, hh))
+            # (outside the connector, away from its wire, whichever way it is turned: the
+            # owner, 0.18, "Wire cross references need to always be outside the connector,
+            # away from the wire")
+            got = _outside(s, c, text, hh)
+            if got is None:
+                bb = c.bbox()
+                got = ((bb[0] + bb[2]) / 2.0, bb[1] - GAP - hh)
+            out[s.id].append((round(got[0], 6), round(got[1], 6), text, hh))
     for s, c in contacts:
         if tags.numbered(c):
             continue                    # (a terminal shows its number, not where its strip is)
@@ -136,21 +138,54 @@ def live_all(project):
     return out
 
 
-ARROW_LENGTH = 0.3125      # (a source or destination arrow's length from its pin, paper inches)
-
-
-def _past_arrow(c, text, hh):
-    """Where an arrow's text is centered: past its far end along the way it points out of its
-    wire, beside the end when it lies across, under or over it when it lies up and down."""
+def _outside(sheet, c, text, hh):
+    """Where a connector's (or arrow's) text is centered: past the connector's far side from
+    its wire, the way the wire comes into its pin and on out (beside it when the wire runs
+    across, under or over it when the wire runs up and down); None when no wire ends on it."""
+    from .wires import TOL
+    from .geometry import segment_hits_rect
     pin = c.pin_points()[0][1]
-    a = math.radians(c.angle)
-    d = (math.cos(a), math.sin(a))
-    reach = ARROW_LENGTH * c.scale + 0.4 * hh
-    fx, fy = pin[0] + d[0] * reach, pin[1] + d[1] * reach
+    d = wire = None
+    for w in sheet.query_point(pin, TOL):
+        if getattr(w, "kind", "") != "wire":
+            continue
+        for i, j in ((0, 1), (-1, -2)):
+            q, r = w.points[i], w.points[j]
+            if abs(q[0] - pin[0]) <= TOL and abs(q[1] - pin[1]) <= TOL:
+                L = math.hypot(q[0] - r[0], q[1] - r[1])
+                if L > TOL:
+                    d = ((q[0] - r[0]) / L, (q[1] - r[1]) / L)
+                    wire = w
+        if d is not None:
+            break
+    if d is None:
+        return None
+    bb = c.bbox()
+    gap = 0.4 * hh
+    tw = text_width(text, hh)
+    mid = (bb[0] + bb[2]) / 2.0
+    # (each spot with the way it moves out from the connector)
+    right = ((bb[2] + gap + tw / 2.0, pin[1] - 0.35 * hh), (1.0, 0.0))
+    left = ((bb[0] - gap - tw / 2.0, pin[1] - 0.35 * hh), (-1.0, 0.0))
+    over = ((mid, bb[3] + gap), (0.0, 1.0))
+    under = ((mid, bb[1] - gap - hh), (0.0, -1.0))
     if abs(d[0]) >= abs(d[1]):
-        w = text_width(text, hh)
-        return fx + (w / 2.0 if d[0] > 0 else -w / 2.0), pin[1] - 0.35 * hh
-    return pin[0], (fy - hh if d[1] < 0 else fy + 0.2 * hh)
+        # the wire comes in across: past its far end first, then over or under it
+        spots = [right if d[0] > 0 else left, over, under]
+    else:
+        spots = [((pin[0], over[0][1]), over[1]) if d[1] > 0 else
+                 ((pin[0], under[0][1]), under[1]), right, left]
+    # (the first of them clear of its own wire, a little farther out where the wire passes
+    # close: a wire that comes back round past the connector, the long battery, seed 3152,
+    # and one wrapped round three sides of it, seed 3263)
+    for step in (0.0, 1.5, 3.0, 4.5, 6.0):
+        for (x, y), (ux, uy) in spots:
+            q = (x + ux * step * hh, y + uy * step * hh)
+            tb = Text(q, text, hh, 0.0, "center").bbox()
+            if not any(segment_hits_rect(a, b, tb)
+                       for a, b in zip(wire.points, wire.points[1:])):
+                return q
+    return spots[0][0]
 
 
 def live(project, sheet):

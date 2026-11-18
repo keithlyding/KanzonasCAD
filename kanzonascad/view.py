@@ -61,12 +61,19 @@ GLOW_LIMIT = 6000           # path elements past which the hover glow is drawn p
 def _local_parts(e, rect):
     """The plain entities of e whose box touches rect: e itself, or, for a block reference,
     the lines, arcs and texts of its drawing that come into rect (its drawing in sheet
-    coordinates is kept on the reference)."""
-    if not isinstance(e, M.Insert):
+    coordinates is kept on the reference); for wire duct, DIN rail or a dimension, the lines
+    it is drawn with (Intersection where a line crosses a duct's edge: the owner, 0.18, "the
+    linear measurement not being able to select an intersection is killing me"; as one object
+    they had no pieces to cross)."""
+    if isinstance(e, M.Composite):
+        sub = [w for w in e.parts() if not isinstance(w, M.Text)]
+    elif isinstance(e, M.Insert):
+        sub = e.world_entities()
+    else:
         return [e]
     x0, y0, x1, y1 = rect
     out = []
-    for w in e.world_entities():
+    for w in sub:
         b = w.bbox()
         if b[0] <= x1 and b[2] >= x0 and b[1] <= y1 and b[3] >= y0:
             out.append(w)
@@ -159,6 +166,7 @@ class CadView(QWidget):
         self._hover = None
         self._hover_parts = None         # (what a picking command would act on: Trim)
         self._hot_grip = None
+        self.picked_grips = set()       # {(entity id, grip index)}: grips picked with Shift
         self._picture = None            # (key, QPixmap): the drawing as last drawn
         self._lit = None                # (key, QPixmap): that, with the selection lit
         self._shift_cache = None        # (key, objects, paths): what a Move preview slides
@@ -193,6 +201,7 @@ class CadView(QWidget):
 
     def set_selection(self, ids):
         self.sel = set(ids)
+        self.picked_grips = {g for g in getattr(self, "picked_grips", set()) if g[0] in self.sel}
         self._sel_cache = None
         self.selectionChanged.emit()
         self.update()
@@ -288,6 +297,7 @@ class CadView(QWidget):
             self.messaged.emit("*Cancel*")
         self._drag = None
         self._window = None
+        self.picked_grips = set()
         self._preview = set()
         self.update()
 
@@ -347,7 +357,8 @@ class CadView(QWidget):
     def show_sheet(self, sheet_id):
         if sheet_id == self.sheet_id:
             return
-        self.cancel()
+        if not getattr(self.cmd, "across_sheets", False):
+            self.cancel()                # (Source/destination arrows goes on: its other end)
         self.sel = set()
         self._sel_cache = None
         self.sheet_id = sheet_id
@@ -583,7 +594,7 @@ class CadView(QWidget):
         # maker's drawing: thousands of lines) gives only its own lines that come near, not all
         # of them (every piece of every block nearby against every other, on every mouse move,
         # froze the program for seconds)
-        near = []
+        near, owner = [], []
         for e in cands:
             parts = _local_parts(e, rect)
             if isinstance(e, M.Run):
@@ -593,12 +604,17 @@ class CadView(QWidget):
             for part in parts:
                 if part.distance(p) <= r:
                     near.append(part)
+                    # (a duct's, rail's or dimension's own lines don't cross each other for
+                    # Intersection: a duct's slots meet its edges every quarter inch)
+                    owner.append(e.id if isinstance(e, M.Composite) else None)
             if len(near) >= 40:
                 break
         near = near[:40]
         if "int" in modes:
             for i in range(len(near)):
                 for j in range(i + 1, len(near)):
+                    if owner[i] is not None and owner[i] == owner[j]:
+                        continue
                     for q in entity_intersections(near[i], near[j]):
                         offer("int", q)
         base = self.cmd.base if self.cmd is not None else None
@@ -904,7 +920,10 @@ class CadView(QWidget):
         rail whose end is near (railsnap.magnet). With the object snaps off (F3), as given.
         What it did is kept for the marker (_paint_rail)."""
         self._rail_hit = None
-        if not self.osnap_on:
+        if not self.osnap_on or self.snap is not None:
+            # (a point snapped to, as an intersection on a duct's edge, is where it goes: the
+            # owner, 0.18, copying a footprint at a duct's intersection, "the grabbed location
+            # changes on the new device")
             return dx, dy
         dx, dy, hit = railsnap.magnet(self.sheet(), ents, dx, dy,
                                       self.RAIL_PIXELS / max(self.scale, 1e-9), copy)
@@ -1028,7 +1047,17 @@ class CadView(QWidget):
         if cmd is None:
             g = self.grip_at(pos)
             if g is not None:
-                self.run(C.GripCmd, g[0], g[1])
+                key = (g[0].id, g[1])
+                if e.modifiers() & Qt.ShiftModifier:
+                    # (Shift: picks the grip, or puts it back; picked ones move together)
+                    self.picked_grips ^= {key}
+                    self.update()
+                    return
+                ents = self.sheet().entities
+                others = [(ents[i], k) for i, k in self.picked_grips
+                          if i in ents and key in self.picked_grips]
+                self.picked_grips = set()
+                self.run(C.GripCmd, g[0], g[1], others)
                 return
         ent = self.pick_entity(p)
         if ent is not None:
@@ -1606,7 +1635,8 @@ class CadView(QWidget):
                 continue
             for k, g in enumerate(e.grips()):
                 q = self.to_screen(g)
-                is_hot = hot is not None and hot[0].id == e.id and hot[1] == k
+                is_hot = (hot is not None and hot[0].id == e.id and hot[1] == k) or \
+                    (e.id, k) in self.picked_grips
                 p.setBrush(QColor("#ff3030") if is_hot else QColor("#2f7bff"))
                 p.drawRect(QRectF(q.x() - GRIP / 2, q.y() - GRIP / 2, GRIP, GRIP))
 

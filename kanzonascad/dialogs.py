@@ -148,6 +148,17 @@ def sheet_properties(parent, project, sheet):
     form.addRow("Scale", scale)
     form.addRow("Rotation", orient)
     form.addRow("Numbering order", order)
+    worder = QComboBox()
+    worder.setObjectName("wire_order")
+    follow = bool(project.settings.get("wire_order_tags", True))
+    worder.addItem("As the project (%s)" % ("the tags' order" if follow else
+                                            "across, then down"), None)
+    worder.addItem("The tags' order (above)", True)
+    worder.addItem("Across, then down", False)
+    worder.setCurrentIndex(max(worder.findData(sheet.wire_order_tags), 0))
+    worder.setToolTip("The order wire numbers go in on this sheet: the tags' numbering order "
+                      "(along the wires too), or across and down")
+    form.addRow("Wire numbers in", worder)
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
     form.addRow(_gray("The page number starts each wire number (page 6: 6001, 6002 ...) and "
@@ -184,7 +195,8 @@ def sheet_properties(parent, project, sheet):
         fields.pop("Revision", None)
     changes = dict(title=title.text().strip(), number=number.text().strip() or None,
                    own_layout=own.isChecked(), fields=fields, kind=kind.currentData(),
-                   number_order=order.currentData(), location=loc.text().strip())
+                   number_order=order.currentData(), location=loc.text().strip(),
+                   wire_order_tags=worder.currentData())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     new_scale = picked != (sheet.scale_name, sheet.scale)
@@ -341,6 +353,12 @@ def project_properties(parent, project, tab=0):
                     "one number per wire, on its longest run")
     ends.setObjectName("wire_label_ends")
     form.addRow("Number near both ends of wires longer than", ends)
+    worder = QCheckBox("Wire numbers follow the tags' numbering order (along the wires too)")
+    worder.setObjectName("wire_order_tags")
+    worder.setChecked(bool(st.get("wire_order_tags", True)))
+    worder.setToolTip("Unticked, wire numbers go across and down even on a sheet numbered along "
+                      "the wires; a sheet can choose otherwise in its Sheet properties")
+    form.addRow("", worder)
     cross = QComboBox()
     for key, label in (("plain", "Plain: the wires just cross"),
                        ("gap", "Gap: one wire is broken where it crosses"),
@@ -433,6 +451,12 @@ def project_properties(parent, project, tab=0):
         b.setToolTip("1 m = 39.37 in, 2 m = 78.74 in, 6 ft = 72 in")
         stocks[key] = b
         form.addRow(label, b)
+    hatch = QCheckBox("Wire duct drawn with a light hatch (as a mask)")
+    hatch.setObjectName("duct_hatch")
+    hatch.setChecked(bool(st.get("duct_hatch", False)))
+    hatch.setToolTip("Light diagonal lines across every wire duct in the project, besides its "
+                     "finger slots and mounting holes")
+    form.addRow("", hatch)
     form.addRow(_gray("Objects take their layer's color (ByLayer), as in AutoCAD, unless you "
                       "give them their own (Modify > Color...). Panel scale and dimension "
                       "settings come with the dimension tools."))
@@ -466,6 +490,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_number_height"] = num_h.value()
     settings["wire_label_ends"] = ends.value()
+    settings["wire_order_tags"] = worder.isChecked()
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
@@ -474,6 +499,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_clear"] = wclear.value()
     settings["wire_gauge_shown"] = wgauge.isChecked()
     settings["footprint_label"] = fp_show.currentData()
+    settings["duct_hatch"] = hatch.isChecked()
     settings["xref_height"] = xref_h.value()
     settings["dim_height"] = dim_h.value()
     for key, b in stocks.items():
@@ -503,6 +529,18 @@ def project_properties(parent, project, tab=0):
                 ed.add(tb, e)
         if settings != st:
             ed.project_settings(settings)
+        if bool(settings.get("duct_hatch")) != bool(st.get("duct_hatch", False)):
+            # (every duct in the project takes it: kept on each, HATCH)
+            on = bool(settings.get("duct_hatch"))
+            for s in project.sheets:
+                for e in list(s.entities.values()):
+                    if isinstance(e, M.Duct) and (e.attrs.get("HATCH") == "1") != on:
+                        attrs = dict(e.attrs)
+                        if on:
+                            attrs["HATCH"] = "1"
+                        else:
+                            attrs.pop("HATCH", None)
+                        ed.change(s, e.copy(attrs=attrs))
         for name, color in changed_colors.items():
             lay = project.layers.get(name)
             before = lay.to_dict() if lay else None
@@ -1985,6 +2023,154 @@ def wire_number_dialog(parent, num, tap_of=None, own=False, locked=False):
         return None
     text = edit.text().strip().upper()
     return text, (box.isChecked() if box is not None else own), bool(text) and lock.isChecked()
+
+
+def _sheet_list(project, sheet, some):
+    """The project's sheets with a tick each (this one ticked), usable while the radio button
+    some ("These sheets:") is on: Update numbers and Lock numbers."""
+    from PySide6.QtWidgets import QListWidget, QListWidgetItem
+    lst = QListWidget()
+    lst.setObjectName("sheet_list")
+    for s in project.sheets:
+        it = QListWidgetItem("%s  %s" % (project.sheet_number(s), s.title or ""))
+        it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+        it.setCheckState(Qt.Checked if s is sheet else Qt.Unchecked)
+        it.setData(Qt.UserRole, s.id)
+        lst.addItem(it)
+    lst.setEnabled(False)
+    some.toggled.connect(lst.setEnabled)
+    return lst
+
+
+def _ticked_sheets(project, lst):
+    ids = {lst.item(i).data(Qt.UserRole) for i in range(lst.count())
+           if lst.item(i).checkState() == Qt.Checked}
+    return [s for s in project.sheets if s.id in ids]
+
+
+def update_numbers_dialog(parent, project, sheet):
+    """Update numbers and cross-references (the owner, 0.18: "a way to update wire numbers and
+    cross references, tag numbers and cross references, and both ... for specific sheets or
+    for the whole project"; asked each time: renumber or keep). Returns {"tags", "wires",
+    "xrefs": bool, "renumber": bool, "sheets": [sheets]} or None."""
+    from PySide6.QtWidgets import QRadioButton, QGroupBox
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Update numbers and cross-references")
+    lay = QVBoxLayout(dlg)
+    what = QGroupBox("Update")
+    wl = QVBoxLayout(what)
+    tags_box = QCheckBox("Device tags (CR601, M602...)")
+    wires_box = QCheckBox("Wire numbers (6001, 6002...)")
+    xref_box = QCheckBox("Cross-references (contacts, connectors and arrows)")
+    for name, b in (("tags", tags_box), ("wires", wires_box), ("xrefs", xref_box)):
+        b.setObjectName(name)
+        b.setChecked(True)
+        wl.addWidget(b)
+    lay.addWidget(what)
+    how = QGroupBox("Numbers")
+    hl = QVBoxLayout(how)
+    again = QRadioButton("Renumber in order: 01, 02... (001, 002... for wires) in each sheet's "
+                         "order; locked ones stay")
+    keep = QRadioButton("Keep the numbers: only number what has none, and fix those that "
+                        "aren't of their sheet's page")
+    again.setObjectName("renumber")
+    keep.setObjectName("keep")
+    keep.setChecked(True)
+    hl.addWidget(again)
+    hl.addWidget(keep)
+    lay.addWidget(how)
+    where = QGroupBox("Sheets")
+    pl = QVBoxLayout(where)
+    this = QRadioButton("This sheet (%s)" % project.sheet_number(sheet))
+    every = QRadioButton("The whole project (%d sheets)" % len(project.sheets))
+    some = QRadioButton("These sheets:")
+    this.setObjectName("this_sheet")
+    every.setObjectName("whole_project")
+    some.setObjectName("these_sheets")
+    this.setChecked(True)
+    lst = _sheet_list(project, sheet, some)
+    for b in (this, every, some):
+        pl.addWidget(b)
+    pl.addWidget(lst, 1)
+    lay.addWidget(where, 1)
+    lay.addWidget(_gray("One step: Undo takes it all back. Frozen sheets keep their "
+                        "cross-references (Freeze cross-references off to update them)."))
+    lay.addWidget(_buttons(dlg))
+    dlg.resize(520, 520)
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    if this.isChecked():
+        sheets = [sheet]
+    elif every.isChecked():
+        sheets = list(project.sheets)
+    else:
+        sheets = _ticked_sheets(project, lst)
+    return {"tags": tags_box.isChecked(), "wires": wires_box.isChecked(),
+            "xrefs": xref_box.isChecked(), "renumber": again.isChecked(), "sheets": sheets}
+
+
+def lock_numbers_dialog(parent, project, sheet, selected):
+    """Lock numbers... (the owner, 0.18: "I would like to be able to freeze wire numbers and/or
+    component tag numbers as well. Both individually and by selecting a bunch at a time and by
+    choosing the entire sheet"; asked: lock what's there). selected: how many wires and devices
+    are selected. Returns {"lock": bool, "wires": bool, "tags": bool, "sheets": [sheets] or
+    None for the selection} or None."""
+    from PySide6.QtWidgets import QRadioButton, QGroupBox
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Lock numbers")
+    lay = QVBoxLayout(dlg)
+    do = QGroupBox("Do")
+    dl = QVBoxLayout(do)
+    lock = QRadioButton("Lock: numbering, Renumber sheet and Update numbers leave them alone")
+    unlock = QRadioButton("Unlock: numbering may change them again")
+    lock.setObjectName("lock")
+    unlock.setObjectName("unlock")
+    lock.setChecked(True)
+    dl.addWidget(lock)
+    dl.addWidget(unlock)
+    lay.addWidget(do)
+    what = QGroupBox("What")
+    wl = QVBoxLayout(what)
+    wires = QCheckBox("Wire numbers")
+    tags_box = QCheckBox("Device tags")
+    wires.setObjectName("wires")
+    tags_box.setObjectName("tags")
+    for b in (wires, tags_box):
+        b.setChecked(True)
+        wl.addWidget(b)
+    lay.addWidget(what)
+    where = QGroupBox("Where")
+    pl = QVBoxLayout(where)
+    sel = QRadioButton("The selected objects (%d wire(s) and device(s))" % selected)
+    this = QRadioButton("This sheet (%s)" % project.sheet_number(sheet))
+    every = QRadioButton("The whole project (%d sheets)" % len(project.sheets))
+    some = QRadioButton("These sheets:")
+    for name, b in (("selection", sel), ("this_sheet", this), ("whole_project", every),
+                    ("these_sheets", some)):
+        b.setObjectName(name)
+        pl.addWidget(b)
+    sel.setEnabled(selected > 0)
+    (sel if selected else this).setChecked(True)
+    lst = _sheet_list(project, sheet, some)
+    pl.addWidget(lst, 1)
+    lay.addWidget(where, 1)
+    lay.addWidget(_gray("Each wire and device keeps its lock: the Wire number window's Lock "
+                        "this number and a device's Lock this tag show it. New wires and "
+                        "devices still get numbers. One step: Undo takes it back."))
+    lay.addWidget(_buttons(dlg))
+    dlg.resize(500, 520)
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    if sel.isChecked():
+        sheets = None
+    elif this.isChecked():
+        sheets = [sheet]
+    elif every.isChecked():
+        sheets = list(project.sheets)
+    else:
+        sheets = _ticked_sheets(project, lst)
+    return {"lock": lock.isChecked(), "wires": wires.isChecked(), "tags": tags_box.isChecked(),
+            "sheets": sheets}
 
 
 def cross_reference_question(parent, num, where):

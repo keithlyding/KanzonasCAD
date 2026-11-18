@@ -527,7 +527,13 @@ def mouse_pan(v, rnd):
 
 
 # ---- 1. random editing -------------------------------------------------------------------------
-FAR = 1e7      # (inches: past this, doubles are coarser than 2e-9", see clear_of_drawing)
+# Drawings kept to a realistic size (the owner's choice, Nov 2026, asked: "cap to realistic
+# drawings"): sheets no bigger than 1:100 (MAX_K) and drawing within about 10,000 inches of the
+# origin (FAR). Before, Fit's scale grew with the drawing and each clear spot went 20 scales
+# past it, until sheets of 1:68,593 had wires 500,000 inches out, where a slanted wire's chance
+# crossing left 0.001" gaps that no real drawing has. Every check is as strict as before.
+FAR = 1e4
+MAX_K = 100.0
 
 
 def random_editing(log, out, ops, seed, drawing=None):
@@ -791,6 +797,18 @@ def random_editing(log, out, ops, seed, drawing=None):
                 return
             # (a wire carrying it on may have had the pin: then nothing moved either)
             assert False, "a run with a pin on it was moved: %s" % s.entities[w.id].points
+        if s.entities[w.id].points == w.points:
+            # (refused, as it must be when the drag would leave a pin with no wire: a wire
+            # tapping the run, a pin on its middle, followed past its other end, seed 6006;
+            # worked out here from the drag the run would make and every pin by it)
+            got = wires.segment_drag(s, w, i, to)
+            if got is not None:
+                after_w = [M.Wire(pts) if x.id in got else x for x in s.wires()
+                           for pts in [got.get(x.id)]]
+                lost = [q for q in wired if not any(x.touches(q) for x in after_w)]
+                if lost:
+                    BC.CHECKED["wire run that would leave a pin refused"] += 1
+                    return
         horiz = abs(a[1] - b[1]) < 1e-9
         moved = any((abs(p[1] - to[1]) < 1e-9 and abs(q[1] - to[1]) < 1e-9) if horiz else
                     (abs(p[0] - to[0]) < 1e-9 and abs(q[0] - to[0]) < 1e-9)
@@ -1351,7 +1369,9 @@ def random_editing(log, out, ops, seed, drawing=None):
             kept = sum(length(x) for i, x in s.entities.items() if i not in before)
             whole, cut = length(hit), sum(length(x) for x in lit)
             assert abs(kept + cut - whole) <= 1e-6 * max(1.0, whole), \
-                "Trim lit %.6g of %.6g and left %.6g" % (cut, whole, kept)
+                "Trim lit %.6g of %.6g and left %.6g: %r at %r, lit %r, left %r" % (
+                    cut, whole, kept, hit, q, lit,
+                    [x for i, x in s.entities.items() if i not in before])
             BC.CHECKED["trim lights what it cuts"] += 1
 
     def op_wire_xref():
@@ -1372,8 +1392,14 @@ def random_editing(log, out, ops, seed, drawing=None):
             return
         num = rnd.choice([b.num, b.num, "9%03d" % rnd.randint(0, 999)])
         lock = rnd.random() < 0.7
+        if num == a.num:
+            # (it has that number already: two groups kept with one number on purpose, "just
+            # the same number" earlier; typing it again changes nothing and asks nothing,
+            # seed 3262)
+            return
         how = rnd.choice(["source", "destination", "same", None])
-        links = {e.id for sh in p.sheets for e in sh.inserts()
+        # (by sheet and id: ids are a sheet's own, seed 4103)
+        links = {(sh.id, e.id) for sh in p.sheets for e in sh.inserts()
                  if e.defn is not None and e.defn.wiring == "link"}
         win.ask_wire_number = lambda n, tap_of=None, own=False, locked=False: (num, own, lock)
         asked = []
@@ -1384,7 +1410,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             win.__dict__.pop("ask_wire_number", None)
             win.__dict__.pop("ask_cross_reference", None)
         new = [e for sh in p.sheets for e in sh.inserts()
-               if e.defn is not None and e.defn.wiring == "link" and e.id not in links]
+               if e.defn is not None and e.defn.wiring == "link" and (sh.id, e.id) not in links]
         got = s.entities.get(a.id)
         if num != b.num or got is None:
             assert not new, "connectors placed for a number no other wire had"
@@ -1402,7 +1428,8 @@ def random_editing(log, out, ops, seed, drawing=None):
             other = s.entities.get(b.id)
             assert other is not None and got.num == other.num == num, \
                 "a cross-reference left two numbers: %s, %s" % (got.num, other and other.num)
-            assert got.num_lock == lock, "the lock wasn't as ticked"
+            # (unticked, it is locked when numbering would change it: the typed number stays)
+            assert got.num_lock or not lock, "the lock wasn't as ticked"
             BC.CHECKED["cross-reference by a number typed"] += 1
         elif how == "same":
             # (locked whatever was ticked: an unlocked duplicate would be numbered again)
@@ -1412,6 +1439,248 @@ def random_editing(log, out, ops, seed, drawing=None):
             BC.CHECKED["the same number, as typed"] += 1
         else:
             assert not new and got.num == a.num, "cancelled, yet the number changed"
+
+    def op_sig_arrows():
+        # (0.18) Source/destination arrows through the command: a click near one wire's open
+        # end, then another's: a Source arrow and a Destination arrow of one name on those
+        # ends, one wire with the source's number
+        from kanzonascad import wires as W
+        def opens(w):
+            return [q for q in (w.points[0], w.points[-1])
+                    if not W.connects_at(s, q, exclude=w.id)]
+        ws = [w for w in s.wires() if opens(w) and G.dist(w.points[0], w.points[-1]) > 0.5]
+        if len(ws) < 2:
+            return
+        a, b = rnd.sample(ws, 2)
+        if wirenums.group_of(p, s, a)[0] == wirenums.group_of(p, s, b)[0]:
+            return
+        qa, qb = rnd.choice(opens(a)), rnd.choice(opens(b))
+        num = a.num
+        before = {e.id for e in s.inserts()}
+        v.run(C.SignalArrowsCmd)
+        for q in (qa, qb):
+            if v.cmd is not None and getattr(v.cmd, "pick", None):
+                v.cmd.pick(q)
+        finish()
+        new = [e for e in s.inserts() if e.id not in before and e.block in wirenums.ARROWS]
+        if not new:
+            return                  # (a pick took another wire there: nothing placed, checked)
+        assert len(new) == 2 and new[0].attrs["TAG"] == new[1].attrs["TAG"], \
+            "arrows not a pair: %r" % [(e.block, e.attrs.get("TAG")) for e in new]
+        at = {e.block: e.pin_points()[0][1] for e in new}
+        assert G.dist(at["Source arrow"], qa) < 1e-9 and \
+            G.dist(at["Destination arrow"], qb) < 1e-9, \
+            "arrows not on the ends clicked: %r, %r %r" % (at, qa, qb)
+        if num and wirenums.enabled(p):
+            nb = [w.num for w in s.wires() if w.touches(qb)]
+            assert nb and nb[0] == num, "the destination took %r, not the source's %s" % (
+                nb, num)
+        # (0.18: their text outside them, off their wires)
+        from kanzonascad import xrefs as X
+        texts = X.texts(p, s)
+        num_now = (s.entities[a.id].num if a.id in s.entities else None) \
+            if wirenums.enabled(p) else None
+        for e in new:
+            pin = e.pin_points()[0][1]
+            ws = [w for w in s.wires() if w.touches(pin)]
+            if not ws:
+                continue
+            # (its own text: the arrow pair's two texts can be alike and big on a scaled
+            # sheet, where the other's may be the nearer one: any text of the arrow's kind
+            # beside it, clear of the arrow and of its wire, will do)
+            eb = e.bbox()
+            # (its text can go a few heights farther out, clear of a wire that wraps round
+            # it: xrefs._outside)
+            reach = 8.0 * float(p.settings.get("xref_height", 0.065)) * s.k()
+
+            def beside(box):
+                return box[0] <= eb[2] + reach and box[2] >= eb[0] - reach and \
+                    box[1] <= eb[3] + reach and box[3] >= eb[1] - reach
+
+            def clear(box):
+                if box[0] < eb[2] and box[2] > eb[0] and box[1] < eb[3] and box[3] > eb[1]:
+                    return False
+                return not any(G.segment_hits_rect(q, r, box)
+                               for q, r in zip(ws[0].points, ws[0].points[1:]))
+            mine = [t for t in texts if beside(t.bbox()) and
+                    (not num_now or t.text.startswith("%s / " % num_now))]
+            assert mine, "no text beside the %s at %r" % (e.block, pin)
+            assert any(clear(t.bbox()) for t in mine), \
+                "the text of a %s lies on it or on its wire: %r, the arrow %r, its wire %r" % (
+                    e.block, [(t.text, t.bbox()) for t in mine], eb, ws[0].points)
+        BC.CHECKED["source and destination arrows"] += 1
+
+    def op_update_numbers():
+        # (0.18) Update numbers and cross-references, as the window answers: tags, wires,
+        # cross-references, renumbered or kept, on this sheet or every sheet, one step; then
+        # every unlocked device on those sheets has a tag of its sheet's page, none twice
+        o = {"tags": rnd.random() < 0.8, "wires": rnd.random() < 0.8,
+             "xrefs": rnd.random() < 0.8, "renumber": rnd.random() < 0.5,
+             "sheets": [s] if rnd.random() < 0.5 else list(p.sheets)}
+        win.ask_update_numbers = lambda project, sheet: o
+        n0 = len(p.undo_stack)
+        try:
+            win.update_numbers()
+        finally:
+            win.__dict__.pop("ask_update_numbers", None)
+        assert len(p.undo_stack) - n0 <= 1, "Update numbers took more than one step"
+        if o["tags"]:
+            seen = {}
+            for sh in o["sheets"]:
+                if sh is p.title_block:
+                    continue
+                page = p.sheet_number(sh)
+                for e in sh.entities.values():
+                    if tags_mod.is_device(e) and not tags_mod.locked(e):
+                        got = tags_mod.split(e.attrs.get("TAG", ""), e.defn.prefix)
+                        assert got is not None and got[0] == page, \
+                            "%s on sheet %s after Update numbers" % (e.attrs.get("TAG"), page)
+                        k = e.attrs["TAG"]
+                        assert k not in seen, "%s twice after Update numbers" % k
+                        seen[k] = 1
+            BC.CHECKED["Update numbers: tags of their page, none twice"] += 1
+
+    def op_stretch():
+        # (0.18) STRETCH through the command: a crossing window over some wire ends, moved;
+        # every wire end inside (of a wire not wholly inside) moved by exactly that, one step
+        ws = s.wires()
+        if not ws:
+            return
+        w = rnd.choice(ws)
+        q = rnd.choice([w.points[0], w.points[-1]])
+        k = s.k()
+        h = rnd.choice([0.3, 1.0, 2.5]) * k
+        rect = (q[0] - h, q[1] - h, q[0] + h, q[1] + h)
+        d = rnd.choice([(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -1.0), (1.0, 0.5)])
+        d = (d[0] * k, d[1] * k)
+        before = {x.id: x for x in s.query(rect) if isinstance(x, M.Wire)}
+        n0 = len(p.undo_stack)
+        v.run(C.StretchCmd)
+        type_in(v, fmt(rect[:2]), fmt(rect[2:]), fmt(q), fmt((q[0] + d[0], q[1] + d[1])))
+        finish()
+        if len(p.undo_stack) == n0:
+            return
+        assert len(p.undo_stack) == n0 + 1, "Stretch took more than one step"
+
+        def inside(r):
+            return rect[0] - 1e-9 <= r[0] <= rect[2] + 1e-9 and \
+                rect[1] - 1e-9 <= r[1] <= rect[3] + 1e-9
+        for x in before.values():
+            got = s.entities.get(x.id)
+            if got is None or all(inside(r) for r in x.points):
+                continue
+            for i in (0, -1):
+                if inside(x.points[i]):
+                    want = (x.points[i][0] + d[0], x.points[i][1] + d[1])
+                    # (a wire may be joined to another after: its end is still a wire end
+                    # there, or on a pin it was taken to)
+                    assert any(G.dist(r, want) < 1e-6 for y in s.wires()
+                               for r in (y.points[0], y.points[-1])) or \
+                        wires.pins_on(s, want), "Stretch: an end at %s didn't go to %s" % (
+                            x.points[i], want)
+        BC.CHECKED["stretch moves the ends in the window"] += 1
+
+    def op_grips():
+        # (0.18) several grips picked with Shift (the view's picked grips), one of them
+        # dragged: every picked grip moves the same way
+        ws = s.wires()
+        if len(ws) < 2:
+            return
+        pick = rnd.sample(ws, min(len(ws), rnd.randint(2, 3)))
+        grips = [(w, rnd.choice([0, len(w.points) - 1])) for w in pick]
+        start = {(w.id, i): w.grips()[i] for w, i in grips}
+        k = s.k()
+        d = (rnd.choice([-1, 1]) * 0.5 * k, rnd.choice([0, 1]) * 0.5 * k)
+        v.set_selection({w.id for w in pick})
+        v.picked_grips = {(w.id, i) for w, i in grips}
+        w0, i0 = grips[0]
+        v.run(C.GripCmd, w0, i0, [(w, i) for w, i in grips])
+        g = start[(w0.id, i0)]
+        type_in(v, fmt((g[0] + d[0], g[1] + d[1])))
+        finish()
+        for (wid, i), g in start.items():
+            want = (g[0] + d[0], g[1] + d[1])
+            assert any(G.dist(r, want) < 1e-6 for y in s.wires() for r in y.points) or \
+                wires.pins_on(s, want), "a picked grip at %s didn't go to %s" % (g, want)
+        BC.CHECKED["picked grips move together"] += 1
+
+    def op_lock_numbers():
+        # (0.18) Lock numbers..., as the window answers: on the selected wires, or this sheet
+        o = {"lock": rnd.random() < 0.6, "wires": True, "tags": rnd.random() < 0.7,
+             "sheets": None if rnd.random() < 0.5 else [s]}
+        ws = s.wires()
+        if not ws:
+            return
+        chosen = rnd.sample(ws, min(len(ws), rnd.randint(1, 4)))
+        v.set_selection({w.id for w in chosen})
+        win.ask_lock_numbers = lambda project, sheet, n: o
+        try:
+            win.lock_numbers()
+        finally:
+            win.__dict__.pop("ask_lock_numbers", None)
+        target = chosen if o["sheets"] is None else s.wires()
+        for w in target:
+            got = s.entities.get(w.id)
+            if got is not None and got.num:
+                assert got.num_lock == o["lock"], "wire %s %slocked after %s" % (
+                    got.num, "" if got.num_lock else "un", "Lock" if o["lock"] else "Unlock")
+        BC.CHECKED["Lock numbers as asked"] += 1
+
+    def op_number_bus():
+        # (0.18) numbering along the wires: a disconnect and a bus off on its own, three
+        # breakers dropped off it, the bus running right or left from the disconnect; Numbering
+        # source on the disconnect, Renumber sheet: the breakers count away from it along the
+        # bus, whichever way it runs
+        o = clear_of_drawing(s.k())
+        if o is None:
+            return
+        lib_ds, lib_cb = lib.get("symbol", "Disconnect 3-pole"), lib.get("symbol",
+                                                                        "Circuit breaker 3-pole")
+        way = rnd.choice([1, -1])
+        with p.edit("a bus to number") as ed:
+            for d in (lib_ds, lib_cb):
+                if d.name not in p.blocks:
+                    ed.block(d)
+            ds = M.Insert(lib_ds.name, o, 0.0 if way > 0 else 180.0, defn=p.blocks[lib_ds.name])
+            ds = ed.add(s, ds.copy(attrs=tags_mod.new_attrs(p, s, ds.defn, {})))
+            ends = sorted((q for n, q in ds.pin_points() if n.startswith("T")),
+                          key=lambda q: -q[1])
+            for q in ends:
+                ed.add(s, M.Wire([q, (q[0] + way * 9.0, q[1])]))
+            cbs = []
+            for j in range(3):
+                x = ends[0][0] + way * (2.0 + 2.5 * j)
+                e = M.Insert(lib_cb.name, (0.0, 0.0), 270.0, defn=p.blocks[lib_cb.name])
+                q = dict(e.pin_points())
+                e = e.moved(x - q["L1"][0], ends[-1][1] - 2.0 - q["L1"][1])
+                # (tagged as Insert tags a device: CB? of this page, its own id)
+                e = ed.add(s, e.copy(attrs=tags_mod.new_attrs(p, s, e.defn, {})))
+                q = dict(e.pin_points())
+                for i in range(3):
+                    lq = q["L%d" % (i + 1)]
+                    ed.add(s, M.Wire([(lq[0], ends[i][1]), lq]))      # (a drop)
+                cbs.append(e)
+        if any(len(dict(e.pin_points())) < 6 for e in cbs):
+            return
+        v.center, v.scale = ds.pos, max(v.scale, 40.0 / s.k())
+        v.run(C.NumberSourceCmd)
+        if v.cmd is not None:
+            v.cmd.pick(ds.pos)
+        finish()
+        if s.number_from != ds.id:
+            return                      # (a pick there took another symbol: not checked)
+        with p.edit("Renumber sheet") as ed:
+            tags_mod.renumber_sheet(ed, p, s)
+        got = [tags_mod.split(s.entities[e.id].attrs.get("TAG", ""), "CB") for e in cbs]
+        if all(g is not None for g in got) and all(not tags_mod.locked(s.entities[e.id])
+                                                   for e in cbs):
+            counts = [g[1] for g in got]
+            assert counts == sorted(counts), \
+                "along the bus (running %s) the breakers got %s" % (
+                    "right" if way > 0 else "left", [s.entities[e.id].attrs["TAG"] for e in cbs])
+            BC.CHECKED["numbering follows the bus"] += 1
+        with p.edit("order back") as ed:
+            ed.sheet_meta(s, number_order="across", number_from=None)
 
     def op_tap():
         # (0.17.2: a wire drawn off the middle of another asks; Enter: its number, N: one of
@@ -1475,7 +1744,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert len(now.labels) == len(w.labels) - 1, (w.labels, now.labels)
         else:
             assert len(now.labels) == len(w.labels) + 1, (w.labels, now.labels)
-            assert any(abs(x - t) < 1e-6 for x in now.labels), (t, now.labels)
+            # (where it was clicked, on the drawing: a wire that crosses itself has that point
+            # at two distances along it, and the label may go at the first, seed 105)
+            assert any(abs(x - t) < 1e-6 or G.dist(now.at_length(x)[0], q) < 1e-6
+                       for x in now.labels), (t, now.labels, q)
         if wirenums.enabled(p) and now.num:
             shown = {(round(x.pos[0], 6), round(x.pos[1], 6)): x.text
                      for x in wirenums.labels(p, s)}
@@ -1924,13 +2196,16 @@ def random_editing(log, out, ops, seed, drawing=None):
             name, val = rnd.choice(scalefit.presets_like(s.scale_name))
             win._set_scale(name, val)
         elif scalefit.fit_for(p, s) is not None:        # (else it opens the Sheet scale window)
+            if 1.0 / scalefit.fit_for(p, s)[1] > MAX_K:
+                BC.CHECKED["Fit past 1:100 left out (drawings kept realistic)"] += 1
+                return
             win.fit_scale()
             BC.fit_oracle(p, s)
 
     # ---- sheets of every size, turn and scale, several of them -------------------------------
     def op_world():
         world["o"] = rnd.choice([(0.0, 0.0), (0.0, 0.0), (480.0, -250.0),
-                                 (-2400.0, 1700.0), (12000.0, 8000.0)])
+                                 (-2400.0, 1700.0), (4000.0, 3000.0)])
         world["k"] = rnd.choice([1.0, 1.0, 1.0, 4.0, 24.0])
 
     def op_sheet():
@@ -2243,7 +2518,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2),
+             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2), (op_stretch, 2), (op_grips, 2), (op_lock_numbers, 2), (op_number_bus, 2),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
@@ -2474,6 +2749,15 @@ def mixed_project(win):
         ed.change(v.sheet(), mtr.copy(attrs=dict(mtr.attrs, HP="5", VOLTS="460", FLA="7.6"),
                                       hidden=["FLA"]).with_attr_angle("HP", 90.0)
                   .with_attr_angle("TAG", 30.0))
+    # (0.18) a pair of source and destination arrows through the command
+    with p.edit("wires for arrows") as ed:
+        wa = ed.add(v.sheet(), M.Wire([(1.0, 1.0), (4.0, 1.0)]))
+        wb = ed.add(v.sheet(), M.Wire([(9.0, 1.0), (12.0, 1.0)]))
+    v.run(C.SignalArrowsCmd)
+    v.cmd.pick(wa.points[-1])
+    v.cmd.pick(wb.points[0])
+    if v.cmd is not None:
+        v.cmd.enter()
     coil = [e for e in v.sheet().inserts() if e.attrs.get("TAG", "").startswith("CR")][0]
     pin = max((q for _n, q in coil.pin_points()), key=lambda q: q[0])
     v.run(C.WireCmd)

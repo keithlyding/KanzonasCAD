@@ -177,23 +177,36 @@ def _pin_wires(sheet, ins, roots):
     return out
 
 
-def _summary(sheet):
+def wire_order(project, sheet):
+    """The numbering order wire numbers take on a sheet: the tags' (Sheet.number_order), or
+    across and down when the sheet (or, as it says, the project) has them not follow it."""
+    follow = sheet.wire_order_tags
+    if follow is None:
+        follow = bool(project.settings.get("wire_order_tags", True))
+    if follow or sheet.number_order != "wires":
+        return sheet.number_order
+    return "across"
+
+
+def _summary(sheet, how=None):
     """What numbering needs to know of one sheet, kept until the sheet changes: its local
     groups {root: (sort key, [wires], [numbers], locked number or None)}, its off-sheet
     connectors' groups [(name, root)] and its distribution blocks [(input root, [output
     roots])]."""
-    sig = (sheet.version, sheet.number_order, sheet.size, sheet.cols, sheet.rows,
-           sheet.col_start, sheet.row_start)
+    how = how or sheet.number_order
+    sig = (sheet.version, how, sheet.size, sheet.cols, sheet.rows,
+           sheet.col_start, sheet.row_start, sheet.number_from)
     got = getattr(sheet, "_num_summary", None)
     if got is not None and got[0] == sig:
         return got[1]
     roots = _sheet_groups(sheet)
-    zsig = sig[1:] + (sheet.scale, sheet.reserve)
+    zsig = sig[1:] + (sheet.scale, sheet.reserve) + (
+        (sheet.version,) if how == "wires" else ())
     cache = getattr(sheet, "_num_keys", None)
     if cache is None or cache[0] != zsig:
         cache = sheet._num_keys = (zsig, {})
     known = cache[1]
-    key = tags.order_key(sheet, sheet.number_order)
+    key = tags.order_key(sheet, how)
     local = {}
     for w in sheet.wires():
         r = roots[w.id]
@@ -251,7 +264,7 @@ def _assemble(project):
     names = {}
     sums = []
     for i, s in enumerate(project.sheets):
-        local, links, dists = _summary(s)
+        local, links, dists = _summary(s, wire_order(project, s))
         sums.append((i, s, local, dists))
         for name, r in links:
             names.setdefault(name, []).append((s.id, r))
@@ -282,11 +295,15 @@ def _assemble(project):
 
 # ---- numbering -------------------------------------------------------------------------------
 def sync(ed, project, renumber=None):
-    """Give every group its number (see the module's notes); renumber: a sheet whose
+    """Give every group its number (see the module's notes); renumber: a sheet (or several:
+    Update numbers and cross-references, 0.18) whose
     unlocked groups are numbered again from 001."""
     if not enabled(project):
         return
     gs, info, dist = _assemble(project)
+    again = [] if renumber is None else [renumber] if not isinstance(renumber, (list, tuple,
+                                                                               set)) \
+        else list(renumber)
     order = sorted(info, key=lambda g: info[g][0])
     page = {}
     taken = {}                                  # page -> counts used
@@ -312,7 +329,7 @@ def sync(ed, project, renumber=None):
             continue
         pg = page[g]
         mine = taken.setdefault(pg, set())
-        have = [] if renumber is not None and info[g][1] is renumber else info[g][2]
+        have = [] if info[g][1] in again else info[g][2]
         for n in have:
             got = split(n)
             if got and got[0] == pg and not got[2] and got[1] not in mine:
@@ -371,6 +388,19 @@ def set_number(ed, project, sheet, wire, num, lock=True):
             return
 
 
+def set_locks(ed, sheet, wires, lock):
+    """Lock (or unlock) the numbers of these wires' groups as they are: Wire.num_lock, as the
+    Wire number window's "Lock this number" (a group is one number: all its wires). Returns
+    how many wires changed."""
+    n = 0
+    for w in wires:
+        cur = sheet.entities.get(w.id, w)
+        if cur.num and cur.num_lock != lock:
+            ed.change(sheet, cur.copy(num_lock=lock))
+            n += 1
+    return n
+
+
 # ---- a number typed that another wire has: a cross-reference (0.17.5) ------------------------
 def group_of(project, sheet, wire):
     """(group key, [(sheet, wire)]) of the group wire is in, or None."""
@@ -414,6 +444,17 @@ def number_at(sheet, ins):
             if getattr(w, "kind", "") == "wire" and w.num and w.touches(q, TOL):
                 return w.num
     return ""
+
+
+def wire_end(sheet, wire, p):
+    """(sheet, end point, direction out) of the end of wire nearer p."""
+    a, b = wire.points[0], wire.points[-1]
+    if math.hypot(p[0] - a[0], p[1] - a[1]) <= math.hypot(p[0] - b[0], p[1] - b[1]):
+        q, r = a, wire.points[1]
+    else:
+        q, r = b, wire.points[-2]
+    L = math.hypot(q[0] - r[0], q[1] - r[1]) or 1.0
+    return sheet, tuple(q), ((q[0] - r[0]) / L, (q[1] - r[1]) / L)
 
 
 def new_link_name(project):

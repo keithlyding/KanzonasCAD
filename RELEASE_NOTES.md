@@ -6,6 +6,77 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18
+
+**New**
+- **Source/destination arrows** (Schematic tab, Cross-references; Draw menu): click the open
+  end of a wire where it leaves, then the open end where it arrives, on this sheet or another.
+  A Source arrow and a Destination arrow go there; the wires become one wire with the source's
+  number, and each arrow shows that number and where the other is (2046 / 7-A2).
+- **Update numbers and cross-references...** (Schematic tab, Numbering; Sheets menu): device
+  tags, wire numbers and cross-references, together or apart, on this sheet, the sheets you
+  tick or the whole project. Renumber them in order, or keep them and only fix what's missing
+  or on the wrong page. One Undo takes it back.
+- The Library can show only **three-phase** symbols, or only single-phase and control ones
+  (the third list above the symbols). Block **Properties...** has Phases to correct the guess.
+- **Lock numbers...** (Schematic tab, Numbering; Sheets menu): lock or unlock wire numbers and
+  device tags as they are, for the selected ones, this sheet, the sheets you tick or the whole
+  project. Locked ones stay when you renumber.
+- **Stretch** (S; Modify menu, Home and Schematic tabs): drag a window over the ends of a bus's
+  wires and move them all at once; the wires stay square. Or Shift+click several grips (they
+  turn red) and drag one: they all move together.
+- Numbering can **follow your bus**: **Numbering source** (Schematic tab, Numbering): click
+  the disconnect the wires start from, and Renumber numbers each branch in the order it leaves
+  the bus, however the bus winds round the sheet, with the branch's wires numbered together.
+- Whether wire numbers follow the tags' order is a project setting (Project properties,
+  Schematic) and a sheet setting (Sheet properties) that can override it.
+- **Wire duct** is drawn from a corner: click one corner and the other end of that edge; the
+  duct goes on the side the cursor is (F for the other side). It now shows its finger slots
+  and mounting holes, and Panel settings can add a light hatch to every duct.
+- A connector's cross-reference text is always outside it, on the side away from its wire,
+  however the connector is turned, and moves over or under it when the wire comes back round
+  past that side.
+- Cross-reference text is on a layer of its own, **XREFS**, in cyan, and a little smaller.
+  Projects made earlier get the layer and the new size when opened.
+- The ribbon fits the window: when a tab is too wide, its groups shrink from the right (big
+  buttons become small ones, then icons with their names as tooltips) and grow back when you
+  widen the window.
+- A block's tools (Save block, Save block as, Block properties, Duplicate block, Add pin, Pins)
+  are on a new **Block** tab that shows up while you edit a block, instead of on the Schematic
+  and Panel tabs. **Edit block** stays there to open one; View > **Block tab** keeps the tab
+  shown all the time.
+
+**Fixed**
+- Renumbering a sheet could give a device the same tag as a device on another sheet. Update
+  numbers' "Keep the numbers" now also fixes a tag two devices share.
+- Scooting a device whose pin sits on the corner of a wire (not cut there) could slide the pin
+  off the wire. It now refuses that move.
+- The Schematic tab ran off the screen.
+- Trim on a small circle, clicked right where something crosses it (or in its middle), left
+  the circle whole. It now cuts it there.
+- Dragging a wire's end straight past its last corner, back along the wire, left a hidden
+  corner where the wire ran back over itself. The wire now runs straight to where you drop it.
+- **Intersection** didn't snap where a line (or a dimension's point, or a Copy or Move point)
+  crosses the edge of wire duct or DIN rail, or where duct and rail cross. It does now.
+- Carrying a bus on from its open ends with a symbol in the way could route one wire onto the
+  bus's own other ends (a stray dot and tangled wires). The bus now leaves its ends straight
+  on, and a way round whose wires would touch isn't used.
+- Moving or stretching something so a wire's end went back along its own last leg left a
+  hidden corner where the wire ran back over itself. The wire now runs straight. Clean up
+  wires could also join two wires into one that ran back over itself; it no longer does.
+- Typing a wire number that two other wires already had (one kept with "just the same
+  number") and answering Source or Destination could say there was no open end when one of
+  them had one. The arrow now goes on the one with an open end.
+- Dragging a run of wire by its middle grip could leave a symbol's pin with no wire, when a
+  wire tapping that run passed through the pin. Such a drag is now refused, with the reason.
+- Scooting a breaker with everything attached, or stretching a wire's end onto its other end,
+  could squeeze a wire down to nothing and leave it broken. That wire is now removed.
+- Copying or moving a footprint to a point you snapped to near DIN rail pulled it onto the
+  rail, away from the point you picked it up by. A snapped point now wins.
+- Placing a footprint with the same name as a symbol already in the project gave the
+  footprint the symbol's drawing. The footprint now keeps its own (as "name (footprint)"), and
+  updating one from the library no longer changes the other.
+
 ## 0.17.5
 
 **New**

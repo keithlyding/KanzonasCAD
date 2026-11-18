@@ -1005,10 +1005,13 @@ class GripCmd(Command):
     name, title = "GRIP", "Stretch"
     repeatable = False
 
-    def __init__(self, ctx, ent, index):
+    def __init__(self, ctx, ent, index, others=()):
         super().__init__(ctx)
         self.ent, self.index = ent, index
         self.base = self.last = ent.grips()[index]
+        # (several grips picked with Shift: they all move the same way, the owner, 0.18;
+        # [(entity, grip index)] besides this one)
+        self.others = [(e, k) for e, k in others if (e.id, k) != (ent.id, index)]
 
     def begin(self):
         self.ctx.prompt("Specify stretch point")
@@ -1024,6 +1027,14 @@ class GripCmd(Command):
         """{id: new entity} a drag of the grip to p gives (a wire's run: the wires joined to
         it too)."""
         k = self._run()
+        if self.others:
+            dx, dy = p[0] - self.base[0], p[1] - self.base[1]
+            out = {}
+            for e, i in [(self.ent, self.index)] + self.others:
+                cur = out.get(e.id, e)
+                g = e.grips()[i]
+                out[e.id] = cur.with_grip(i, (g[0] + dx, g[1] + dy))
+            return out
         if k is None:
             return {self.ent.id: self.ent.with_grip(self.index, p)}
         return _run_drag(self.ctx, self.ent, k, p)
@@ -1041,6 +1052,105 @@ class GripCmd(Command):
 
     def preview(self, p):
         return list(self._dragged(p).values())
+
+
+def put_changed(ed, sheet, got):
+    """Write changed copies; a wire squeezed to nothing (fewer than two points: an end moved
+    onto its other end) goes instead, as Clean up wires takes wires of no length (the long
+    battery: Scoot, seed 4101; Stretch, seed 3252)."""
+    for e in got:
+        if isinstance(e, M.Wire) and len(e.points) < 2:
+            ed.remove(sheet, e.id)
+        else:
+            ed.change(sheet, e)
+
+
+def stretched(sheet, rect, dx, dy):
+    """STRETCH (as AutoCAD's): what a crossing window rect (x0, y0, x1, y1) moved by dx, dy
+    does: an object wholly inside moves; a wire's ends inside move, its next corner sliding
+    along so it stays square (Wire.end_moved: a bus's three ends stretched together, the owner,
+    0.18); a line's ends and a polyline's corners inside move; a symbol, text, circle... whose
+    insertion point or center is inside moves (wires on a symbol's pins follow it). Returns
+    the changed copies."""
+    x0, y0, x1, y1 = rect
+
+    def inside(q):
+        return x0 - 1e-9 <= q[0] <= x1 + 1e-9 and y0 - 1e-9 <= q[1] <= y1 + 1e-9
+
+    out = []
+    for e in sheet.query(rect):
+        bb = e.bbox()
+        if inside(bb[:2]) and inside(bb[2:]):
+            out.append(e.moved(dx, dy))
+            continue
+        if isinstance(e, M.Wire):
+            w = e
+            for i in (0, -1):
+                q = w.points[i]
+                if inside(e.points[i]) and len(w.points) >= 2:
+                    w = w.end_moved(i, (q[0] + dx, q[1] + dy))
+            if w is not e:
+                out.append(w)
+        elif isinstance(e, M.Line):
+            p1 = (e.p1[0] + dx, e.p1[1] + dy) if inside(e.p1) else e.p1
+            p2 = (e.p2[0] + dx, e.p2[1] + dy) if inside(e.p2) else e.p2
+            if (p1, p2) != (e.p1, e.p2):
+                out.append(e.copy(p1=list(p1), p2=list(p2)))
+        elif isinstance(e, M.Polyline):
+            pts = [[q[0] + dx, q[1] + dy] if inside(q) else list(q) for q in e.points]
+            if pts != [list(q) for q in e.points]:
+                out.append(e.copy(points=pts))
+        else:
+            anchor = getattr(e, "pos", None) or getattr(e, "center", None)
+            if anchor is not None and inside(anchor):
+                out.append(e.moved(dx, dy))
+    return out
+
+
+class StretchCmd(Command):
+    """STRETCH (S): a crossing window over the ends to move (two corners), then the base point
+    and where it goes: what stretched() says, in one step (the owner, 0.18: "Is there a way to
+    stretch a bus of wires at the same time, so I don't have to do all three individually?")."""
+    name, title = "STRETCH", "Stretch"
+
+    def begin(self):
+        self.corner = self.rect = self.base = None
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Stretch: first corner of the crossing window (around the ends to "
+                        "move)")
+
+    def point(self, p):
+        if self.corner is None:
+            self.corner = p
+            self.ctx.prompt("Other corner")
+        elif self.rect is None:
+            a = self.corner
+            self.rect = (min(a[0], p[0]), min(a[1], p[1]), max(a[0], p[0]), max(a[1], p[1]))
+            if not self.ctx.sheet().query(self.rect):
+                self.ctx.message("Nothing in that window")
+                self.corner = self.rect = None
+                self.ctx.prompt("Stretch: first corner of the crossing window")
+                return
+            self.ctx.prompt("Base point")
+        elif self.base is None:
+            self.base = self.last = p
+            self.ctx.prompt("Second point")
+        else:
+            got = stretched(self.ctx.sheet(), self.rect, p[0] - self.base[0],
+                            p[1] - self.base[1])
+            if got:
+                with self.ctx.edit(self.title) as ed:
+                    put_changed(ed, self.ctx.sheet(), got)
+            self.finish()
+
+    def preview(self, p):
+        if self.corner is not None and self.rect is None:
+            a = self.corner
+            return [M.Polyline([a, (p[0], a[1]), p, (a[0], p[1])], True)]
+        if self.base is not None:
+            return stretched(self.ctx.sheet(), self.rect, p[0] - self.base[0],
+                             p[1] - self.base[1])
+        return []
 
 
 class PasteCmd(Command):
@@ -1068,15 +1178,22 @@ class PasteCmd(Command):
         sheet = self.ctx.sheet()
         ids = set()
         with self.ctx.edit("Paste") as ed:
+            project = self.ctx.project
+            names = {}
             for e in self.ents:
-                if isinstance(e, M.Insert) and e.block not in self.ctx.project.blocks \
-                        and e.block in self.blocks:
-                    ed.block(self.blocks[e.block])
+                if isinstance(e, M.Insert) and e.block in self.blocks:
+                    # (a footprint pasted where a symbol has its name: kept apart, 0.18)
+                    d = self.blocks[e.block]
+                    pname = M.project_block_name(project, e.block, d.kind)
+                    names[e.block] = pname
+                    if pname not in project.blocks:
+                        ed.block(M.renamed_block(d, pname))
             from .tags import retag_copies
             placed = []
             for e in self.result(p):
                 if isinstance(e, M.Insert):
-                    e.defn = self.ctx.project.blocks.get(e.block, e.defn)
+                    e.block = names.get(e.block, e.block)
+                    e.defn = project.blocks.get(e.block, e.defn)
                     e._world = None
                 placed.append(e)
             for e in retag_copies(self.ctx.project, sheet, placed):
@@ -1272,12 +1389,38 @@ class WireCmd(Command):
         return [M.Wire(self.points + self._route(p), layer=wire_layer(self.ctx))]
 
 
+def _strands_a_pin(sheet, got):
+    """Would wires changed to got ({id: points}) leave a pin that one of them was on with no
+    wire? (A wire tapping the dragged run, a pin on its middle, followed the run past its other
+    end and left that pin behind: the battery, seed 6006.)"""
+    old = [sheet.entities[i] for i in got if i in sheet.entities]
+    if not old:
+        return False
+    new = {i: M.Wire(pts) for i, pts in got.items()}
+    bb = None
+    for e in old:
+        bb = G.bbox_union(bb, e.bbox())
+    for e in sheet.query(bb):
+        if not isinstance(e, M.Insert):
+            continue
+        for _n, q in e.pin_points():
+            if not any(x.touches(q) for x in old):
+                continue
+            near = [x for x in sheet.query((q[0] - 1e-6, q[1] - 1e-6, q[0] + 1e-6, q[1] + 1e-6))
+                    if isinstance(x, M.Wire) and x.id not in got]
+            if not any(x.touches(q) for x in list(new.values()) + near):
+                return True
+    return False
+
+
 def _run_drag(ctx, w, k, p, say=False):
     """{id: new wire} for wire w's run k dragged to p (wires.segment_drag); {} when it can't
     move, saying why when say."""
     from .wires import segment_drag
     sheet = ctx.sheet()
     got = segment_drag(sheet, w, k, p)
+    if got is not None and _strands_a_pin(sheet, got):
+        got = None
     if got is None:
         if say:
             ctx.message("Moved there, the wire would leave a symbol's pin or a wire joined to "
@@ -1332,6 +1475,32 @@ def bus_paths(points, count, spacing, flip=False):
         if len(line) >= 2:
             out.append(line)
     return out
+
+
+def _same_way(a, b, c):
+    """Do a-b and a-c leave a the same way (across or up and down, and the same direction)?"""
+    u = (b[0] - a[0], b[1] - a[1])
+    w = (c[0] - a[0], c[1] - a[1])
+    return u[0] * w[0] + u[1] * w[1] > 0 and abs(u[0] * w[1] - u[1] * w[0]) <= 1e-9 * max(
+        1.0, abs(u[0]) + abs(u[1])) * max(1.0, abs(w[0]) + abs(w[1]))
+
+
+def _apart(paths):
+    """Do a bus's wires (their points) keep apart: none turns straight back along itself, and
+    no two touch or cross? (A bus carried on from its open ends round a symbol had a wire's
+    way round run onto another's end: joined there with a dot, the battery, seed 77.)"""
+    from .wires import doubles_back
+    from .trim import intersect
+    if any(doubles_back(q) for q in paths):
+        return False
+    segs = [[("seg", a, b) for a, b in zip(q, q[1:])] for q in paths]
+    for i in range(len(segs)):
+        for j in range(i + 1, len(segs)):
+            for sa in segs[i]:
+                for sb in segs[j]:
+                    if intersect(sa, sb):
+                        return False
+    return True
 
 
 def _paths_cross(paths):
@@ -1887,8 +2056,15 @@ class BusCmd(Command):
                                extra, on)
             if got is new:
                 continue
-            tail = [q[len(self.points) - 1:] for q in self._paths(self.points + got)]
-            if not any(_crosses(q, boxes) for q in tail):
+            if len(self.points) == 1 and getattr(self, "side_pins", None) and \
+                    not _same_way(self.points[0], new[0], got[0]):
+                # (a bus leaving pins or carried on from its ends leaves them square, the way
+                # it was clicked: a way round turning across them ran onto its own ends,
+                # the battery, seed 77)
+                continue
+            paths = self._paths(self.points + got)
+            tail = [q[len(self.points) - 1:] for q in paths]
+            if not any(_crosses(q, boxes) for q in tail) and _apart(tail):
                 return got
         return new
 
@@ -2341,7 +2517,8 @@ class MakeBlockCmd(Command):
                           wiring=d.get("wiring", ""), manufacturer=d.get("manufacturer", ""),
                           family=d.get("family", ""), series=d.get("series", ""),
                           catalog=d.get("catalog", ""),
-                          show_pins=bool(d.get("show_pins", False)))
+                          show_pins=bool(d.get("show_pins", False)),
+                          phases=d.get("phases", ""))
         if d["kind"] == "symbol":
             if tag_pt is not None:
                 defn.tag_pos = (tag_pt[0] - bx, tag_pt[1] - by)
@@ -2544,7 +2721,7 @@ class InsertCmd(Command):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
         tag_h = self.ctx.project.settings.get("tag_height") * self.ctx.sheet().k() \
             if self.defn.kind == "symbol" else None
-        return M.Insert(self.defn.name, p, self.angle, 1.0,
+        return M.Insert(defn.name, p, self.angle, 1.0,
                         self.mirror if mirror is None else mirror, self.attrs, defn,
                         tag_h, layer=layer)
 
@@ -2621,11 +2798,13 @@ class InsertCmd(Command):
         project = self.ctx.project
         sheet = self.ctx.sheet()
         with self.ctx.edit("Insert %s" % self.defn.name) as ed:
-            if self.defn.name not in project.blocks:
-                # the project keeps its own copy (a block already in it stays as it was)
-                ed.block(self.defn)
+            # the project keeps its own copy (a block already in it stays as it was), under
+            # its name, or "name (footprint)" when a symbol already has that name (0.18)
+            pname = M.project_block_name(project, self.defn.name, self.defn.kind)
+            if pname not in project.blocks:
+                ed.block(M.renamed_block(self.defn, pname))
             from . import tags
-            defn = project.blocks[self.defn.name]
+            defn = project.blocks[pname]
             ins = self._make(p, defn, self.placed_mirror).copy(attrs=attrs)
             ins = ins.copy(attrs=tags.new_attrs(project, sheet, defn, ins.attrs))
             if defn.kind == "footprint":
@@ -3530,12 +3709,12 @@ class _RunCmd(Command):
     def point(self, p):
         if self.p1 is None:
             self.p1 = self.base = self.last = p
-            self.ctx.prompt("Specify end point, or type the length (toward the cursor)")
+            self.end_prompt()
             return
         p = self._straight(p)
         if G.dist(self.p1, p) < 1e-6:
             return
-        e = self.make(self.p1, p)
+        e = self.place(self.p1, p)
         with self.ctx.edit(self.title) as ed:
             if e.layer not in self.ctx.project.layers:
                 ed.layer(e.layer, None, M.Layer(e.layer).to_dict())
@@ -3546,10 +3725,21 @@ class _RunCmd(Command):
     def preview(self, p):
         if self.p1 is None:
             return []
+        raw = p
         p = self._straight(p)
         if G.dist(self.p1, p) < 1e-6:
             return []
-        return [self.make(self.p1, p)]
+        self.side_from(raw, p)
+        return [self.place(self.p1, p)]
+
+    def end_prompt(self):
+        self.ctx.prompt("Specify end point, or type the length (toward the cursor)")
+
+    def side_from(self, raw, p):
+        """(where the cursor is off the line: a duct's side)"""
+
+    def place(self, a, b):
+        return self.make(a, b)
 
 
 class RailCmd(_RunCmd):
@@ -3592,11 +3782,14 @@ class DuctCmd(_RunCmd):
 
     def _prompt_start(self):
         # (the standard sizes as buttons too: width x depth, inches)
-        self.ctx.prompt("Specify start point (%s; or a size: width x depth, 2x3, 1.5x3, "
+        self.ctx.prompt("Specify start corner (%s; or a size: width x depth, 2x3, 1.5x3, "
                         "50x75mm)" % M.size_text(*self._size()),
                         [(M.size_text(w, d), "%gx%g" % (w, d)) for w, d in M.DUCT_SIZES])
 
     def text(self, s):
+        if s.strip().upper() == "F" and self.p1 is not None:
+            self.side = -self.side
+            return True
         got = parse_duct_size(s)
         if got is None or self.p1 is not None:
             return False
@@ -3606,7 +3799,35 @@ class DuctCmd(_RunCmd):
 
     def make(self, a, b):
         w, d = self._size()
-        return M.Duct(a, b, "", w, d)
+        hatch = {"HATCH": "1"} if self.ctx.project.settings.get("duct_hatch") else None
+        return M.Duct(a, b, "", w, d, attrs=hatch)
+
+    # (from a corner, not its middle: the owner, 0.18, "For adding wire duct, the start point
+    # needs to be at the corner, not the middle": the two points are one edge, corner to
+    # corner, the duct on the side of it the cursor is on, F the other side)
+    side = 1.0
+
+    def end_prompt(self):
+        self.ctx.prompt("Specify the other corner along this edge, or type the length (the "
+                        "duct goes on the side the cursor is; F: the other side)",
+                        [("Other side", "F")])
+
+    def side_from(self, raw, p):
+        a = self.p1
+        L = G.dist(a, p)
+        if L <= 1e-9:
+            return
+        n = (-(p[1] - a[1]) / L, (p[0] - a[0]) / L)          # (left of the way it goes)
+        off = (raw[0] - a[0]) * n[0] + (raw[1] - a[1]) * n[1]
+        if abs(off) > 1e-9:
+            self.side = 1.0 if off > 0 else -1.0
+
+    def place(self, a, b):
+        w, _d = self._size()
+        L = G.dist(a, b)
+        n = (-(b[1] - a[1]) / L, (b[0] - a[0]) / L)
+        k = self.side * w / 2.0
+        return self.make((a[0] + n[0] * k, a[1] + n[1] * k), (b[0] + n[0] * k, b[1] + n[1] * k))
 
 
 class ScootCmd(_TwoPoint):
@@ -3694,8 +3915,8 @@ class ScootCmd(_TwoPoint):
             self.finish()
             return
         with self.ctx.edit(self.title) as ed:
-            for e in got:
-                ed.change(sheet, e)
+            # (a wire squeezed to nothing between what moves and what stays goes)
+            put_changed(ed, sheet, got)
         self.ctx.message("Scooted %s%s" % (M.fmt_inches(abs(d)), "" if self.only else
                                            " with everything attached (%d objects)"
                                            % len(got)))
@@ -4022,6 +4243,116 @@ class WireLabelCmd(Command):
         return False
 
     def enter(self):
+        self.finish()
+
+
+class SignalArrowsCmd(Command):
+    """SIGARROW (Source/destination arrows, as AutoCAD Electrical's signal arrows; the owner,
+    0.18: "I would like source and destination arrows for wire cross references"): click the
+    end of a wire where it leaves (a Source arrow goes there), then the end where it arrives,
+    on this sheet or another (go to it in the Sheets panel: the command goes on), and a
+    Destination arrow goes there. They are a pair of one new name: one wire, the source's
+    number on both, each showing the wire's number and the other's place (2046 / 7-A2). Goes
+    on with the next pair until Enter or Esc."""
+    name, title = "SIGARROW", "Source/destination arrows"
+    across_sheets = True
+
+    def begin(self):
+        self.src = None
+        self.done = 0
+        self.ctx.set_selection(set())
+        self._ask()
+
+    def _ask(self):
+        if self.src is None:
+            self.ctx.prompt("Click the end of the wire where it leaves (the source arrow goes "
+                            "there); Enter to finish")
+        else:
+            self.ctx.prompt("Click the end of the wire where it arrives (the destination "
+                            "arrow), here or on another sheet (Sheets panel); Esc cancels")
+
+    def _end(self, p):
+        from . import wirenums
+        from .wires import connects_at
+        w = _pick_wire(self.ctx, p)
+        if w is None:
+            self.ctx.message("Click a wire near its end")
+            return None
+        got = wirenums.wire_end(self.ctx.sheet(), w, p)
+        if connects_at(got[0], got[1], exclude=w.id):
+            self.ctx.message("That end is connected to something: click the open end of a "
+                             "wire (the end where it leaves or arrives)")
+            return None
+        return got, w
+
+    def pick(self, p):
+        from . import wirenums
+        got = self._end(p)
+        if got is None:
+            return
+        (end, w) = got
+        project = self.ctx.project
+        if self.src is None:
+            self.src = (end, w)
+            self.ctx.message("Source: wire %s. Now the end where it arrives" % (w.num or "?"))
+            self._ask()
+            return
+        (s_end, s_w) = self.src
+        a = wirenums.group_of(project, s_end[0], s_end[0].entities.get(s_w.id, s_w))
+        b = wirenums.group_of(project, end[0], w)
+        if a is not None and b is not None and a[0] == b[0]:
+            self.ctx.message("That is the same wire: click the end of the wire it goes on to")
+            return
+        lib = getattr(self.ctx.window(), "library", None)
+        defs = [project.blocks.get(n) or (lib.get("symbol", n) if lib is not None else None)
+                for n in wirenums.ARROWS]
+        if None in defs:
+            self.ctx.message("The Source arrow and Destination arrow symbols aren't in the "
+                             "library")
+            self.finish()
+            return
+        src_sheet = s_end[0]
+        num = src_sheet.entities[s_w.id].num if s_w.id in src_sheet.entities else None
+        with self.ctx.edit(self.title) as ed:
+            name = wirenums.cross_reference(ed, project, s_end, end, defs[0], defs[1], True)
+            if num and wirenums.enabled(project):
+                wirenums.sync(ed, project)
+                cur = src_sheet.entities[s_w.id]
+                if cur.num != num:
+                    # (the destination takes the source's number: numbering would give the
+                    # pair the number of the sheet first in order)
+                    wirenums.set_number(ed, project, src_sheet, cur, num, True)
+        self.done += 1
+        self.ctx.message("Arrows %s: wire %s from %s to %s (Undo takes them back)" % (
+            name, num or "?", project.zone_text(src_sheet, *s_end[1]) or "?",
+            project.zone_text(end[0], *end[1]) or "?"))
+        self.src = None
+        self._ask()
+
+    def enter(self):
+        self.finish()
+
+
+class NumberSourceCmd(Command):
+    """NUMSOURCE (Numbering source): click the symbol the sheet's wires start from (a
+    disconnect, say): numbering on this sheet then follows the wires from it (Sheet properties:
+    Along the wires; tags.wire_walk), as the owner asked, 0.18: "Can it track my bus?". One
+    step; Renumber sheet or Update numbers then numbers it that way."""
+    name, title = "NUMSOURCE", "Numbering source"
+
+    def begin(self):
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click the symbol the wires start from (a disconnect, say)")
+
+    def pick(self, p):
+        e = self.ctx.pick_entity(p, M.Insert)
+        if e is None or not e.pin_points():
+            self.ctx.message("Click a symbol with pins")
+            return
+        with self.ctx.edit(self.title) as ed:
+            ed.sheet_meta(self.ctx.sheet(), number_order="wires", number_from=e.id)
+        self.ctx.message("Numbering on this sheet follows the wires from %s: Renumber sheet or "
+                         "Update numbers numbers it so" % (e.attrs.get("TAG") or e.block))
         self.finish()
 
 
@@ -4405,6 +4736,9 @@ COMMANDS = {
     "WIRECROSS": (WireCrossCmd, ["WX"]),
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
     "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
+    "STRETCH": (StretchCmd, ["S"]),
+    "NUMSOURCE": (NumberSourceCmd, ["NSRC"]),
+    "SIGARROW": (SignalArrowsCmd, ["SDA", "SOURCEARROW", "XARROW"]),
     "DELWIRE": (DeleteWireCmd, ["DW"]),
     "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),
     "DELCOMP": (DeleteComponentCmd, ["AEERASECOMP"]),

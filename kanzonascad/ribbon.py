@@ -4,8 +4,10 @@ Built from the app's existing QActions (so checked states, shortcuts, enabling a
 stay in sync with the menus). Double-click a tab (or Ctrl+F1) to collapse it to just the
 tab names; click a tab to open it again.
 
-Compact like LibreOffice's tabbed bar: two rows of small buttons, group names optional, and a
-tab scrolls sideways (mouse wheel) when the window is too narrow for it.
+Compact like LibreOffice's tabbed bar: two rows of small buttons, group names optional. A tab
+too wide for the window shows its big buttons small, group by group from the right (as Office
+does: the owner, 0.18, "the schematic ribbon goes off the screen"); one still too wide scrolls
+sideways (mouse wheel).
 """
 
 from PySide6.QtCore import Qt, QSize, Signal
@@ -32,8 +34,15 @@ class _Strip(QScrollArea):
         self.horizontalScrollBar().setFixedHeight(7)      # thin: only shows when it's needed
 
     def showEvent(self, e):
-        # scroll instead of squeezing button names (measured now: icons are set after building)
-        self.widget().setMinimumWidth(self.widget().sizeHint().width())
+        # scroll instead of squeezing button names (measured now: icons are set after
+        # building), the ribbon first showing big buttons small where the room is short
+        rib = self.parent()
+        while rib is not None and not isinstance(rib, Ribbon):
+            rib = rib.parent()
+        if rib is not None and rib.currentWidget() is self:
+            rib.fit()
+        else:
+            self.widget().setMinimumWidth(self.widget().sizeHint().width())
         super().showEvent(e)
 
     def wheelEvent(self, e):
@@ -101,6 +110,54 @@ def split_button(actions):
     return SplitButton(actions)
 
 
+STAGES = ("large", "small", "icons")     # a group's buttons, from the most room to the least
+
+
+class _Group:
+    """A ribbon group's buttons, shown as built ("large": icon over its name, the full height;
+    "small": two rows, the name beside the icon) or, in a window too narrow, smaller
+    ("small", then "icons": two rows of icons alone)."""
+
+    def __init__(self, size, grid, widgets, box):
+        self.size, self.grid, self.widgets, self.box = size, grid, widgets, box
+        self.shown = None
+
+    def show(self, stage):
+        if stage == self.shown:
+            return
+        self.shown = stage
+        for w in self.widgets:
+            self.grid.removeWidget(w)
+        col = k = 0
+        for w in self.widgets:
+            split = isinstance(w, SplitButton)
+            plain = isinstance(w, QToolButton) and not split
+            # (a layer box is placed as it is; a split button in a group of small ones keeps
+            # its own look until it shows as an icon)
+            if (plain or split) and stage == "large":
+                w.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+                w.setIconSize(QSize(LARGE_ICON, LARGE_ICON))
+                w.setMinimumWidth(44 if plain else 52)
+                w.setFixedHeight(ROWS * SMALL_HEIGHT)
+                w.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            elif plain or (split and (self.size == "large" or stage == "icons")):
+                w.setToolButtonStyle(Qt.ToolButtonIconOnly if stage == "icons"
+                                     else Qt.ToolButtonTextBesideIcon)
+                w.setIconSize(QSize(SMALL_ICON, SMALL_ICON))
+                w.setMinimumWidth(0)
+                w.setFixedHeight(SMALL_HEIGHT)
+                w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            elif split and self.size == "small" and stage == "small":
+                w.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            w.updateGeometry()
+            if stage == "large":
+                self.grid.addWidget(w, 0, col, ROWS, 1)
+                col += 1
+            else:
+                self.grid.addWidget(w, k % ROWS, k // ROWS)
+                k += 1
+
+
 class Ribbon(QTabWidget):
     collapsedChanged = Signal(bool)
 
@@ -110,6 +167,9 @@ class Ribbon(QTabWidget):
         self.setObjectName("ribbon")
         self._collapsed = False
         self._labels = []
+        self._groups = {}               # tab page -> [_Group, ...], left to right
+        self._fitted = {}               # tab page -> the room it was fitted to
+        self.currentChanged.connect(lambda _i: self.fit())
         self._show_labels = False
         self.tabBar().tabBarDoubleClicked.connect(lambda _i: self.set_collapsed(not self._collapsed))
         self.tabBar().tabBarClicked.connect(self._tab_clicked)
@@ -119,11 +179,12 @@ class Ribbon(QTabWidget):
     def add_tab(self, title, groups):
         """groups: [(group title, 'large' | 'small', [QAction | QWidget | None, ...])]"""
         page = QWidget()
+        self._groups[page] = []
         row = QHBoxLayout(page)
         row.setContentsMargins(2, 1, 2, 1)
         row.setSpacing(2)
         for gtitle, size, items in groups:
-            row.addWidget(self._group(gtitle, size, items))
+            row.addWidget(self._group(gtitle, size, items, page))
             line = QFrame()
             line.setFrameShape(QFrame.VLine)
             line.setFrameShadow(QFrame.Sunken)
@@ -132,7 +193,24 @@ class Ribbon(QTabWidget):
         self.addTab(_Strip(page), title)
         return page
 
-    def _group(self, title, size, items):
+    def tab_index(self, title):
+        for i in range(self.count()):
+            if self.tabText(i) == title:
+                return i
+        return -1
+
+    def show_tab(self, title, on, select=False):
+        """Show or hide a tab that only belongs to some work (Block: in a block's tab)."""
+        i = self.tab_index(title)
+        if i < 0:
+            return
+        if not on and self.currentIndex() == i:
+            self.setCurrentIndex(0)
+        self.setTabVisible(i, bool(on))
+        if on and select:
+            self.setCurrentIndex(i)
+
+    def _group(self, title, size, items, page):
         box = QWidget()
         v = QVBoxLayout(box)
         v.setContentsMargins(2, 0, 2, 0)
@@ -141,18 +219,12 @@ class Ribbon(QTabWidget):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(1)
         grid.setVerticalSpacing(0)
-        col = 0
-        k = 0
+        widgets = []
         for item in items:
             if item is None:
                 continue
             if isinstance(item, QWidget):
                 w = item
-                if isinstance(w, SplitButton) and size == "large":
-                    w.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-                    w.setIconSize(QSize(LARGE_ICON, LARGE_ICON))
-                    w.setMinimumWidth(52)
-                    w.setFixedHeight(ROWS * SMALL_HEIGHT)
             else:
                 w = QToolButton()
                 w.setDefaultAction(item)
@@ -160,22 +232,10 @@ class Ribbon(QTabWidget):
                 # (clicked, it leaves the keyboard with the drawing, so Esc still cancels and
                 # deselects: the owner, 0.16)
                 w.setFocusPolicy(Qt.NoFocus)
-                if size == "large":
-                    w.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-                    w.setIconSize(QSize(LARGE_ICON, LARGE_ICON))
-                    w.setMinimumWidth(44)
-                    w.setFixedHeight(ROWS * SMALL_HEIGHT)
-                else:
-                    w.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-                    w.setIconSize(QSize(SMALL_ICON, SMALL_ICON))
-                    w.setFixedHeight(SMALL_HEIGHT)
-                    w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            if size == "large":
-                grid.addWidget(w, 0, col, ROWS, 1)
-                col += 1
-            else:
-                grid.addWidget(w, k % ROWS, k // ROWS)
-                k += 1
+            widgets.append(w)
+        group = _Group(size, grid, widgets, box)
+        self._groups[page].append(group)
+        group.show(size)
         v.addLayout(grid, 1)
         label = QLabel(title)
         label.setAlignment(Qt.AlignCenter)
@@ -185,11 +245,59 @@ class Ribbon(QTabWidget):
         v.addWidget(label)
         return box
 
+    def fit(self, width=None):
+        """The shown tab in the room there is: its groups as built when they fit; else, group
+        by group from the right, big buttons shown small, then small ones as icons alone (the
+        name in the tooltip), until it fits (or nothing is left to make smaller)."""
+        strip = self.currentWidget()
+        if not isinstance(strip, _Strip):
+            return
+        page = strip.widget()
+        groups = self._groups.get(page, [])
+        room = width if width is not None else strip.viewport().width()
+        if room <= 0 or self._fitted.get(page) == (room, self._show_labels):
+            return                      # (as it was: a resize that changed nothing here)
+        self._fitted[page] = (room, self._show_labels)
+        row = page.layout()
+
+        def need():
+            # (added up from the groups' own sizes: the row's cached ones lag behind a change)
+            m = row.contentsMargins()
+            ws = [row.itemAt(i).widget() for i in range(row.count())]
+            ws = [w for w in ws if w is not None]
+            for g in groups:
+                g.grid.invalidate()
+                g.box.layout().invalidate()
+            return m.left() + m.right() + row.spacing() * max(0, len(ws) - 1) + \
+                sum(w.sizeHint().width() for w in ws)
+        for g in groups:
+            g.show(g.size)
+        for step in ("small", "icons"):
+            for g in reversed(groups):
+                if need() <= room:
+                    break
+                if STAGES.index(g.shown) < STAGES.index(step):
+                    g.show(step)
+        page.setMinimumWidth(need())
+        row.invalidate()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.fit()
+
+    def compacted(self):
+        """How the shown tab's groups are shown now, where not as built: {index: stage}."""
+        strip = self.currentWidget()
+        page = strip.widget() if isinstance(strip, _Strip) else None
+        return {i: g.shown for i, g in enumerate(self._groups.get(page, []))
+                if g.shown != g.size}
+
     def set_group_names(self, on):
         """Show the group names under the buttons (Microsoft Office style); off is compact."""
         self._show_labels = bool(on)
         for label in self._labels:
             label.setVisible(self._show_labels)
+        self.fit()
         if not self._collapsed:
             self.setMaximumHeight(self.expanded_height())
 

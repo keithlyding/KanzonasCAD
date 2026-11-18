@@ -36,6 +36,20 @@ nobody understands).
 - Multi-sheet projects with a sheet list and sheet types (schematic, panel, report, other):
   done since 0.1/0.2.
 
+- 0.18: cross-references and numbering (owner, Nov 2026): Source/destination arrows as
+  AutoCAD Electrical's (click the source end, then the destination end on any sheet; one wire,
+  the source's number; each arrow shows the number and the other's place); Update numbers and
+  cross-references (tags, wires, cross-references; renumber or keep, asked each time; this
+  sheet, picked sheets or the whole project); the Library's phase filter (worked out from pins
+  and name, Properties... overrides).
+  Also in 0.18: cross-reference text on layer XREFS, cyan, 0.065" (owner's choice); Lock
+  numbers (lock what's there, for a selection, sheets or the project: owner's choice over a
+  sheet setting); Stretch, as AutoCAD's, and Shift-picked grips moving together (owner: both).
+  The ribbon (owner, Nov 2026: "the schematic ribbon goes off the screen... make it its own
+  tab that only shows up when needed (or manually selected)"): a block's tools on a Block tab
+  shown in a block's tab (or always, View > Block tab); a tab too wide for the window shows
+  its groups smaller from the right, as Office does, rather than scrolling.
+
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,
 cross-references, wire numbers, off-sheet connectors, more symbols), then the panel.

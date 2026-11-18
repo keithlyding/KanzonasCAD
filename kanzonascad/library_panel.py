@@ -151,6 +151,10 @@ def maker_tooltip(b):
     return "\n".join(lines)
 
 
+PHASE_FILTER = (("All phases", None), ("Three-phase", "3"),
+                ("Single-phase and control", "1"))
+
+
 def _maker_match(b, mfr, family):
     """Does a block pass the Library's Manufacturer and Family filters (None: any)?"""
     if mfr is not None and b.manufacturer.strip().lower() != mfr.lower():
@@ -183,9 +187,17 @@ class LibraryPanel(QWidget):
         self.mfr_filter.setToolTip("Show only this manufacturer's blocks (and parts)")
         self.family_filter = QComboBox()
         self.family_filter.setToolTip("Show only this family's blocks")
-        for box in (self.mfr_filter, self.family_filter):
+        # three-phase or not (the owner, 0.18: "Can symbols be further filtered by whether
+        # they're 3ph or not?"; worked out from the pins and name, or as set in Properties...)
+        self.phase_filter = QComboBox()
+        self.phase_filter.setObjectName("phase_filter")
+        self.phase_filter.setToolTip("Show only three-phase blocks (pins L1-L3 or T1-T3, or set "
+                                     "so in Properties...), or only the others")
+        for label, val in PHASE_FILTER:
+            self.phase_filter.addItem(label, val)
+        for box in (self.mfr_filter, self.family_filter, self.phase_filter):
             box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-            box.setMinimumContentsLength(12)
+            box.setMinimumContentsLength(10)
             box.currentIndexChanged.connect(lambda _i: self.refresh())
             frow.addWidget(box, 1)
         v.addLayout(frow)
@@ -271,6 +283,7 @@ class LibraryPanel(QWidget):
         self._fill_filter(self.family_filter, "All families",
                           sorted(fams.values(), key=str.lower))
         family = self.family_filter.currentData()
+        phase = self.phase_filter.currentData()
         for kind, tree in self.trees.items():
             tree.clear()
             blocks = loaded[kind]
@@ -278,6 +291,8 @@ class LibraryPanel(QWidget):
             for name in sorted(blocks, key=str.lower):
                 b = blocks[name]
                 if not _maker_match(b, mfr, family):
+                    continue
+                if phase is not None and M.phases_of(b) != phase:
                     continue
                 hay = " ".join((b.name, b.category, b.description, b.manufacturer, b.family,
                                 b.series, b.catalog)).lower()
@@ -543,9 +558,20 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
     show_pins = QCheckBox("Show the pin names on the drawing (terminal numbers)")
     show_pins.setObjectName("show_pins")
     show_pins.setChecked(defn.show_pins if defn is not None else True)
+    phases = QComboBox()
+    phases.setObjectName("phases")
+    guess = M.phases_of(M.BlockDef.from_dict(dict(defn.to_dict(), phases=""))) \
+        if defn is not None else None
+    phases.addItem("Automatic%s" % ({"3": " (three-phase)", "1": " (single-phase or control)"}
+                                    .get(guess, ": from its pins and name")), "")
+    phases.addItem("Three-phase", "3")
+    phases.addItem("Single-phase or control", "1")
+    phases.setCurrentIndex(max(phases.findData(defn.phases if defn is not None else ""), 0))
+    phases.setToolTip("For the Library's phase filter: automatic takes a symbol with pins "
+                      "L1-L3 or T1-T3 (or 3-pole / 3-phase in its name) as three-phase")
     sym_rows = [("Part in cross-references", role), ("Contact", contact),
                 ("Tag prefix", prefix), ("Wire numbers through it", wiring),
-                (pin_label, pins), ("", show_pins)]
+                (pin_label, pins), ("", show_pins), ("Phases", phases)]
     for label, w in sym_rows:
         form.addRow(label, w)
     sym_note = _hint("Part in cross-references, Contact, Tag prefix, Wire numbers and Pin names "
@@ -610,7 +636,8 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
            "category": cat.currentText().strip(), "description": desc.text().strip(),
            "role": role.currentData(), "contact": contact.currentData(),
            "prefix": prefix.text().strip().upper(), "wiring": wiring.currentData(),
-           "pin_names": pin_list(), "show_pins": show_pins.isChecked()}
+           "pin_names": pin_list(), "show_pins": show_pins.isChecked(),
+           "phases": phases.currentData()}
     out.update({k: _text_of(box).strip() for k, box in makers.items()})
     if defn is None:
         out["replace"] = replace.isChecked()
@@ -628,6 +655,7 @@ def block_with_details(defn, details):
         for k in ("role", "contact", "prefix", "wiring"):
             d[k] = details.get(k, d.get(k, ""))
         d["show_pins"] = bool(details.get("show_pins", d.get("show_pins", False)))
+        d["phases"] = details.get("phases", d.get("phases", ""))
         if d.get("tag_pos") is None and defn.kind != "symbol" and defn.entities:
             # (a footprint becoming a symbol: its tag above its drawing, as Make block puts it)
             boxes = [e.bbox() for e in defn.entities]

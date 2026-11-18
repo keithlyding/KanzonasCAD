@@ -16,7 +16,7 @@ spec.loader.exec_module(slop)
 class SlopTest(unittest.TestCase):
     def test_no_slop(self):
         found = slop.run()
-        self.assertEqual(found, [], "\n" + "\n".join("%s:%d: %s: %s" % f for f in found))
+        self.assertEqual(found, [], "\n" + "\n".join("%s:%s: %s: %s" % f for f in found))
 
     def _scan(self, check, text, *more):
         d = tempfile.mkdtemp()

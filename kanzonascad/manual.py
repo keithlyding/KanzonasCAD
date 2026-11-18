@@ -17,12 +17,23 @@ and reports come next.</i></p>
 <h2>The window</h2>
 <ul>
 <li><b>Menus and ribbon</b> along the top, as in KanzonasPDF. The ribbon's tabs are
-<b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>; each
-group of buttons has its name under it (Rail and duct, Dimensions, Blocks...). Move, Copy,
+<b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>, and
+<b>Block</b> while you edit a block; each
+group of buttons has its name under it (Rail and duct, Dimensions, Numbering...). Move, Copy,
 Rotate, Mirror and Erase are on the Schematic and Panel tabs too (Modify), not only Home. Double-click a
 tab name (or <b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
 <b>Ribbon group names</b> (View) turns the names off, for a more compact ribbon, and on
-again.</li>
+again. When the window is too narrow for a tab, its groups shrink from the right: big
+buttons become small ones with their names beside them, then icons alone (the name shows
+when you hold the mouse over one); widen the window and they grow back. Only a tab that
+still doesn't fit as icons scrolls sideways (the mouse wheel over it).</li>
+<li><b>The Block tab</b> holds a block's own tools: <b>Save block</b>, <b>Save block as...</b>,
+<b>Block properties...</b>, <b>Duplicate block...</b>, <b>Add pin</b>, <b>Pins...</b>,
+<b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
+in a block's tab (Edit block..., on the Schematic tab's Symbols group and the Panel tab's
+Footprints group, opens one), and goes away when you leave it. To have it all the time, turn
+on <b>Block tab</b> (View menu, and the View tab's Ribbon group). The same commands are always
+in the Library menu.</li>
 <li><b>Project tabs</b>: each open project has its own tab. Drag a tab away from the tabs and
 let go to give it a window of its own (see <b>Windows and two screens</b>).</li>
 <li><b>Sheets panel</b> on the left: the project's sheets with their page numbers. Click one to
@@ -224,6 +235,11 @@ own from its maker's drawing (Make block), or Edit block one of these and save i
 own name. A footprint of yours with the same name replaces a built-in one.</li>
 <li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
 footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
+<li><b>A symbol and a footprint with the same name</b> stay apart in a project: the one
+placed second is kept as "name (footprint)" or "name (symbol)" (its tab in the Library still
+shows its own name), so a footprint never takes a symbol's drawing, or the other way round.
+Edit block..., Update blocks from library... and saving a changed block find each by its own
+name and kind.</li>
 </ul>
 <p>The <b>Library</b> opens as a popup window, as AutoCAD Electrical's icon menu does, so the
 drawing keeps the whole width: <b>Insert symbol...</b> (Schematic tab) opens it on its Symbols,
@@ -333,7 +349,13 @@ manufacturer typed, the series of that family); the list grows from what you typ
 <b>?</b> button beside Manufacturer opens this section.</p>
 <p>In the Library popup, the search box also finds a manufacturer, family or series, and the
 two lists above the symbols (<b>All manufacturers</b>, <b>All families</b>) show only one
-manufacturer's blocks, or one family's; the manufacturer list also filters the Parts tab. A
+manufacturer's blocks, or one family's; the manufacturer list also filters the Parts tab. The
+third list, <b>All phases</b>, shows only the <b>Three-phase</b> blocks or only the
+<b>Single-phase and control</b> ones. A block is three-phase when it has pins L1-L3, T1-T3 or
+U, V, W, or says 3-pole, 3-phase or 3ph in its name or description (the breakers,
+disconnects, fuses, contactor power contacts, overloads and starter of three poles, the
+three-phase motor and the drive); <b>Phases</b> in its Properties... (Automatic, Three-phase,
+Single-phase or control) sets it when that guess is wrong. A
 block's tooltip shows all three. Placing a block whose manufacturer is set fills in the placed
 copy's manufacturer (as a part does; a part's own manufacturer wins), and <b>New part...</b>
 with a symbol or footprint selected in the Library starts the part with that block and its
@@ -353,14 +375,15 @@ drawing; Edit block... adds its pins); the kind can change either way. Renaming 
 under the new name, removes your file under the old one and points your parts at the new
 name.</li>
 <li><b>Edit block...</b> (a button in the Library popup, its right-click menu, or the Library
-menu and the Schematic and Panel tabs, for a block selected in the drawing): the library's
+menu, the Schematic tab's Symbols group, the Panel tab's Footprints group and the Block tab,
+for a block selected in the drawing): the library's
 copy of the block opens in a tab of its own, <b>Block: name</b>, as AutoCAD's Block Editor
 does. Change it with every normal command (Move, Copy, Trim, Text, grips, Undo...). The cross
 is the <b>base point</b> (on the locked layer BLOCK BASE POINT); each green text on layer BLOCK
 PINS is a <b>pin</b>: its insertion point, marked with a small ring, is where wires attach, and
 its text is the pin's name (edit the text to rename it, move it with its grip, copy it to add
-a pin, erase it to remove one). <b>Add pin</b> (ADDPIN, PIN, AP; Library menu and the
-Schematic and Panel tabs, in that tab) adds pins by clicking: click where the pin goes (the
+a pin, erase it to remove one). <b>Add pin</b> (ADDPIN, PIN, AP; Library menu and the Block
+tab, in that tab) adds pins by clicking: click where the pin goes (the
 snaps help: a line's end), then type its name or press Enter for the one offered (one more than
 the highest number: 15 after 13 and 14, A3 after A1 and A2); it goes on with the next pin until
 Enter or Esc. A name already there is asked again. <b>Pins...</b> (the same places) lists the
@@ -379,14 +402,14 @@ when placed; left where it opened, it stays the middle of the drawing (also when
 changes); erased, it goes back to that. The blue <b>LABEL</b> text on layer BLOCK TAG is
 where its <b>Footprint label</b> goes, the same way: left where it opened, the middle of the
 drawing; moved, that spot. <b>Save block</b>
-(Library menu, the ribbon, or Save, Ctrl+S, in that tab) puts it back in your library: the
+(Library menu, the ribbon's Block tab, or Save, Ctrl+S, in that tab) puts it back in your library: the
 pins keep their order (or the one set in Pins...), new ones come after. Closing the tab with changes not saved asks
-first. <b>Save block as...</b> (Library menu and the ribbon, in that tab) saves it under a new
+first. <b>Save block as...</b> (Library menu and the Block tab, in that tab) saves it under a new
 name instead, with its catalog number left blank: the block it was opened from stays as it
 was in your library, and the tab goes on editing the new one.</li>
 <li><b>Duplicate...</b> (a button in the Library popup, its right-click menu, or
-<b>Duplicate block...</b> in the Library menu and the Schematic and Panel tabs, for a block
-selected in the drawing): to make a block that is almost like one you have (a footprint of
+<b>Duplicate block...</b> in the Library menu and the Block tab, for a block selected in the
+drawing): to make a block that is almost like one you have (a footprint of
 the next size up, a contactor with another contact arrangement), it asks for a name (offering
 "name copy"), saves a copy under it in your library with everything the same but the catalog
 number, left blank, and opens the copy in Edit block right away to be changed. Set its
@@ -426,7 +449,37 @@ around), its tags follow: CR601 becomes CR701.</li>
 changes it. Untick "Lock this tag" there to give it back.</li>
 <li><b>Renumber sheet</b> (Schematic tab, Sheets menu) numbers the sheet's unlocked devices
 01, 02... per prefix in the sheet's <b>numbering order</b> (Sheet properties): across then
-down, or down then across. Locked tags stay and their numbers are skipped.</li>
+down, or down then across, or <b>along the wires</b>. Locked tags stay and their numbers are
+skipped.</li>
+<li><b>Along the wires</b> follows a bus however it winds round the sheet (right along the top
+row, down the side and back left along the next, say). <b>Numbering source</b> (NUMSOURCE;
+Schematic tab: Numbering, Sheets menu): click the symbol the wires start from (the disconnect)
+and the sheet is numbered along the wires from it, as you would trace them: each branch off the
+bus in the order its drop leaves the bus, and everything down that branch (its contactor, drive
+and motor) with the same count, M209, VFD209 and MTR209. Wire numbers follow too: a branch's
+own wires get their numbers before the next branch's (a drop off the bus is the bus's wire and
+has its number). Devices the wires don't reach from the source come after, across then down.
+Renumber sheet or Update numbers then numbers it so. A bus wire that doubles back on itself
+(Clean up wires straightens it) can upset the order. Whether wire numbers follow the tags'
+order or go across and down is a project setting (Project properties, Schematic: <b>Wire
+numbers follow the tags' numbering order</b>, on to start) that a sheet can override (Sheet
+properties: <b>Wire numbers in</b>: as the project, the tags' order, or across, then
+down).</li>
+<li><b>Update numbers and cross-references...</b> (Schematic tab: Numbering, Sheets menu) does
+it for more at once. Tick what to update: <b>Device tags</b>, <b>Wire numbers</b>,
+<b>Cross-references</b> (any of them, or all). Choose how: <b>Renumber in order</b> (01, 02...
+for tags and 001, 002... for wires, in each sheet's order; locked ones stay) or <b>Keep the
+numbers</b> (only what has no number gets one, and a number that isn't of its sheet's page is
+fixed, its count kept when free). And where: <b>This sheet</b>, <b>The whole project</b>, or
+<b>These sheets</b> (tick them in the list). One step: Undo takes it all back. Frozen sheets
+keep their cross-references.</li>
+<li><b>Lock numbers...</b> (Schematic tab: Numbering, Sheets menu) locks wire numbers and/or
+device tags as they are, so numbering, Renumber sheet and Update numbers leave them alone:
+<b>The selected objects</b> (select the wires and devices first), <b>This sheet</b>, <b>The
+whole project</b> or <b>These sheets</b>. <b>Unlock</b> in the same window gives them back to
+numbering. It is the same lock as a device's <b>Lock this tag</b> and a wire's <b>Lock this
+number</b> (double-click it), which lock one at a time; new wires and devices still get
+numbers. (Freeze cross-references, below, is for a sheet's cross-reference text only.)</li>
 <li>Contacts take their device's tag (next section); symbols without a tag prefix get no
 tag.</li>
 <li>Behind each tag, every device also has a hidden identity that survives renaming, so
@@ -469,6 +522,10 @@ object.</li>
 operator, one line per contact, <b>NO 6-D3</b> or <b>NC 7-B2</b> (in sheet order, then zone
 order); under each contact, where its device is (<b>6-D1</b>). They use the project's grid
 reference format and each sheet's zones, and go into PDF and DXF exports as text.</li>
+<li>They are on a layer of their own, <b>XREFS</b> (cyan to start; Layers... changes its color or
+switches them off, on the screen, in prints and in exports), and a little smaller than wire
+numbers: 0.065 inch (Project properties, Schematic). A project made before 0.18 gets the layer
+when it is opened, and its cross-references the new size unless it was changed.</li>
 <li>Double-click a coil and untick <b>List its contacts under it</b> to hide its list; untick
 <b>List this contact under its device</b> on a contact to leave it out of the list.</li>
 <li>They follow every change. <b>Update cross-references automatically</b> (Schematic tab,
@@ -727,12 +784,21 @@ of the wire on its input with A, B, C... added (6001A, 6001B; after Z come AA, A
 <li><b>Off-sheet connector</b> (Library, JIC/Wiring): place one where a wire leaves the sheet
 and one where it comes back on another sheet, with the same name. Placing one asks its name:
 Enter takes the one offered (a connector still waiting for its other end, else the next free
-letter). The wire keeps the number of the sheet it starts on, and under each connector its
-other end's place shows (<b>7-A2</b>). <b>Source arrow</b> and <b>Destination arrow</b>
+letter). The wire keeps the number of the sheet it starts on, and beside each connector its
+other end's place shows (<b>7-A2</b>), outside the connector on the side away from its wire,
+whichever way the connector is turned. <b>Source arrow</b> and <b>Destination arrow</b>
 (Library, JIC/Wiring) are the same, drawn as arrows on the wire's end: a source arrow points
 away from the line where the wire leaves, a destination arrow's tip is on the line, pointing
 into it, where the wire arrives. Past each arrow's far end (not over the wire), the wire's
 number and the other arrow's place (<b>2046 / 7-A2</b>).</li>
+<li><b>Source/destination arrows</b> (SIGARROW, SDA; Draw menu, Schematic tab:
+Cross-references), as AutoCAD Electrical's signal arrows: click near the open end of the wire
+where it leaves (an end on nothing: a Source arrow goes there), then near the open end where it
+arrives, on this sheet or another (go to it in the Sheets panel: the command waits), and a
+Destination arrow goes there. They get a new name, the two wires become one wire with the
+source's number, and each arrow shows that number and the other's place. It goes on with the
+next pair; Enter or Esc ends it. An end connected to something, or the same wire twice, is
+refused with a message.</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
 numbers and cross-references.</li>
 <li>Wire numbers go into PDF and DXF exports as text.</li>
@@ -813,6 +879,12 @@ manufacturer's drawing to its real size. Lengths can be typed in millimeters:
 <code>45mm</code>. On a panel sheet, footprints are left out (they're real size).</td></tr>
 <tr><td>Mirror</td><td>MIRROR, MI</td><td>Select, two points of the mirror line, keep or erase
 the originals (the mirrored objects show while it asks). Text stays readable.</td></tr>
+<tr><td>Stretch</td><td>STRETCH, S</td><td>Drag a crossing window over the ends to move (the
+three ends of a bus, say), then a base point and where it goes. Wire ends in the window move
+and their wires stay square (a corner slides along, or a jog is added); a line's ends and a
+polyline's corners in it move; an object wholly in it, and a symbol, text or circle whose
+insertion point or center is in it, moves whole (wires on a symbol's pins follow). One step.
+</td></tr>
 <tr><td>Array</td><td>ARRAY, AR</td><td>Copies of the selected objects in rows and columns
 (R, to start: how many rows, how many columns, the distance between rows (up; negative: down)
 and between columns (across; negative: left)) or round a center (P: the center, how many in
@@ -852,9 +924,11 @@ the next item number).</td></tr>
 <tr><td>DIN rail</td><td>DINRAIL, RAIL, DR</td><td>Real-size DIN rail from its start to its end
 (or type the length toward the cursor). Before the first click: <b>7.5</b> (TS35 x 7.5 mm, to
 start), <b>15</b> (TS35 x 15 mm) or <b>MINI</b> (TS15).</td></tr>
-<tr><td>Wire duct</td><td>DUCT, WIREWAY, WD, PANDUIT</td><td>Real-size wire duct, the same way. Before
-the first click, click a standard size on the command line or type one, width x depth:
-<code>2x3</code> (inches) or <code>50x75mm</code>.</td></tr>
+<tr><td>Wire duct</td><td>DUCT, WIREWAY, WD, PANDUIT</td><td>Real-size wire duct, from a corner:
+click one corner and then the other end of that edge (or type the length); the duct goes on the
+side of that edge the cursor is on, F puts it on the other side. Before the first click, click a
+standard size on the command line or type one, width x depth: <code>2x3</code> (inches) or
+<code>50x75mm</code>.</td></tr>
 </table>
 <p>Typed <b>Undo</b> (U) and <b>Redo</b> work on the command line too.</p>
 
@@ -883,7 +957,9 @@ with ORTHO on, straight across or up and down).</li>
 a yellow marker in AutoCAD's shape and the snap's name show which. The snaps:
 <b>Endpoint</b> (END), <b>Midpoint</b> (MID), <b>Center</b> (CEN), <b>Geometric center</b>
 (GCE: the middle of a closed polyline), <b>Node</b> (NOD: symbol pins, dimension points),
-<b>Quadrant</b> (QUA), <b>Intersection</b> (INT), <b>Insertion</b> (INS: blocks and text),
+<b>Quadrant</b> (QUA), <b>Intersection</b> (INT: where two lines, arcs or edges cross, a
+footprint's lines and the edges of wire duct and DIN rail included), <b>Insertion</b> (INS:
+blocks and text),
 <b>Perpendicular</b> (PER: square to a line, or on a circle in line with its center, from the
 last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point) and
 <b>Nearest</b> (NEA: the closest point on any object). And three that follow what the cursor
@@ -1003,8 +1079,10 @@ so the gaps between them are equal. With Snap on, each move is rounded to the sn
 symbols' pins stay on the grid and wires still meet them (the gaps can then differ by up to
 one snap step); wires on a moved symbol's pins follow. One Undo puts them back.</li>
 <li><b>DIN rail</b> and <b>Wire duct</b> (Draw menu, Panel tab) are drawn at real size from
-one end to the other: the rail's outline, lips and mounting slots, the duct's walls and finger
-slots. They always go straight across or straight up and down (a snap off that line only sets
+one end to the other (a rail along its middle, a duct along one edge, from a corner): the rail's outline, lips and mounting slots; the duct's outline, its finger slots
+along both edges (one every half inch) and its mounting holes along the middle (every 3
+inches). <b>Wire duct drawn with a light hatch</b> (Panel settings) adds light diagonal lines
+across every duct, as a mask; new ducts take it too. They always go straight across or straight up and down (a snap off that line only sets
 the length), and their end grips stretch them along their own line. Stretch one
 with its end grips (or double-click it and type its length), move it with its middle grip. A duct's depth isn't drawn (it's a view from the front) but is part of its
 size: it goes on the materials list and the bill of materials. Double-click a piece for its
@@ -1042,7 +1120,9 @@ pixels of the end of a footprint already on that rail, it butts against it ("On 
 against the next one"), as devices sit side by side on a real rail; a copy butts against the
 one it was copied from. It works on rails across and up and down, and on footprints turned
 either way. Take it off the rail by moving it away; with the object snaps off (F3) it isn't
-held at all. Moving a rail together with what is on it moves them all as they are. A
+held at all. A point you snap to wins: with the cursor on an object snap (an intersection on
+a duct's or rail's edge, an end), the part goes exactly where you snapped, held by the point
+you picked it up by, and isn't pulled onto the rail. Moving a rail together with what is on it moves them all as they are. A
 footprint's DIN rail point is the middle of its drawing unless its block says otherwise:
 parts whose clip isn't halfway up (many breakers, contactors, power supplies) get theirs in
 <b>Edit block...</b> (see <b>Changing a library block</b>). The rail's own snaps still work
@@ -1134,7 +1214,10 @@ too).</li>
 that end, corner, radius or text position (a symbol: its insertion point, its tag, an
 attribute shown). A polyline or rectangle also has a grip in the <b>middle of each side</b>:
 drag it and that side moves straight out or in (a rectangle stays a rectangle, longer or
-shorter); a wire has its corners only.</li>
+shorter); a wire has its corners only. <b>Shift+click</b> grips to pick several (on any of
+the selected objects: the ends of a bus's wires, say): they turn red; click one of them and
+then where it goes, and all of them move the same way, in one step. Shift+click a picked grip
+again to put it back; Esc drops them all.</li>
 <li>Select first, then start Move, Copy objects, Rotate... (or start the command and then
 select, pressing Enter when done).</li>
 <li>Right-click: Enter while a command runs; otherwise a menu with Repeat, the clipboard and

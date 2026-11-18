@@ -711,12 +711,13 @@ def join_at(ed, sheet, points):
         # (not when b goes back along a: joined, the wire would fold back over itself, the
         # battery, seed 306: a bus wire laid on another wire the other way, and a pin left in
         # the middle of the fold)
-        da = (pa[-2][0] - p[0], pa[-2][1] - p[1])
-        db = (pb[1][0] - p[0], pb[1][1] - p[1])
-        if abs(da[0] * db[1] - da[1] * db[0]) <= TOL * TOL and da[0] * db[0] + da[1] * db[1] > 0:
+        # (by the angle between them, as doubles_back measures: an end a hair off the other's
+        # line, 52455.999999999985 for 52456 far from the origin, passed a fixed tolerance and
+        # was joined into a fold, the long battery on GitHub, seed 3283)
+        if doubles_back([pa[-2], p, pb[1]]):
             continue
         merged = _tidy(pa + pb[1:])
-        if len(merged) < 2:
+        if len(merged) < 2 or doubles_back(merged):
             continue
         ed.remove(sheet, b.id)
         ed.change(sheet, a.copy(points=merged,

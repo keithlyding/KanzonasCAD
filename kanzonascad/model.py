@@ -41,7 +41,12 @@ DEFAULT_LAYERS = [
     ("NOTES", "#00a0ff"),
     ("PANEL", ADAPTIVE),
     ("DIMENSIONS", "#00c8c8"),
+    # the cross-references' text (a coil's contacts, a contact's coil, the other end of a
+    # connector or arrow): a layer of its own, cyan (the owner, 0.18: "Cross reference labels
+    # need to be a different layer by default. And a different color")
+    ("XREFS", "#00e5ff"),
 ]
+XREF_HEIGHT_BEFORE_018 = 0.08   # (see Project.from_dict: such projects take the new 0.065)
 
 # the project's own settings (Project properties); sheets that follow the project take the
 # layout ones (size, zones) from here
@@ -51,7 +56,9 @@ DEFAULT_SETTINGS = {
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
-    "xref_height": 0.08,        # cross-reference text
+    "wire_order_tags": True,    # wire numbers in the tags' numbering order (else across/down)
+    "duct_hatch": False,        # wire duct drawn with a light hatch (Panel settings)
+    "xref_height": 0.065,       # cross-reference text (0.08 before 0.18: "slightly smaller")
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
     "wire_number_height": 0.08,
     "dim_height": 0.1,          # dimension text, paper inches
@@ -436,6 +443,18 @@ class Wire(Polyline):
                 return True
         return False
 
+    def with_grip(self, i, p):
+        """A corner or end dragged: with no corner left where it turns straight back along
+        itself (an end dragged onto the line of the leg before it ran back up that leg: a
+        hidden fold, found by the long battery with Shift-picked grips, 0.18)."""
+        got = super().with_grip(i, p)
+        from .wires import straighten
+        # (and no point twice: an end dropped on the corner before it, seed 4101)
+        pts = _tidy(straighten(got.points))
+        if len(pts) < 2:
+            return self                 # (dragged onto its other end: no wire left; as it was)
+        return got if len(pts) == len(got.points) else got.copy(points=[list(q) for q in pts])
+
     def grips(self):
         """Its corners and ends, then the middle of each straight run (dragged, the run moves
         sideways and the wires joined to it follow: wires.segment_drag, through GripCmd)."""
@@ -480,7 +499,7 @@ class Wire(Polyline):
                     pts[at:at] = jog if j == 0 else jog[::-1]
                 else:
                     pts[m][0] += dx
-            return self.copy(points=_tidy(pts))
+            return self.copy(points=_unfolded(pts))
         if n >= 3:
             if horiz and not vert:
                 pts[k][1] += dy
@@ -497,7 +516,7 @@ class Wire(Polyline):
             else:
                 ym = (a[1] + b[1]) / 2
                 pts = [a, [a[0], ym], [b[0], ym], b]
-        return self.copy(points=_tidy(pts))
+        return self.copy(points=_unfolded(pts))
 
 
 @_register
@@ -549,6 +568,14 @@ class WireCross(Entity):
 
     def _map(self, fn, **_kw):
         return self.copy(pos=list(fn(self.pos)))
+
+
+def _unfolded(pts):
+    """_tidy, and with no corner where the path turns straight back along itself (an end moved
+    back along its own last leg: Stretch, seed 3272; a symbol moved with its wires, seed 3273,
+    the long battery on GitHub)."""
+    from .wires import straighten
+    return _tidy(straighten(_tidy(pts)))
 
 
 def _tidy(pts):
@@ -1735,27 +1762,54 @@ class Rail(Run):
 
 @_register
 class Duct(Run):
-    """Wire duct (wireway): its outline, its walls and their finger slots. The depth isn't
-    drawn (a plan view) but is part of its size."""
+    """Wire duct (wireway): its outline, the finger slots along both edges (notches cut in
+    from each side, a finger between) with the base line under them, and mounting holes along
+    its middle (the owner, 0.18: "I don't love the look of panduit on the drawing. I think it
+    needs some basic mask and/or hole pattern"; asked: fingers and holes, a light hatch as an
+    option: attribute HATCH "1", Panel settings). The depth isn't drawn (a plan view) but is
+    part of its size."""
     kind = "duct"
     __slots__ = ()
-    WALL = 0.08
-    PITCH = 0.5
+    PITCH = 0.5             # finger slots, one every half inch
+    SLOT = 0.25             # a slot's width
+    HOLES = 3.0             # mounting holes along the middle, this far apart
+    HOLE_R = 0.09
+    HATCH = 0.35            # the light hatch's spacing (on: attribute HATCH)
 
     def name(self):
         return "Wire duct " + size_text(self.width, self.depth)
 
     def _details(self):
-        L, h, t = self.length(), self.width / 2, min(self.WALL, self.width / 6)
-        out = [Line(self.at(0, -(h - t)), self.at(L, -(h - t))),
-               Line(self.at(0, h - t), self.at(L, h - t))]
-        s = self.PITCH
-        n = 0
-        while s < L - 1e-9 and n < 4000:
-            out.append(Line(self.at(s, -h), self.at(s, -(h - t))))
-            out.append(Line(self.at(s, h), self.at(s, h - t)))
+        L, h = self.length(), self.width / 2
+        d = min(0.3, self.width / 5)                  # (how deep the slots are)
+        out = [Line(self.at(0, -(h - d)), self.at(L, -(h - d))),
+               Line(self.at(0, h - d), self.at(L, h - d))]
+        s, n = self.PITCH / 2, 0
+        while s + self.SLOT < L - 1e-9 and n < 4000:
+            for side in (-1, 1):
+                edge, base = side * h, side * (h - d)
+                out.append(Polyline([self.at(s, edge), self.at(s, base),
+                                     self.at(s + self.SLOT, base),
+                                     self.at(s + self.SLOT, edge)]))
             s += self.PITCH
             n += 1
+        # mounting holes along the middle, centered on its length
+        if L > 2 * self.HOLE_R:
+            k = max(0, int((L - 1.5) // self.HOLES))
+            s0 = (L - k * self.HOLES) / 2.0
+            for i in range(k + 1):
+                if self.HOLE_R < s0 + i * self.HOLES < L - self.HOLE_R:
+                    out.append(Circle(self.at(s0 + i * self.HOLES, 0.0), self.HOLE_R))
+        if self.attrs.get("HATCH") == "1":
+            # light diagonals between the slots' base lines (s - t = c, clipped)
+            w = h - d
+            c, n = -w, 0
+            while c < L + w and n < 20000:
+                a0, a1 = max(0.0, c - w), min(L, c + w)
+                if a1 > a0 + 1e-9:
+                    out.append(Line(self.at(a0, a0 - c), self.at(a1, a1 - c)))
+                c += self.HATCH
+                n += 1
         return out
 
 
@@ -1786,7 +1840,8 @@ class BlockDef:
     def __init__(self, name, kind="symbol", entities=(), pins=(), tag_pos=None, tag_height=0.1,
                  category="", description="", role="device", contact="", prefix="",
                  builtin=False, wiring="", attr_texts=(), manufacturer="", family="",
-                 series="", catalog="", rail_pos=None, own_colors=False, show_pins=False):
+                 series="", catalog="", rail_pos=None, own_colors=False, show_pins=False,
+                 phases=""):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -1831,6 +1886,10 @@ class BlockDef:
         # its pins' names drawn beside them (a symbol's terminal numbers: the owner, 0.16: "when
         # making terminal numbers, will they show up?"); hidden on a copy as attribute PINS
         self.show_pins = bool(show_pins)
+        # three-phase or not, for the Library's filter (the owner, 0.18: "Can symbols be
+        # further filtered by whether they're 3ph or not?"): "3", "1" (single-phase or
+        # control), or "" to be worked out from it (phases_of)
+        self.phases = str(phases) if str(phases) in ("1", "3") else ""
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -1845,7 +1904,8 @@ class BlockDef:
                     k: getattr(self, k) for k in MAKER_FIELDS if getattr(self, k)} | (
                     {"rail_pos": list(self.rail_pos)} if self.rail_pos is not None else {}) | (
                     {"own_colors": True} if self.own_colors else {}) | (
-                    {"show_pins": True} if self.show_pins else {})
+                    {"show_pins": True} if self.show_pins else {}) | (
+                    {"phases": self.phases} if self.phases else {})
 
     @classmethod
     def from_dict(cls, d, builtin=False):
@@ -1856,7 +1916,8 @@ class BlockDef:
                    d.get("prefix", ""), builtin, d.get("wiring", ""),
                    d.get("attr_texts", ()), d.get("manufacturer", ""), d.get("family", ""),
                    d.get("series", ""), d.get("catalog", ""), d.get("rail_pos"),
-                   d.get("own_colors", False), d.get("show_pins", False))
+                   d.get("own_colors", False), d.get("show_pins", False),
+                   d.get("phases", ""))
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
@@ -1890,6 +1951,25 @@ class BlockDef:
         for p in self.pins:
             bb = G.bbox_union(bb, (p["pos"][0], p["pos"][1], p["pos"][0], p["pos"][1]))
         return bb or (0.0, 0.0, 0.0, 0.0)
+
+
+_THREE = (("L1", "L2", "L3"), ("T1", "T2", "T3"), ("U", "V", "W"), ("U1", "V1", "W1"))
+
+
+def phases_of(defn):
+    """"3" when a block is three-phase, else "1" (single-phase or control): as set on it
+    (BlockDef.phases), else worked out: pins L1-L3, T1-T3 or U, V, W, or "3-pole", "3-phase",
+    "three-phase" or "3ph" in its name or description."""
+    if defn.phases:
+        return defn.phases
+    names = {p["name"].upper() for p in defn.pins}
+    if any(set(t) <= names for t in _THREE):
+        return "3"
+    words = (defn.name + " " + defn.description).lower()
+    if any(w in words for w in ("3-pole", "3 pole", "3-phase", "three-phase", "three phase",
+                                "3ph", "three poles")):
+        return "3"
+    return "1"
 
 
 def pin_keys(pins):
@@ -1928,6 +2008,29 @@ def attr_display(name, value):
     if got is not None and _PLAIN_NUMBER.match(v):
         return v + got[1]
     return value
+
+
+def project_block_name(project, name, kind):
+    """The name a library block of that kind goes by in project: its own, unless the project
+    already has a block of that name of the other kind (a symbol and a footprint both named
+    "VFD 10x15"): then "name (footprint)" or "name (symbol)" (the owner, 0.18: "I tried to
+    insert a footprint with the same name as a schematic and it changed the footprint to the
+    schematic in a panel drawing")."""
+    got = project.blocks.get(name)
+    if got is None or got.kind == kind:
+        return name
+    return "%s (%s)" % (name, kind)
+
+
+def library_block_name(name, kind):
+    """A project block's name in the library (project_block_name's other way)."""
+    tail = " (%s)" % kind
+    return name[:-len(tail)] if name.endswith(tail) else name
+
+
+def renamed_block(defn, name):
+    """A copy of a block definition under another name."""
+    return defn if defn.name == name else BlockDef.from_dict(dict(defn.to_dict(), name=name))
 
 
 # what a footprint's label shows (Footprint label): the attribute, or its block's name
@@ -2513,6 +2616,13 @@ class Sheet:
         self.location = ""                  # where what's drawn on it is: a panel or box (MCP,
                                             # JB-1, FIELD); a device's LOC wins (pull.py)
         self.number_order = "across"        # tags (and wire numbers): across/down then the other
+        # ("wires": along the wires from this symbol, its id: the owner, 0.18, "Can it track my
+        # bus?"; tags.wire_walk)
+        self.number_from = None
+        # wire numbers in the tags' order (True), across and down (False), or as the project
+        # says (None: Project properties' "Wire numbers follow the tags' order"; the owner,
+        # 0.18: "both a sheet and project setting")
+        self.wire_order_tags = None
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
@@ -2731,6 +2841,8 @@ class Sheet:
              "own_layout": self.own_layout, "kind": self.kind,
              "location": self.location,
              "number_order": self.number_order,
+             "number_from": self.number_from,
+             "wire_order_tags": self.wire_order_tags,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
              "rotation": self.rotation,
@@ -2760,7 +2872,10 @@ class Sheet:
         self.own_layout = bool(d.get("own_layout", False))
         self.kind = d.get("kind", "schematic") if d.get("kind") in SHEET_KINDS else "schematic"
         self.location = str(d.get("location", "") or "").strip()
-        self.number_order = "down" if d.get("number_order") == "down" else "across"
+        self.number_order = d.get("number_order") if d.get("number_order") in (
+            "down", "wires") else "across"
+        self.number_from = d.get("number_from")
+        self.wire_order_tags = d.get("wire_order_tags")
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         try:
@@ -3238,6 +3353,12 @@ class Project:
             for ld in d["layers"]:
                 lay = Layer.from_dict(ld)
                 p.layers[lay.name] = lay
+            if "XREFS" not in p.layers:
+                # (a project from before 0.18: its cross-references get their layer, and
+                # the old size for them the new one; a size set by hand stays)
+                p.layers["XREFS"] = Layer("XREFS", dict(DEFAULT_LAYERS)["XREFS"])
+                if float(p.settings.get("xref_height", 0)) == XREF_HEIGHT_BEFORE_018:
+                    p.settings["xref_height"] = DEFAULT_SETTINGS["xref_height"]
         for bd in d.get("blocks", []) or []:
             b = BlockDef.from_dict(bd)
             p.blocks[b.name] = b

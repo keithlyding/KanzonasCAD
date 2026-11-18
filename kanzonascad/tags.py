@@ -22,7 +22,8 @@ import uuid
 
 from .model import DashBox, Insert
 
-ORDERS = {"across": "Across, then down", "down": "Down, then across"}
+ORDERS = {"across": "Across, then down", "down": "Down, then across",
+          "wires": "Along the wires, from a source (Numbering source)"}
 
 
 def is_device(e):
@@ -48,13 +49,16 @@ def make(prefix, page, count):
     return "%s%s%02d" % (prefix, page, count)
 
 
-def used_counts(project, prefix, page, skip=()):
+def used_counts(project, prefix, page, skip=(), on=None):
     """Counts already taken for prefix on page, over the whole project (a tag typed by hand on
-    another sheet still takes its number). Contacts don't count: their tag is their device's."""
+    another sheet still takes its number). Contacts don't count: their tag is their device's.
+    skip: ids of devices on sheet on (or on every sheet when on is None) not to count: ids are
+    a sheet's own, so another sheet's device with the same id still counts (the long battery,
+    0.18, seed 3152: two DS404 after Update numbers)."""
     out = set()
     for s in project.sheets:
         for e in s.inserts():
-            if e.id in skip or is_child(e):
+            if (e.id in skip and (on is None or s is on)) or is_child(e):
                 continue
             got = split(e.attrs.get("TAG", ""), prefix)
             if got and got[0] == page:
@@ -84,18 +88,109 @@ def new_attrs(project, sheet, defn, attrs):
     return out
 
 
+def _rk(p):
+    return (round(p[0], 6), round(p[1], 6))
+
+
+def wire_walk(sheet):
+    """{point: order} of the points the wires reach from the sheet's numbering source
+    (Sheet.number_from: a symbol, a disconnect say), walked as one traces a drawing by eye
+    (the owner, 0.18: "Can it track my bus?"): from the source's pins along its wires; at a tap
+    or a tee every turn first, then straight on; into a symbol at a pin and out of its other
+    pins (in its pins' order). So each branch off a bus is walked through (its devices and
+    their wires) before the bus goes on to the next one, however the bus winds round the
+    sheet. None when there is no source. Kept until the sheet changes."""
+    src = sheet.entities.get(sheet.number_from) if sheet.number_from is not None else None
+    if src is None or getattr(src, "kind", "") != "insert" or not src.pin_points():
+        return None
+    got = getattr(sheet, "_wire_walk", None)
+    if got is not None and got[0] == (sheet.version, sheet.number_from):
+        return got[1]
+    from .wires import TOL
+    adj = {}                                     # node -> [(node, direction or None, rank)]
+
+    def link(a, b, d, rank):
+        adj.setdefault(a, []).append((b, d, rank))
+    wires = sheet.wires()
+    stops = {}                                   # wire id -> [length along it]
+    for w in wires:
+        for q in (w.points[0], w.points[-1]):
+            for x in sheet.query_point(q, TOL):
+                if getattr(x, "kind", "") == "wire" and x.id != w.id and x.touches(q, TOL):
+                    stops.setdefault(x.id, []).append(x.length_at(q))
+    pins = {}
+    for e in sheet.inserts():
+        pp = [q for _n, q in e.pin_points()]
+        for q in pp:
+            pins[_rk(q)] = e
+            for x in sheet.query_point(q, TOL):
+                if getattr(x, "kind", "") == "wire" and x.touches(q, TOL):
+                    stops.setdefault(x.id, []).append(x.length_at(q))
+        for a in pp:
+            for b in pp:
+                if a != b:
+                    link(_rk(a), _rk(b), None, 0)      # (through the symbol: first)
+    for w in wires:
+        corners, run = [0.0], 0.0
+        for a, b in zip(w.points, w.points[1:]):
+            run += ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+            corners.append(run)
+        cut = sorted(set(round(t, 9) for t in corners + stops.get(w.id, [])))
+        pts = [w.at_length(t)[0] for t in cut]
+        for a, b in zip(pts, pts[1:]):
+            L = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+            if L <= TOL:
+                continue
+            d = ((b[0] - a[0]) / L, (b[1] - a[1]) / L)
+            link(_rk(a), _rk(b), d, 1)
+            link(_rk(b), _rk(a), (-d[0], -d[1]), 1)
+    order = {}
+    stack = [(_rk(q), None) for _n, q in reversed(src.pin_points())]
+    while stack:
+        node, din = stack.pop()
+        if node in order:
+            continue
+        order[node] = len(order)
+        nxt = []
+        for b, d, rank in adj.get(node, ()):
+            if b in order:
+                continue
+            straight = d is not None and din is not None and \
+                abs(d[0] - din[0]) < 1e-6 and abs(d[1] - din[1]) < 1e-6
+            # (through a symbol first, then the turns, then straight on)
+            turn = 0 if d is None else (2 if straight else 1)
+            ang = 0.0 if d is None else (d[0] * 2 + d[1])
+            nxt.append(((turn, -ang), b, d))
+        nxt.sort(key=lambda t: t[0])
+        for _k, b, d in reversed(nxt):
+            stack.append((b, d))
+    sheet._wire_walk = ((sheet.version, sheet.number_from), order)
+    return order
+
+
 def order_key(sheet, how):
-    """Sorting key of a point for a sheet's numbering order (by zone, then position)."""
+    """Sorting key of a point for a sheet's numbering order (by zone, then position; along
+    the wires: by wire_walk, the points it doesn't reach after, by zone). key(p, pins): a
+    symbol's key is its first pin's in the walk."""
     rows = {n: i for i, n in enumerate(sheet.row_labels())}
     cols = {n: i for i, n in enumerate(sheet.col_labels())}
+    walk = wire_walk(sheet) if how == "wires" else None
 
-    def key(p):
+    def zone(p):
         z = sheet.zone_at(p[0], p[1])
         r = rows.get(z[0], 0) if z else 0
         c = cols.get(z[1], 0) if z else 0
         if how == "down":
             return (c, r, -p[1], p[0])
         return (r, c, -p[1], p[0])
+
+    def key(p, pins=()):
+        if walk is not None:
+            got = [walk[_rk(q)] for q in list(pins) + [p] if _rk(q) in walk]
+            if got:
+                return (0, min(got), 0.0, 0.0)
+            return (1,) + zone(p)
+        return zone(p)
     return key
 
 
@@ -105,11 +200,12 @@ def renumber_sheet(ed, project, sheet):
     page = project.sheet_number(sheet)
     key = order_key(sheet, sheet.number_order)
     devices = [e for e in sheet.entities.values() if is_device(e)]
+    pos = {e.id: key(e.pos, [q for _n, q in e.pin_points()]) for e in devices}
     changed = 0
     for prefix in sorted({e.defn.prefix for e in devices}):
         group = [e for e in devices if e.defn.prefix == prefix and not locked(e)]
-        group.sort(key=lambda e: key(e.pos))
-        taken = used_counts(project, prefix, page, skip={e.id for e in group})
+        group.sort(key=lambda e: pos[e.id])
+        taken = used_counts(project, prefix, page, skip={e.id for e in group}, on=sheet)
         n = 0
         for e in group:
             n = lowest_free(taken | set(range(1, n + 1)))
@@ -120,6 +216,54 @@ def renumber_sheet(ed, project, sheet):
                 attrs["TAG"] = tag
                 ed.change(sheet, e.copy(attrs=attrs))
                 changed += 1
+    return changed
+
+
+def set_locks(ed, sheet, ents, lock):
+    """Lock (or unlock) the tags of the devices among ents (contacts take their device's):
+    TAG_LOCK, as a device's "Lock this tag". Returns how many changed."""
+    n = 0
+    for e in ents:
+        if not is_device(e) or locked(e) == lock:
+            continue
+        attrs = dict(e.attrs)
+        if lock:
+            attrs["TAG_LOCK"] = "1"
+        else:
+            attrs.pop("TAG_LOCK", None)
+        ed.change(sheet, e.copy(attrs=attrs))
+        n += 1
+    return n
+
+
+def fix_sheet(ed, project, sheet):
+    """Update numbers and cross-references' "keep, only fix" (0.18): the sheet's unlocked
+    devices keep their tags; one with no tag (or only its prefix and ?) or a tag not of this
+    sheet's page takes one (its count kept when free here, else the lowest free one). Returns
+    how many changed."""
+    page = project.sheet_number(sheet)
+    changed = 0
+    key = order_key(sheet, sheet.number_order)
+    # (a tag two devices have is fixed too: the later in order takes a free one; the tags of
+    # other sheets' devices and of this sheet's locked ones are kept)
+    seen = {e.attrs.get("TAG", "") for s in project.sheets for e in s.inserts()
+            if is_device(e) and (s is not sheet or locked(e))}
+    for e in sorted((e for e in sheet.entities.values() if is_device(e) and not locked(e)),
+                    key=lambda e: key(e.pos, [q for _n, q in e.pin_points()])):
+        prefix = e.defn.prefix
+        got = split(e.attrs.get("TAG", ""), prefix)
+        if got is not None and got[0] == page and e.attrs.get("TAG") not in seen:
+            seen.add(e.attrs["TAG"])
+            continue
+        taken = used_counts(project, prefix, page, skip={e.id}, on=sheet)
+        if got is not None and got[0] == page:
+            taken.add(got[1])                   # (a duplicate: not its own count again)
+        n = got[1] if got is not None and got[1] not in taken else lowest_free(taken)
+        attrs = dict(e.attrs, TAG=make(prefix, page, n))
+        attrs.setdefault("DEV", uuid.uuid4().hex[:12])
+        seen.add(attrs["TAG"])
+        ed.change(sheet, e.copy(attrs=attrs))
+        changed += 1
     return changed
 
 
@@ -134,7 +278,7 @@ def sync_pages(ed, project):
             got = split(e.attrs.get("TAG", ""), e.defn.prefix)
             if got is None or got[0] == page:
                 continue
-            taken = used_counts(project, e.defn.prefix, page, skip={e.id})
+            taken = used_counts(project, e.defn.prefix, page, skip={e.id}, on=s)
             n = got[1] if got[1] not in taken else lowest_free(taken)
             attrs = dict(e.attrs, TAG=make(e.defn.prefix, page, n))
             ed.change(s, e.copy(attrs=attrs))

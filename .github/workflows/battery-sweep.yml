@@ -1,0 +1,72 @@
+name: Battery sweep
+
+# Many seeds of the long battery at once, on GitHub's machines (the owner, Nov 2026: "add the
+# GitHub battery sweep"): twelve seeds of 3,000 steps side by side, about half an hour, to find
+# what a release's long battery would before it is pushed for merging (AGENTS.md, The battery).
+# It looks for problems only: it builds nothing, publishes nothing and isn't a check a pull
+# request needs. Start it by hand (Actions, Battery sweep, Run workflow: on main), or by pushing
+# a branch named sweep/<anything> (any branch's code, before it is on main). A failure names its
+# seed: python tests/battery.py OUT --ops 3000 --seed N
+on:
+  workflow_dispatch:
+    inputs:
+      seed_base:
+        description: "First seed is this plus 1 (empty: the run number times 100)"
+        required: false
+        default: ""
+      ops:
+        description: "Steps per seed"
+        required: false
+        default: "3000"
+  push:
+    branches: ["sweep/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sweep-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sweep:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Libraries Qt needs
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            libegl1 libgl1 libopengl0 libdbus-1-3 libfontconfig1 libxkbcommon0
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt -c constraints.txt
+
+      - name: Battery
+        env:
+          QT_QPA_PLATFORM: offscreen
+          SEED_BASE: ${{ github.event.inputs.seed_base }}
+          OPS: ${{ github.event.inputs.ops || '3000' }}
+        run: |
+          base="${SEED_BASE:-$(( ${{ github.run_number }} * 100 ))}"
+          seed=$(( base + ${{ matrix.part }} ))
+          echo "seed $seed, $OPS steps"
+          python tests/battery.py battery-sweep --ops "$OPS" --seed "$seed"
+
+      - name: Battery log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: battery-sweep-log-${{ matrix.part }}
+          path: battery-sweep/battery.log
+          if-no-files-found: ignore

@@ -20,6 +20,11 @@ builds are green (full releases, not pre-releases: the owner's choice). A merge 
 change `__version__` publishes nothing. The app's update box (`updates.py`) shows those notes
 and installs the release.
 
+**The owner's standard (Nov 2026):** "in order for this app to be truly useful, it must be
+capable, fast, and bug-free". A feature isn't done until it is all three: it does the whole
+job, stays within the speed budgets below, and the battery and tests find nothing wrong with
+it. When they pull against each other, say so and ask; don't trade one away quietly.
+
 ## Branches and merging (several agents work here at once)
 - Start every task from the latest `main`, on a new branch of your own named
   `<agent>/<task>` (for example `chatgpt/wire-numbers`, `grok/symbol-library`).
@@ -34,7 +39,7 @@ and installs the release.
   number (0.2, 0.3) for a significant new capability (a new kind of work: wires, symbols,
   wire numbers, cross-references, reports...); everything else bumps the last number
   (0.2 -> 0.2.1). Plain numbers only (0.2, not 0.20).
-- Every push to any branch runs both builds, as in KanzonasPDF (no separate pull-request
+- Every push to any branch (but a `sweep/` one) runs both builds, as in KanzonasPDF (no separate pull-request
   run). Push when a piece of work is done, not after every small edit; then open its pull
   request and merge once the branch's builds are green: build and publish in one go (the
   owner's choice). Never hold builds back with GitHub's skip-ci marker: a branch whose newest
@@ -64,8 +69,8 @@ and installs the release.
 - **Random editing:** thousands of steps with the model checked after each: the wire groups,
   dots and crossings kept up to date against a fresh count; the spatial index against every
   entity for boxes of any size; save/open round trips; undo all the way back and redo all the
-  way forward. It draws on sheets of every size, turn and scale, on several sheets, far from
-  the origin and big, and drives the mouse (windows, crossings, lassos, drags, panning, the
+  way forward. It draws on sheets of every size, turn and scale (up to 1:100), on several
+  sheets, away from the origin (within about 10,000 inches) and big, and drives the mouse (windows, crossings, lassos, drags, panning, the
   wheel).
 - **What each command must do,** worked out from every object and not from the code being
   tested: what a window or lasso selects, where a snap lands, that after Fit the drawing fits
@@ -88,6 +93,20 @@ nothing.
   long battery: job `battery-long`, 3,000 steps on each of three seeds. Publishing waits for it.
   Merge such a release only when `battery-long` is green too.
 - By hand: `QT_QPA_PLATFORM=offscreen python tests/battery.py OUT_DIR --ops 3000 --seed N`.
+- Before pushing a release that bumps the middle number (and each fix pushed to it), run 10 to
+  12 seeds of the long battery in parallel, seeds not run before (the owner's rule,
+  Nov 2026: the build picks new seeds each run, and four local seeds left one new edge case
+  for nearly every run on GitHub to find, an hour a round). Fix what they find first. The
+  quick way: the **Battery sweep** workflow (`.github/workflows/battery-sweep.yml`), twelve
+  seeds side by side on GitHub's machines in about half an hour: push the branch's head to a
+  branch named `sweep/<anything>` (or, once the workflow is on main, Actions > Battery sweep >
+  Run workflow). A `sweep/` branch doesn't run the builds (the owner's choice:
+  its commit is built on its own branch). Locally, a four-core machine takes two hours or more for ten.
+- Its drawings stay realistic (the owner's choice, Nov 2026): sheets up to 1:100, drawing
+  within about 10,000 inches of the origin (`MAX_K`, `FAR` in tests/battery.py). Past that,
+  Fit and the battery's own spots fed each other until sheets of 1:68,593 had wires 500,000
+  inches out, and chance crossings of stretched wires there were all it found. Don't widen
+  them without asking the owner; never loosen a check instead.
 - `--drawing YOUR.dwg` starts from your own drawing, on your computer.
 - `BATTERY_DUMP_AT=N` saves the project as it was before step N, to look into a failure.
 
