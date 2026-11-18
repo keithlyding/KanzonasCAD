@@ -1226,10 +1226,12 @@ def wire_layer(ctx):
     """The layer a wire goes on: the current layer when it is a wire layer (WIRES, one named
     WIRE..., or one with a gauge or wire color: Layers), else WIRES (the owner, 0.16: picking
     WIRE BROWN and drawing a wire put it on WIRES; picking 0 for drafting leaves wires on
-    WIRES)."""
+    WIRES; a layer of the wire layer preset, Layers > Wire layers, ETHERNET too)."""
+    from . import wirelayers
     name = ctx.layer()
     lay = ctx.project.layers.get(name)
-    if name.upper().startswith("WIRE") or (lay is not None and (lay.awg or lay.wire_color)):
+    if name.upper().startswith("WIRE") or (lay is not None and (lay.awg or lay.wire_color)) \
+            or (lay is not None and wirelayers.is_preset(name)):
         return name
     return "WIRES"
 
@@ -4398,6 +4400,93 @@ def _pick_wire(ctx, p):
     return ctx.pick_entity(p, M.Wire)
 
 
+def wire_gauge(text):
+    """A gauge typed for Wire size, as kept ("12", "1/0", "250 kcmil"), or None when it isn't
+    one: 0000 to 40 AWG, 1/0 to 4/0, or kcmil (MCM) sizes."""
+    import re
+    t = " ".join(str(text or "").strip().upper().split())
+    if t.endswith("AWG"):
+        t = t[:-3].strip()
+    m = re.fullmatch(r"(\d{2,4})\s*(KCMIL|MCM)", t)
+    if m:
+        return "%s kcmil" % int(m.group(1))
+    m = re.fullmatch(r"([1-4])/0", t)
+    if m:
+        return t
+    if re.fullmatch(r"\d{1,2}", t) and 0 < int(t) <= 40:
+        return str(int(t))
+    return None
+
+
+class WireSizeCmd(Command):
+    """WIRESIZE (Wire size): the selected wires, or wires clicked one by one, given a gauge
+    of their own in place of their layer's (the owner, 0.18.2: "per wire, with the layer as
+    default"), or back to their layer's (L). Their gauge label shows it."""
+    name, title = "WIRESIZE", "Wire size"
+
+    def begin(self):
+        self.wires = [e.id for e in _selected(self.ctx) if isinstance(e, M.Wire)]
+        if self.wires:
+            self._ask_size()
+            return
+        self.picking = True
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click the wires to size (Enter when done)")
+
+    def pick(self, p):
+        w = _pick_wire(self.ctx, p)
+        if w is None:
+            self.ctx.message("Click a wire")
+            return
+        if w.id not in self.wires:
+            self.wires.append(w.id)
+            self.ctx.set_selection(set(self.wires))
+
+    def _ask_size(self):
+        self.picking = False
+        sheet = self.ctx.sheet()
+        ws = [sheet.entities[i] for i in self.wires if i in sheet.entities]
+        own = sorted({w.awg for w in ws})
+        layer = sorted({(self.ctx.project.layers.get(w.layer).awg
+                         if self.ctx.project.layers.get(w.layer) else "") for w in ws})
+        now = M.gauge_text(own[0]) if len(own) == 1 and own[0] else \
+            ("the layer's (%s)" % (M.gauge_text(layer[0]) or "none")
+             if len(own) == 1 and len(layer) == 1 else "mixed")
+        self.ctx.prompt("Gauge (AWG) for %d wire(s), now %s: type it (14, 1/0, 250 kcmil), "
+                        "or L for the layer's" % (len(ws), now), [("Layer's", "L")])
+
+    def text(self, s):
+        if self.picking:
+            return False
+        k = s.strip().upper()
+        if k in ("L", "LAYER", "BYLAYER"):
+            got = ""
+        else:
+            got = wire_gauge(s)
+            if got is None:
+                self.ctx.message("Not a wire gauge: type 14, 1/0 or 250 kcmil, or L for the "
+                                 "layer's")
+                return True
+        sheet = self.ctx.sheet()
+        ws = [sheet.entities[i] for i in self.wires if i in sheet.entities]
+        changed = [w for w in ws if w.awg != got]
+        if changed:
+            with self.ctx.edit(self.title) as ed:
+                for w in changed:
+                    ed.change(sheet, w.copy(awg=got))
+        self.ctx.message("%d wire(s): %s" % (len(ws), M.gauge_text(got) or
+                                             "the layer's gauge"))
+        self.ctx.set_selection(set())
+        self.finish()
+        return True
+
+    def enter(self):
+        if self.picking and self.wires:
+            self._ask_size()
+            return
+        self.finish()
+
+
 class DeleteWireCmd(Command):
     """DELWIRE (AutoCAD Electrical's Delete Wires): the selected wires go (anything else
     selected stays), or click wires one by one. Wires left meeting end to end become one."""
@@ -4736,6 +4825,7 @@ COMMANDS = {
     "WIRECROSS": (WireCrossCmd, ["WX"]),
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
     "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
+    "WIRESIZE": (WireSizeCmd, ["WSZ"]),
     "STRETCH": (StretchCmd, ["S"]),
     "NUMSOURCE": (NumberSourceCmd, ["NSRC"]),
     "SIGARROW": (SignalArrowsCmd, ["SDA", "SOURCEARROW", "XARROW"]),

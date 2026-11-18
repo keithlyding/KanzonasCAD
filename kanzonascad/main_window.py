@@ -407,6 +407,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("distribute", "Dis&tribute objects", C.DistributeCmd, "Distribute")
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("wire_label", "Wire number &label", C.WireLabelCmd, "Wire label")
+        self._cmd_act("wire_size", "Wire si&ze", C.WireSizeCmd, "Wire size")
         self._cmd_act("sig_arrows", "Source/destination &arrows", C.SignalArrowsCmd, "Arrows")
         self._cmd_act("stretch", "Stretc&h", C.StretchCmd, "Stretch")
         self._cmd_act("num_source", "Numbering s&ource", C.NumberSourceCmd, "Source")
@@ -484,6 +485,7 @@ class MainWindow(BlockEditing, QMainWindow):
         A("sheet_props", "&Sheet properties...", self.sheet_properties, label="Sheet")
         A("project_props", "&Project properties...", self.project_properties, label="Project")
         A("layers", "&Layers...", self.layers_dialog, label="Layers")
+        A("wire_layers", "Add &wire layers...", self.add_wire_layers, label="Wire layers")
         A("revisions", "Re&visions...", lambda: self.revisions(), icon="revisions",
           label="Revisions",
           tip="The drawing's revision history: the title block's {Revision} and {Date} show "
@@ -625,7 +627,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "offset", "erase",
                   "trim", "number", None,
-                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "del_wire", "del_dot", "clean_wires", "del_comp", None,
+                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             if k == "FPLABEL":
@@ -641,7 +643,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "materials", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
-                  "layers",
+                  "layers", "wire_layers",
                   None, "new_revision", "revisions"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
@@ -707,14 +709,14 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["edit_block"],
                                   a["explode"], a["attr_vis"], a["del_comp"]]),
             ("Parts", "large", [a["new_part"]]),
-            ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["del_wire"], a["del_dot"],
-                                     a["clean_wires"]]),
+            ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["wire_size"],
+                                     a["del_wire"], a["del_dot"], a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Numbering", "large", [a["update_numbers"], a["renumber"], a["lock_numbers"],
                                     a["num_source"]]),
             ("Cross-references", "large", [a["sig_arrows"], a["xref_update"], a["xref_freeze"],
                                            a["xref_auto"]]),
-            ("Look", "small", [a["object_color"], a["layers"]]),
+            ("Look", "small", [a["object_color"], a["layers"], a["wire_layers"]]),
             ("Settings", "large", [a["schematic_settings"]]),
         ])
         r.add_tab("Panel", [
@@ -2053,6 +2055,27 @@ class MainWindow(BlockEditing, QMainWindow):
         self._fill_layers()
         v.update()
 
+    def add_wire_layers(self):
+        """Add wire layers: the preset's layers of the groups ticked (480 V, 120 V, 24 VDC,
+        Ethernet) added in one step; layers the project has already are left as they are."""
+        from . import wirelayers
+        v = self.view()
+        if v is None:
+            return
+        groups = self.ask_wire_layer_groups()
+        if not groups:
+            return
+        with v.project.edit("Add wire layers") as ed:
+            added = wirelayers.add_preset(ed, v.project, groups)
+        self._fill_layers()
+        v.update()
+        self._say("Wire layers added: %s" % ", ".join(added) if added else
+                  "The project has those wire layers already")
+
+    def ask_wire_layer_groups(self):
+        """The wire layer preset's groups ticked, or None (a test replaces it)."""
+        return dialogs.wire_layers_question(self)
+
     # ---- sheets ----------------------------------------------------------------------------
     def _fill_sheets(self):
         lst = self.sheet_list
@@ -2982,8 +3005,8 @@ class MainWindow(BlockEditing, QMainWindow):
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "array", "offset", "dash_box", "number", "erase", "trim",
                   "paste",
-                  "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "del_wire", "del_dot", "clean_wires",
-                  "del_comp"):
+                  "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "wire_size", "del_wire", "del_dot",
+                  "clean_wires", "del_comp", "wire_layers"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())
         a["save_block"].setEnabled(in_block)

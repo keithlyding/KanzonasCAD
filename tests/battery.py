@@ -1716,6 +1716,46 @@ def random_editing(log, out, ops, seed, drawing=None):
                 "with its own number" if own else "keeping the number", tap[0].num, main.num)
             BC.CHECKED["tap numbered as asked"] += 1
 
+    def op_wire_size():
+        # (0.18.2: Wire size: a wire clicked given a gauge of its own, or the layer's again;
+        # the wire layer preset added now and then, and a layer of it made current, so wires
+        # are drawn on it, two-color ones striped)
+        if rnd.random() < 0.15:
+            from kanzonascad import wirelayers
+            win.ask_wire_layer_groups = lambda: rnd.sample(wirelayers.preset_groups(),
+                                                           rnd.randint(1, 4))
+            win.acts["wire_layers"].trigger()
+            have = [n for n in p.layers if wirelayers.is_preset(n)]
+            if have:
+                v.current_layer = rnd.choice(have + ["WIRES"])
+                assert C.wire_layer(v) == v.current_layer, v.current_layer
+                BC.CHECKED["wire layers added, wires go on them"] += 1
+            return
+        ws = [w for w in s.wires() if w.length() > 0.5]
+        if not ws:
+            return
+        w = rnd.choice(ws)
+        q, _i = w.at_length(rnd.uniform(0.1, w.length() - 0.1))
+        under = C._pick_wire(v, q)
+        if under is None or under.id != w.id:
+            return                      # (another wire there first: not this one)
+        v.set_selection(set())
+        v.run(C.WireSizeCmd)
+        v.cmd.pick(q)
+        v.cmd.enter()
+        typed = rnd.choice(["14", "10", "1/0", "250 kcmil", "L", "6 AWG"])
+        v.input_text(typed)
+        finish()
+        now = s.entities.get(w.id)
+        want = "" if typed == "L" else C.wire_gauge(typed)
+        assert now is not None and now.awg == want, (typed, now and now.awg)
+        if p.settings.get("wire_gauge_shown", True) and (want or p.layers.get(now.layer) and
+                                                          p.layers[now.layer].wire_label()):
+            from kanzonascad import wirelayers
+            text = wirelayers.wire_label(p.layers.get(now.layer), now.awg)
+            assert text in [t.text for t in wirenums.gauge_labels(p, s)], (text, now.layer)
+        BC.CHECKED["wire size as typed"] += 1
+
     def op_wire_label():
         # (0.17.2: Wire number label: a click on a wire shows its number there too, its
         # current number; R takes the nearest off)
@@ -2523,7 +2563,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_wire_size, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -2749,6 +2789,12 @@ def mixed_project(win):
         ed.change(v.sheet(), mtr.copy(attrs=dict(mtr.attrs, HP="5", VOLTS="460", FLA="7.6"),
                                       hidden=["FLA"]).with_attr_angle("HP", 90.0)
                   .with_attr_angle("TAG", 30.0))
+    # (0.18.2) the wire layer preset, a striped 24 VDC common and a wire of its own size
+    from kanzonascad import wirelayers
+    with p.edit("wire layers") as ed:
+        wirelayers.add_preset(ed, p)
+        ed.add(v.sheet(), M.Wire([(1.0, 0.5), (4.0, 0.5)], layer="24VDC BLU-WHT"))
+        ed.add(v.sheet(), M.Wire([(9.0, 0.5), (12.0, 0.5)], layer="480V BLK", awg="10"))
     # (0.18) a pair of source and destination arrows through the command
     with p.edit("wires for arrows") as ed:
         wa = ed.add(v.sheet(), M.Wire([(1.0, 1.0), (4.0, 1.0)]))

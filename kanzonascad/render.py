@@ -192,9 +192,10 @@ class Palette:
 
 
 class _Chunk:
-    __slots__ = ("strokes", "fills", "areas", "texts")
+    __slots__ = ("strokes", "fills", "areas", "texts", "stripes")
 
     def __init__(self):
+        self.stripes = {}       # rgba -> QPainterPath: two-color wires' stripes (BLU/WHT)
         self.strokes = {}       # rgba -> QPainterPath
         self.fills = {}         # (leaders' arrowheads)
         self.areas = {}         # (solid hatches: drawn first, under the lines, as AutoCAD's)
@@ -223,7 +224,8 @@ class SheetRenderer:
             self._frame = None
 
     def _layer_sig(self):
-        return tuple((n, l.color, l.visible) for n, l in self.project.layers.items())
+        return tuple((n, l.color, l.visible, l.wire_color)
+                     for n, l in self.project.layers.items())
 
     def _refresh(self):
         s = self.sheet
@@ -277,7 +279,13 @@ class SheetRenderer:
         return self._frame
 
     def _fill_chunk(self, ch, ents):
+        from . import wirelayers
         layers = self.project.layers
+        # (a wire layer of two colors, BLU/WHT: its wires striped in the second; not when
+        # everything is printed in the ink color)
+        striped = {} if self.pal.mono else {
+            n: QColor(c).rgba() for n, c in
+            ((n, wirelayers.stripe(lay.wire_color)) for n, lay in layers.items()) if c}
         for e in ents:
             lay = layers.get(e.layer)
             if lay is not None and not lay.visible:
@@ -311,6 +319,13 @@ class SheetRenderer:
                 if p is None:
                     p = ch.strokes[key] = QPainterPath()
                 add_entity(p, e)
+                if striped and e.layer in striped and isinstance(e, M.Wire) and \
+                        e.color is None:
+                    k2 = striped[e.layer]
+                    p = ch.stripes.get(k2)
+                    if p is None:
+                        p = ch.stripes[k2] = QPainterPath()
+                    add_entity(p, e)
 
     def _paint_dots(self, painter):
         """Junction dots where wires join (worked out again only when the sheet changed)."""
@@ -388,6 +403,9 @@ class SheetRenderer:
                 pen.setJoinStyle(Qt.RoundJoin)
                 painter.setPen(pen)
                 painter.drawPath(path)
+            for rgba, path in ch.stripes.items():
+                painter.setPen(stripe_pen(QColor.fromRgba(rgba), pen_width))
+                painter.drawPath(path)
             painter.setRenderHint(QPainter.Antialiasing, smooth)   # text stays smooth
             painter.setPen(Qt.NoPen)
             for rgba, path in ch.fills.items():
@@ -435,6 +453,18 @@ class SheetRenderer:
 
 
 DOT_RADIUS = 0.03
+STRIPE = 0.06       # a two-color wire's stripes: this long, as far apart, in inches on paper
+STRIPE_PX = 6       # (on screen: in pixels, the same at any zoom)
+
+
+def stripe_pen(color, pen_width):
+    """The pen of a two-color wire's stripes, drawn over the wire in its first color."""
+    pen = QPen(color, pen_width)
+    pen.setCosmetic(pen_width == 0)
+    pen.setCapStyle(Qt.FlatCap)
+    n = STRIPE_PX if pen_width == 0 else STRIPE / pen_width
+    pen.setDashPattern([n, n])
+    return pen
 
 
 def _dots_path(sheet):

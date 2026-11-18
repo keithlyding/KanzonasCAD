@@ -94,8 +94,8 @@ a layer moves them to it.</li>
 own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel tabs) to pick a
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
 layer it sits on, or its own color if you gave it one. Wires go on the current layer when it
-is a wire layer (WIRES, one named WIRE..., or one with a gauge or wire color), else on layer
-WIRES; symbols on
+is a wire layer (WIRES, one named WIRE..., one with a gauge or wire color, or one Add wire
+layers made), else on layer WIRES; symbols on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them. On the black drawing,
 black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
@@ -108,7 +108,28 @@ shows them, <b>10 AWG BRN</b>, on the other side of the wire from its number (un
 of it on an upright wire), a little smaller; Project properties, Schematic, <b>Show a wire
 layer's gauge and color beside its wires</b> turns that off. The layers a bus adds (WIRE BROWN,
 WIRE ORANGE...) come with their color's name; give them a gauge once and every wire on them
-shows it.</p>
+shows it. A wire color of two names, <b>BLU/WHT</b> say, draws the layer's wires striped: the
+layer's color with stripes of the second (a 24 VDC common), on the screen and printed (not when
+printing in black only).</p>
+<p><b>Add wire layers...</b> (Format menu, Schematic tab: Look; also the <b>Wire layers...</b>
+button in Layers...) adds a layer for each wire of the systems you tick, with its color, gauge
+and wire color, ready to draw on (pick one as the current layer, then draw wires):</p>
+<ul>
+<li><b>480 V</b>, 12 AWG: 480V BLK, 480V RED, 480V ORG, 480V BRN, 480V YEL, 480V WHT (neutral)
+and 480V GRN (ground).</li>
+<li><b>120 V</b>, 14 AWG: 120V RED, 120V BLK and 120V WHT (neutral).</li>
+<li><b>24 VDC</b>, 16 AWG: 24VDC BLU, and 24VDC BLU-WHT for the common, blue with white
+stripes.</li>
+<li><b>Ethernet</b>: ETHERNET, green, a cable with no gauge.</li>
+</ul>
+<p>A layer the project has already keeps its own color, gauge and wire color. Change any of
+them in Layers... as usual.</p>
+<p><b>Wire size</b> (WIRESIZE, WSZ; Modify menu, Schematic tab: Edit wires): give the selected
+wires, or wires you click one by one (Enter when done), a gauge of their own in place of their
+layer's: type it (<b>10</b>, <b>1/0</b>, <b>250 kcmil</b>), or <b>L</b> to go back to the
+layer's. The gauge label beside them shows it (<b>10 AWG BLK</b>). A wire keeps its size when
+it is moved, copied, cut or saved; two wires meeting end to end are made one only when they
+are on one layer with one size.</p>
 <p><b>Layers</b>, as in AutoCAD: pick one in the layer box with objects selected and they go on
 it (the box shows their layer, empty when they are on several); with nothing selected it
 becomes the current layer. A hidden layer isn't drawn, printed or picked; a locked one

@@ -585,7 +585,8 @@ class LayersDialog(QDialog):
         for label, slot in (("New", self._new), ("Rename", self._rename),
                             ("Color...", self._color), ("Delete", self._delete),
                             ("Select unused", self._select_unused),
-                            ("Set current", self._set_current)):
+                            ("Set current", self._set_current),
+                            ("Wire layers...", self._wire_layers)):
             b = QPushButton(label)
             b.setObjectName("layers_" + label.lower().replace(" ", "_").strip("."))
             b.clicked.connect(slot)
@@ -593,7 +594,9 @@ class LayersDialog(QDialog):
         v.addLayout(row)
         note = QLabel("Click On or Locked to switch it. Double-click a name to make it the "
                       "current layer (new objects go on it). Double-click AWG or Wire color to "
-                      "give a wire layer its wire's gauge and color: its wires show them. "
+                      "give a wire layer its wire's gauge and color: its wires show them (a "
+                      "color of two, BLU/WHT, draws them striped). Wire layers adds the "
+                      "480 V, 120 V, 24 VDC and Ethernet ones. "
                       "Select several (Ctrl or Shift) to delete them together; Select unused "
                       "picks the empty ones.")
         note.setWordWrap(True)
@@ -672,6 +675,15 @@ class LayersDialog(QDialog):
             if gauge and got.upper().endswith("AWG"):
                 got = got[:-3].strip()
             self._change(name, **({"awg": got} if gauge else {"wire_color": got.upper()}))
+
+    def _wire_layers(self):
+        """The wire layer preset (as Format > Add wire layers)."""
+        from . import wirelayers
+        groups = wire_layers_question(self)
+        if groups:
+            with self.project.edit("Add wire layers") as ed:
+                wirelayers.add_preset(ed, self.project, groups)
+            self._fill()
 
     def _set_current(self):
         n = self._name()
@@ -2193,3 +2205,32 @@ def cross_reference_question(parent, num, where):
     box.exec()
     got = box.clickedButton()
     return {src: "source", dst: "destination", same: "same"}.get(got)
+
+
+def wire_layers_question(parent):
+    """Add wire layers: which of the preset's groups (480 V, 120 V, 24 VDC, Ethernet), each
+    listing its layers, sizes and colors; [group names] or None (cancelled)."""
+    from . import wirelayers
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Add wire layers")
+    v = QVBoxLayout(dlg)
+    note = QLabel("Layers for the wires of each system, with their gauge and wire color "
+                  "(Layers changes them). A layer the project has already is left as it is.")
+    note.setWordWrap(True)
+    v.addWidget(note)
+    boxes = []
+    for g, lays in wirelayers.PRESET:
+        what = ", ".join("%s%s" % (name, " (%s)" % M.gauge_text(awg) if awg else "")
+                         for name, _c, awg, _w in lays)
+        b = QCheckBox("%s: %s" % (g, what))
+        b.setObjectName("wire_layers_" + g.replace(" ", "").lower())
+        b.setChecked(True)
+        boxes.append((g, b))
+        v.addWidget(b)
+    bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    bb.accepted.connect(dlg.accept)
+    bb.rejected.connect(dlg.reject)
+    v.addWidget(bb)
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return [g for g, b in boxes if b.isChecked()]
