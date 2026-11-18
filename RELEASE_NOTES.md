@@ -27,6 +27,12 @@ build fails without them.
 - A rectangle's (or dashed box's) size typed after its first corner, 72,72 say, now goes the
   way the mouse is from that corner. It always went up and to the right. A sign typed (-72 or
   +72) still says which way.
+- Clicking off the running snaps menu (the arrow by OSNAP), or off a right-click menu on the
+  drawing, only closes it: it no longer also clicks on the drawing (on Windows it put the
+  point there).
+- A dimension's second point (or any point after the first) snaps Nearest under the mouse:
+  a Perpendicular point anywhere in the snap box went first. Perpendicular and Tangent now win
+  only when they are close to the mouse.
 
 ## 0.18.1
 

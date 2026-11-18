@@ -120,7 +120,14 @@ class ProjectTabs(QTabWidget):
 class StayOpenMenu(QMenu):
     """A menu that stays open while its tick boxes are clicked (the running snaps: several
     are set in one go). A tick box, or an action marked stay_open, does its work and leaves
-    the menu up; anything else closes it, as usual, and so do a click outside it and Esc."""
+    the menu up; anything else closes it, as usual, and so do a click outside it and Esc.
+    The click outside only closes it: it doesn't go on to the drawing (the owner, 0.18.2: "I
+    have to re click osnap, otherwise it will register the click on the drawing and put my
+    object wherever I clicked"; Windows passes that click on unless told not to)."""
+
+    def __init__(self, *a):
+        super().__init__(*a)
+        self.setAttribute(Qt.WA_NoMouseReplay)
 
     def _keeps_open(self, a):
         return a is not None and a.isEnabled() and not a.isSeparator() and \
@@ -1880,6 +1887,7 @@ class MainWindow(BlockEditing, QMainWindow):
         if v is None:
             return
         m = QMenu(self)
+        m.setAttribute(Qt.WA_NoMouseReplay)     # (a click off it closes it, nothing more)
         if v.last_cmd is not None:
             m.addAction("Repeat %s" % v.last_cmd.title, v.enter)
             m.addSeparator()

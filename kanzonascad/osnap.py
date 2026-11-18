@@ -40,6 +40,19 @@ DEFAULT = {"end", "mid", "center", "node", "quad", "int", "insert"}
 # when several are in reach, the first of these wins (then the nearest)
 PRIORITY = {"end": 0, "int": 0, "insert": 0, "node": 0, "center": 1, "quad": 1, "gcen": 1,
             "perp": 1, "tan": 1, "app": 1, "mid": 2, "ext": 3, "par": 3, "near": 4}
+# Perpendicular and Tangent, worked out from the last point, go first only when their point
+# is this close to the mouse (a part of the aperture); farther, after Nearest: a foot anywhere
+# in the aperture went before a Nearest right under the mouse (the owner, 0.18.2, of a
+# dimension's second point: "It didn't see the nearest")
+FROM_LAST = ("perp", "tan")
+FROM_LAST_REACH = 0.35
+
+
+def rank(kind, d, r):
+    """A snap's rank (lower first) at distance d from the mouse, the aperture's radius r."""
+    if kind in FROM_LAST and d > r * FROM_LAST_REACH:
+        return 5
+    return PRIORITY.get(kind, 3)
 
 
 def _segments_and_curves(e):

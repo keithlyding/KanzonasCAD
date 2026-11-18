@@ -1013,7 +1013,10 @@ last point: the new line runs parallel to it) and <b>Apparent intersection</b> (
 over two lines, then near where they would meet if they were longer; or a line and a circle or
 arc, where the line extended would meet it; with <b>Ortho</b> on, the line straight across or
 up and down from the last point counts too: hover over a circle, or a line, and the point
-lands exactly where your Ortho line meets it or its extension).</li>
+lands exactly where your Ortho line meets it or its extension). When several are in reach,
+ends, intersections, insertion points and pins go first, then centers and quadrants, then
+midpoints, then tracking, then Nearest; Perpendicular and Tangent go with centers only when
+their point is close to the mouse (farther, Nearest under the mouse wins).</li>
 <li><b>Blocks snap too</b>: the ends, middles, centers and quadrants of a placed symbol's or
 footprint's own drawing (a footprint's corners, for a dimension), as in AutoCAD. A pin, or an
 ordinary object's point of the same kind, comes first, so a wire still lands on a pin.</li>

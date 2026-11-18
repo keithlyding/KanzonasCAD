@@ -23,8 +23,6 @@ GRIP = 7                # grip square, pixels
 GRIP_LIMIT = 100        # grips are shown for at most this many selected objects (GRIPOBJLIMIT)
 from . import osnap as OS
 from . import railsnap
-SNAP_PRIORITY = OS.PRIORITY
-
 
 
 def _step_text(dx, dy):
@@ -575,7 +573,7 @@ class CadView(QWidget):
             nonlocal best
             d = G.dist(p, q)
             if d <= r:
-                key = (SNAP_PRIORITY.get(kind, 3), inner, d)
+                key = (OS.rank(kind, d, r), inner, d)
                 if best is None or key < best[0]:
                     best = (key, kind, q, frm)
         for e in cands:
@@ -1704,6 +1702,7 @@ class CadView(QWidget):
         """Shift + right-click while picking points: a snap for the next point only."""
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
+        menu.setAttribute(Qt.WA_NoMouseReplay)  # (a click off it isn't the next point)
         for key, name, typed in OS.MODES:
             act = menu.addAction("%s  (%s)" % (name, typed))
             act.setData(key)
