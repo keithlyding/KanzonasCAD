@@ -19,6 +19,10 @@ build fails without them.
   printed.
 
 **Fixed**
+- A Move or Copy typed (@0,-0.5, say) with the object snaps on could go a different distance
+  than typed, for the whole selection, when a footprint in it came over a DIN rail: the rail
+  magnet pulled it. Typed points and distances now go exactly as typed; the magnet works for
+  the mouse only.
 - With every object snap on (Extension among them), moving the mouse over big footprints (a
   maker's drive drawings) lagged, in Move most of all. It's about five times quicker.
 - With everything selected on a heavy sheet (a panel of maker drive footprints), every mouse

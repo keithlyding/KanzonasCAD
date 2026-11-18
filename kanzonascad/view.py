@@ -166,6 +166,7 @@ class CadView(QWidget):
         # (dragged: the selection moves, or with Ctrl a copy goes, where it is dropped)
         self._drag = None
         self._rail_hit = None        # (the rail magnet's last catch: railsnap.magnet)
+        self._typing = False         # (a point typed being given to the command: exact)
         self._hover = None
         self._hover_parts = None         # (what a picking command would act on: Trim)
         self._hot_grip = None
@@ -339,7 +340,7 @@ class CadView(QWidget):
         p = C.parse_point(text, cmd.last)
         if p is not None and not cmd.selecting() and not cmd.picking:
             self.osnap_once = None              # (typed coordinates: no snap involved)
-            cmd.point(p)
+            self._typed_point(cmd, p)
             self.update()
             return True
         v = C.parse_number(text)
@@ -352,10 +353,20 @@ class CadView(QWidget):
                 # (toward the cursor as ortho or polar tracking aims it)
                 aim = self.resolve(self.cursor)
                 if G.dist(cmd.base, aim) > 1e-12:
-                    cmd.point(G.polar(cmd.base, v, G.angle_of(cmd.base, aim)))
+                    self._typed_point(cmd, G.polar(cmd.base, v, G.angle_of(cmd.base, aim)))
                     self.update()
                     return True
         return False
+
+    def _typed_point(self, cmd, p):
+        """A point typed: exactly there (the rail magnet doesn't pull it: a typed Move of
+        part of a panel, every snap on, shifted it all by another distance when a footprint
+        in it came over a DIN rail, the owner, 0.18.2: "one of my vfds disappeared")."""
+        self._typing = True
+        try:
+            cmd.point(p)
+        finally:
+            self._typing = False
 
     # ---- sheets ----------------------------------------------------------------------------
     def show_sheet(self, sheet_id):
@@ -958,7 +969,7 @@ class CadView(QWidget):
         rail whose end is near (railsnap.magnet). With the object snaps off (F3), as given.
         What it did is kept for the marker (_paint_rail)."""
         self._rail_hit = None
-        if not self.osnap_on or self.snap is not None:
+        if not self.osnap_on or self.snap is not None or self._typing:
             # (a point snapped to, as an intersection on a duct's edge, is where it goes: the
             # owner, 0.18, copying a footprint at a duct's intersection, "the grabbed location
             # changes on the new device")

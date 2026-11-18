@@ -133,10 +133,14 @@ class WindowTest(unittest.TestCase):
         self.v.run(C.InsertCmd, box())
         prev = self.v.cmd.preview((3, 3.4))[0]
         self.assertAlmostEqual(prev.pos[1], 3.0)
-        type_in(self.v, "3,3.4")
+        self.v.cmd.point((3, 3.4))                      # (a click: the magnet pulls it on)
         ins = self.newest()
         self.assertAlmostEqual(ins.pos[0], 3.0)
         self.assertAlmostEqual(ins.pos[1], 3.0)
+        # typed, exactly where typed (0.18.2: a typed point is never pulled)
+        self.v.run(C.InsertCmd, box())
+        type_in(self.v, "13,3.4")
+        self.assertEqual(tuple(self.newest().pos), (13.0, 3.4))
         # with the object snaps off (F3), where it is put
         self.v.osnap_on = False
         self.v.run(C.InsertCmd, box())
@@ -147,14 +151,16 @@ class WindowTest(unittest.TestCase):
         a = place(self.s, box(), (2, 0))
         self.v.set_selection({a.id})
         self.v.run(C.MoveCmd)
-        type_in(self.v, "2,0", "4.13,3.25")
+        type_in(self.v, "2,0")
+        self.v.cmd.point((4.13, 3.25))                  # (clicked: pulled onto the rail)
         a = self.s.entities[a.id]
         self.assertAlmostEqual(a.pos[0], 4.13)
         self.assertAlmostEqual(a.pos[1], 3.0)
         # a copy beside it butts against it
         self.v.set_selection({a.id})
         self.v.run(C.CopyCmd)
-        type_in(self.v, "4.13,3", "6.2,3.1")
+        type_in(self.v, "4.13,3")
+        self.v.cmd.point((6.2, 3.1))
         b = self.newest()
         self.assertNotEqual(b.id, a.id)
         self.assertAlmostEqual(b.pos[0], 6.13)

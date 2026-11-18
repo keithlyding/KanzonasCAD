@@ -1172,7 +1172,8 @@ pixels of the end of a footprint already on that rail, it butts against it ("On 
 against the next one"), as devices sit side by side on a real rail; a copy butts against the
 one it was copied from. It works on rails across and up and down, and on footprints turned
 either way. Take it off the rail by moving it away; with the object snaps off (F3) it isn't
-held at all. A point you snap to wins: with the cursor on an object snap (an intersection on
+held at all. A point or distance you type (<code>@0,-0.5</code>, a length) is never pulled:
+the whole selection goes exactly as typed. A point you snap to wins: with the cursor on an object snap (an intersection on
 a duct's or rail's edge, an end), the part goes exactly where you snapped, held by the point
 you picked it up by, and isn't pulled onto the rail. Moving a rail together with what is on it moves them all as they are. A
 footprint's DIN rail point is the middle of its drawing unless its block says otherwise:
