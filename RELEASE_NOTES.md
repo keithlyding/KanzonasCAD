@@ -20,6 +20,8 @@ build fails without them.
   it later.
 
 **Fixed**
+- A wire end moved by Stretch or a grip that stops less than 0.01" from a pin or another wire
+  is put on it, instead of being left a hair short and not connected.
 - A wire crossing's loop (or gap) is drawn in the colors of its own wires, stripes too, and
   exported on the jumping wire's layer. Before, it kept the default wire layer's color after
   the wires were moved to another layer.
