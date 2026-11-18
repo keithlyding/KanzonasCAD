@@ -20,6 +20,8 @@ build fails without them.
   it later.
 
 **Fixed**
+- The text of a source or destination arrow turns with the arrow: on a wire running up and
+  down it reads up, in line with the wire past the arrow's tip, instead of lying level.
 - Tracking (Extension) now picks up a midpoint, a center or a quadrant you hover, as AutoCAD
   does: hover the middle of a box's edge, move straight down, and text or a part centers under
   it. Before, only ends, intersections, pins and insertion points were picked up, and Parallel

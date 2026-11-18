@@ -414,7 +414,7 @@ class SheetRenderer:
                      for t in wirenums.labels(self.project, self.sheet) +
                      wirenums.gauge_labels(self.project, self.sheet))
         if self._xrefs is None or self._xrefs[0] != (shown, nums):
-            refs = [text_item(M.Text((x, y), t, h, 0.0, "center")) for x, y, t, h in shown]
+            refs = [text_item(xrefs.text_item(t)) for t in shown]
             items = [text_item(t) for t in wirenums.labels(self.project, self.sheet)]
             items += [text_item(t) for t in wirenums.gauge_labels(self.project, self.sheet)]
             self._xrefs = ((shown, nums), (refs, items))

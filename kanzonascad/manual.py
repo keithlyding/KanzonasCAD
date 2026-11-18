@@ -845,7 +845,9 @@ whichever way the connector is turned. <b>Source arrow</b> and <b>Destination ar
 (Library, JIC/Wiring) are the same, drawn as arrows on the wire's end: a source arrow points
 away from the line where the wire leaves, a destination arrow's tip is on the line, pointing
 into it, where the wire arrives. Past each arrow's far end (not over the wire), the wire's
-number and the other arrow's place (<b>2046 / 7-A2</b>).</li>
+number and the other arrow's place (<b>2046 / 7-A2</b>), turned the way the arrow is: on a wire
+running up and down it reads up, in line with the wire (as that wire's number reads); across,
+it is level.</li>
 <li><b>Source/destination arrows</b> (SIGARROW, SDA; Draw menu, Schematic tab:
 Cross-references), as AutoCAD Electrical's signal arrows: click near the open end of the wire
 where it leaves (an end on nothing: a Source arrow goes there), then near the open end where it

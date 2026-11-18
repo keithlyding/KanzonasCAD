@@ -113,6 +113,14 @@ def live_all(project):
             # (outside the connector, away from its wire, whichever way it is turned: the
             # owner, 0.18, "Wire cross references need to always be outside the connector,
             # away from the wire")
+            if c.block in ARROWS:
+                # (an arrow on a wire running up and down: its text turned with it, as that
+                # wire's number reads; the owner, 0.18.3: "I need the verbiage to be the same
+                # orientation as I make the arrow")
+                got = _along(s, c, text, hh)
+                if got is not None:
+                    out[s.id].append((round(got[0], 6), round(got[1], 6), text, hh, 90.0))
+                    continue
             got = _outside(s, c, text, hh)
             if got is None:
                 bb = c.bbox()
@@ -138,14 +146,11 @@ def live_all(project):
     return out
 
 
-def _outside(sheet, c, text, hh):
-    """Where a connector's (or arrow's) text is centered: past the connector's far side from
-    its wire, the way the wire comes into its pin and on out (beside it when the wire runs
-    across, under or over it when the wire runs up and down); None when no wire ends on it."""
+def _wire_in(sheet, c):
+    """(The way the wire comes into the connector's pin (a unit vector), that wire), or
+    (None, None) when no wire ends on it."""
     from .wires import TOL
-    from .geometry import segment_hits_rect
     pin = c.pin_points()[0][1]
-    d = wire = None
     for w in sheet.query_point(pin, TOL):
         if getattr(w, "kind", "") != "wire":
             continue
@@ -154,10 +159,55 @@ def _outside(sheet, c, text, hh):
             if abs(q[0] - pin[0]) <= TOL and abs(q[1] - pin[1]) <= TOL:
                 L = math.hypot(q[0] - r[0], q[1] - r[1])
                 if L > TOL:
-                    d = ((q[0] - r[0]) / L, (q[1] - r[1]) / L)
-                    wire = w
-        if d is not None:
-            break
+                    return ((q[0] - r[0]) / L, (q[1] - r[1]) / L), w
+    return None, None
+
+
+def text_item(item):
+    """A reference as drawn (x, y, text, height[, angle]): a centered Text."""
+    return Text((item[0], item[1]), item[2], item[3], item[4] if len(item) > 4 else 0.0,
+                "center")
+
+
+def _along(sheet, c, text, hh):
+    """Where an arrow's text turned 90 degrees is centered (its insertion point) when its
+    wire runs up and down: past the arrow's tip, in line with the wire, reading up as a
+    wire number does on such a wire; beside the arrow, turned, when its own wire is in the
+    way there. None for a wire running across (its text stays level) or no wire."""
+    from .geometry import segment_hits_rect
+    d, wire = _wire_in(sheet, c)
+    if d is None or abs(d[1]) <= abs(d[0]):
+        return None
+    pin = c.pin_points()[0][1]
+    bb = c.bbox()
+    gap = 0.4 * hh
+    tw = text_width(text, hh)
+    probe = Text((0.0, 0.0), text, hh, 90.0, "center").bbox()
+    off = ((probe[0] + probe[2]) / 2.0, (probe[1] + probe[3]) / 2.0)
+    half = (probe[2] - probe[0]) / 2.0
+    ymid = (bb[1] + bb[3]) / 2.0
+    out = 1.0 if d[1] > 0 else -1.0
+    tip = ((pin[0], (bb[3] + gap + tw / 2.0) if out > 0 else (bb[1] - gap - tw / 2.0)),
+           (0.0, out))
+    right = ((bb[2] + gap + half, ymid), (1.0, 0.0))
+    left = ((bb[0] - gap - half, ymid), (-1.0, 0.0))
+    for step in (0.0, 1.5, 3.0, 4.5, 6.0):
+        for (x, y), (ux, uy) in (tip, right, left):
+            q = (x + ux * step * hh - off[0], y + uy * step * hh - off[1])
+            tb = Text(q, text, hh, 90.0, "center").bbox()
+            if not any(segment_hits_rect(a, b, tb)
+                       for a, b in zip(wire.points, wire.points[1:])):
+                return q
+    return (tip[0][0] - off[0], tip[0][1] - off[1])
+
+
+def _outside(sheet, c, text, hh):
+    """Where a connector's (or arrow's) text is centered: past the connector's far side from
+    its wire, the way the wire comes into its pin and on out (beside it when the wire runs
+    across, under or over it when the wire runs up and down); None when no wire ends on it."""
+    from .geometry import segment_hits_rect
+    pin = c.pin_points()[0][1]
+    d, wire = _wire_in(sheet, c)
     if d is None:
         return None
     bb = c.bbox()
@@ -214,7 +264,7 @@ def out_of_date(project):
 
 def texts(project, sheet):
     """The references drawn on the sheet, as centered texts."""
-    return [Text((x, y), t, hh, 0.0, "center") for x, y, t, hh in shown(project, sheet)]
+    return [text_item(t) for t in shown(project, sheet)]
 
 
 def update(ed, project, sheets=None):
