@@ -527,7 +527,13 @@ def mouse_pan(v, rnd):
 
 
 # ---- 1. random editing -------------------------------------------------------------------------
-FAR = 5e4      # (inches, 0.8 mile: past this the battery's own spots run away, see clear_of_drawing)
+# Drawings kept to a realistic size (the owner's choice, Nov 2026, asked: "cap to realistic
+# drawings"): sheets no bigger than 1:100 (MAX_K) and drawing within about 10,000 inches of the
+# origin (FAR). Before, Fit's scale grew with the drawing and each clear spot went 20 scales
+# past it, until sheets of 1:68,593 had wires 500,000 inches out, where a slanted wire's chance
+# crossing left 0.001" gaps that no real drawing has. Every check is as strict as before.
+FAR = 1e4
+MAX_K = 100.0
 
 
 def random_editing(log, out, ops, seed, drawing=None):
@@ -2190,13 +2196,16 @@ def random_editing(log, out, ops, seed, drawing=None):
             name, val = rnd.choice(scalefit.presets_like(s.scale_name))
             win._set_scale(name, val)
         elif scalefit.fit_for(p, s) is not None:        # (else it opens the Sheet scale window)
+            if 1.0 / scalefit.fit_for(p, s)[1] > MAX_K:
+                BC.CHECKED["Fit past 1:100 left out (drawings kept realistic)"] += 1
+                return
             win.fit_scale()
             BC.fit_oracle(p, s)
 
     # ---- sheets of every size, turn and scale, several of them -------------------------------
     def op_world():
         world["o"] = rnd.choice([(0.0, 0.0), (0.0, 0.0), (480.0, -250.0),
-                                 (-2400.0, 1700.0), (12000.0, 8000.0)])
+                                 (-2400.0, 1700.0), (4000.0, 3000.0)])
         world["k"] = rnd.choice([1.0, 1.0, 1.0, 4.0, 24.0])
 
     def op_sheet():

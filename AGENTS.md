@@ -69,8 +69,8 @@ it. When they pull against each other, say so and ask; don't trade one away quie
 - **Random editing:** thousands of steps with the model checked after each: the wire groups,
   dots and crossings kept up to date against a fresh count; the spatial index against every
   entity for boxes of any size; save/open round trips; undo all the way back and redo all the
-  way forward. It draws on sheets of every size, turn and scale, on several sheets, far from
-  the origin and big, and drives the mouse (windows, crossings, lassos, drags, panning, the
+  way forward. It draws on sheets of every size, turn and scale (up to 1:100), on several
+  sheets, away from the origin (within about 10,000 inches) and big, and drives the mouse (windows, crossings, lassos, drags, panning, the
   wheel).
 - **What each command must do,** worked out from every object and not from the code being
   tested: what a window or lasso selects, where a snap lands, that after Fit the drawing fits
@@ -102,6 +102,11 @@ nothing.
   branch named `sweep/<anything>` (or, once the workflow is on main, Actions > Battery sweep >
   Run workflow). A `sweep/` branch doesn't run the builds (the owner's choice:
   its commit is built on its own branch). Locally, a four-core machine takes two hours or more for ten.
+- Its drawings stay realistic (the owner's choice, Nov 2026): sheets up to 1:100, drawing
+  within about 10,000 inches of the origin (`MAX_K`, `FAR` in tests/battery.py). Past that,
+  Fit and the battery's own spots fed each other until sheets of 1:68,593 had wires 500,000
+  inches out, and chance crossings of stretched wires there were all it found. Don't widen
+  them without asking the owner; never loosen a check instead.
 - `--drawing YOUR.dwg` starts from your own drawing, on your computer.
 - `BATTERY_DUMP_AT=N` saves the project as it was before step N, to look into a failure.
 
