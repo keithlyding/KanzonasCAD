@@ -1157,10 +1157,19 @@ def random_editing(log, out, ops, seed, drawing=None):
         if shifts:
             def key(e):
                 return e.pos if isinstance(e, M.Insert) else e.bbox()[:2]
-            got = sorted((e.kind, round(key(e)[0], 6), round(key(e)[1], 6)) for e in new)
-            exp = sorted((e.kind, round(key(e)[0] + dx, 6), round(key(e)[1] + dy, 6))
+            # (matched within a millionth, not rounded to six places: 0.1666625 and a hair
+            # under it round apart, a copy's place a trillionth off was taken as wrong, CI
+            # seed 334)
+            got = sorted((e.kind, key(e)[0], key(e)[1]) for e in new)
+            exp = sorted((e.kind, key(e)[0] + dx, key(e)[1] + dy)
                          for dx, dy in shifts for e in sel)
-            assert got == exp, "Array put copies at %s, not %s" % (got[:3], exp[:3])
+            left = list(got)
+            for k, x, y in exp:
+                hit = next((g for g in left if g[0] == k and abs(g[1] - x) <= 1e-6 and
+                            abs(g[2] - y) <= 1e-6), None)
+                assert hit is not None, "Array put no %s copy at %s (copies at %s)" % (
+                    k, (x, y), [g[1:] for g in got if g[0] == k][:4])
+                left.remove(hit)
             BC.CHECKED["array where they go"] += 1
 
     def op_offset():
