@@ -104,8 +104,9 @@ print in it.</p>
 <p><b>Wire gauge and color</b>: in <b>Layers...</b>, double-click a wire layer's <b>AWG</b> or
 <b>Wire color</b> to give its wires a gauge (14, 10, 2/0...) and insulation color (BLK, BRN,
 GRN/YEL...), picked from the usual ones or typed. Each run of joined wires on that layer then
-shows its gauge, <b>10 AWG</b>, on the other side of the wire from its number (under it, or
-right of it on an upright wire), smaller (Project properties, Schematic: <b>Gauge label
+shows its gauge, <b>10 AWG</b>: in line with its number, just after it (<b>2018&nbsp;&nbsp;12
+AWG</b>), when the wire's straight piece has room and nothing is in the way, else on the other
+side of the wire from its number (under it, or right of it on an upright wire); smaller (Project properties, Schematic: <b>Gauge label
 height</b>, 0.06" to start); <b>Show a wire layer's gauge beside its wires</b> there turns it
 off. <b>Wire color label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) writes the
 color too, on the wires you select or click (<b>10 AWG BRN</b>); again, and it stops. Wires

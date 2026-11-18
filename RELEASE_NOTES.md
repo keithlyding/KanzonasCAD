@@ -16,7 +16,8 @@ build fails without them.
   nearest 1/8, 1/16, 1/32 or 1/64: 1-9/16"). Dimension units (Modify menu, DU) changes the
   dimensions you select: D decimal, F fractional, or type 1/32.
 
-- Wire gauge labels are smaller and show the gauge only ("12 AWG"), once for wires side by
+- Wire gauge labels sit in line with the wire number ("2018  12 AWG") where the wire has room,
+  are smaller and show the gauge only ("12 AWG"), once for wires side by
   side (a starter's conductors to its drive, a bus), beside the outside wire. Wire color label
   (Modify menu, WCL) adds the color on the wires you pick ("12 AWG BRN"). Project properties,
   Schematic: "Gauge label height", and "Gauge and color shown" to put it on every wire.

@@ -890,8 +890,13 @@ def gauge_labels(project, sheet):
             bests.append((g, [color], best[1], best[2]))
     if not every:
         bests = _one_per_bundle(bests, BUNDLE_GAP * sheet.k())
+    beside = _beside_numbers(project, sheet, h)
     for g, colors, a, b in bests:
         text = " ".join(t for t in (g, ", ".join(c for c in colors if c)) if t)
+        got = beside(text, gh, a, b)
+        if got is not None:
+            out.append(got)
+            continue
         mx, my = _clear_spot(a, b, busy)
         if abs(a[1] - b[1]) > abs(a[0] - b[0]):
             out.append(Text((mx + h * 0.4 + gh, my), text, gh, 90.0, "center"))
@@ -899,6 +904,63 @@ def gauge_labels(project, sheet):
             out.append(Text((mx, my - h * 0.4 - gh), text, gh, 0.0, "center"))
     sheet._gauge_labels = (sig, out)
     return out
+
+
+def _beside_numbers(project, sheet, h):
+    """A function (text, height, a, b) -> Text or None: the gauge label in line with the wire
+    number on the piece a-b, just after it (right of it across, above it upright) or else just
+    before it, when the piece is long enough and nothing else is in the way (the owner,
+    0.18.4: "I would like the verbiage of the awg and color to be intuitively side-by-side if
+    there's enough room"). None: no number on that piece, or no room."""
+    from .geometry import segment_hits_rect
+    from .model import text_width
+    cell = 4.0 * h
+    nums = {}
+    for t in labels(project, sheet):
+        x0, y0, x1, y1 = t.bbox()
+        up = abs(t.angle - 90.0) < 1e-6
+        if not up and abs(t.angle) > 1e-6:
+            continue
+        across = (x0 + x1) / 2.0 if up else (y0 + y1) / 2.0
+        nums.setdefault((up, int(across // cell)), []).append(t)
+    gap = 0.6 * h
+
+    def place(text, gh, a, b):
+        up = abs(a[1] - b[1]) > abs(a[0] - b[0])
+        if up and abs(a[0] - b[0]) > 1e-9 or not up and abs(a[1] - b[1]) > 1e-9:
+            return None
+        line = a[0] if up else a[1]
+        lo, hi = sorted((a[1], b[1]) if up else (a[0], b[0]))
+        best = None
+        k = int(line // cell)
+        for kk in (k - 1, k, k + 1):
+            for t in nums.get((up, kk), ()):
+                x0, y0, x1, y1 = t.bbox()
+                across = (x0 + x1) / 2.0 if up else (y0 + y1) / 2.0
+                along0, along1 = (y0, y1) if up else (x0, x1)
+                d = abs(across - line)
+                if d <= 2.5 * h and along0 >= lo - 1e-9 and along1 <= hi + 1e-9 and \
+                        (best is None or d < best[0]):
+                    best = (d, t, across, along0, along1)
+        if best is None:
+            return None
+        _d, t, across, along0, along1 = best
+        w = text_width(text, gh)
+        probe = Text((0.0, 0.0), text, gh, 90.0 if up else 0.0, "center").bbox()
+        off = ((probe[0] + probe[2]) / 2.0, (probe[1] + probe[3]) / 2.0)
+        for c in (along1 + gap + w / 2.0, along0 - gap - w / 2.0):
+            if c - w / 2.0 < lo + gap or c + w / 2.0 > hi - gap:
+                continue                # (past the piece's end: no room)
+            cx, cy = (across, c) if up else (c, across)
+            q = Text((cx - off[0], cy - off[1]), text, gh, 90.0 if up else 0.0, "center")
+            box = q.bbox()
+            if any(o.kind == "wire" and any(segment_hits_rect(p0, p1, box)
+                                            for p0, p1 in zip(o.points, o.points[1:]))
+                   for o in sheet.query(box)):
+                continue                # (another wire, or its own bend, in the way)
+            return q
+        return None
+    return place
 
 
 BUNDLE_GAP = 0.75      # wires side by side this close (paper inches) share one gauge label

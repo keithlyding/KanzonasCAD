@@ -29,6 +29,27 @@ class GaugeBundleTest(unittest.TestCase):
                 ed.add(self.s, M.Wire([(x, y0), (x, y1)], layer=layer, awg=awg,
                                       show_color=color))
 
+    def in_line(self, x=None, y=None):
+        """The gauge label is in line with the number of the wire at x (upright) or y
+        (across), just after it, touching no wire (0.18.4: side by side)."""
+        from kanzonascad import geometry as G
+        g = wirenums.gauge_labels(self.p, self.s)[0]
+        nums = [t for t in wirenums.labels(self.p, self.s)
+                if (x is not None and abs(t.angle - 90) < 1e-6 and abs(t.pos[0] - x) < 0.2) or
+                (y is not None and abs(t.angle) < 1e-6 and abs(t.pos[1] - y) < 0.2)]
+        self.assertTrue(nums)
+        n = min(nums, key=lambda t: abs((t.pos[0] - x) if x is not None else (t.pos[1] - y)))
+        nb, gb = n.bbox(), g.bbox()
+        if x is not None:
+            self.assertAlmostEqual((gb[0] + gb[2]) / 2, (nb[0] + nb[2]) / 2, places=6)
+            self.assertTrue(gb[1] > nb[3] or gb[3] < nb[1])
+        else:
+            self.assertAlmostEqual((gb[1] + gb[3]) / 2, (nb[1] + nb[3]) / 2, places=6)
+            self.assertTrue(gb[0] > nb[2] or gb[2] < nb[0])
+        for w in self.s.wires():
+            for a, b in zip(w.points, w.points[1:]):
+                self.assertFalse(G.segment_hits_rect(a, b, gb), (g.text, gb, w.points))
+
     def labels(self):
         return [(t.text, round(t.pos[0], 3), round(t.pos[1], 3))
                 for t in wirenums.gauge_labels(self.p, self.s)]
@@ -38,7 +59,7 @@ class GaugeBundleTest(unittest.TestCase):
         got = self.labels()
         self.assertEqual(len(got), 1, got)
         self.assertEqual(got[0][0], "12 AWG")               # (the gauge alone, 0.18.4)
-        self.assertGreater(got[0][1], 2.75)                 # (right of the rightmost)
+        self.in_line(x=2.75)                                # (by the rightmost's number)
         # every wire again, as asked in Schematic settings
         with self.p.edit("each") as ed:
             ed.project_settings({"wire_gauge_each": "each"})
@@ -63,7 +84,7 @@ class GaugeBundleTest(unittest.TestCase):
                 ed.add(self.s, M.Wire([(1.0, y), (12.0, y)], layer="480V BLK"))
         got = self.labels()
         self.assertEqual(len(got), 1, got)
-        self.assertLess(got[0][2], 7.5)
+        self.in_line(y=7.5)                                 # (by the lowest's number)
 
     def test_a_bus_of_three_colors_one_label(self):
         # (the owner's DS201 bus: BRN, ORG, YEL, "too busy": one label, the colors in order)
@@ -73,7 +94,7 @@ class GaugeBundleTest(unittest.TestCase):
         got = self.labels()
         self.assertEqual(len(got), 1, got)
         self.assertEqual(got[0][0], "12 AWG BRN, ORG, YEL")
-        self.assertLess(got[0][2], 7.5)                     # (under the lowest)
+        self.in_line(y=7.5)
 
     def test_conductors_and_a_ground_upright(self):
         self.wires([2.0, 2.25, 2.5], color=True)
@@ -86,7 +107,15 @@ class GaugeBundleTest(unittest.TestCase):
                 if w.layer == "480V BLK":
                     ed.change(self.s, w.copy(show_color=False))
         self.assertEqual([t for t, _x, _y in self.labels()], ["12 AWG GRN"])
-        self.assertGreater(got[0][1], 2.75)
+        self.in_line(x=2.75)
+
+    def test_no_room_beside_it_goes_across_the_wire(self):
+        # (a piece too short for the number and the label side by side: the label on the
+        # other side of the wire, as before)
+        with self.p.edit("w") as ed:
+            ed.add(self.s, M.Wire([(2.0, 5.0), (2.5, 5.0)], layer="480V BLK"))
+        g = wirenums.gauge_labels(self.p, self.s)[0]
+        self.assertLess(g.bbox()[3], 5.0)                   # (under the wire)
 
     def test_smaller_than_the_numbers(self):
         self.wires([2.0])

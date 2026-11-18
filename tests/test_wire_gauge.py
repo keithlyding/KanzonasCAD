@@ -53,10 +53,13 @@ class GaugeTest(unittest.TestCase):
                          ["10 AWG", "10 AWG"])
         self.v.set_selection({w.id for w in self.s.wires() if w.layer == "POWER"})
         self.v.run(C.WireColorLabelCmd)
+        # (in line with its number, after it: side by side, 0.18.4)
         across = [t for t in wirenums.gauge_labels(self.p, self.s) if t.angle == 0][0]
-        self.assertLess(across.bbox()[3], 5.0)                          # (under the wire)
         num = [t for t in wirenums.labels(self.p, self.s) if t.pos[1] > 4.0 and t.angle == 0]
         self.assertTrue(num and num[0].bbox()[1] > 5.0)                 # (its number above)
+        nb, gb = num[0].bbox(), across.bbox()
+        self.assertGreater(gb[0], nb[2])                                # (right of it)
+        self.assertAlmostEqual((gb[1] + gb[3]) / 2, (nb[1] + nb[3]) / 2, places=6)
 
     def test_one_label_a_run_and_its_parts(self):
         self.set_layer("POWER", awg="12")
