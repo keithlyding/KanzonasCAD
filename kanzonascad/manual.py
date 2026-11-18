@@ -106,7 +106,11 @@ print in it.</p>
 GRN/YEL...), picked from the usual ones or typed. Each run of joined wires on that layer then
 shows them, <b>10 AWG BRN</b>, on the other side of the wire from its number (under it, or right
 of it on an upright wire), a little smaller; Project properties, Schematic, <b>Show a wire
-layer's gauge and color beside its wires</b> turns that off. The layers a bus adds (WIRE BROWN,
+layer's gauge and color beside its wires</b> turns that off. Wires side by side of one gauge
+and color (within 3/4" of each other on paper, running along each other: a starter's three
+conductors to its drive, a bus) show it <b>once</b>, beside the outside one (the rightmost of
+upright wires, the lowest of those across); <b>Gauge and color shown</b>, On every wire, puts it
+back on each. The layers a bus adds (WIRE BROWN,
 WIRE ORANGE...) come with their color's name; give them a gauge once and every wire on them
 shows it. A wire color of two names, <b>BLU/WHT</b> say, draws the layer's wires striped: the
 layer's color with stripes of the second (a 24 VDC common), on the screen and printed (not when

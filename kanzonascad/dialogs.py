@@ -420,6 +420,15 @@ def project_properties(parent, project, tab=0):
                       "them (10 AWG BRN), under its wire number.")
     wgauge.setChecked(bool(st.get("wire_gauge_shown", True)))
     form.addRow("", wgauge)
+    wgroup = QComboBox()
+    wgroup.setObjectName("wire_gauge_each")
+    wgroup.addItem("Once for wires side by side of one gauge and color", "group")
+    wgroup.addItem("On every wire", "each")
+    wgroup.setCurrentIndex(max(wgroup.findData(st.get("wire_gauge_each", "group")), 0))
+    wgroup.setToolTip("Wires running side by side within 3/4\" of each other, of one gauge and "
+                      "color (a starter's three conductors to its drive, a bus), show it once, on "
+                      "the outside wire")
+    form.addRow("Gauge and color shown", wgroup)
     wlead = QCheckBox("A second wire on a pin leaves it on a 45-degree lead")
     wlead.setToolTip("Double landing as drawn by hand: a wire started or ended on a pin that "
                      "already has one bends off it beside the first. Off: it runs straight "
@@ -562,6 +571,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_around"] = waround.isChecked()
     settings["wire_clear"] = wclear.value()
     settings["wire_gauge_shown"] = wgauge.isChecked()
+    settings["wire_gauge_each"] = wgroup.currentData()
     settings["footprint_label"] = fp_show.currentData()
     settings["duct_hatch"] = hatch.isChecked()
     settings["xref_height"] = xref_h.value()

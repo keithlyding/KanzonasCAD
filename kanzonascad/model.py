@@ -85,6 +85,7 @@ DEFAULT_SETTINGS = {
                                 # zone grid stops at
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
     "wire_gauge_shown": True,   # a wire layer's gauge and color beside its wires
+    "wire_gauge_each": "group",  # once for wires side by side alike ("group"), or "each" run
     "footprint_label": "tag",   # what a footprint placed shows to start (Footprint label)
     "wire_around": True,        # a wire goes round the symbols in its way (wires.route_around)
     "wire_clear": 0.125,        # ...that far from them, paper inches
