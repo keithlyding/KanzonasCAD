@@ -3870,9 +3870,9 @@ class ScootCmd(_TwoPoint):
     only = False
     ACROSS = ("A wire runs through a pin of what would move, across the way it goes: scoot "
               "along that wire, or cut it at the pin first (Trim wire)")
-    STRANDS = ("A wire of what would move runs on through a pin of a device that stays: it "
-               "would come off that pin. Cut it at the pin first (Trim wire), or scoot that "
-               "device too")
+    STRANDS = ("A wire would come off a pin: it runs on through a pin of a device (one that "
+               "stays, or one that moves while the wire's far end stays). Cut it at the pin "
+               "first (Trim wire), or scoot that device too")
     why = ACROSS
 
     def begin(self):
@@ -3931,7 +3931,7 @@ class ScootCmd(_TwoPoint):
             sheet = self.ctx.sheet()
             got = scoot.branch_moved(sheet, self.devs, dx, dy)
             self.why = self.ACROSS
-            if got is not None and scoot.strands(sheet, got):
+            if got is not None and scoot.strands(sheet, got, (dx, dy)):
                 self.why = self.STRANDS
                 return None
             return got

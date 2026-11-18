@@ -75,6 +75,11 @@ def _local_parts(e, rect):
         b = w.bbox()
         if b[0] <= x1 and b[2] >= x0 and b[1] <= y1 and b[3] >= y0:
             out.append(w)
+        elif isinstance(w, (M.Arc, M.Circle)) and x0 <= w.center[0] <= x1 and \
+                y0 <= w.center[1] <= y1:
+            # (an arc's center, outside the arc's box: a breaker's arc, the mouse by its
+            # center zoomed in, gave no Center snap; the sweep, 0.18.2, seed 907)
+            out.append(w)
     return out
 
 
@@ -555,6 +560,32 @@ class CadView(QWidget):
         self._frame_snap = (key, ents, index)
         return ents, index
 
+    def _arc_centers(self, rect):
+        """The sheet's arcs whose center is in rect but outside their own box (fewer than a
+        half circle), found by their center: cells of an inch, kept until the sheet
+        changes."""
+        s = self.sheet()
+        got = getattr(self, "_arc_cells", None)
+        if got is None or got[0] != (s.id, s.version):
+            cells = {}
+            for e in s.entities.values():
+                if isinstance(e, M.Arc):
+                    b, c = e.bbox(), e.center
+                    if not (b[0] <= c[0] <= b[2] and b[1] <= c[1] <= b[3]):
+                        cells.setdefault((math.floor(c[0]), math.floor(c[1])), []).append(e)
+            got = self._arc_cells = ((s.id, s.version), cells)
+        cells = got[1]
+        if not cells:
+            return []
+        x0, y0, x1, y1 = rect
+        out = []
+        for i in range(math.floor(x0), math.floor(x1) + 1):
+            for j in range(math.floor(y0), math.floor(y1) + 1):
+                for e in cells.get((i, j), ()):
+                    if x0 <= e.center[0] <= x1 and y0 <= e.center[1] <= y1:
+                        out.append(e)
+        return out
+
     def snap_query(self, rect):
         """What snapping looks at in rect: the sheet's entities, then its frame's."""
         out = self.sheet().query(rect)
@@ -589,6 +620,12 @@ class CadView(QWidget):
                     for kind, q in w.snap_points():
                         if kind in modes:
                             offer(kind, q, inner=1)
+        if "center" in modes:
+            # (arcs on the sheet whose center is outside their box: the index finds them by
+            # their box only)
+            for e in self._arc_centers(rect):
+                if self.layer_visible(e.layer):
+                    offer("center", e.center)
         # what lies under the aperture, piece by piece: a block (a footprint made from a
         # maker's drawing: thousands of lines) gives only its own lines that come near, not all
         # of them (every piece of every block nearby against every other, on every mouse move,

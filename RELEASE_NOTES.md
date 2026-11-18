@@ -42,6 +42,10 @@ build fails without them.
   wire back over itself (a hidden corner). It's now refused, saying why.
 - A bus ended on a symbol's pins could go on instead of landing, when another symbol shared the
   first pin of that side. It now lands, as its preview showed.
+- Center snap found an arc's center when zoomed in, on arcs less than half a circle (a
+  breaker's, for one); zoomed in, it didn't.
+- Scoot could leave a moved device's pin with no wire, when a wire leaving the branch ran
+  through that pin to a far end that stays. It's now refused, saying why.
 
 ## 0.18.1
 

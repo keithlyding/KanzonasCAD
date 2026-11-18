@@ -1306,6 +1306,49 @@ def random_editing(log, out, ops, seed, drawing=None):
                                   a[1] + rnd.choice([-1, 0, 1]) * 0.5)))
         finish()
 
+    def op_move_area():
+        # (0.18.2: a crossing box over a part of the drawing, then Move typed, every object
+        # snap on, as the owner moves part of a panel: "one of my vfds disappeared"): every
+        # object selected is still there, moved exactly as typed (a wire may be joined into
+        # another by the cleanup, so only the rest is checked one by one)
+        from kanzonascad import osnap as OS
+        ents = [e for e in s.entities.values() if BC.selectable(v, e)]
+        if len(ents) < 4:
+            return
+        a, b = rnd.choice(ents).bbox(), rnd.choice(ents).bbox()
+        box = (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
+        sel = {e.id for e in s.query(box) if BC.selectable(v, e) and e.crosses(box)}
+        if not sel:
+            return
+        before = {i: s.entities[i] for i in sel}
+        k = s.k()
+        d = (rnd.choice([-1, 0, 1]) * 0.5 * k, rnd.choice([-1, 1]) * 0.5 * k)
+        modes, on = v.osnap_modes, v.osnap_on
+        v.osnap_modes, v.osnap_on = {m for m, _n, _t in OS.MODES}, True
+        try:
+            v.set_selection(sel)
+            v.run(C.MoveCmd)
+            if v.cmd is None:
+                return
+            base = rnd.choice(list(before.values())).bbox()[:2]
+            v.input_text(fmt(base))
+            if v.cmd is not None:
+                v.input_text("@%r,%r" % d)
+            finish()
+        finally:
+            v.osnap_modes, v.osnap_on = modes, on
+        for i, e in before.items():
+            if isinstance(e, (M.Wire, M.WireCross)):
+                continue
+            now = s.entities.get(i)
+            assert now is not None, "moving %d objects, %s %d went" % (
+                len(sel), type(e).__name__, i)
+            b0, b1 = e.bbox(), now.bbox()
+            assert all(abs(b1[j] - b0[j] - d[j % 2]) <= 1e-6 * max(1.0, abs(b0[j]))
+                       for j in range(4)), "%s %d moved %s, not %s" % (
+                type(e).__name__, i, (b1[0] - b0[0], b1[1] - b0[1]), d)
+        BC.CHECKED["an area moved, everything in it"] += 1
+
     def op_copy():
         op_move(C.CopyCmd)
 
@@ -2611,7 +2654,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
