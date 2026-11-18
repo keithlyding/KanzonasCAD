@@ -64,6 +64,13 @@ jobs:
           echo "seed $seed, $OPS steps"
           python tests/battery.py battery-sweep --ops "$OPS" --seed "$seed"
 
+      - name: Dump into the log
+        if: always()
+        run: |
+          echo "DUMP-BEGIN"
+          gzip -9c battery-sweep/before-step-1388.kzcad | base64 -w 200
+          echo "DUMP-END"
+
       - name: Battery log
         if: always()
         uses: actions/upload-artifact@v4
