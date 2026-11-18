@@ -11,7 +11,8 @@ build fails without them.
 **New**
 - Wires tapped off a wire (the drops off a bus) are numbered from it: off bus wire 2007, the
   drops are 2007-1, 2007-2, 2007-3 in the sheet's numbering order, and a tap off a tap is
-  2007-1a. Project properties, Schematic, "Wires tapped off a wire are numbered" chooses this,
+  2007-1a. A drop where the bus wire ends and another carries on straight counts too.
+  Project properties, Schematic, "Wires tapped off a wire are numbered" chooses this,
   the same number as the wire, or a number of their own. New projects start with -1, -2;
   projects from before keep their numbers until you change it.
 - Drawing a tap asks as before: Enter numbers it as the project says, S keeps the wire's

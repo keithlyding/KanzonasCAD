@@ -121,6 +121,43 @@ class TapNumberTest(unittest.TestCase):
         self.p.undo()
         self.assertEqual(self.drops(3.0)[0], l1 + "-1")
 
+    def test_a_bus_ending_at_a_drop_and_going_on(self):
+        # (the owner's drawing, M207's L1: the bus wire ends where the drop is, another goes
+        # on from there to the next row: three ends; the bus straight through, the drop a tap)
+        with self.p.edit("w") as ed:
+            bus = ed.add(self.s, M.Wire([(1.0, 8.0), (6.0, 8.0)]))
+            on = ed.add(self.s, M.Wire([(6.0, 8.0), (10.0, 8.0), (10.0, 2.0)]))
+            ed.add(self.s, M.Wire([(3.0, 8.0), (3.0, 5.0)]))
+            last = ed.add(self.s, M.Wire([(6.0, 8.0), (6.0, 5.0)]))
+        n = self.s.entities[bus.id].num
+        self.assertEqual(self.s.entities[on.id].num, n)
+        self.assertEqual(self.num((3.0, 5.0)), n + "-1")
+        self.assertEqual(self.num((6.0, 5.0)), n + "-2")
+        self.assertIsNotNone(wirenums.taps(self.s, self.s.entities[last.id]))
+        # (the wire going on drawn last: the drop already there becomes a tap then)
+        with self.p.edit("off") as ed:
+            ed.remove(self.s, on.id)
+        self.assertEqual(self.num((6.0, 5.0)), n)                # (an L: one wire)
+        with self.p.edit("on") as ed:
+            ed.add(self.s, M.Wire([(6.0, 8.0), (10.0, 8.0), (10.0, 2.0)]))
+        self.assertEqual(self.num((6.0, 5.0)), n + "-2")
+
+    def test_a_bus_ending_on_a_bend_carries_on(self):
+        # (M207's L2: the drop and the run on drawn as one wire, the bus ending on its bend:
+        # the bus goes on along it, not tapped off it; the drop is that wire's, as drawn)
+        with self.p.edit("w") as ed:
+            bus = ed.add(self.s, M.Wire([(1.0, 8.0), (6.0, 8.0)]))
+            ed.add(self.s, M.Wire([(3.0, 8.0), (3.0, 5.0)]))
+            bent = ed.add(self.s, M.Wire([(6.0, 5.0), (6.0, 8.0), (10.0, 8.0), (10.0, 2.0)]))
+        n = self.s.entities[bus.id].num
+        self.assertEqual(self.s.entities[bent.id].num, n)
+        self.assertEqual(self.num((3.0, 5.0)), n + "-1")
+        self.assertIsNone(wirenums.taps(self.s, self.s.entities[bus.id]))
+        # (on a square bend a wire always carries on one of its pieces: one wire with it)
+        with self.p.edit("t") as ed:
+            ed.add(self.s, M.Wire([(10.0, 8.0), (10.0, 9.0)]))
+        self.assertEqual(self.num((10.0, 9.0)), n)
+
     def test_two_wires_tapping_each_other(self):
         # (each one's end on the other's middle: numbered from each other round a loop, they
         # got no number; the battery, seed 37)

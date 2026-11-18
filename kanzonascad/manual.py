@@ -786,6 +786,10 @@ on are numbered as usual. Adding or removing a drop renumbers the others on that
 one wire with the wire it taps.</li>
 <li><b>A number of its own</b>: each tap takes the next free number of its page.</li>
 </ul>
+A drop is a tap too where a bus wire ends at it and another wire carries straight on from there
+(the bus going on to another row). A wire that ends on another's bend and carries straight on
+along it is the same wire, not a tap: to number a drop drawn as one wire with the run that goes
+on, draw the drop as a wire of its own.
 Changing it renumbers the taps in one step (Undo puts them back). A number you typed stays.</li>
 <li><b>Tapping off a wire</b>: draw a wire from (or to) the middle of another and the command line
 asks: <b>Enter</b> numbers the tap as the project says, <b>S</b> gives it the same number as that

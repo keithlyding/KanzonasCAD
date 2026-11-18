@@ -24,6 +24,7 @@ import math
 import re
 from functools import lru_cache
 
+from . import geometry as G
 from . import tags
 from .model import Text
 
@@ -78,38 +79,107 @@ def _touching(sheet, p):
     return sheet.query_point(p, TOL)
 
 
+def _same_pt(p, q):
+    return abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
+
+
+def _unit(p, q):
+    dx, dy = q[0] - p[0], q[1] - p[1]
+    d = (dx * dx + dy * dy) ** 0.5
+    return (dx / d, dy / d) if d > 1e-12 else None
+
+
+def _legs(w, p):
+    """The ways w leaves p (unit vectors), and how p is on w: "end", "corner" (one of its
+    bends) or "middle" (along a straight piece)."""
+    pts = w.points
+    if _same_pt(p, pts[0]) or _same_pt(p, pts[-1]):
+        seq = pts if _same_pt(p, pts[0]) else pts[::-1]
+        for q in seq[1:]:
+            u = _unit(p, q)
+            if u is not None:
+                return [u], "end"
+        return [], "end"
+    for q in pts[1:-1]:
+        if _same_pt(p, q):
+            k = next(i for i, r in enumerate(pts) if _same_pt(p, r))
+            legs = [u for u in (_unit(p, pts[k - 1]), _unit(p, pts[k + 1])) if u is not None]
+            return legs, "corner"
+    for q, r in zip(pts, pts[1:]):
+        if G.dist_to_segment(p, q, r) <= TOL:
+            u = _unit(q, r)
+            if u is not None:
+                return [u, (-u[0], -u[1])], "middle"
+    return [], "middle"
+
+
+def _straight(u, v):
+    return u[0] * v[0] + u[1] * v[1] < -0.999
+
+
+def tap_at(sheet, a, p, b):
+    """a's end p, on wire b: is a tapped off b there? On b's middle, yes. On one of b's
+    bends, unless a carries straight on from b's piece there (b then is the one turning off:
+    both one run). End to end, a is a tap when two other ends there make a straight run
+    through p and b is one of them (a bus ending at a drop and going on: the owner's
+    drawing, 0.18.3, M207's L1)."""
+    la, _ = _legs(a, p)
+    lb, how = _legs(b, p)
+    if how == "middle":
+        return True
+    if not la:
+        return False
+    if how == "corner":
+        return not any(_straight(la[0], u) for u in lb)
+    ends = []
+    for o in _touching(sheet, p):
+        if o.kind == "wire" and (_same_pt(p, o.points[0]) or _same_pt(p, o.points[-1])):
+            got, _ = _legs(o, p)
+            if got:
+                ends.append((o.id, got[0]))
+    runs = [(x, y) for i, (x, u) in enumerate(ends) for y, v in ends[i + 1:]
+            if _straight(u, v)]
+    if len(runs) != 1:
+        return False
+    return a.id not in runs[0] and b.id in runs[0]
+
+
 def _adjacent(sheet, w, split_taps=False, tapped_out=None):
     """Ids of the wires w connects with: one whose middle or end w ends on, or one that ends
-    on w (its middle or end). split_taps: a wire tapped off another (its end on the other's
-    middle) is not joined to it (numbered apart: tap_numbers "suffix" or "own") unless it
-    keeps that wire's number (same_num). tapped_out: a dict given {(tap id, tapped id): the
-    tap's end there} of the taps kept apart, w's own and those off w."""
-    def tapped(a, p, b):
-        # (a's end p on b's middle, a with a number of its own: not one group for numbering,
+    on w (its middle or end). split_taps: a wire tapped off another (tap_at) is not joined to
+    it (numbered apart: tap_numbers "suffix" or "own") unless it keeps that wire's number
+    (same_num). tapped_out: a dict given {(tap id, tapped id): the tap's end there} of the
+    taps kept apart, w's own and those off w."""
+    def apart(a, p, b):
+        # (a's end p tapped off b, a with a number of its own: not one group for numbering,
         # the owner, 0.17.2)
-        return (a.own_num or (split_taps and not a.same_num)) and not any(
-            abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
-            for q in (b.points[0], b.points[-1]))
-    out = set()
+        return (a.own_num or (split_taps and not a.same_num)) and tap_at(sheet, a, p, b)
+    near = {}
     for p in (w.points[0], w.points[-1]):
         for o in _touching(sheet, p):
             if o is not w and o.kind == "wire" and o.touches(p, TOL):
-                if not tapped(w, p, o):
-                    out.add(o.id)
-                elif tapped_out is not None:
-                    _note_tap(tapped_out, (w.id, o.id), p)
+                near[o.id] = o
     x0, y0, x1, y1 = w.bbox()
     for o in sheet.query((x0 - TOL, y0 - TOL, x1 + TOL, y1 + TOL)):
-        if o is w or o.kind != "wire" or (o.id in out and tapped_out is None):
-            continue
-        # (both ends looked at: one joined to w and the other tapping its middle is a tap
-        # too; the battery, 0.18.3, seed 37)
-        for p in (o.points[0], o.points[-1]):
-            if w.touches(p, TOL):
-                if not tapped(o, p, w):
-                    out.add(o.id)
-                elif tapped_out is not None:
-                    _note_tap(tapped_out, (o.id, w.id), p)
+        if o is not w and o.kind == "wire" and o.id not in near and any(
+                w.touches(q, TOL) for q in (o.points[0], o.points[-1])):
+            near[o.id] = o
+    out = set()
+    for o in near.values():
+        # (each place they meet: joined there unless one is tapped off the other; one end
+        # joined and the other tapping is a tap too, the battery, 0.18.3, seed 37)
+        pts = [p for p in (w.points[0], w.points[-1]) if o.touches(p, TOL)]
+        pts += [q for q in (o.points[0], o.points[-1]) if w.touches(q, TOL) and
+                not any(_same_pt(q, r) for r in pts)]
+        for p in pts:
+            tw = (_same_pt(p, w.points[0]) or _same_pt(p, w.points[-1])) and apart(w, p, o)
+            to = (_same_pt(p, o.points[0]) or _same_pt(p, o.points[-1])) and apart(o, p, w)
+            if tw and tapped_out is not None:
+                _note_tap(tapped_out, (w.id, o.id), p)
+            if to and tapped_out is not None:
+                _note_tap(tapped_out, (o.id, w.id), p)
+            if not tw and not to:
+                out.add(o.id)
     return out
 
 
@@ -123,13 +193,12 @@ def _note_tap(found, k, p):
 
 
 def taps(sheet, w):
-    """The wire w taps off (one of w's ends on the middle of it, not its end), or None."""
+    """The wire w taps off (tap_at, at one of w's ends), or None."""
     for p in (w.points[0], w.points[-1]):
         for o in _touching(sheet, p):
             if o is w or o.kind != "wire" or o.id == w.id or not o.touches(p, TOL):
                 continue
-            if not any(abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
-                       for q in (o.points[0], o.points[-1])):
+            if tap_at(sheet, w, p, o):
                 return o
     return None
 
@@ -161,6 +230,18 @@ def _sheet_groups(sheet, split_taps=False):
                  (old.get(i) is None or old[i].points != w.points or
                   old[i].own_num != w.own_num or old[i].same_num != w.same_num)]
         stale += [i for i in old if i not in cur]
+        # (and the wires ending where they end, before and after: whether a drop there is a
+        # tap depends on every end there, a run straight through; tap_at)
+        more = set()
+        for i in stale:
+            for x in (old.get(i), cur.get(i)):
+                if x is None:
+                    continue
+                for q in (x.points[0], x.points[-1]):
+                    more.update(o.id for o in _touching(sheet, q)
+                                if o.kind == "wire" and o.id in cur)
+        have = set(stale)
+        stale += [i for i in more if i not in have]
         for i in stale:
             for n in adj.pop(i, ()):
                 ns = adj.get(n)
