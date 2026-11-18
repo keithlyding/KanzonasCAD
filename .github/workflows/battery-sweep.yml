@@ -34,7 +34,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        include:
+          - {part: 1, at: 1187}
+          - {part: 7, at: 893}
     steps:
       - uses: actions/checkout@v5
 
@@ -55,13 +57,21 @@ jobs:
       - name: Battery
         env:
           QT_QPA_PLATFORM: offscreen
-          SEED_BASE: ${{ github.event.inputs.seed_base }}
+          SEED_BASE: "900"
+          BATTERY_DUMP_AT: ${{ matrix.at }}
           OPS: ${{ github.event.inputs.ops || '3000' }}
         run: |
           base="${SEED_BASE:-$(( ${{ github.run_number }} * 100 ))}"
           seed=$(( base + ${{ matrix.part }} ))
           echo "seed $seed, $OPS steps"
           python tests/battery.py battery-sweep --ops "$OPS" --seed "$seed"
+
+      - name: Dump into the log
+        if: always()
+        run: |
+          echo "DUMP-BEGIN"
+          gzip -9c battery-sweep/before-step-${{ matrix.at }}.kzcad | base64 -w 200
+          echo "DUMP-END"
 
       - name: Battery log
         if: always()
