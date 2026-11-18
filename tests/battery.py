@@ -1861,11 +1861,15 @@ def random_editing(log, out, ops, seed, drawing=None):
         now = s.entities.get(w.id)
         want = "" if typed == "L" else C.wire_gauge(typed)
         assert now is not None and now.awg == want, (typed, now and now.awg)
-        if p.settings.get("wire_gauge_shown", True) and (want or p.layers.get(now.layer) and
-                                                          p.layers[now.layer].wire_label()):
-            from kanzonascad import wirelayers
-            text = wirelayers.wire_label(p.layers.get(now.layer), now.awg)
-            assert text in [t.text for t in wirenums.gauge_labels(p, s)], (text, now.layer)
+        lay = p.layers.get(now.layer)
+        g = now.awg or (lay.awg if lay is not None else "")
+        if p.settings.get("wire_gauge_shown", True) and g:
+            # (its gauge shown: the label of its run, or of the wires side by side with it of
+            # that gauge, starts with it; the color only where asked, 0.18.3, the owner: "I
+            # don't think we need to include the wire color")
+            text = M.gauge_text(g)
+            got = [t.text for t in wirenums.gauge_labels(p, s)]
+            assert any(t == text or t.startswith(text + " ") for t in got), (text, now.layer)
         BC.CHECKED["wire size as typed"] += 1
 
     def op_wire_label():
