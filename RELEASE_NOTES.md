@@ -23,10 +23,14 @@ build fails without them.
   Schematic: "Gauge label height", and "Gauge and color shown" to put it on every wire.
 - A source arrow placed on a numbered wire takes the wire's number as its name: nothing to
   type. A destination arrow's wire takes the source's number and its layer too.
+- Duplicate sheet (Sheets menu and tab): a copy of the sheet shown, everything on it, on a
+  page of its own, its devices and wires numbered for that page.
 - Each source or destination arrow shows only its other half's place: a destination its
   source, not every arrow of that name.
 
 **Fixed**
+- A gauge label no longer sits on another wire's number: it moves along its wire to a clear
+  spot.
 - Pasting into another project brings the layers that project doesn't have with their colors
   and settings; a layer it already has keeps its own.
 

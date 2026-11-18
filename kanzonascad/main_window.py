@@ -480,6 +480,7 @@ class MainWindow(BlockEditing, QMainWindow):
           tip="Cross-references follow every change (off: they change only with Update "
               "cross-references)")
         A("sheet_add", "&New sheet", self.add_sheet, label="New sheet")
+        A("sheet_dup", "D&uplicate sheet", self.duplicate_sheet, label="Duplicate sheet")
         A("sheet_del", "&Delete sheet", self.delete_sheet, label="Delete sheet")
         A("sheet_up", "Move sheet &up", lambda: self.move_sheet(-1), label="Move up")
         A("sheet_down", "Move sheet do&wn", lambda: self.move_sheet(1), label="Move down")
@@ -651,7 +652,8 @@ class MainWindow(BlockEditing, QMainWindow):
             else:
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
-        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_cw", "sheet_ccw",
+        for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
+                  "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
                   "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "materials", None,
                   "sheet_props",
@@ -749,7 +751,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
         ])
         r.add_tab("Sheets", [
-            ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
+            ("Sheets", "large", [a["sheet_add"], a["sheet_dup"], a["sheet_del"]]),
             ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
             ("Rotate", "small", [a["sheet_cw"], a["sheet_ccw"]]),
             ("Properties", "large", [a["sheet_props"], a["project_props"], a["layers"]]),
@@ -2178,7 +2180,8 @@ class MainWindow(BlockEditing, QMainWindow):
 
     def _sheet_menu(self, pos):
         m = QMenu(self)
-        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_props"):
+        for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down",
+                  "sheet_props"):
             m.addAction(self.acts[k])
         m.addSeparator()
         it = self.sheet_list.itemAt(pos)
@@ -2207,6 +2210,57 @@ class MainWindow(BlockEditing, QMainWindow):
         if s.kind == "panel":
             self.cmdline.add_history("New panel sheet: Sheet scale (Panel tab, or Scale in the "
                                      "status bar) can pick its scale from the cabinet's size.")
+
+    def duplicate_sheet(self):
+        """Duplicate sheet: a copy of the sheet shown, everything on it, just after it, on its
+        own page (the owner, 0.18.4: "I need to be able to duplicate a sheet inside the
+        project"). Its devices get tags of its page, as pasted ones do; its wires numbers of
+        their own (numbering gives them); its off-sheet connectors and arrows no name, so the
+        copy isn't joined to the wires the originals are. One step."""
+        v = self.view()
+        if v is None:
+            return
+        p = v.project
+        self._leave_title_block(v)
+        cur = v.sheet()
+        if cur is p.title_block:
+            return
+        from . import tags
+        meta = cur.meta_dict()
+        for k in ("id", "number", "xref_shown", "xref_frozen", "no_dots", "number_from"):
+            meta.pop(k, None)
+        meta["title"] = ("%s (copy)" % cur.title).strip() if cur.title else "Copy"
+        s = p.make_sheet(meta["title"])
+        s.set_meta(dict(s.meta_dict(), **meta))
+        if cur.number:
+            # (a page number typed on the original: the next one free, not the automatic one,
+            # which could be the original's)
+            used = {p.sheet_number(x) for x in p.sheets}
+            n = int(cur.number) + 1 if str(cur.number).isdigit() else len(p.sheets) + 1
+            while str(n) in used:
+                n += 1
+            s.number = str(n)
+        ents = []
+        for e in cur.entities.values():
+            c = e.copy()
+            c.id = None
+            if isinstance(c, M.Wire):
+                c = c.copy(num=None, num_lock=False)
+                c.id = None
+            elif isinstance(c, M.Insert) and c.defn is not None and c.defn.wiring == "link":
+                attrs = dict(c.attrs)
+                attrs.pop("TAG", None)
+                c = c.copy(attrs=attrs)
+                c.id = None
+            ents.append(c)
+        with p.edit("Duplicate sheet") as ed:
+            ed.add_sheet(s, p.sheets.index(cur) + 1)
+            for e in tags.retag_copies(p, s, ents):
+                ed.add(s, e)
+        v.show_sheet(s.id)
+        self._fill_sheets()
+        self.cmdline.add_history("Duplicated %s as %s (page %s)" % (
+            cur.title or "the sheet", s.title, p.sheet_number(s)))
 
     def delete_sheet(self):
         v = self.view()
@@ -3097,7 +3151,7 @@ class MainWindow(BlockEditing, QMainWindow):
         a = self.acts
         for k in ("save", "save_as", "import_dxf", "import_pdf", "export_dxf", "export_dxf_all", "export_pdf",
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
-                  "sheet_add", "sheet_props", "project_props", "layers", "drafting",
+                  "sheet_add", "sheet_dup", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",

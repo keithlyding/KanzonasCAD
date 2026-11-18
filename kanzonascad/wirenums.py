@@ -898,10 +898,29 @@ def gauge_labels(project, sheet):
             out.append(got)
             continue
         mx, my = _clear_spot(a, b, busy)
-        if abs(a[1] - b[1]) > abs(a[0] - b[0]):
-            out.append(Text((mx + h * 0.4 + gh, my), text, gh, 90.0, "center"))
-        else:
-            out.append(Text((mx, my - h * 0.4 - gh), text, gh, 0.0, "center"))
+        up = abs(a[1] - b[1]) > abs(a[0] - b[0])
+        first = None
+        # (across the wire from its number; slid along the piece, a little at a time, off
+        # another wire's number or label: the owner, 0.18.4, "the wire number is on top of the
+        # wire labels from the other wires")
+        lo, hi = sorted((a[1], b[1]) if up else (a[0], b[0]))
+        for k in range(0, 13):
+            step = (k + 1) // 2 * (1 if k % 2 else -1) * gh * 2.0
+            cx, cy = (mx, my + step) if up else (mx + step, my)
+            if not lo <= (cy if up else cx) <= hi:
+                continue
+            q = Text((cx + h * 0.4 + gh, cy), text, gh, 90.0, "center") if up else \
+                Text((cx, cy - h * 0.4 - gh), text, gh, 0.0, "center")
+            if first is None:
+                first = q
+            box = q.bbox()
+            if not beside.taken(box) and not any(o.bbox() and o.bbox()[0] < box[2] and
+                                                 o.bbox()[2] > box[0] and
+                                                 o.bbox()[1] < box[3] and o.bbox()[3] > box[1]
+                                                 for o in out):
+                first = q
+                break
+        out.append(first)
     sheet._gauge_labels = (sig, out)
     return out
 
@@ -916,6 +935,7 @@ def _beside_numbers(project, sheet, h):
     from .model import text_width
     cell = 4.0 * h
     nums = {}
+    taken = _text_boxes(labels(project, sheet), cell)
     for t in labels(project, sheet):
         x0, y0, x1, y1 = t.bbox()
         up = abs(t.angle - 90.0) < 1e-6
@@ -956,11 +976,31 @@ def _beside_numbers(project, sheet, h):
             box = q.bbox()
             if any(o.kind == "wire" and any(segment_hits_rect(p0, p1, box)
                                             for p0, p1 in zip(o.points, o.points[1:]))
-                   for o in sheet.query(box)):
-                continue                # (another wire, or its own bend, in the way)
+                   for o in sheet.query(box)) or taken(box):
+                continue                # (another wire, its own bend, or a number in the way)
             return q
         return None
+    place.taken = taken
     return place
+
+
+def _text_boxes(texts, cell):
+    """A function box -> True when it overlaps one of the texts (kept in cells of cell)."""
+    grid = {}
+    for t in texts:
+        b = t.bbox()
+        for i in range(int(b[0] // cell), int(b[2] // cell) + 1):
+            for j in range(int(b[1] // cell), int(b[3] // cell) + 1):
+                grid.setdefault((i, j), []).append(b)
+
+    def hits(box):
+        for i in range(int(box[0] // cell), int(box[2] // cell) + 1):
+            for j in range(int(box[1] // cell), int(box[3] // cell) + 1):
+                for b in grid.get((i, j), ()):
+                    if box[0] < b[2] and box[2] > b[0] and box[1] < b[3] and box[3] > b[1]:
+                        return True
+        return False
+    return hits
 
 
 BUNDLE_GAP = 0.75      # wires side by side this close (paper inches) share one gauge label

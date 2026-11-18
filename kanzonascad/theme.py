@@ -32,7 +32,7 @@ ICONS = {
     "theme": "theme-light-dark", "command_line": "console-line", "ribbon": "view-dashboard-outline",
     "collapse": "chevron-double-up", "group_names": "label-outline", "menu_bar": "menu",
     # sheets / project
-    "sheet_add": "file-document-outline", "sheet_del": "file-remove-outline",
+    "sheet_add": "file-document-outline", "sheet_dup": "file-document-multiple-outline", "sheet_del": "file-remove-outline",
     "sheet_up": "arrow-up", "sheet_down": "arrow-down", "sheet_props": "file-cog-outline",
     "project_props": "folder-cog-outline", "revisions": "history",
     "new_revision": "file-document-edit-outline", "fp_label": "label-outline", "layers": "layers-outline", "title_block": "table-edit",

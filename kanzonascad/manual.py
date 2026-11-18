@@ -55,6 +55,11 @@ gets that room) and a <b>title block</b> in the lower right corner.</p>
 of every wire number (6001, 6002 ...).</p>
 <ul>
 <li><b>New sheet</b> adds a sheet after the one shown, the same size and zones.</li>
+<li><b>Duplicate sheet</b> (Sheets menu and tab) adds a copy of the sheet shown just after it,
+with everything on it, titled "(copy)", on a page of its own (the next free number when the
+original's was typed). Its devices get tags of its page (CR201 becomes CR301), its wires new
+numbers, and its off-sheet connectors and arrows no name (so it isn't joined to the original's
+wires: name them for the copy). One step, so Undo takes it back.</li>
 <li><b>Delete sheet</b> removes the sheet shown (Undo brings it back).</li>
 <li><b>Move sheet up</b> and <b>Move sheet down</b> change the order (and so the automatic
 page numbers).</li>
@@ -106,7 +111,8 @@ print in it.</p>
 GRN/YEL...), picked from the usual ones or typed. Each run of joined wires on that layer then
 shows its gauge, <b>10 AWG</b>: in line with its number, just after it (<b>2018&nbsp;&nbsp;12
 AWG</b>), when the wire's straight piece has room and nothing is in the way, else on the other
-side of the wire from its number (under it, or right of it on an upright wire); smaller (Project properties, Schematic: <b>Gauge label
+side of the wire from its number (under it, or right of it on an upright wire), slid along the
+wire off any other wire's number or label; smaller (Project properties, Schematic: <b>Gauge label
 height</b>, 0.06" to start); <b>Show a wire layer's gauge beside its wires</b> there turns it
 off. <b>Wire color label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) writes the
 color too, on the wires you select or click (<b>10 AWG BRN</b>); again, and it stops. Wires
