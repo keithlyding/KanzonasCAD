@@ -498,6 +498,7 @@ def labels(project, sheet):
     number label put one (Wire.labels). Worked out, never stored: the number is always the
     wire's own."""
     if not enabled(project) or sheet is project.title_block:
+        sheet._num_leaders = (None, [])
         return []
     got = getattr(sheet, "_num_labels", None)
     ends_at = float(project.settings.get("wire_label_ends", 6.0) or 0.0)
@@ -513,13 +514,87 @@ def labels(project, sheet):
         if w.num:
             parts.setdefault((roots[w.id], w.num), []).append(w)
     out = []
+    leaders = []
+    taken = []                          # (the numbers placed so far: boxes)
     busy = _busy_points(sheet)
 
-    def put(num, q, a, b):
+    def text_at(num, q, a, b, side=1.0, off=0.4):
+        """The number beside the piece a-b at q: over it (side 1) or under it (-1), left of
+        or right of it when it runs up and down, off text heights away."""
         if abs(a[1] - b[1]) > abs(a[0] - b[0]):
-            out.append(Text((q[0] - h * 0.4, q[1]), num, h, 90.0, "center"))
+            return Text((q[0] - side * h * off, q[1]), num, h, 90.0, "center")
+        return Text((q[0], q[1] + side * h * off - (h if side < 0 else 0.0)), num, h, 0.0,
+                    "center")
+
+    def put(num, q, a, b):
+        t = text_at(num, q, a, b)
+        out.append(t)
+        taken.append(t.bbox())
+
+    def clear(box, skip=()):
+        """Does nothing on the sheet (another wire, a symbol and its texts, a line) or a number
+        placed already come into box?"""
+        g = 0.1 * h
+        r = (box[0] - g, box[1] - g, box[2] + g, box[3] + g)
+        for o in taken:
+            if o[0] < r[2] and o[2] > r[0] and o[1] < r[3] and o[3] > r[1]:
+                return False
+        for e in sheet.query(r):
+            if e.id not in skip and e.crosses(r):
+                return False
+        return True
+
+    def place(num, ws, around=None):
+        """The number of the wires ws where it comes into nothing (the owner, 0.18.1: "wire
+        numbers need to try to move to be out of the way. If no room, a little line and wire
+        number off the wire line can be used"): along their straight pieces, longest first
+        (around: the point it should be near), over then under each; else set off to the side
+        with a short line back to the wire; else where it always went."""
+        own = {w.id for w in ws}
+        pieces = [(a, b) for w in ws for a, b in zip(w.points, w.points[1:])
+                  if abs(a[0] - b[0]) + abs(a[1] - b[1]) > 1e-9]
+        if not pieces:
+            return
+        if around is None:
+            pieces.sort(key=lambda ab: -(abs(ab[0][0] - ab[1][0]) + abs(ab[0][1] - ab[1][1])))
         else:
-            out.append(Text((q[0], q[1] + h * 0.4), num, h, 0.0, "center"))
+            pieces.sort(key=lambda ab: _seg_dist(around, ab[0], ab[1]))
+        pieces = pieces[:6]
+        first = None
+        for a, b in pieces:
+            L = math.hypot(b[0] - a[0], b[1] - a[1])
+            mid = _clear_spot(a, b, busy) if around is None else \
+                _closest_on(around, a, b)
+            spots = [mid] + [(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f)
+                             for f in (0.3, 0.7, 0.15, 0.85) if L * f > 2 * h]
+            for q in spots:
+                for side in (1.0, -1.0):
+                    t = text_at(num, q, a, b, side)
+                    if first is None:
+                        first = t
+                    if clear(t.bbox(), own):
+                        out.append(t)
+                        taken.append(t.bbox())
+                        return
+        # no room beside it: off to the side, a little line back to the wire
+        a, b = pieces[0]
+        q = _clear_spot(a, b, busy) if around is None else _closest_on(around, a, b)
+        for off in (2.5, 4.0, 6.0):
+            for side in (1.0, -1.0):
+                t = text_at(num, q, a, b, side, off)
+                if clear(t.bbox(), own):
+                    out.append(t)
+                    taken.append(t.bbox())
+                    tb = t.bbox()
+                    # (from the wire to the number's near edge)
+                    if abs(a[1] - b[1]) > abs(a[0] - b[0]):
+                        end = (tb[2], q[1]) if side > 0 else (tb[0], q[1])
+                    else:
+                        end = (q[0], tb[1]) if side > 0 else (q[0], tb[3])
+                    leaders.append((tuple(q), end))
+                    return
+        out.append(first)
+        taken.append(first.bbox())
     for (_r, num), ws in parts.items():
         ended = False
         if ends_at > 0:
@@ -531,7 +606,7 @@ def labels(project, sheet):
                 d = min(1.0 * k, L / 4.0)
                 for t in (d, L - d):
                     q, i = w.at_length(t)
-                    put(num, q, w.points[i], w.points[i + 1])
+                    place(num, [w], around=q)
                 ended = True
         for w in ws:
             for t in w.labels:
@@ -540,18 +615,33 @@ def labels(project, sheet):
                     put(num, q, w.points[i], w.points[i + 1])
         if ended:
             continue
-        best = None
-        for w in ws:
-            for a, b in zip(w.points, w.points[1:]):
-                d = abs(a[0] - b[0]) + abs(a[1] - b[1])
-                if best is None or d > best[0]:
-                    best = (d, a, b)
-        if best is None:
-            continue
-        _d, a, b = best
-        put(num, _clear_spot(a, b, busy), a, b)
+        place(num, ws)
     sheet._num_labels = (sig, out)
+    sheet._num_leaders = (sig, leaders)
     return out
+
+
+def label_leaders(project, sheet):
+    """[(from, to)]: the short lines from a wire to its number where it had to be set off to
+    the side (labels)."""
+    labels(project, sheet)
+    got = getattr(sheet, "_num_leaders", None)
+    return got[1] if got is not None else []
+
+
+def _seg_dist(p, a, b):
+    q = _closest_on(p, a, b)
+    return math.hypot(p[0] - q[0], p[1] - q[1])
+
+
+def _closest_on(p, a, b):
+    """The point of the piece a-b nearest p."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    L2 = dx * dx + dy * dy
+    if L2 < 1e-18:
+        return a
+    t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2))
+    return (a[0] + t * dx, a[1] + t * dy)
 
 
 def gauge_labels(project, sheet):

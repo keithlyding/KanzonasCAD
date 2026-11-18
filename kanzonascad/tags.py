@@ -20,7 +20,7 @@ number of its sheet and a two-digit count on that page: CR601, CR602, M601; on p
 import re
 import uuid
 
-from .model import DashBox, Insert
+from .model import DashBox, Insert, RATING_FIELDS
 
 ORDERS = {"across": "Across, then down", "down": "Down, then across",
           "wires": "Along the wires, from a source (Numbering source)"}
@@ -355,16 +355,34 @@ def footprint_candidates(project, cat=""):
     return [(s, e) for _k, s, e in out]
 
 
+# a device's attributes its footprint has too, kept the same both ways (the owner, 0.18.1:
+# "once linked, I should be able to see and show the attributes from the linked schematic
+# device"; asked: edit from either): its ratings
+LINKED_ATTRS = tuple(RATING_FIELDS) + ("RATING",)
+
+
+def linked_values(attrs, device):
+    """attrs with the device's ratings (LINKED_ATTRS): its values, none where it has none."""
+    out = dict(attrs or {})
+    for k in LINKED_ATTRS:
+        v = device.attrs.get(k, "")
+        if v:
+            out[k] = v
+        else:
+            out.pop(k, None)
+    return out
+
+
 def link_footprint(attrs, device):
-    """A footprint's attributes as the footprint of device: its id and tag, and the device's
-    manufacturer, catalog number and description where the footprint has none."""
+    """A footprint's attributes as the footprint of device: its id and tag, its ratings, and
+    the device's manufacturer, catalog number and description where the footprint has none."""
     out = dict(attrs or {})
     out["PARENT"] = device.attrs["DEV"]
     out["TAG"] = device.attrs.get("TAG", "")
     for k in ("MFR", "CAT", "DESC"):
         if not out.get(k) and device.attrs.get(k):
             out[k] = device.attrs[k]
-    return out
+    return linked_values(out, device)
 
 
 def devices(project):
@@ -441,13 +459,18 @@ def sync_children(ed, project):
                 continue                # (a footprint follows the device it was placed as)
             dev = e.attrs.get("PARENT")
             got = index.get(dev) if dev else None
+            fp = is_footprint(e)
             if got is not None:
-                if got[1].attrs.get("TAG", "") != e.attrs.get("TAG", ""):
-                    ed.change(s, e.copy(attrs=link_attrs(e.attrs, got[1])))
+                want = link_attrs(e.attrs, got[1])
+                if fp:
+                    want = linked_values(want, got[1])      # (its device's ratings too)
+                if want != e.attrs:
+                    ed.change(s, e.copy(attrs=want))
             elif e.attrs.get("TAG"):
                 p = by_tag.get(e.attrs["TAG"].upper())
                 if p is not None:
-                    ed.change(s, e.copy(attrs=link_attrs(e.attrs, p)))
+                    want = link_attrs(e.attrs, p)
+                    ed.change(s, e.copy(attrs=linked_values(want, p) if fp else want))
         # dashed boxes that belong to a device show its tag, as contacts do
         for e in list(s.entities.values()):
             if not is_linked_box(e):

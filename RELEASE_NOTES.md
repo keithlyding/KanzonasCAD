@@ -6,6 +6,45 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.2
+
+**New**
+- Add wire layers... (Format menu, Schematic tab): layers for 480 V (BLK, RED, ORG, BRN, YEL, a
+  WHT neutral and a GRN ground, 12 AWG), 120 V (RED, BLK, a WHT neutral, 14 AWG), 24 VDC (BLU,
+  and a blue common with white stripes, 16 AWG) and Ethernet (green), with their colors, sizes
+  and wire colors. Pick one as the current layer and draw.
+- Wire size (Modify menu, Schematic tab: Edit wires): give wires a gauge of their own (10, 1/0,
+  250 kcmil), or L for their layer's again. Their label shows it.
+- A wire color of two names, BLU/WHT for one, draws the wires striped, on the screen and
+  printed.
+
+**Fixed**
+- A kcmil size showed "250 kcmil AWG"; it now shows "250 kcmil".
+- Wires of different layers or sizes meeting end to end are no longer made one wire (one would
+  lose its layer or size).
+
+## 0.18.1
+
+**New**
+- A footprint can show **several things at once**: Footprint label's Show tag, Show part
+  number, Show description and Show block name each turn a line on or off (a tick shows
+  what's on). Double-click a footprint for everything it can show.
+- **Each line has a grip**: drag it to put that line anywhere on or beside the part. It moves
+  and turns with the part.
+- Footprint labels are **smaller**: 0.08" on paper to start. Panel settings has **Footprint
+  label height** to change it for the whole project. Projects made earlier take 0.08" when
+  opened.
+- **Wire numbers keep out of the way**: a number moves along its wire, or to its other side,
+  to a spot clear of other wires, symbols, texts and numbers. With no room anywhere beside the
+  wire, it goes off to the side with a short line back to the wire.
+- **Duplicates are marked**: a device tag or wire number used twice anywhere in the project
+  gets a red frame on the drawing until you fix it (it doesn't print), and the command line
+  says which when one appears. Wires joined by connectors or arrows, and a number kept with
+  "just the same number", aren't duplicates.
+- A footprint linked to a schematic device has the **device's ratings** (horsepower, volts,
+  amps...). Its window lists them; change one there or on the symbol and both have it. Tick
+  one to show it on the footprint (5HP, 480V).
+
 ## 0.18
 
 **New**

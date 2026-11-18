@@ -47,12 +47,16 @@ DEFAULT_LAYERS = [
     ("XREFS", "#00e5ff"),
 ]
 XREF_HEIGHT_BEFORE_018 = 0.08   # (see Project.from_dict: such projects take the new 0.065)
+# (a project from before 0.18.1 has no fp_label_height: its footprints' labels were the tag
+# height; they take the new, smaller one: the owner, "I also think the footprint font is too
+# big")
 
 # the project's own settings (Project properties); sheets that follow the project take the
 # layout ones (size, zones) from here
 DEFAULT_SETTINGS = {
     "text_height": 0.125,       # new text
     "tag_height": 0.1,          # device tags on symbols
+    "fp_label_height": 0.08,    # what footprints show on them, paper inches (0.1 before 0.18.1)
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
@@ -2038,9 +2042,31 @@ def renamed_block(defn, name):
     return defn if defn.name == name else BlockDef.from_dict(dict(defn.to_dict(), name=name))
 
 
-# what a footprint's label shows (Footprint label): the attribute, or its block's name
+# what a footprint's label shows (Footprint label): the attribute, or its block's name; and
+# besides these, any attribute it has by its own name (a linked device's ratings: HP, VOLTS)
 LABELS = {"tag": "TAG", "cat": "CAT", "desc": "DESC", "name": None}
 LABEL_NAMES = {"tag": "Tag", "cat": "Part number", "desc": "Description", "name": "Block name"}
+_LABEL_ATTR = re.compile(r"^[A-Z][A-Z0-9_]*$")
+LABEL_LINE = 1.35               # a label's lines apart, in text heights
+
+
+def label_keys(label):
+    """The keys a footprint's label shows, in order: its label is them joined by commas ("tag",
+    "tag,cat,HP"; a project from before 0.18.1 has one)."""
+    out = []
+    for k in str(label or "").split(","):
+        k = k.strip()
+        if (k in LABELS or _LABEL_ATTR.match(k)) and k not in out:
+            out.append(k)
+    return out
+
+
+def label_name(key):
+    """A label key as the menus and windows name it (Tag, Part number, Horsepower)."""
+    if key in LABEL_NAMES:
+        return LABEL_NAMES[key]
+    got = RATING_FIELDS.get(key)
+    return got[0] if got else {"RATING": "Rating", "MFR": "Manufacturer"}.get(key, key)
 
 
 @_register
@@ -2048,7 +2074,8 @@ class Insert(Entity):
     """A block placed on a sheet: at pos, turned by angle, sized by scale, optionally flipped
     (mirror: the block's own y turned over before turning), with its attributes (TAG, DESC,
     MFR, CAT and the part it is). defn is the BlockDef it shows (the project's copy). label:
-    what a footprint shows on it ("" nothing, or a key of LABELS)."""
+    what a footprint shows on it ("" nothing; keys of LABELS or attribute names, joined by
+    commas: label_keys)."""
     kind = "insert"
     __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "label",
                  "hidden", "attr_at", "attr_rot", "_world", "_body")
@@ -2064,7 +2091,7 @@ class Insert(Entity):
         self.attrs = {k: str(v) for k, v in (attrs or {}).items()}
         self.defn = defn
         self.tag_h = float(tag_h) if tag_h else None    # tag height (None: the block's)
-        self.label = label if label in LABELS else ""
+        self.label = ",".join(label_keys(label))
         # this copy's own way of showing its attributes, as AutoCAD keeps it per copy (an
         # imported drawing: AutoCAD Electrical hides most attributes copy by copy and moves some
         # off their spot): the ones not shown here, and where some are shown instead of the
@@ -2257,6 +2284,10 @@ class Insert(Entity):
         place of their own (Insert's grips after its insertion point): its tag, and each
         attribute shown at one spot (a 3-pole fuse's three ratings move with the block)."""
         d = self.defn
+        if d is not None and d.kind == "footprint":
+            # (each line of its label: the owner, 0.18.1, "I need to be able to move footprint
+            # attributes")
+            return [("@" + k.upper(), t.pos) for k, t in self.label_texts()]
         if d is None or d.kind != "symbol":
             return []
         out = []
@@ -2271,28 +2302,59 @@ class Insert(Entity):
                 out.append((name, q))
         return out
 
-    def label_value(self):
-        """What a footprint's label says ("?" when that attribute is empty), or None."""
+    def label_value(self, key=None):
+        """What a footprint's label line for key says (its first one when None): "?" for an
+        empty tag, part number or description; None for an empty attribute (no line) or no
+        label."""
         d = self.defn
-        if not self.label or d is None:
+        keys = label_keys(self.label)
+        if key is None:
+            key = keys[0] if keys else None
+        if key is None or d is None:
             return None
-        if self.label == "name":
+        if key == "name":
             return d.name
-        v = self.attrs.get(LABELS[self.label], "")
-        if not v and self.label == "cat":
-            v = d.catalog
-        return v or "?"
+        if key in LABELS:
+            v = self.attrs.get(LABELS[key], "")
+            if not v and key == "cat":
+                v = d.catalog
+            return v or "?"
+        v = self.attrs.get(key, "")
+        return attr_display(key, v) if v.strip() else None
 
-    def label_text(self):
-        """A footprint's label (Footprint label): at its block's label spot, centered, paper-
-        sized (tag_h), read from the bottom or the right as it is turned. None: no label."""
-        v = self.label_value()
-        if v is None:
-            return None
+    def label_texts(self):
+        """[(key, Text)]: what a footprint shows on it (Footprint label), a line for each key
+        with a value: stacked in the middle of its block's label spot, or each where it was
+        dragged (attr_at "@KEY", in the block's coordinates, as a symbol's attributes);
+        centered, paper-sized (tag_h), read from the bottom or the right as it is turned."""
+        d = self.defn
+        if d is None or d.kind != "footprint" or not self.label:
+            return []
+        lines = [(k, v) for k, v in ((k, self.label_value(k)) for k in label_keys(self.label))
+                 if v is not None]
+        if not lines:
+            return []
+        h = self.tag_h or 0.125
         a = self.angle % 180.0
         ang = 90.0 if 45.0 <= a < 135.0 else 0.0
-        return Text(self.to_world(self.defn.label_point()), v, self.tag_h or 0.125, ang,
-                    "center", "middle")
+        bx, by = self.to_world(d.label_point())
+        # (down the lines: below on a part read across, to the right on one read upward)
+        down = (math.sin(math.radians(ang)), -math.cos(math.radians(ang)))
+        out = []
+        for i, (k, v) in enumerate(lines):
+            at = self.attr_at.get("@" + k.upper())
+            if at:
+                q = self.to_world(at[:2])
+            else:
+                off = (i - (len(lines) - 1) / 2.0) * LABEL_LINE * h
+                q = (bx + down[0] * off, by + down[1] * off)
+            out.append((k, Text(q, v, h, ang, "center", "middle")))
+        return out
+
+    def label_text(self):
+        """A footprint's first label line (Footprint label), or None: no label."""
+        got = self.label_texts()
+        return got[0][1] if got else None
 
     def world_entities(self):
         """The block's content placed on the sheet, plus the tag text."""
@@ -2311,9 +2373,12 @@ class Insert(Entity):
                     if self.mirror:
                         w = _mirror_fix(e, w, self)
                     out.append(w)
-                t = self.tag_text()
-                if t is not None:
-                    out.append(t)
+                if d.kind == "footprint":
+                    out += [t for _k, t in self.label_texts()]
+                else:
+                    t = self.tag_text()
+                    if t is not None:
+                        out.append(t)
                 out += self.pin_texts()
                 for name, q, ang, a in self.attr_spots():
                     out.append(Text(q, attr_display(name, self.attrs[name]),
@@ -2663,6 +2728,9 @@ class Sheet:
         self._next = 1
         self.index = SpatialIndex()
         self.version = 0                # bumped on every change (render caches key on it)
+        # bumped when a block reference or a wire is added, removed or replaced: what reads
+        # only those (inserts(), wires(), duplicates) isn't worked out again for a line drawn
+        self.net_version = 0
         self.touched = set()            # ids changed since the screen renderer last looked
 
     # ---- size, border, zones -------------------------------------------------------------
@@ -2804,30 +2872,34 @@ class Sheet:
         self.entities[ent.id] = ent
         self.index.add(ent)
         self.version += 1
+        if isinstance(ent, (Insert, Wire)) or isinstance(old, (Insert, Wire)):
+            self.net_version += 1
         self.touched.add(ent.id)
 
     def _drop(self, eid):
         if eid in self.entities:
-            del self.entities[eid]
+            old = self.entities.pop(eid)
             self.index.remove(eid)
             self.version += 1
+            if isinstance(old, (Insert, Wire)):
+                self.net_version += 1
             self.touched.add(eid)
 
     def wires(self):
         """The wires on this sheet (kept per sheet version, as inserts())."""
         got = getattr(self, "_wires", None)
-        if got is None or got[0] != self.version:
-            got = self._wires = (self.version, [e for e in self.entities.values()
-                                                if isinstance(e, Wire)])
+        if got is None or got[0] != self.net_version:
+            got = self._wires = (self.net_version, [e for e in self.entities.values()
+                                                    if isinstance(e, Wire)])
         return got[1]
 
     def inserts(self):
         """The block references on this sheet (kept per sheet version: tags, contacts and
         cross-references read them without walking every line)."""
         got = getattr(self, "_inserts", None)
-        if got is None or got[0] != self.version:
-            got = self._inserts = (self.version, [e for e in self.entities.values()
-                                                  if isinstance(e, Insert)])
+        if got is None or got[0] != self.net_version:
+            got = self._inserts = (self.net_version, [e for e in self.entities.values()
+                                                      if isinstance(e, Insert)])
         return got[1]
 
     def query(self, rect):
@@ -3072,9 +3144,12 @@ class Edit:
                 for e in list(s.entities.values()):
                     if isinstance(e, Insert) and e.defn is not None and e.defn.kind == "symbol":
                         self.change(s, e.copy(tag_h=after["tag_height"]))
-                    elif isinstance(e, Insert) and e.label:
-                        # a footprint's label: paper-sized, as the tags
-                        self.change(s, e.copy(tag_h=after["tag_height"] * s.k()))
+        if after.get("fp_label_height") != before.get("fp_label_height"):
+            for s in p.sheets:
+                for e in list(s.entities.values()):
+                    if isinstance(e, Insert) and e.label:
+                        # a footprint's label: paper-sized, its own height (0.18.1)
+                        self.change(s, e.copy(tag_h=float(after["fp_label_height"]) * s.k()))
 
     def block(self, defn):
         """Put a block definition in the project (or replace the one of that name); block
@@ -3375,7 +3450,16 @@ class Project:
         for bd in d.get("blocks", []) or []:
             b = BlockDef.from_dict(bd)
             p.blocks[b.name] = b
+        old_labels = "fp_label_height" not in (d.get("settings") or {})
+        ratio = DEFAULT_SETTINGS["fp_label_height"] / float(p.settings.get("tag_height") or 0.1)
         for sd in d.get("sheets", []):
+            if old_labels:
+                # (from before 0.18.1: its footprints' labels were the tag height, kept on each
+                # as paper height times the sheet's scale; they take the new height the same way)
+                sd = dict(sd, entities=[
+                    dict(ed_, tag_h=float(ed_["tag_h"]) * ratio)
+                    if ed_.get("kind") == "insert" and ed_.get("label") and ed_.get("tag_h")
+                    else ed_ for ed_ in sd.get("entities", [])])
             s = Sheet.from_dict(sd, p.blocks)
             if s.id is None:
                 s.id = p.new_sheet_id()

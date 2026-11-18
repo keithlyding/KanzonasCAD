@@ -49,6 +49,16 @@ nobody understands).
   tab that only shows up when needed (or manually selected)"): a block's tools on a Block tab
   shown in a block's tab (or always, View > Block tab); a tab too wide for the window shows
   its groups smaller from the right, as Office does, rather than scrolling.
+- 0.18.1 (owner, Nov 2026): footprint labels: several lines at once, a grip for each, their
+  own height (0.08" to start: owner's choice), a linked device's ratings on its footprint,
+  edited from either one (owner's choice); duplicate tags and wire numbers marked red on the
+  drawing and said on the command line, over the whole project (owner's choices); wire numbers
+  out of the way, with a short line back to the wire when there's no room.
+- 0.18.2 (owner, Nov 2026: "I'll need a lot of different ones...480, 120, 24vdc, Ethernet and
+  others"): Add wire layers, a preset with the owner's colors and sizes (480 V BLK, RED, ORG,
+  BRN, YEL, WHT neutral, GRN ground, 12 AWG; 120 V RED, BLK, WHT neutral, 14 AWG; 24 VDC BLU
+  and a BLU/WHT striped common, 16 AWG; Ethernet green, no size); a size per wire with the
+  layer's as default (Wire size); two-color wire layers drawn striped.
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,

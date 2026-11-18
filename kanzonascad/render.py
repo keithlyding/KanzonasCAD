@@ -340,6 +340,21 @@ class SheetRenderer:
         painter.setBrush(QBrush(color))
         painter.drawPath(path)
 
+    def _paint_dupes(self, painter):
+        """A red frame round each duplicate tag and wire number (dupes.py): on the screen
+        only, never printed."""
+        from . import dupes
+        boxes = dupes.marks(self.project, self.sheet)
+        if not boxes:
+            return
+        pen = QPen(QColor("#ff2020"), 2.0)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        g = 0.03 * self.sheet.k()
+        for x0, y0, x1, y1 in boxes:
+            painter.drawRect(QRectF(x0 - g, y0 - g, x1 - x0 + 2 * g, y1 - y0 + 2 * g))
+
     def _paint_xrefs(self, painter, outlines):
         """Cross-references and wire numbers (worked out again only when what they show
         changed)."""
@@ -360,8 +375,20 @@ class SheetRenderer:
         if lay is None or lay.visible:
             draw_texts(painter, refs, self.pal.color(self.project, M.Text(
                 (0, 0), "", 0.1, layer="XREFS" if lay is not None else "SYMBOLS")), outlines)
-        draw_texts(painter, items, self.pal.color(self.project, M.Text(
-            (0, 0), "", 0.1, layer="SYMBOLS")), outlines)
+        num_color = self.pal.color(self.project, M.Text((0, 0), "", 0.1, layer="SYMBOLS"))
+        draw_texts(painter, items, num_color, outlines)
+        lead = wirenums.label_leaders(self.project, self.sheet)
+        if lead:
+            # (a number set off to the side of its wire: the little line back to it)
+            path = QPainterPath()
+            for a, b in lead:
+                path.moveTo(QPointF(*a))
+                path.lineTo(QPointF(*b))
+            pen = QPen(num_color, 0.0)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(path)
 
     def paint(self, painter, pen_width=0.0, paper=True, under=None):
         """pen_width 0: cosmetic one-pixel lines (screen); a number: that width in inches
@@ -384,6 +411,8 @@ class SheetRenderer:
         draw_texts(painter, texts, pal.frame, outlines)
         self._paint_dots(painter)
         self._paint_xrefs(painter, outlines)
+        if pen_width == 0:
+            self._paint_dupes(painter)
         smooth = painter.testRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         for ch in [tb] + list(self.chunks.values()):

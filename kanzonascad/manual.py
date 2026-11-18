@@ -762,7 +762,11 @@ shown under it.</li>
 <p>Every wire gets its number by itself: the page number and three digits, <b>6001</b>, 6002...
 on page 6. The number shows above the wire (beside it when it runs up and down), on its
 longest straight piece, in the middle of the longest stretch clear of crossings and
-junctions. A wire longer than 6 inches on paper shows it near <b>both ends</b> instead (Project
+junctions, <b>where it is out of the way</b>: when another wire, a symbol or its texts, or
+another number is there, it moves along the wire, or to the other side of it, to the first
+spot where it touches nothing. With no room beside the wire anywhere, it is set off to the
+side with a <b>short line</b> back to the wire (drawn, printed and exported with it). A
+number you put with Wire number label stays where you put it. A wire longer than 6 inches on paper shows it near <b>both ends</b> instead (Project
 properties, Schematic: <b>Number near both ends of wires longer than</b>; Off for one).</p>
 <ul>
 <li><b>One number per connected wire</b>: wires joined end to end or in a T share it. A
@@ -794,8 +798,16 @@ arrow</b> pointing out where the wire leaves and a <b>Destination arrow</b> poin
 arrives. They are then one wire with that number, and each shows
 the other's place under it (7-A2). One step: Undo takes it all back. <b>No: just the same
 number</b> gives this wire the number as typed, without connectors, and locks it (numbering
-would give an unlocked one a free number again). A wire with no open end
+would give an unlocked one a free number again), and that number is then kept on purpose: it
+isn't marked as a duplicate. A wire with no open end
 (both ends on pins or wires) says so: draw it out to where it leaves the sheet first.</li>
+<li><b>Duplicates are marked.</b> A device tag two devices have, or a wire number two wires
+that aren't joined have, anywhere in the project, gets a <b>red frame</b> round it on the
+drawing, on every sheet it is on, until you fix it (on the screen only: it doesn't print). When
+one appears (a tag typed, something pasted, a number locked), the command line says which and
+on what sheets. Not duplicates: a contact or footprint showing its device's tag, wires joined
+by off-sheet connectors or source and destination arrows (one wire), and a number kept with
+"No: just the same number".</li>
 <li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
 as device tags do.</li>
 <li><b>Renumber sheet</b> also numbers the sheet's unlocked wires again, 001, 002... in
@@ -1113,24 +1125,34 @@ that fills both); its length, manufacturer, catalog number and the length it is 
 (or ducts) selected too, <b>Also the other selected...</b> gives them all the same size and part
 in one step, each keeping its own length.</li>
 <li><b>Footprint label</b> (Modify menu, the Panel tab's Footprints group, or a right-click
-with footprints selected): the selected footprints show, written across them, their
-<b>Show tag</b> (M1, CR3), <b>Show part number</b> (its catalog number; the block's own when
-the copy has none), <b>Show description</b> or <b>Show block name</b>, or <b>No label</b>. A
-footprint you place shows its tag to start (one with no tag, its part number or block name):
-Project properties, Panel, <b>New footprints show</b> picks another. Select one or many, pick one: one step, Undo takes it back. Each footprint
-keeps its own choice, so some can show part numbers and others tags. The label is centered on
-the part (or at its block's label spot, set in Edit block), turned up the page or reading from
-the right as the part is turned, and paper-sized like the tags (Project properties: tag
-height). An empty tag or description shows "?". It prints and goes into PDF and DXF exports.
-Changing the tag, part number or description (double-click the footprint) changes the
-label.</li>
+with footprints selected): what the selected footprints show written on them. <b>Show tag</b>
+(M1, CR3), <b>Show part number</b> (its catalog number; the block's own when the copy has
+none), <b>Show description</b> and <b>Show block name</b> each turn that line on, and picked
+again, off: a footprint can show several at once, one under the other (a tick shows what
+every selected footprint shows). <b>No label</b> takes them all off. A footprint you place
+shows its tag to start (one with no tag, its part number or block name): Project properties,
+Panel, <b>New footprints show</b> picks another. Select one or many, pick one: one step, Undo
+takes it back. Double-click a footprint for the rest: <b>Shown on it</b> lists everything it
+can show, its device's ratings too (see below). The lines are centered on the part (or at its
+block's label spot, set in Edit block), turned up the page or reading from the right as the
+part is turned. Each shown line has a grip: select the footprint and drag a line's grip to put
+that line anywhere; it then stays there on the part, moving and turning with it. They are
+<b>0.08"</b> tall on paper to start: Panel settings, <b>Footprint label height</b>, sets it
+for every footprint in the project (projects made before 0.18.1 take 0.08" when opened; their
+labels were the tag height). An empty tag or description shows "?"; an empty rating shows no
+line. It prints and goes into PDF and DXF exports. Changing the tag, part number or
+description (double-click the footprint) changes the label.</li>
 <li><b>Which device a footprint is</b>: placing a footprint (Insert footprint, or a part's
 footprint) asks which schematic device it is, as a contact asks which coil: <b>Enter</b> takes
 the one offered (the next device with no footprint yet, in page order; one with the
 footprint's catalog number first), a typed tag takes that device, <b>L</b> lists them, <b>N</b>
 leaves it a footprint of its own. It then carries the device's tag (and its manufacturer,
 catalog number and description where it has none), shows it, and follows it: renumber the
-schematic and the panel's labels change with it. On the bill of materials the device and its
+schematic and the panel's labels change with it. It has the device's ratings too
+(horsepower, volts, amps, full-load amps, VA, primary and secondary volts, rating): its
+window (double-click it) lists them under <b>From its device</b>, and they are the same on
+both: change one there or on the symbol and the other has it (one step for Undo). Tick them
+under <b>Shown on it</b> to write them on the footprint (5HP, 480V). On the bill of materials the device and its
 footprint are one part. Typing another tag on a footprint (double-click it) makes it that
 device's footprint, or, if no device has that tag, a footprint of its own showing it.</li>
 <li><b>Footprints snap onto DIN rail.</b> While you place a footprint (Insert), move it,

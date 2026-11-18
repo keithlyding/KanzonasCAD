@@ -2013,6 +2013,49 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert len(same) == 1, "two footprints tagged %s" % f.attrs["TAG"]
             BC.CHECKED["footprint takes a device"] += 1
 
+    def op_fp_labels():
+        # (0.18.1) a footprint's label as the Footprint label menu and grips change it: a line
+        # shown or not (several at once), or one dragged; then what it shows is what it says
+        # it shows, a dragged line is where it was put and the others stay; and a linked
+        # footprint has its device's ratings
+        from kanzonascad import tags
+        fs = [e for e in s.inserts() if tags.is_footprint(e) and not v.layer_locked(e.layer)]
+        if not fs:
+            return
+        f = rnd.choice(fs)
+        if rnd.random() < 0.6 or not f.label_texts():
+            key = rnd.choice(list(M.LABELS) + [""])
+            v.set_selection({f.id})
+            had = M.label_keys(f.label)
+            win.acts["fp_label_" + (key or "none")].trigger()
+            now = M.label_keys(s.entities[f.id].label)
+            want = [] if not key else ([k for k in had if k != key] if key in had
+                                       else had + [key])
+            assert now == want, "Footprint label %r: %r became %r, not %r" % (key, had, now,
+                                                                             want)
+            BC.CHECKED["footprint label lines"] += 1
+        else:
+            grips = f.text_grips()
+            i = rnd.randrange(len(grips))
+            q = (grips[i][1][0] + rnd.uniform(-1, 1), grips[i][1][1] + rnd.uniform(-1, 1))
+            with p.edit("Grip") as ed:
+                ed.change(s, f.with_grip(i + 1, q))
+            now = s.entities[f.id].text_grips()
+            assert G.dist(now[i][1], q) < 1e-6, "a label line dragged to %r is at %r" % (
+                q, now[i][1])
+            for j, (n, at) in enumerate(grips):
+                if j != i:
+                    assert G.dist(dict(now)[n], at) < 1e-6, "dragging one label line moved %s" % n
+            BC.CHECKED["footprint label grips"] += 1
+        f = s.entities[f.id]
+        got = tags.parent_of(p, f)
+        if got is not None:
+            for k in tags.LINKED_ATTRS:
+                assert f.attrs.get(k, "") == got[1].attrs.get(k, ""), \
+                    "a linked footprint's %s is %r, its device's %r" % (
+                        k, f.attrs.get(k), got[1].attrs.get(k))
+            BC.CHECKED["linked footprint ratings"] += 1
+
     def op_location():
         # as Sheet properties and a device's Location do: the sheet's location, or a device's
         # own (LOC), set or cleared
@@ -2563,7 +2606,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_wire_size, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
