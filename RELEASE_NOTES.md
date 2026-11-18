@@ -19,6 +19,9 @@ build fails without them.
   printed.
 
 **Fixed**
+- Printing a heavy sheet (a panel with maker footprints, wire duct, rails and dimensions)
+  could leave whole groups of objects off the paper on Windows, though the screen and a PDF
+  were right. They print now.
 - A kcmil size showed "250 kcmil AWG"; it now shows "250 kcmil".
 - Wires of different layers or sizes meeting end to end are no longer made one wire (one would
   lose its layer or size).

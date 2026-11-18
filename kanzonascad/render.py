@@ -191,12 +191,56 @@ class Palette:
         return q
 
 
+# the most elements one path drawn at once holds: a printer on Windows dropped whole paths of
+# a few hundred thousand (the owner's panel, 0.18.2: a maker's drive footprints, ducts, rails
+# and dimensions in one piece each came out blank on paper, right on screen and in a PDF; a
+# piece of 12,000 printed)
+PATH_LIMIT = 4000
+
+
+class PathList:
+    """Paths of one color drawn one after another, each kept under PATH_LIMIT elements: takes
+    the QPainterPath calls add_entity and hatch_path make, a new path at the start of a piece
+    when the one in hand is full."""
+    __slots__ = ("paths", "fill_rule")
+
+    def __init__(self, fill_rule=None):
+        self.paths = []
+        self.fill_rule = fill_rule
+
+    def _cur(self):
+        if not self.paths or self.paths[-1].elementCount() >= PATH_LIMIT:
+            p = QPainterPath()
+            if self.fill_rule is not None:
+                p.setFillRule(self.fill_rule)
+            self.paths.append(p)
+        return self.paths[-1]
+
+    def moveTo(self, x, y):
+        self._cur().moveTo(x, y)
+
+    def lineTo(self, x, y):
+        self.paths[-1].lineTo(x, y)
+
+    def closeSubpath(self):
+        self.paths[-1].closeSubpath()
+
+    def addEllipse(self, *a):
+        self._cur().addEllipse(*a)
+
+    def addPath(self, path):
+        self._cur().addPath(path)
+
+    def __iter__(self):
+        return iter(self.paths)
+
+
 class _Chunk:
     __slots__ = ("strokes", "fills", "areas", "texts", "stripes")
 
     def __init__(self):
-        self.stripes = {}       # rgba -> QPainterPath: two-color wires' stripes (BLU/WHT)
-        self.strokes = {}       # rgba -> QPainterPath
+        self.stripes = {}       # rgba -> PathList: two-color wires' stripes (BLU/WHT)
+        self.strokes = {}       # rgba -> PathList
         self.fills = {}         # (leaders' arrowheads)
         self.areas = {}         # (solid hatches: drawn first, under the lines, as AutoCAD's)
         self.texts = {}         # rgba -> [(placement, string)] (draw_texts)
@@ -308,8 +352,7 @@ class SheetRenderer:
                     k2 = self.pal.area(key) if hatch else key
                     p = box.get(k2)
                     if p is None:
-                        p = box[k2] = QPainterPath()
-                        p.setFillRule(Qt.WindingFill)
+                        p = box[k2] = PathList(Qt.WindingFill)
                     for h in solids:
                         p.addPath(hatch_path(h))
             if isinstance(e, M.Text):
@@ -317,14 +360,14 @@ class SheetRenderer:
             else:
                 p = ch.strokes.get(key)
                 if p is None:
-                    p = ch.strokes[key] = QPainterPath()
+                    p = ch.strokes[key] = PathList()
                 add_entity(p, e)
                 if striped and e.layer in striped and isinstance(e, M.Wire) and \
                         e.color is None:
                     k2 = striped[e.layer]
                     p = ch.stripes.get(k2)
                     if p is None:
-                        p = ch.stripes[k2] = QPainterPath()
+                        p = ch.stripes[k2] = PathList()
                     add_entity(p, e)
 
     def _paint_dots(self, painter):
@@ -416,30 +459,34 @@ class SheetRenderer:
         smooth = painter.testRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         for ch in [tb] + list(self.chunks.values()):
-            for rgba, path in ch.areas.items():         # (fills under every line)
+            for rgba, paths in ch.areas.items():        # (fills under every line)
                 painter.setBrush(QBrush(QColor.fromRgba(rgba)))
-                painter.drawPath(path)
+                for path in paths:
+                    painter.drawPath(path)
         for ch in [tb] + list(self.chunks.values()):
             # on screen, one-pixel lines are drawn without smoothing, as AutoCAD does: a
             # smoothed line falling between two pixel rows would show at half strength
             if pen_width == 0:
                 painter.setRenderHint(QPainter.Antialiasing, False)
             painter.setBrush(Qt.NoBrush)
-            for rgba, path in ch.strokes.items():
+            for rgba, paths in ch.strokes.items():
                 pen = QPen(QColor.fromRgba(rgba), pen_width)
                 pen.setCosmetic(pen_width == 0)
                 pen.setCapStyle(Qt.RoundCap)
                 pen.setJoinStyle(Qt.RoundJoin)
                 painter.setPen(pen)
-                painter.drawPath(path)
-            for rgba, path in ch.stripes.items():
+                for path in paths:
+                    painter.drawPath(path)
+            for rgba, paths in ch.stripes.items():
                 painter.setPen(stripe_pen(QColor.fromRgba(rgba), pen_width))
-                painter.drawPath(path)
+                for path in paths:
+                    painter.drawPath(path)
             painter.setRenderHint(QPainter.Antialiasing, smooth)   # text stays smooth
             painter.setPen(Qt.NoPen)
-            for rgba, path in ch.fills.items():
+            for rgba, paths in ch.fills.items():
                 painter.setBrush(QBrush(QColor.fromRgba(rgba)))
-                painter.drawPath(path)
+                for path in paths:
+                    painter.drawPath(path)
             for rgba, items in ch.texts.items():
                 draw_texts(painter, items, QColor.fromRgba(rgba), outlines)
             painter.setPen(Qt.NoPen)
