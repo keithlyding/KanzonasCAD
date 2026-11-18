@@ -802,6 +802,11 @@ def random_editing(log, out, ops, seed, drawing=None):
             # tapping the run, a pin on its middle, followed past its other end, seed 6006;
             # worked out here from the drag the run would make and every pin by it)
             got = wires.segment_drag(s, w, i, to)
+            if got is not None and any(wires.doubles_back(q) for q in got.values()):
+                # (refused, as it must be: onto its own run beside it, the other way, the
+                # wire would run back over itself, seed 704)
+                BC.CHECKED["wire run that would fold the wire refused"] += 1
+                return
             if got is not None:
                 after_w = [M.Wire(pts) if x.id in got else x for x in s.wires()
                            for pts in [got.get(x.id)]]

@@ -33,6 +33,10 @@ build fails without them.
 - A dimension's second point (or any point after the first) snaps Nearest under the mouse:
   a Perpendicular point anywhere in the snap box went first. Perpendicular and Tangent now win
   only when they are close to the mouse.
+- Dragging a run of a wire by its middle grip onto the wire's own run beside it could fold the
+  wire back over itself (a hidden corner). It's now refused, saying why.
+- A bus ended on a symbol's pins could go on instead of landing, when another symbol shared the
+  first pin of that side. It now lands, as its preview showed.
 
 ## 0.18.1
 

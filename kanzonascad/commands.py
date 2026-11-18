@@ -1429,9 +1429,17 @@ def _strands_a_pin(sheet, got):
 def _run_drag(ctx, w, k, p, say=False):
     """{id: new wire} for wire w's run k dragged to p (wires.segment_drag); {} when it can't
     move, saying why when say."""
-    from .wires import segment_drag
+    from .wires import doubles_back, segment_drag
     sheet = ctx.sheet()
     got = segment_drag(sheet, w, k, p)
+    if got is not None and any(doubles_back(pts) for pts in got.values()):
+        # (onto the wire's own run beside it, the other way: the wire would run back over
+        # itself, a corner hidden in what looks like one straight wire; the sweep, 0.18.2,
+        # seed 704)
+        if say:
+            ctx.message("Moved there, the wire would run back over itself: drag the run less "
+                        "far, or delete the jog and draw it again")
+        return {}
     if got is not None and _strands_a_pin(sheet, got):
         got = None
     if got is None:
@@ -1958,8 +1966,12 @@ class BusCmd(Command):
             # the clicked pin is on, not the first pin's: two symbols overlapping share a pin,
             # and the first pin's side was the other symbol's, the bus landing one pin over:
             # the quick battery, seed 12)
+            # (routed for the pin clicked, as _landing did: from the side's first pin, shared
+            # with the overlapping symbol, the route was taken as coming at that one through
+            # it and dropped, and the bus went on without landing; the sweep, 0.18.2, seed
+            # 708)
             got = pin_side(sheet, clicked)
-            new = self._land_route(sheet, land, got[0]) if got is not None else None
+            new = self._land_route(sheet, clicked, got[0]) if got is not None else None
             if new and not doubles_back(self.points[-2:] + list(new)):
                 self.points += new
                 self._make()
@@ -2443,8 +2455,10 @@ class BusCmd(Command):
         sheet = self.ctx.sheet()
         land = self._landing(sheet, p)
         if land is not None:
-            got = pin_side(sheet, land)
-            new = self._land_route(sheet, land, got[0]) if got is not None else None
+            # (the side of the pin pointed at, as the click takes it; near one, the first's)
+            at = p if pin_side(sheet, p) is not None else land
+            got = pin_side(sheet, at)
+            new = self._land_route(sheet, at, got[0]) if got is not None else None
             if new:
                 return [M.Wire(q) for q in self._paths(self.points + new)]
         else:
