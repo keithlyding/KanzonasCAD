@@ -371,10 +371,10 @@ class Wire(Polyline):
     wires. What it connects is worked out from where its ends are (wires.py), never stored, so
     it can't go stale; moving a symbol drags the ends that sat on its pins."""
     kind = "wire"
-    __slots__ = ("num", "num_lock", "own_num", "labels")
+    __slots__ = ("num", "num_lock", "own_num", "labels", "awg")
 
     def __init__(self, points, closed=False, num=None, num_lock=False, own_num=False,
-                 labels=(), **kw):
+                 labels=(), awg="", **kw):
         kw.setdefault("layer", "WIRES")
         super().__init__(points, False, **kw)
         # its wire number (every wire of a connected group has the same: wirenums.py) and
@@ -388,6 +388,9 @@ class Wire(Polyline):
         # its number shown again at these distances along it from its first point (Wire
         # number label: placed by hand; the number they show is never stored, so never stale)
         self.labels = sorted(round(float(t), 6) for t in (labels or ()) if float(t) >= 0)
+        # its own gauge (Wire size: "10", "2/0"), or "" for its layer's (the owner, 0.18.2:
+        # "per wire, with the layer as default")
+        self.awg = str(awg or "").strip()
 
     def _data(self):
         d = super()._data()
@@ -399,12 +402,14 @@ class Wire(Polyline):
             d["own_num"] = True
         if self.labels:
             d["labels"] = list(self.labels)
+        if self.awg:
+            d["awg"] = self.awg
         return d
 
     @classmethod
     def _from(cls, d):
         return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
-                   d.get("own_num", False), d.get("labels") or (),
+                   d.get("own_num", False), d.get("labels") or (), d.get("awg", ""),
                    layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
 
     def length(self):
@@ -2492,6 +2497,14 @@ def _mirror_fix(src, mapped, ins):
 # ============================================================================================
 # Layers, sheets, project
 # ============================================================================================
+def gauge_text(g):
+    """A gauge as shown: "14 AWG", "1/0 AWG", "250 kcmil" (no AWG after kcmil), or ""."""
+    g = str(g or "").strip()
+    if not g:
+        return ""
+    return g if "KCMIL" in g.upper() or "MCM" in g.upper() else "%s AWG" % g
+
+
 class Layer:
     def __init__(self, name, color=ADAPTIVE, visible=True, locked=False, awg="",
                  wire_color=""):
@@ -2506,7 +2519,7 @@ class Layer:
 
     def wire_label(self):
         """What its wires show: "14 AWG BLK", "14 AWG", "BLK", or ""."""
-        parts = (["%s AWG" % self.awg] if self.awg else []) + \
+        parts = ([gauge_text(self.awg)] if self.awg else []) + \
             ([self.wire_color] if self.wire_color else [])
         return " ".join(parts)
 

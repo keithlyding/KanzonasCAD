@@ -153,10 +153,14 @@ def add_entity(path, e):
         c, r = e.center, e.radius
         path.addEllipse(QPointF(c[0], c[1]), r, r)
     elif isinstance(e, M.Arc):
-        pts = G.arc_points(e.center, e.radius, e.start, e.end, 3.0)
-        path.moveTo(pts[0][0], pts[0][1])
-        for p in pts[1:]:
-            path.lineTo(p[0], p[1])
+        # (Qt's own arc, not a hundred points worked out here: a maker's drive footprints with
+        # 12,000 arcs took a second to light when all selected; Qt's angles turn clockwise in
+        # y-down coordinates, so ours, y up, go in negated)
+        c, r = e.center, e.radius
+        sw = G.sweep(e.start, e.end)
+        q = G.polar(c, r, e.start)
+        path.moveTo(q[0], q[1])
+        path.arcTo(QRectF(c[0] - r, c[1] - r, 2 * r, 2 * r), -e.start, -sw)
 
 
 class Palette:
@@ -191,11 +195,59 @@ class Palette:
         return q
 
 
+# the most elements one path drawn at once holds: a printer on Windows dropped whole paths of
+# a few hundred thousand (the owner's panel, 0.18.2: a maker's drive footprints, ducts, rails
+# and dimensions in one piece each came out blank on paper, right on screen and in a PDF; a
+# piece of 12,000 printed)
+PATH_LIMIT = 4000
+
+
+class PathList:
+    """Paths of one color drawn one after another, each kept under PATH_LIMIT elements: takes
+    the QPainterPath calls add_entity and hatch_path make, a new path at the start of a piece
+    when the one in hand is full."""
+    __slots__ = ("paths", "fill_rule")
+
+    def __init__(self, fill_rule=None):
+        self.paths = []
+        self.fill_rule = fill_rule
+
+    def _cur(self):
+        if not self.paths or self.paths[-1].elementCount() >= PATH_LIMIT:
+            p = QPainterPath()
+            if self.fill_rule is not None:
+                p.setFillRule(self.fill_rule)
+            self.paths.append(p)
+        return self.paths[-1]
+
+    def moveTo(self, x, y):
+        self._cur().moveTo(x, y)
+
+    def lineTo(self, x, y):
+        self.paths[-1].lineTo(x, y)
+
+    def closeSubpath(self):
+        self.paths[-1].closeSubpath()
+
+    def addEllipse(self, *a):
+        self._cur().addEllipse(*a)
+
+    def arcTo(self, *a):
+        self.paths[-1].arcTo(*a)
+
+    def addPath(self, path):
+        self._cur().addPath(path)
+
+    def __iter__(self):
+        return iter(self.paths)
+
+
 class _Chunk:
-    __slots__ = ("strokes", "fills", "areas", "texts")
+    __slots__ = ("strokes", "fills", "areas", "texts", "stripes")
 
     def __init__(self):
-        self.strokes = {}       # rgba -> QPainterPath
+        self.stripes = {}       # rgba -> PathList: two-color wires' stripes (BLU/WHT)
+        self.strokes = {}       # rgba -> PathList
         self.fills = {}         # (leaders' arrowheads)
         self.areas = {}         # (solid hatches: drawn first, under the lines, as AutoCAD's)
         self.texts = {}         # rgba -> [(placement, string)] (draw_texts)
@@ -223,7 +275,8 @@ class SheetRenderer:
             self._frame = None
 
     def _layer_sig(self):
-        return tuple((n, l.color, l.visible) for n, l in self.project.layers.items())
+        return tuple((n, l.color, l.visible, l.wire_color)
+                     for n, l in self.project.layers.items())
 
     def _refresh(self):
         s = self.sheet
@@ -277,7 +330,13 @@ class SheetRenderer:
         return self._frame
 
     def _fill_chunk(self, ch, ents):
+        from . import wirelayers
         layers = self.project.layers
+        # (a wire layer of two colors, BLU/WHT: its wires striped in the second; not when
+        # everything is printed in the ink color)
+        striped = {} if self.pal.mono else {
+            n: QColor(c).rgba() for n, c in
+            ((n, wirelayers.stripe(lay.wire_color)) for n, lay in layers.items()) if c}
         for e in ents:
             lay = layers.get(e.layer)
             if lay is not None and not lay.visible:
@@ -300,8 +359,7 @@ class SheetRenderer:
                     k2 = self.pal.area(key) if hatch else key
                     p = box.get(k2)
                     if p is None:
-                        p = box[k2] = QPainterPath()
-                        p.setFillRule(Qt.WindingFill)
+                        p = box[k2] = PathList(Qt.WindingFill)
                     for h in solids:
                         p.addPath(hatch_path(h))
             if isinstance(e, M.Text):
@@ -309,8 +367,15 @@ class SheetRenderer:
             else:
                 p = ch.strokes.get(key)
                 if p is None:
-                    p = ch.strokes[key] = QPainterPath()
+                    p = ch.strokes[key] = PathList()
                 add_entity(p, e)
+                if striped and e.layer in striped and isinstance(e, M.Wire) and \
+                        e.color is None:
+                    k2 = striped[e.layer]
+                    p = ch.stripes.get(k2)
+                    if p is None:
+                        p = ch.stripes[k2] = PathList()
+                    add_entity(p, e)
 
     def _paint_dots(self, painter):
         """Junction dots where wires join (worked out again only when the sheet changed)."""
@@ -401,27 +466,34 @@ class SheetRenderer:
         smooth = painter.testRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         for ch in [tb] + list(self.chunks.values()):
-            for rgba, path in ch.areas.items():         # (fills under every line)
+            for rgba, paths in ch.areas.items():        # (fills under every line)
                 painter.setBrush(QBrush(QColor.fromRgba(rgba)))
-                painter.drawPath(path)
+                for path in paths:
+                    painter.drawPath(path)
         for ch in [tb] + list(self.chunks.values()):
             # on screen, one-pixel lines are drawn without smoothing, as AutoCAD does: a
             # smoothed line falling between two pixel rows would show at half strength
             if pen_width == 0:
                 painter.setRenderHint(QPainter.Antialiasing, False)
             painter.setBrush(Qt.NoBrush)
-            for rgba, path in ch.strokes.items():
+            for rgba, paths in ch.strokes.items():
                 pen = QPen(QColor.fromRgba(rgba), pen_width)
                 pen.setCosmetic(pen_width == 0)
                 pen.setCapStyle(Qt.RoundCap)
                 pen.setJoinStyle(Qt.RoundJoin)
                 painter.setPen(pen)
-                painter.drawPath(path)
+                for path in paths:
+                    painter.drawPath(path)
+            for rgba, paths in ch.stripes.items():
+                painter.setPen(stripe_pen(QColor.fromRgba(rgba), pen_width))
+                for path in paths:
+                    painter.drawPath(path)
             painter.setRenderHint(QPainter.Antialiasing, smooth)   # text stays smooth
             painter.setPen(Qt.NoPen)
-            for rgba, path in ch.fills.items():
+            for rgba, paths in ch.fills.items():
                 painter.setBrush(QBrush(QColor.fromRgba(rgba)))
-                painter.drawPath(path)
+                for path in paths:
+                    painter.drawPath(path)
             for rgba, items in ch.texts.items():
                 draw_texts(painter, items, QColor.fromRgba(rgba), outlines)
             painter.setPen(Qt.NoPen)
@@ -464,6 +536,18 @@ class SheetRenderer:
 
 
 DOT_RADIUS = 0.03
+STRIPE = 0.06       # a two-color wire's stripes: this long, as far apart, in inches on paper
+STRIPE_PX = 6       # (on screen: in pixels, the same at any zoom)
+
+
+def stripe_pen(color, pen_width):
+    """The pen of a two-color wire's stripes, drawn over the wire in its first color."""
+    pen = QPen(color, pen_width)
+    pen.setCosmetic(pen_width == 0)
+    pen.setCapStyle(Qt.FlatCap)
+    n = STRIPE_PX if pen_width == 0 else STRIPE / pen_width
+    pen.setDashPattern([n, n])
+    return pen
 
 
 def _dots_path(sheet):

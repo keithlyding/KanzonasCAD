@@ -233,13 +233,24 @@ def size_typed(cmd, text):
     """A plain "x,y" typed for a box's second corner is its size from the first corner (as
     AutoCAD's dynamic input takes it; the owner: "I'm trying to make a rectangle that is
     0.19x0.15" and it's coming out as 8.76x3.76"": typed as a size, it was taken as the corner
-    0.19,0.15 of the sheet). "#x,y" is that point itself; "@x,y" as always. The point, or
-    None when it isn't a plain x,y."""
+    0.19,0.15 of the sheet). "#x,y" is that point itself; "@x,y" as always. A size typed
+    without a sign goes the way the cursor is from the first corner (the owner, 0.18.2: "I set
+    it to 72,72. It built the rectangle to the right dimensions but in a different direction
+    than my mouse was moving"); a sign typed (-72, +72) says which way. The point, or None
+    when it isn't a plain x,y."""
     t = to_inches(text).strip()
     m = _RE_ABS.match(t)
     if m is None or cmd.last is None:
         return None
-    return (cmd.last[0] + float(m.group(1)), cmd.last[1] + float(m.group(2)))
+    a = cmd.last
+    cur = cmd.ctx.cursor_point() if hasattr(cmd.ctx, "cursor_point") else None
+    out = []
+    for k, raw in ((0, m.group(1)), (1, m.group(2))):
+        v = float(raw)
+        if raw.strip()[:1] not in "+-" and cur is not None and cur[k] < a[k] - 1e-9:
+            v = -v                      # (toward the cursor)
+        out.append(a[k] + v)
+    return tuple(out)
 
 
 class RectangleCmd(Command):
@@ -1226,10 +1237,12 @@ def wire_layer(ctx):
     """The layer a wire goes on: the current layer when it is a wire layer (WIRES, one named
     WIRE..., or one with a gauge or wire color: Layers), else WIRES (the owner, 0.16: picking
     WIRE BROWN and drawing a wire put it on WIRES; picking 0 for drafting leaves wires on
-    WIRES)."""
+    WIRES; a layer of the wire layer preset, Layers > Wire layers, ETHERNET too)."""
+    from . import wirelayers
     name = ctx.layer()
     lay = ctx.project.layers.get(name)
-    if name.upper().startswith("WIRE") or (lay is not None and (lay.awg or lay.wire_color)):
+    if name.upper().startswith("WIRE") or (lay is not None and (lay.awg or lay.wire_color)) \
+            or (lay is not None and wirelayers.is_preset(name)):
         return name
     return "WIRES"
 
@@ -1416,9 +1429,17 @@ def _strands_a_pin(sheet, got):
 def _run_drag(ctx, w, k, p, say=False):
     """{id: new wire} for wire w's run k dragged to p (wires.segment_drag); {} when it can't
     move, saying why when say."""
-    from .wires import segment_drag
+    from .wires import doubles_back, segment_drag
     sheet = ctx.sheet()
     got = segment_drag(sheet, w, k, p)
+    if got is not None and any(doubles_back(pts) for pts in got.values()):
+        # (onto the wire's own run beside it, the other way: the wire would run back over
+        # itself, a corner hidden in what looks like one straight wire; the sweep, 0.18.2,
+        # seed 704)
+        if say:
+            ctx.message("Moved there, the wire would run back over itself: drag the run less "
+                        "far, or delete the jog and draw it again")
+        return {}
     if got is not None and _strands_a_pin(sheet, got):
         got = None
     if got is None:
@@ -1945,8 +1966,12 @@ class BusCmd(Command):
             # the clicked pin is on, not the first pin's: two symbols overlapping share a pin,
             # and the first pin's side was the other symbol's, the bus landing one pin over:
             # the quick battery, seed 12)
+            # (routed for the pin clicked, as _landing did: from the side's first pin, shared
+            # with the overlapping symbol, the route was taken as coming at that one through
+            # it and dropped, and the bus went on without landing; the sweep, 0.18.2, seed
+            # 708)
             got = pin_side(sheet, clicked)
-            new = self._land_route(sheet, land, got[0]) if got is not None else None
+            new = self._land_route(sheet, clicked, got[0]) if got is not None else None
             if new and not doubles_back(self.points[-2:] + list(new)):
                 self.points += new
                 self._make()
@@ -2430,8 +2455,10 @@ class BusCmd(Command):
         sheet = self.ctx.sheet()
         land = self._landing(sheet, p)
         if land is not None:
-            got = pin_side(sheet, land)
-            new = self._land_route(sheet, land, got[0]) if got is not None else None
+            # (the side of the pin pointed at, as the click takes it; near one, the first's)
+            at = p if pin_side(sheet, p) is not None else land
+            got = pin_side(sheet, at)
+            new = self._land_route(sheet, at, got[0]) if got is not None else None
             if new:
                 return [M.Wire(q) for q in self._paths(self.points + new)]
         else:
@@ -3841,6 +3868,12 @@ class ScootCmd(_TwoPoint):
     shortening, stopping short of a wire's far end or corner."""
     name, title = "SCOOT", "Scoot"
     only = False
+    ACROSS = ("A wire runs through a pin of what would move, across the way it goes: scoot "
+              "along that wire, or cut it at the pin first (Trim wire)")
+    STRANDS = ("A wire would come off a pin: it runs on through a pin of a device (one that "
+               "stays, or one that moves while the wire's far end stays). Cut it at the pin "
+               "first (Trim wire), or scoot that device too")
+    why = ACROSS
 
     def begin(self):
         from . import scoot
@@ -3895,7 +3928,13 @@ class ScootCmd(_TwoPoint):
         from . import scoot
         if not self.only:
             dx, dy = self._branch_delta(p)
-            return scoot.branch_moved(self.ctx.sheet(), self.devs, dx, dy)
+            sheet = self.ctx.sheet()
+            got = scoot.branch_moved(sheet, self.devs, dx, dy)
+            self.why = self.ACROSS
+            if got is not None and scoot.strands(sheet, got, (dx, dy)):
+                self.why = self.STRANDS
+                return None
+            return got
         d = self._slide(p)
         return [e.moved(self.ax[0] * d, self.ax[1] * d) if scoot.axis(e) == self.ax else e
                 for e in self.devs]
@@ -3909,9 +3948,7 @@ class ScootCmd(_TwoPoint):
         sheet = self.ctx.sheet()
         got = self.result(p)
         if got is None:
-            self.ctx.message("A wire runs through a pin of what would move, across the way it "
-                             "goes: scoot along that wire, or cut it at the pin first (Trim "
-                             "wire)")
+            self.ctx.message(self.why)
             self.finish()
             return
         with self.ctx.edit(self.title) as ed:
@@ -4398,6 +4435,93 @@ def _pick_wire(ctx, p):
     return ctx.pick_entity(p, M.Wire)
 
 
+def wire_gauge(text):
+    """A gauge typed for Wire size, as kept ("12", "1/0", "250 kcmil"), or None when it isn't
+    one: 0000 to 40 AWG, 1/0 to 4/0, or kcmil (MCM) sizes."""
+    import re
+    t = " ".join(str(text or "").strip().upper().split())
+    if t.endswith("AWG"):
+        t = t[:-3].strip()
+    m = re.fullmatch(r"(\d{2,4})\s*(KCMIL|MCM)", t)
+    if m:
+        return "%s kcmil" % int(m.group(1))
+    m = re.fullmatch(r"([1-4])/0", t)
+    if m:
+        return t
+    if re.fullmatch(r"\d{1,2}", t) and 0 < int(t) <= 40:
+        return str(int(t))
+    return None
+
+
+class WireSizeCmd(Command):
+    """WIRESIZE (Wire size): the selected wires, or wires clicked one by one, given a gauge
+    of their own in place of their layer's (the owner, 0.18.2: "per wire, with the layer as
+    default"), or back to their layer's (L). Their gauge label shows it."""
+    name, title = "WIRESIZE", "Wire size"
+
+    def begin(self):
+        self.wires = [e.id for e in _selected(self.ctx) if isinstance(e, M.Wire)]
+        if self.wires:
+            self._ask_size()
+            return
+        self.picking = True
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click the wires to size (Enter when done)")
+
+    def pick(self, p):
+        w = _pick_wire(self.ctx, p)
+        if w is None:
+            self.ctx.message("Click a wire")
+            return
+        if w.id not in self.wires:
+            self.wires.append(w.id)
+            self.ctx.set_selection(set(self.wires))
+
+    def _ask_size(self):
+        self.picking = False
+        sheet = self.ctx.sheet()
+        ws = [sheet.entities[i] for i in self.wires if i in sheet.entities]
+        own = sorted({w.awg for w in ws})
+        layer = sorted({(self.ctx.project.layers.get(w.layer).awg
+                         if self.ctx.project.layers.get(w.layer) else "") for w in ws})
+        now = M.gauge_text(own[0]) if len(own) == 1 and own[0] else \
+            ("the layer's (%s)" % (M.gauge_text(layer[0]) or "none")
+             if len(own) == 1 and len(layer) == 1 else "mixed")
+        self.ctx.prompt("Gauge (AWG) for %d wire(s), now %s: type it (14, 1/0, 250 kcmil), "
+                        "or L for the layer's" % (len(ws), now), [("Layer's", "L")])
+
+    def text(self, s):
+        if self.picking:
+            return False
+        k = s.strip().upper()
+        if k in ("L", "LAYER", "BYLAYER"):
+            got = ""
+        else:
+            got = wire_gauge(s)
+            if got is None:
+                self.ctx.message("Not a wire gauge: type 14, 1/0 or 250 kcmil, or L for the "
+                                 "layer's")
+                return True
+        sheet = self.ctx.sheet()
+        ws = [sheet.entities[i] for i in self.wires if i in sheet.entities]
+        changed = [w for w in ws if w.awg != got]
+        if changed:
+            with self.ctx.edit(self.title) as ed:
+                for w in changed:
+                    ed.change(sheet, w.copy(awg=got))
+        self.ctx.message("%d wire(s): %s" % (len(ws), M.gauge_text(got) or
+                                             "the layer's gauge"))
+        self.ctx.set_selection(set())
+        self.finish()
+        return True
+
+    def enter(self):
+        if self.picking and self.wires:
+            self._ask_size()
+            return
+        self.finish()
+
+
 class DeleteWireCmd(Command):
     """DELWIRE (AutoCAD Electrical's Delete Wires): the selected wires go (anything else
     selected stays), or click wires one by one. Wires left meeting end to end become one."""
@@ -4736,6 +4860,7 @@ COMMANDS = {
     "WIRECROSS": (WireCrossCmd, ["WX"]),
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
     "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
+    "WIRESIZE": (WireSizeCmd, ["WSZ"]),
     "STRETCH": (StretchCmd, ["S"]),
     "NUMSOURCE": (NumberSourceCmd, ["NSRC"]),
     "SIGARROW": (SignalArrowsCmd, ["SDA", "SOURCEARROW", "XARROW"]),

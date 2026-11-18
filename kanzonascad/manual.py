@@ -94,8 +94,8 @@ a layer moves them to it.</li>
 own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel tabs) to pick a
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
 layer it sits on, or its own color if you gave it one. Wires go on the current layer when it
-is a wire layer (WIRES, one named WIRE..., or one with a gauge or wire color), else on layer
-WIRES; symbols on
+is a wire layer (WIRES, one named WIRE..., one with a gauge or wire color, or one Add wire
+layers made), else on layer WIRES; symbols on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them. On the black drawing,
 black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
@@ -108,7 +108,28 @@ shows them, <b>10 AWG BRN</b>, on the other side of the wire from its number (un
 of it on an upright wire), a little smaller; Project properties, Schematic, <b>Show a wire
 layer's gauge and color beside its wires</b> turns that off. The layers a bus adds (WIRE BROWN,
 WIRE ORANGE...) come with their color's name; give them a gauge once and every wire on them
-shows it.</p>
+shows it. A wire color of two names, <b>BLU/WHT</b> say, draws the layer's wires striped: the
+layer's color with stripes of the second (a 24 VDC common), on the screen and printed (not when
+printing in black only).</p>
+<p><b>Add wire layers...</b> (Format menu, Schematic tab: Look; also the <b>Wire layers...</b>
+button in Layers...) adds a layer for each wire of the systems you tick, with its color, gauge
+and wire color, ready to draw on (pick one as the current layer, then draw wires):</p>
+<ul>
+<li><b>480 V</b>, 12 AWG: 480V BLK, 480V RED, 480V ORG, 480V BRN, 480V YEL, 480V WHT (neutral)
+and 480V GRN (ground).</li>
+<li><b>120 V</b>, 14 AWG: 120V RED, 120V BLK and 120V WHT (neutral).</li>
+<li><b>24 VDC</b>, 16 AWG: 24VDC BLU, and 24VDC BLU-WHT for the common, blue with white
+stripes.</li>
+<li><b>Ethernet</b>: ETHERNET, green, a cable with no gauge.</li>
+</ul>
+<p>A layer the project has already keeps its own color, gauge and wire color. Change any of
+them in Layers... as usual.</p>
+<p><b>Wire size</b> (WIRESIZE, WSZ; Modify menu, Schematic tab: Edit wires): give the selected
+wires, or wires you click one by one (Enter when done), a gauge of their own in place of their
+layer's: type it (<b>10</b>, <b>1/0</b>, <b>250 kcmil</b>), or <b>L</b> to go back to the
+layer's. The gauge label beside them shows it (<b>10 AWG BLK</b>). A wire keeps its size when
+it is moved, copied, cut or saved; two wires meeting end to end are made one only when they
+are on one layer with one size.</p>
 <p><b>Layers</b>, as in AutoCAD: pick one in the layer box with objects selected and they go on
 it (the box shows their layer, empty when they are on several); with nothing selected it
 becomes the current layer. A hidden layer isn't drawn, printed or picked; a locked one
@@ -659,7 +680,10 @@ toward or away from it; the bus and the other branches stay. Type <b>O</b> (Only
 slide just the selected devices along their own wire, as AutoCAD Electrical's Scoot does,
 across a rung or up and down a vertical wire, however you move the mouse: the wires on their
 pins stretch on one side and shorten on the other, staying straight, and they stop short of a
-wire's far end or corner (<b>A</b> goes back to everything attached).</li>
+wire's far end or corner (<b>A</b> goes back to everything attached). A scoot that would
+pull a wire off a pin is refused and says why: a wire running uncut through a pin of what
+moves, across the way it goes, or a wire of the branch running on through a pin of a device
+that stays (cut it at that pin first with Trim wire, or select that device too).</li>
 <li><b>Align devices</b> (AEALIGN; Modify menu, Schematic tab), as AutoCAD Electrical's
 Align: click the device to line up with, then the devices to line up, and press Enter. Each
 slides along its own wire (as Scoot) into line: the same column on rungs across, the same row
@@ -854,7 +878,7 @@ empty command line repeats the last command. <b>Esc</b> cancels.</p>
 options.</td></tr>
 <tr><td>Polyline</td><td>PLINE, PL</td><td>One connected object through all its points.</td></tr>
 <tr><td>Rectangle</td><td>RECTANG, REC</td><td>Two corners (or the first corner, then
-width,height; D: length and width, then the side).</td></tr>
+width,height, toward the mouse; D: length and width, then the side).</td></tr>
 <tr><td>Circle: Center, radius</td><td>CIRCLE, C</td><td>Center, then radius (a point or a
 number); D switches to a diameter. At the first prompt, 3P, 2P or TTR switch to those ways.</td></tr>
 <tr><td>Circle: Center, diameter</td><td></td><td>Center, then diameter.</td></tr>
@@ -955,8 +979,11 @@ shows the way you used last, as in AutoCAD. The Draw menu has them under Circle.
 <li><code>#3,4</code> - the point x=3, y=4 wherever a plain x,y means something else (a box's
 second corner, below).</li>
 <li>A <b>Rectangle</b>'s or <b>Dashed box</b>'s second corner: <code>0.19,0.15</code> is its
-<b>size</b> from the first corner (0.19 across, 0.15 up; <code>-2,-1</code> goes left and
-down), as AutoCAD's dynamic input takes it; <code>#x,y</code> is a point. Rectangle's
+<b>size</b> from the first corner, 0.19 across and 0.15 up or down, <b>the way the mouse
+is</b> from the first corner (move it left and down, and the box goes left and down), as
+AutoCAD's dynamic input takes it. A sign typed says which way whatever the mouse does
+(<code>-2,-1</code> left and down, <code>+2,+1</code> right and up); <code>#x,y</code> is a
+point. Rectangle's
 <b>D</b> (Dimensions) asks the length, then the width, then a click on the side it goes
 (Enter: up and right).</li>
 <li><code>1.5</code> - 1.5 inches from the last point toward the cursor (direct distance;
@@ -986,7 +1013,10 @@ last point: the new line runs parallel to it) and <b>Apparent intersection</b> (
 over two lines, then near where they would meet if they were longer; or a line and a circle or
 arc, where the line extended would meet it; with <b>Ortho</b> on, the line straight across or
 up and down from the last point counts too: hover over a circle, or a line, and the point
-lands exactly where your Ortho line meets it or its extension).</li>
+lands exactly where your Ortho line meets it or its extension). When several are in reach,
+ends, intersections, insertion points and pins go first, then centers and quadrants, then
+midpoints, then tracking, then Nearest; Perpendicular and Tangent go with centers only when
+their point is close to the mouse (farther, Nearest under the mouse wins).</li>
 <li><b>Blocks snap too</b>: the ends, middles, centers and quadrants of a placed symbol's or
 footprint's own drawing (a footprint's corners, for a dimension), as in AutoCAD. A pin, or an
 ordinary object's point of the same kind, comes first, so a wire still lands on a pin.</li>
@@ -1142,7 +1172,8 @@ pixels of the end of a footprint already on that rail, it butts against it ("On 
 against the next one"), as devices sit side by side on a real rail; a copy butts against the
 one it was copied from. It works on rails across and up and down, and on footprints turned
 either way. Take it off the rail by moving it away; with the object snaps off (F3) it isn't
-held at all. A point you snap to wins: with the cursor on an object snap (an intersection on
+held at all. A point or distance you type (<code>@0,-0.5</code>, a length) is never pulled:
+the whole selection goes exactly as typed. A point you snap to wins: with the cursor on an object snap (an intersection on
 a duct's or rail's edge, an end), the part goes exactly where you snapped, held by the point
 you picked it up by, and isn't pulled onto the rail. Moving a rail together with what is on it moves them all as they are. A
 footprint's DIN rail point is the middle of its drawing unless its block says otherwise:

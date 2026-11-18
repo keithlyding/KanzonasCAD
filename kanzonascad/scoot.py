@@ -188,6 +188,36 @@ def branch_moved(sheet, devs, dx, dy):
     return out
 
 
+def strands(sheet, got, d=(0.0, 0.0)):
+    """Would the changed copies got (branch_moved, everything moved by d) leave a pin with
+    no wire that had one? A pin of a symbol that stays, a wire of the branch running on
+    through it (the sweep, 0.18.2, seed 406: a wire back along a row of breakers' line pins);
+    or a pin of one that moves, a wire leaving the branch running through it and staying
+    where it was (seed 901: a long wire through a moved breaker's two pins to its far end)."""
+    moved = {e.id: e for e in got if isinstance(e, Insert)}
+    new = {e.id: e for e in got if isinstance(e, Wire)}
+    old = [sheet.entities[i] for i in new if isinstance(sheet.entities.get(i), Wire)]
+
+    def wired_after(q):
+        if any(x.touches(q, TOL) for x in new.values()):
+            return True
+        box = (q[0] - TOL, q[1] - TOL, q[0] + TOL, q[1] + TOL)
+        return any(isinstance(x, Wire) and x.id not in new and x.touches(q, TOL)
+                   for x in sheet.query(box))
+    for w in old:
+        for e in sheet.query(w.bbox()):
+            if not isinstance(e, Insert):
+                continue
+            for _n, q in e.pin_points():
+                if not w.touches(q, TOL):
+                    continue
+                if e.id in moved:
+                    q = (q[0] + d[0], q[1] + d[1])      # (where that pin goes)
+                if not wired_after(q):
+                    return True
+    return False
+
+
 def _others_pins_on(sheet, w, inside):
     """Is a pin of a symbol not moving (not in inside) on wire w, anywhere along it?"""
     for x in sheet.query(w.bbox()):

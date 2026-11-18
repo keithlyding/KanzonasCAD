@@ -23,8 +23,6 @@ GRIP = 7                # grip square, pixels
 GRIP_LIMIT = 100        # grips are shown for at most this many selected objects (GRIPOBJLIMIT)
 from . import osnap as OS
 from . import railsnap
-SNAP_PRIORITY = OS.PRIORITY
-
 
 
 def _step_text(dx, dy):
@@ -76,6 +74,11 @@ def _local_parts(e, rect):
     for w in sub:
         b = w.bbox()
         if b[0] <= x1 and b[2] >= x0 and b[1] <= y1 and b[3] >= y0:
+            out.append(w)
+        elif isinstance(w, (M.Arc, M.Circle)) and x0 <= w.center[0] <= x1 and \
+                y0 <= w.center[1] <= y1:
+            # (an arc's center, outside the arc's box: a breaker's arc, the mouse by its
+            # center zoomed in, gave no Center snap; the sweep, 0.18.2, seed 907)
             out.append(w)
     return out
 
@@ -163,12 +166,14 @@ class CadView(QWidget):
         # (dragged: the selection moves, or with Ctrl a copy goes, where it is dropped)
         self._drag = None
         self._rail_hit = None        # (the rail magnet's last catch: railsnap.magnet)
+        self._typing = False         # (a point typed being given to the command: exact)
         self._hover = None
         self._hover_parts = None         # (what a picking command would act on: Trim)
         self._hot_grip = None
         self.picked_grips = set()       # {(entity id, grip index)}: grips picked with Shift
         self._picture = None            # (key, QPixmap): the drawing as last drawn
         self._lit = None                # (key, QPixmap): that, with the selection lit
+        self._sel_picture = None        # (key, QPixmap): the picture with the selection
         self._shift_cache = None        # (key, objects, paths): what a Move preview slides
         self._glow_paths = {}           # id -> (entity, paths): the hover glow's, kept
         self.overlay = None             # f(painter, view): more drawn into the picture (the
@@ -335,7 +340,7 @@ class CadView(QWidget):
         p = C.parse_point(text, cmd.last)
         if p is not None and not cmd.selecting() and not cmd.picking:
             self.osnap_once = None              # (typed coordinates: no snap involved)
-            cmd.point(p)
+            self._typed_point(cmd, p)
             self.update()
             return True
         v = C.parse_number(text)
@@ -348,10 +353,20 @@ class CadView(QWidget):
                 # (toward the cursor as ortho or polar tracking aims it)
                 aim = self.resolve(self.cursor)
                 if G.dist(cmd.base, aim) > 1e-12:
-                    cmd.point(G.polar(cmd.base, v, G.angle_of(cmd.base, aim)))
+                    self._typed_point(cmd, G.polar(cmd.base, v, G.angle_of(cmd.base, aim)))
                     self.update()
                     return True
         return False
+
+    def _typed_point(self, cmd, p):
+        """A point typed: exactly there (the rail magnet doesn't pull it: a typed Move of
+        part of a panel, every snap on, shifted it all by another distance when a footprint
+        in it came over a DIN rail, the owner, 0.18.2: "one of my vfds disappeared")."""
+        self._typing = True
+        try:
+            cmd.point(p)
+        finally:
+            self._typing = False
 
     # ---- sheets ----------------------------------------------------------------------------
     def show_sheet(self, sheet_id):
@@ -556,6 +571,32 @@ class CadView(QWidget):
         self._frame_snap = (key, ents, index)
         return ents, index
 
+    def _arc_centers(self, rect):
+        """The sheet's arcs whose center is in rect but outside their own box (fewer than a
+        half circle), found by their center: cells of an inch, kept until the sheet
+        changes."""
+        s = self.sheet()
+        got = getattr(self, "_arc_cells", None)
+        if got is None or got[0] != (s.id, s.version):
+            cells = {}
+            for e in s.entities.values():
+                if isinstance(e, M.Arc):
+                    b, c = e.bbox(), e.center
+                    if not (b[0] <= c[0] <= b[2] and b[1] <= c[1] <= b[3]):
+                        cells.setdefault((math.floor(c[0]), math.floor(c[1])), []).append(e)
+            got = self._arc_cells = ((s.id, s.version), cells)
+        cells = got[1]
+        if not cells:
+            return []
+        x0, y0, x1, y1 = rect
+        out = []
+        for i in range(math.floor(x0), math.floor(x1) + 1):
+            for j in range(math.floor(y0), math.floor(y1) + 1):
+                for e in cells.get((i, j), ()):
+                    if x0 <= e.center[0] <= x1 and y0 <= e.center[1] <= y1:
+                        out.append(e)
+        return out
+
     def snap_query(self, rect):
         """What snapping looks at in rect: the sheet's entities, then its frame's."""
         out = self.sheet().query(rect)
@@ -575,7 +616,7 @@ class CadView(QWidget):
             nonlocal best
             d = G.dist(p, q)
             if d <= r:
-                key = (SNAP_PRIORITY.get(kind, 3), inner, d)
+                key = (OS.rank(kind, d, r), inner, d)
                 if best is None or key < best[0]:
                     best = (key, kind, q, frm)
         for e in cands:
@@ -590,6 +631,12 @@ class CadView(QWidget):
                     for kind, q in w.snap_points():
                         if kind in modes:
                             offer(kind, q, inner=1)
+        if "center" in modes:
+            # (arcs on the sheet whose center is outside their box: the index finds them by
+            # their box only)
+            for e in self._arc_centers(rect):
+                if self.layer_visible(e.layer):
+                    offer("center", e.center)
         # what lies under the aperture, piece by piece: a block (a footprint made from a
         # maker's drawing: thousands of lines) gives only its own lines that come near, not all
         # of them (every piece of every block nearby against every other, on every mouse move,
@@ -637,8 +684,10 @@ class CadView(QWidget):
             for q, q0, inner in OS.alignment(self.track_pts, base, p, r):
                 offer("ext", q, q0, inner)
             # (where a tracking line crosses a line, a wire, a circle: before a point
-            # anywhere along it)
-            for q, q0 in OS.track_crossings(self.tracked, self.track_pts, cands, p, r):
+            # anywhere along it; against the pieces that come within the aperture only, not
+            # every piece of every block near: a maker's drive footprints made it 190 ms a
+            # mouse move with every snap on, the owner, 0.18.2: "it was very laggy")
+            for q, q0 in OS.track_crossings(self.tracked, self.track_pts, near, p, r):
                 offer("ext", q, q0, -1)
         if base is not None and "par" in modes:
             for q in OS.parallel(base, self.par_dirs, p, r):
@@ -920,7 +969,7 @@ class CadView(QWidget):
         rail whose end is near (railsnap.magnet). With the object snaps off (F3), as given.
         What it did is kept for the marker (_paint_rail)."""
         self._rail_hit = None
-        if not self.osnap_on or self.snap is not None:
+        if not self.osnap_on or self.snap is not None or self._typing:
             # (a point snapped to, as an intersection on a duct's edge, is where it goes: the
             # owner, 0.18, copying a footprint at a duct's intersection, "the grabbed location
             # changes on the new device")
@@ -1369,12 +1418,30 @@ class CadView(QWidget):
                 p.end()
             self._lit = (key, pm)
             return pm
-        pm = QPixmap(base)
+        # (the selection drawn once on a picture of its own, the hover and preview lit over a
+        # copy of it: with a whole panel selected, lighting it again on every hover change
+        # took 0.6 s a mouse move, the owner, 0.18.2: "When I select everything on that
+        # first panel page, it's very laggy")
+        sel_key = (self._picture[0], key[1])
+        got = self._sel_picture
+        if got is None or got[0] != sel_key:
+            spm = QPixmap(base)
+            p = QPainter(spm)
+            try:
+                p.setRenderHint(QPainter.Antialiasing, True)
+                p.setTransform(self.transform())
+                self._paint_selected(p, pal)
+            finally:
+                # (an error while painting must not leave the painter open: the
+                # picture would be destroyed while painted on, and Qt may crash)
+                p.end()
+            self._sel_picture = got = (sel_key, spm)
+        pm = QPixmap(got[1])
         p = QPainter(pm)
         try:
             p.setRenderHint(QPainter.Antialiasing, True)
             p.setTransform(self.transform())
-            self._paint_selection(p, pal)
+            self._paint_lit(p)
         finally:
             # (an error while painting must not leave the painter open: the
             # picture would be destroyed while painted on, and Qt may crash)
@@ -1537,6 +1604,11 @@ class CadView(QWidget):
         p.restore()
 
     def _paint_selection(self, p, pal):
+        self._paint_selected(p, pal)
+        self._paint_lit(p)
+
+    def _paint_selected(self, p, pal):
+        """The selected objects, dashed."""
         s = self.sheet()
         key = (s.version, frozenset(self.sel))
         if self._sel_cache is None or self._sel_cache[0] != key:
@@ -1556,6 +1628,10 @@ class CadView(QWidget):
         p.setBrush(QColor(51, 153, 255, 140))
         p.drawPath(fills)
         p.setRenderHint(QPainter.Antialiasing, smooth)
+
+    def _paint_lit(self, p):
+        """What a click (hover) or the window would select, lit."""
+        s = self.sheet()
         lit = [s.entities[i] for i in self._preview if i in s.entities]
         h = self._hover
         if h is not None and h.id in s.entities and self._window is None:
@@ -1704,6 +1780,7 @@ class CadView(QWidget):
         """Shift + right-click while picking points: a snap for the next point only."""
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
+        menu.setAttribute(Qt.WA_NoMouseReplay)  # (a click off it isn't the next point)
         for key, name, typed in OS.MODES:
             act = menu.addAction("%s  (%s)" % (name, typed))
             act.setData(key)

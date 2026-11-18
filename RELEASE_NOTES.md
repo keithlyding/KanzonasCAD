@@ -6,6 +6,55 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.2
+
+**New**
+- Add wire layers... (Format menu, Schematic tab): layers for 480 V (BLK, RED, ORG, BRN, YEL, a
+  WHT neutral and a GRN ground, 12 AWG), 120 V (RED, BLK, a WHT neutral, 14 AWG), 24 VDC (BLU,
+  and a blue common with white stripes, 16 AWG) and Ethernet (green), with their colors, sizes
+  and wire colors. Pick one as the current layer and draw.
+- Wire size (Modify menu, Schematic tab: Edit wires): give wires a gauge of their own (10, 1/0,
+  250 kcmil), or L for their layer's again. Their label shows it.
+- A wire color of two names, BLU/WHT for one, draws the wires striped, on the screen and
+  printed.
+
+**Fixed**
+- Editing a wire duct's size (or maker) in its Properties window took its light hatch (the
+  mask, Panel settings) off it. It stays now.
+- A Move or Copy typed (@0,-0.5, say) with the object snaps on could go a different distance
+  than typed, for the whole selection, when a footprint in it came over a DIN rail: the rail
+  magnet pulled it. Typed points and distances now go exactly as typed; the magnet works for
+  the mouse only.
+- With every object snap on (Extension among them), moving the mouse over big footprints (a
+  maker's drive drawings) lagged, in Move most of all. It's about five times quicker.
+- With everything selected on a heavy sheet (a panel of maker drive footprints), every mouse
+  move lagged. It's quick now, and Select all itself takes about half the time it did.
+- Printing a heavy sheet (a panel with maker footprints, wire duct, rails and dimensions)
+  could leave whole groups of objects off the paper on Windows, though the screen and a PDF
+  were right. They print now.
+- A kcmil size showed "250 kcmil AWG"; it now shows "250 kcmil".
+- Wires of different layers or sizes meeting end to end are no longer made one wire (one would
+  lose its layer or size).
+- Scoot with everything attached could pull a wire off another device's pins, when a wire of
+  the branch ran on through them. It now refuses that move and says why.
+- A rectangle's (or dashed box's) size typed after its first corner, 72,72 say, now goes the
+  way the mouse is from that corner. It always went up and to the right. A sign typed (-72 or
+  +72) still says which way.
+- Clicking off the running snaps menu (the arrow by OSNAP), or off a right-click menu on the
+  drawing, only closes it: it no longer also clicks on the drawing (on Windows it put the
+  point there).
+- A dimension's second point (or any point after the first) snaps Nearest under the mouse:
+  a Perpendicular point anywhere in the snap box went first. Perpendicular and Tangent now win
+  only when they are close to the mouse.
+- Dragging a run of a wire by its middle grip onto the wire's own run beside it could fold the
+  wire back over itself (a hidden corner). It's now refused, saying why.
+- A bus ended on a symbol's pins could go on instead of landing, when another symbol shared the
+  first pin of that side. It now lands, as its preview showed.
+- Center snap found an arc's center when zoomed in, on arcs less than half a circle (a
+  breaker's, for one); zoomed in, it didn't.
+- Scoot could leave a moved device's pin with no wire, when a wire leaving the branch ran
+  through that pin to a far end that stays. It's now refused, saying why.
+
 ## 0.18.1
 
 **New**

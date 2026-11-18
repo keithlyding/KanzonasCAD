@@ -802,6 +802,11 @@ def random_editing(log, out, ops, seed, drawing=None):
             # tapping the run, a pin on its middle, followed past its other end, seed 6006;
             # worked out here from the drag the run would make and every pin by it)
             got = wires.segment_drag(s, w, i, to)
+            if got is not None and any(wires.doubles_back(q) for q in got.values()):
+                # (refused, as it must be: onto its own run beside it, the other way, the
+                # wire would run back over itself, seed 704)
+                BC.CHECKED["wire run that would fold the wire refused"] += 1
+                return
             if got is not None:
                 after_w = [M.Wire(pts) if x.id in got else x for x in s.wires()
                            for pts in [got.get(x.id)]]
@@ -1152,10 +1157,19 @@ def random_editing(log, out, ops, seed, drawing=None):
         if shifts:
             def key(e):
                 return e.pos if isinstance(e, M.Insert) else e.bbox()[:2]
-            got = sorted((e.kind, round(key(e)[0], 6), round(key(e)[1], 6)) for e in new)
-            exp = sorted((e.kind, round(key(e)[0] + dx, 6), round(key(e)[1] + dy, 6))
+            # (matched within a millionth, not rounded to six places: 0.1666625 and a hair
+            # under it round apart, a copy's place a trillionth off was taken as wrong, CI
+            # seed 334)
+            got = sorted((e.kind, key(e)[0], key(e)[1]) for e in new)
+            exp = sorted((e.kind, key(e)[0] + dx, key(e)[1] + dy)
                          for dx, dy in shifts for e in sel)
-            assert got == exp, "Array put copies at %s, not %s" % (got[:3], exp[:3])
+            left = list(got)
+            for k, x, y in exp:
+                hit = next((g for g in left if g[0] == k and abs(g[1] - x) <= 1e-6 and
+                            abs(g[2] - y) <= 1e-6), None)
+                assert hit is not None, "Array put no %s copy at %s (copies at %s)" % (
+                    k, (x, y), [g[1:] for g in got if g[0] == k][:4])
+                left.remove(hit)
             BC.CHECKED["array where they go"] += 1
 
     def op_offset():
@@ -1300,6 +1314,49 @@ def random_editing(log, out, ops, seed, drawing=None):
                 v.input_text(fmt((a[0] + rnd.choice([-1, 0, 1]) * 0.5,
                                   a[1] + rnd.choice([-1, 0, 1]) * 0.5)))
         finish()
+
+    def op_move_area():
+        # (0.18.2: a crossing box over a part of the drawing, then Move typed, every object
+        # snap on, as the owner moves part of a panel: "one of my vfds disappeared"): every
+        # object selected is still there, moved exactly as typed (a wire may be joined into
+        # another by the cleanup, so only the rest is checked one by one)
+        from kanzonascad import osnap as OS
+        ents = [e for e in s.entities.values() if BC.selectable(v, e)]
+        if len(ents) < 4:
+            return
+        a, b = rnd.choice(ents).bbox(), rnd.choice(ents).bbox()
+        box = (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
+        sel = {e.id for e in s.query(box) if BC.selectable(v, e) and e.crosses(box)}
+        if not sel:
+            return
+        before = {i: s.entities[i] for i in sel}
+        k = s.k()
+        d = (rnd.choice([-1, 0, 1]) * 0.5 * k, rnd.choice([-1, 1]) * 0.5 * k)
+        modes, on = v.osnap_modes, v.osnap_on
+        v.osnap_modes, v.osnap_on = {m for m, _n, _t in OS.MODES}, True
+        try:
+            v.set_selection(sel)
+            v.run(C.MoveCmd)
+            if v.cmd is None:
+                return
+            base = rnd.choice(list(before.values())).bbox()[:2]
+            v.input_text(fmt(base))
+            if v.cmd is not None:
+                v.input_text("@%r,%r" % d)
+            finish()
+        finally:
+            v.osnap_modes, v.osnap_on = modes, on
+        for i, e in before.items():
+            if isinstance(e, (M.Wire, M.WireCross)):
+                continue
+            now = s.entities.get(i)
+            assert now is not None, "moving %d objects, %s %d went" % (
+                len(sel), type(e).__name__, i)
+            b0, b1 = e.bbox(), now.bbox()
+            assert all(abs(b1[j] - b0[j] - d[j % 2]) <= 1e-6 * max(1.0, abs(b0[j]))
+                       for j in range(4)), "%s %d moved %s, not %s" % (
+                type(e).__name__, i, (b1[0] - b0[0], b1[1] - b0[1]), d)
+        BC.CHECKED["an area moved, everything in it"] += 1
 
     def op_copy():
         op_move(C.CopyCmd)
@@ -1715,6 +1772,46 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert (tap[0].num != main.num) == own, "a tap %s: %s, %s" % (
                 "with its own number" if own else "keeping the number", tap[0].num, main.num)
             BC.CHECKED["tap numbered as asked"] += 1
+
+    def op_wire_size():
+        # (0.18.2: Wire size: a wire clicked given a gauge of its own, or the layer's again;
+        # the wire layer preset added now and then, and a layer of it made current, so wires
+        # are drawn on it, two-color ones striped)
+        if rnd.random() < 0.15:
+            from kanzonascad import wirelayers
+            win.ask_wire_layer_groups = lambda: rnd.sample(wirelayers.preset_groups(),
+                                                           rnd.randint(1, 4))
+            win.acts["wire_layers"].trigger()
+            have = [n for n in p.layers if wirelayers.is_preset(n)]
+            if have:
+                v.current_layer = rnd.choice(have + ["WIRES"])
+                assert C.wire_layer(v) == v.current_layer, v.current_layer
+                BC.CHECKED["wire layers added, wires go on them"] += 1
+            return
+        ws = [w for w in s.wires() if w.length() > 0.5]
+        if not ws:
+            return
+        w = rnd.choice(ws)
+        q, _i = w.at_length(rnd.uniform(0.1, w.length() - 0.1))
+        under = C._pick_wire(v, q)
+        if under is None or under.id != w.id:
+            return                      # (another wire there first: not this one)
+        v.set_selection(set())
+        v.run(C.WireSizeCmd)
+        v.cmd.pick(q)
+        v.cmd.enter()
+        typed = rnd.choice(["14", "10", "1/0", "250 kcmil", "L", "6 AWG"])
+        v.input_text(typed)
+        finish()
+        now = s.entities.get(w.id)
+        want = "" if typed == "L" else C.wire_gauge(typed)
+        assert now is not None and now.awg == want, (typed, now and now.awg)
+        if p.settings.get("wire_gauge_shown", True) and (want or p.layers.get(now.layer) and
+                                                          p.layers[now.layer].wire_label()):
+            from kanzonascad import wirelayers
+            text = wirelayers.wire_label(p.layers.get(now.layer), now.awg)
+            assert text in [t.text for t in wirenums.gauge_labels(p, s)], (text, now.layer)
+        BC.CHECKED["wire size as typed"] += 1
 
     def op_wire_label():
         # (0.17.2: Wire number label: a click on a wire shows its number there too, its
@@ -2566,7 +2663,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -2792,6 +2889,12 @@ def mixed_project(win):
         ed.change(v.sheet(), mtr.copy(attrs=dict(mtr.attrs, HP="5", VOLTS="460", FLA="7.6"),
                                       hidden=["FLA"]).with_attr_angle("HP", 90.0)
                   .with_attr_angle("TAG", 30.0))
+    # (0.18.2) the wire layer preset, a striped 24 VDC common and a wire of its own size
+    from kanzonascad import wirelayers
+    with p.edit("wire layers") as ed:
+        wirelayers.add_preset(ed, p)
+        ed.add(v.sheet(), M.Wire([(1.0, 0.5), (4.0, 0.5)], layer="24VDC BLU-WHT"))
+        ed.add(v.sheet(), M.Wire([(9.0, 0.5), (12.0, 0.5)], layer="480V BLK", awg="10"))
     # (0.18) a pair of source and destination arrows through the command
     with p.edit("wires for arrows") as ed:
         wa = ed.add(v.sheet(), M.Wire([(1.0, 1.0), (4.0, 1.0)]))

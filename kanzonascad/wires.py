@@ -200,7 +200,7 @@ def break_under(ed, sheet, ins):
         total = cum[-1]
         # (both pieces keep its number to start: numbering gives the second its own)
         keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
-                    own_num=w.own_num)
+                    own_num=w.own_num, awg=w.awg)
         ed.remove(sheet, w.id)
         if lo > TOL:
             ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, lo),
@@ -626,7 +626,7 @@ def trim_wire(sheet, w, click):
     lo = max([s for s in cuts if TOL < s < s0 - TOL], default=0.0)
     hi = min([s for s in cuts if s0 + TOL < s < total - TOL], default=total)
     keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
-                own_num=w.own_num)
+                own_num=w.own_num, awg=w.awg)
     out, ends = [], []
     if lo > TOL:
         piece = _poly_piece(pts, cum, 0.0, lo)
@@ -706,6 +706,10 @@ def join_at(ed, sheet, points):
         if len(ends) != 2 or through or ends[0][0].id == ends[1][0].id or pins_on(sheet, p):
             continue
         (a, ia), (b, ib) = sorted(ends, key=lambda t: (not t[0].num_lock, _order(t[0].id)))
+        if a.layer != b.layer or a.awg != b.awg:
+            # (a 480 V wire meeting a 120 V one, or a 10 AWG one a 12: they stay two wires,
+            # each keeping its layer and size, 0.18.2)
+            continue
         pa = list(a.points) if ia == -1 else list(reversed(a.points))
         pb = list(b.points) if ib == 0 else list(reversed(b.points))
         # (not when b goes back along a: joined, the wire would fold back over itself, the
@@ -860,7 +864,8 @@ def heal(ed, sheet, ins):
             continue
         (wa, ia), (wb, ib) = ends[a], ends[b]
         wa, wb = sheet.entities.get(wa.id), sheet.entities.get(wb.id)
-        if not isinstance(wa, Wire) or not isinstance(wb, Wire) or wa.id == wb.id:
+        if not isinstance(wa, Wire) or not isinstance(wb, Wire) or wa.id == wb.id or \
+                wa.layer != wb.layer or wa.awg != wb.awg:
             continue
         pa = list(wa.points) if ia == -1 else list(reversed(wa.points))   # ... to a
         pb = list(wb.points) if ib == 0 else list(reversed(wb.points))    # b to ...
