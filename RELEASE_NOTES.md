@@ -16,9 +16,10 @@ build fails without them.
   nearest 1/8, 1/16, 1/32 or 1/64: 1-9/16"). Dimension units (Modify menu, DU) changes the
   dimensions you select: D decimal, F fractional, or type 1/32.
 
-- Wires side by side of one gauge and color (a starter's conductors to its drive, a bus)
-  show "12 AWG BLK" once, beside the outside wire, instead of on every wire. Project
-  properties, Schematic, "Gauge and color shown" puts it back on every wire.
+- Wires side by side of one gauge (a starter's conductors to its drive, a bus) show their
+  gauge and colors once, beside the outside wire: "12 AWG BLK", or "12 AWG BRN, ORG, YEL" for
+  a bus of three colors, instead of a label on every wire. Project properties, Schematic,
+  "Gauge and color shown" puts it back on every wire.
 
 **Fixed**
 - Pasting into another project brings the layers that project doesn't have with their colors

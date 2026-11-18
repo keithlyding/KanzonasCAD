@@ -816,7 +816,6 @@ def gauge_labels(project, sheet):
     the wire from its number (under it, or right of it when upright), a little smaller."""
     if not project.settings.get("wire_gauge_shown", True) or sheet is project.title_block:
         return []
-    from . import wirelayers
     shown = {n: lay.wire_label() for n, lay in project.layers.items() if lay.wire_label()}
     h = float(project.settings.get("wire_number_height", 0.08)) * sheet.k()
     every = project.settings.get("wire_gauge_each", "group") == "each"
@@ -827,23 +826,27 @@ def gauge_labels(project, sheet):
         return got[1]
     # (a wire of a size of its own, Wire size, shows it in place of its layer's: one label
     # for each run of joined wires of one layer and one size)
+    from .model import gauge_text
     labeled = []
     for w in sheet.wires():
-        text = wirelayers.wire_label(project.layers.get(w.layer), w.awg) if w.awg else \
-            shown.get(w.layer)
-        if text:
-            labeled.append((w, text))
+        if not (w.awg or w.layer in shown):
+            continue
+        lay = project.layers.get(w.layer)
+        g = str(w.awg or (lay.awg if lay is not None else "")).strip()
+        color = lay.wire_color if lay is not None else ""
+        if g or color:
+            labeled.append((w, gauge_text(g) if g else "", color or ""))
     if not labeled:
         sheet._gauge_labels = (sig, [])
         return []
     roots = _sheet_groups(sheet)
     parts = {}
-    for w, text in labeled:
-        parts.setdefault((roots.get(w.id, w.id), w.layer, text), []).append(w)
+    for w, g, color in labeled:
+        parts.setdefault((roots.get(w.id, w.id), w.layer, g, color), []).append(w)
     busy = _busy_points(sheet)
     out = []
     bests = []
-    for (_r, _layer, text), ws in parts.items():
+    for (_r, _layer, g, color), ws in parts.items():
         best = None
         for w in ws:
             for a, b in zip(w.points, w.points[1:]):
@@ -851,16 +854,17 @@ def gauge_labels(project, sheet):
                 if best is None or d > best[0]:
                     best = (d, a, b)
         if best is not None:
-            bests.append((text, best[1], best[2]))
+            bests.append((g, [color], best[1], best[2]))
     if not every:
         bests = _one_per_bundle(bests, BUNDLE_GAP * sheet.k())
-    for text, a, b in bests:
+    for g, colors, a, b in bests:
+        text = " ".join(t for t in (g, ", ".join(c for c in colors if c)) if t)
         mx, my = _clear_spot(a, b, busy)
-        g = h * 0.85
+        gh = h * 0.85
         if abs(a[1] - b[1]) > abs(a[0] - b[0]):
-            out.append(Text((mx + h * 0.4 + g, my), text, g, 90.0, "center"))
+            out.append(Text((mx + h * 0.4 + gh, my), text, gh, 90.0, "center"))
         else:
-            out.append(Text((mx, my - h * 0.4 - g), text, g, 0.0, "center"))
+            out.append(Text((mx, my - h * 0.4 - gh), text, gh, 0.0, "center"))
     sheet._gauge_labels = (sig, out)
     return out
 
@@ -869,21 +873,23 @@ BUNDLE_GAP = 0.75      # wires side by side this close (paper inches) share one 
 
 
 def _one_per_bundle(bests, gap):
-    """Of the runs' labeled pieces [(text, a, b)], one for each bundle: runs of one gauge and
-    color whose pieces run side by side, the same way, no farther apart than gap and along
+    """Of the runs' labeled pieces [(gauge, [color], a, b)], one for each bundle: runs of one
+    gauge whose pieces run side by side, the same way, no farther apart than gap and along
     each other for at least half the shorter one (the conductors from a starter to a drive,
-    a bus). The bundle's label goes on its outside wire: the rightmost of upright ones, the
-    lowest of those across (labels go right of upright wires and under the others). The
-    owner, 0.18.4: "I don't need 12awg black on every wire ... Can this intuitively mark the
-    gauge and color of one wire instead of all of them?" """
+    a bus). The bundle's label goes on its outside wire (the rightmost of upright ones, the
+    lowest of those across: labels go right of upright wires and under the others) and names
+    their colors once each, in order across the bundle (top to bottom, left to right): 12 AWG
+    BRN, ORG, YEL. The owner, 0.18.4: "I don't need 12awg black on every wire ... Can this
+    intuitively mark the gauge and color of one wire instead of all of them?"; for a bus of
+    three colors, "one label per group", the colors listed."""
     rows = {}
-    for i, (text, a, b) in enumerate(bests):
+    for i, (g, _c, a, b) in enumerate(bests):
         up = abs(a[1] - b[1]) > abs(a[0] - b[0])
         if up and abs(a[0] - b[0]) > 1e-6 or not up and abs(a[1] - b[1]) > 1e-6:
             continue                    # (slanted: labeled on its own)
         across = a[0] if up else a[1]   # (where it is, across its way)
         lo, hi = sorted((a[1], b[1]) if up else (a[0], b[0]))
-        rows.setdefault((text, up), []).append((across, lo, hi, i))
+        rows.setdefault((g, up), []).append((across, lo, hi, i))
     up_ = list(range(len(bests)))
 
     def find(i):
@@ -899,14 +905,22 @@ def _one_per_bundle(bests, gap):
                     break
                 if min(hi, hi2) - max(lo, lo2) >= 0.5 * min(hi - lo, hi2 - lo2) > 0:
                     up_[find(j)] = find(i)
-    keep = {}
-    for i, (text, a, b) in enumerate(bests):
-        r = find(i)
+    members = {}
+    for i, (g, colors, a, b) in enumerate(bests):
         up = abs(a[1] - b[1]) > abs(a[0] - b[0])
-        side = a[0] if up else -a[1]    # (the outside one: farthest right, or lowest)
-        if r not in keep or side > keep[r][0]:
-            keep[r] = (side, i)
-    return [bests[i] for _s, i in sorted(keep.values(), key=lambda t: t[1])]
+        # (the outside one: farthest right, or lowest; the colors in order across)
+        members.setdefault(find(i), []).append((a[0] if up else -a[1], i))
+    out = []
+    for r in sorted(members, key=lambda r: min(i for _s, i in members[r])):
+        ms = sorted(members[r])
+        g, _c, a, b = bests[ms[-1][1]]
+        colors = []
+        for _s, i in ms:
+            for c in bests[i][1]:
+                if c not in colors:
+                    colors.append(c)
+        out.append((g, colors, a, b))
+    return out
 
 
 _CELL = 0.5

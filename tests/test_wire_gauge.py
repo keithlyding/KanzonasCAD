@@ -94,6 +94,12 @@ class GaugeTest(unittest.TestCase):
         if self.v.cmd is not None:
             self.v.cmd.enter()
         self.assertEqual(self.p.layers["WIRE ORANGE"].wire_color, "ORG")
+        # (side by side: one label naming the three, in order across, 0.18.4; on every wire
+        # as asked, each its own)
+        texts = [t.text for t in wirenums.gauge_labels(self.p, self.s)]
+        self.assertEqual(texts, ["BRN, ORG, YEL"])
+        with self.p.edit("each") as ed:
+            ed.project_settings({"wire_gauge_each": "each"})
         texts = sorted(t.text for t in wirenums.gauge_labels(self.p, self.s))
         self.assertEqual(texts, ["BRN", "ORG", "YEL"])
 

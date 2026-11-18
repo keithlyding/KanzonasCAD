@@ -64,6 +64,23 @@ class GaugeBundleTest(unittest.TestCase):
         self.assertEqual(len(got), 1, got)
         self.assertLess(got[0][2], 7.5)
 
+    def test_a_bus_of_three_colors_one_label(self):
+        # (the owner's DS201 bus: BRN, ORG, YEL, "too busy": one label, the colors in order)
+        with self.p.edit("bus") as ed:
+            for y, lay in ((8.0, "480V BRN"), (7.75, "480V ORG"), (7.5, "480V YEL")):
+                ed.add(self.s, M.Wire([(1.0, y), (6.0, y)], layer=lay))
+        got = self.labels()
+        self.assertEqual(len(got), 1, got)
+        self.assertEqual(got[0][0], "12 AWG BRN, ORG, YEL")
+        self.assertLess(got[0][2], 7.5)                     # (under the lowest)
+
+    def test_conductors_and_a_ground_upright(self):
+        self.wires([2.0, 2.25, 2.5])
+        self.wires([2.75], layer="480V GRN")
+        got = self.labels()
+        self.assertEqual([t for t, _x, _y in got], ["12 AWG BLK, GRN"])
+        self.assertGreater(got[0][1], 2.75)
+
     def test_kept_up_to_date(self):
         self.wires([2.0, 2.25])
         self.assertEqual(len(self.labels()), 1)
