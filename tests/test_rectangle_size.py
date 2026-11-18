@@ -41,6 +41,26 @@ class RectangleSizeTest(unittest.TestCase):
         type_in(self.v, "5,5", "-2,-1")
         self.assertEqual(self.size(self.last()), ((2.0, 1.0), (3.0, 4.0)))
 
+    def test_size_goes_the_way_the_mouse_is(self):
+        # (the owner, 0.18.2: "I set it to 72,72. It built the rectangle to the right
+        # dimensions but in a different direction than my mouse was moving")
+        for cursor, corner in (((2.0, 9.0), (-67.0, 5.0)),      # left and up
+                               ((2.0, 1.0), (-67.0, -67.0)),    # left and down
+                               ((9.0, 1.0), (5.0, -67.0)),      # right and down
+                               ((9.0, 9.0), (5.0, 5.0))):       # right and up
+            self.v.run(C.RectangleCmd)
+            type_in(self.v, "5,5")
+            self.v.cursor = cursor
+            type_in(self.v, "72,72")
+            self.assertEqual(self.size(self.last()), ((72.0, 72.0), corner), cursor)
+
+    def test_a_typed_sign_wins_over_the_mouse(self):
+        self.v.run(C.RectangleCmd)
+        type_in(self.v, "5,5")
+        self.v.cursor = (2.0, 1.0)                          # (left and down)
+        type_in(self.v, "+2,+1")
+        self.assertEqual(self.size(self.last()), ((2.0, 1.0), (5.0, 5.0)))
+
     def test_a_point_with_hash_and_relative_with_at(self):
         self.v.run(C.RectangleCmd)
         type_in(self.v, "1,1", "#3,2")

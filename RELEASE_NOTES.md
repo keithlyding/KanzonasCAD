@@ -24,6 +24,9 @@ build fails without them.
   lose its layer or size).
 - Scoot with everything attached could pull a wire off another device's pins, when a wire of
   the branch ran on through them. It now refuses that move and says why.
+- A rectangle's (or dashed box's) size typed after its first corner, 72,72 say, now goes the
+  way the mouse is from that corner. It always went up and to the right. A sign typed (-72 or
+  +72) still says which way.
 
 ## 0.18.1
 

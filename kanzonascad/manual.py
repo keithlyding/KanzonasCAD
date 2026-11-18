@@ -878,7 +878,7 @@ empty command line repeats the last command. <b>Esc</b> cancels.</p>
 options.</td></tr>
 <tr><td>Polyline</td><td>PLINE, PL</td><td>One connected object through all its points.</td></tr>
 <tr><td>Rectangle</td><td>RECTANG, REC</td><td>Two corners (or the first corner, then
-width,height; D: length and width, then the side).</td></tr>
+width,height, toward the mouse; D: length and width, then the side).</td></tr>
 <tr><td>Circle: Center, radius</td><td>CIRCLE, C</td><td>Center, then radius (a point or a
 number); D switches to a diameter. At the first prompt, 3P, 2P or TTR switch to those ways.</td></tr>
 <tr><td>Circle: Center, diameter</td><td></td><td>Center, then diameter.</td></tr>
@@ -979,8 +979,11 @@ shows the way you used last, as in AutoCAD. The Draw menu has them under Circle.
 <li><code>#3,4</code> - the point x=3, y=4 wherever a plain x,y means something else (a box's
 second corner, below).</li>
 <li>A <b>Rectangle</b>'s or <b>Dashed box</b>'s second corner: <code>0.19,0.15</code> is its
-<b>size</b> from the first corner (0.19 across, 0.15 up; <code>-2,-1</code> goes left and
-down), as AutoCAD's dynamic input takes it; <code>#x,y</code> is a point. Rectangle's
+<b>size</b> from the first corner, 0.19 across and 0.15 up or down, <b>the way the mouse
+is</b> from the first corner (move it left and down, and the box goes left and down), as
+AutoCAD's dynamic input takes it. A sign typed says which way whatever the mouse does
+(<code>-2,-1</code> left and down, <code>+2,+1</code> right and up); <code>#x,y</code> is a
+point. Rectangle's
 <b>D</b> (Dimensions) asks the length, then the width, then a click on the side it goes
 (Enter: up and right).</li>
 <li><code>1.5</code> - 1.5 inches from the last point toward the cursor (direct distance;

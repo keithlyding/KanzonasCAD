@@ -233,13 +233,24 @@ def size_typed(cmd, text):
     """A plain "x,y" typed for a box's second corner is its size from the first corner (as
     AutoCAD's dynamic input takes it; the owner: "I'm trying to make a rectangle that is
     0.19x0.15" and it's coming out as 8.76x3.76"": typed as a size, it was taken as the corner
-    0.19,0.15 of the sheet). "#x,y" is that point itself; "@x,y" as always. The point, or
-    None when it isn't a plain x,y."""
+    0.19,0.15 of the sheet). "#x,y" is that point itself; "@x,y" as always. A size typed
+    without a sign goes the way the cursor is from the first corner (the owner, 0.18.2: "I set
+    it to 72,72. It built the rectangle to the right dimensions but in a different direction
+    than my mouse was moving"); a sign typed (-72, +72) says which way. The point, or None
+    when it isn't a plain x,y."""
     t = to_inches(text).strip()
     m = _RE_ABS.match(t)
     if m is None or cmd.last is None:
         return None
-    return (cmd.last[0] + float(m.group(1)), cmd.last[1] + float(m.group(2)))
+    a = cmd.last
+    cur = cmd.ctx.cursor_point() if hasattr(cmd.ctx, "cursor_point") else None
+    out = []
+    for k, raw in ((0, m.group(1)), (1, m.group(2))):
+        v = float(raw)
+        if raw.strip()[:1] not in "+-" and cur is not None and cur[k] < a[k] - 1e-9:
+            v = -v                      # (toward the cursor)
+        out.append(a[k] + v)
+    return tuple(out)
 
 
 class RectangleCmd(Command):
