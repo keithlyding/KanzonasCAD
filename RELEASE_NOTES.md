@@ -19,6 +19,8 @@ build fails without them.
   printed.
 
 **Fixed**
+- With every object snap on (Extension among them), moving the mouse over big footprints (a
+  maker's drive drawings) lagged, in Move most of all. It's about five times quicker.
 - With everything selected on a heavy sheet (a panel of maker drive footprints), every mouse
   move lagged. It's quick now, and Select all itself takes about half the time it did.
 - Printing a heavy sheet (a panel with maker footprints, wire duct, rails and dimensions)

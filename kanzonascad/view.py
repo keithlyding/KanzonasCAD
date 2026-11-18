@@ -673,8 +673,10 @@ class CadView(QWidget):
             for q, q0, inner in OS.alignment(self.track_pts, base, p, r):
                 offer("ext", q, q0, inner)
             # (where a tracking line crosses a line, a wire, a circle: before a point
-            # anywhere along it)
-            for q, q0 in OS.track_crossings(self.tracked, self.track_pts, cands, p, r):
+            # anywhere along it; against the pieces that come within the aperture only, not
+            # every piece of every block near: a maker's drive footprints made it 190 ms a
+            # mouse move with every snap on, the owner, 0.18.2: "it was very laggy")
+            for q, q0 in OS.track_crossings(self.tracked, self.track_pts, near, p, r):
                 offer("ext", q, q0, -1)
         if base is not None and "par" in modes:
             for q in OS.parallel(base, self.par_dirs, p, r):
