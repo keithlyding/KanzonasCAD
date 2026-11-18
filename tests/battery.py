@@ -2005,6 +2005,24 @@ def random_editing(log, out, ops, seed, drawing=None):
                 v.input_text(fmt(q))
         finish()
 
+    def op_wire_color():
+        # (0.18.4: Wire color label on the selected wires: on when any is off, else off;
+        # worked out from the wires before)
+        ws = s.wires()
+        if not ws:
+            return
+        pick = rnd.sample(ws, min(len(ws), rnd.randint(1, 3)))
+        want = any(not w.show_color for w in pick)
+        v.set_selection({w.id for w in pick})
+        v.run(C.WireColorLabelCmd)
+        finish()
+        for w in pick:
+            got = s.entities.get(w.id)
+            if got is not None:
+                assert got.show_color == want, "Wire color label left a wire %s" % (
+                    "showing" if got.show_color else "hiding")
+        BC.CHECKED["wire color label as asked"] += 1
+
     def op_dim_units():
         # (0.18.4: Dimension units on the selected dimensions, D, F or a precision typed; new
         # dimensions as the project says, now and then changed; each reads its true length in
@@ -2767,7 +2785,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -3034,6 +3052,10 @@ def mixed_project(win):
         ed.add(panel, M.Dimension((4, 10), (5.5625, 10), (5, 12), height=0.125 * panel.k(),
                                   units="1/16"))
         ed.sheet_meta(panel, show_title_block=False)
+    with p.edit("a wire showing its color") as ed:
+        w0 = next(iter(p.sheets[0].wires()), None)
+        if w0 is not None:
+            ed.change(p.sheets[0], w0.copy(show_color=True))
     with p.edit("notes") as ed:
         s = p.sheets[0]
         ed.add(s, M.Leader([(14, 9), (15, 10), (16, 10)], "SEE NOTE 1"))

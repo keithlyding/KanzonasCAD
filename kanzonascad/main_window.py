@@ -415,6 +415,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("wire_label", "Wire number &label", C.WireLabelCmd, "Wire label")
         self._cmd_act("wire_size", "Wire si&ze", C.WireSizeCmd, "Wire size")
+        self._cmd_act("wire_color", "Wire color &label", C.WireColorLabelCmd, "Color label")
         self._cmd_act("sig_arrows", "Source/destination &arrows", C.SignalArrowsCmd, "Arrows")
         self._cmd_act("stretch", "Stretc&h", C.StretchCmd, "Stretch")
         self._cmd_act("num_source", "Numbering s&ource", C.NumberSourceCmd, "Source")
@@ -639,7 +640,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "offset", "erase",
                   "trim", "number", None,
-                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "del_wire", "del_dot", "clean_wires", "del_comp", None,
+                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "dim_units", "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             if k == "FPLABEL":
@@ -723,7 +724,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["edit_block"],
                                   a["explode"], a["attr_vis"], a["del_comp"]]),
             ("Parts", "large", [a["new_part"]]),
-            ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["wire_size"],
+            ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["wire_size"], a["wire_color"],
                                      a["del_wire"], a["del_dot"], a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Numbering", "large", [a["update_numbers"], a["renumber"], a["lock_numbers"],
@@ -3106,7 +3107,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "array", "offset", "dash_box", "number", "erase", "trim",
                   "paste",
-                  "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "wire_size", "del_wire", "del_dot",
+                  "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot",
                   "clean_wires", "del_comp", "wire_layers"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())

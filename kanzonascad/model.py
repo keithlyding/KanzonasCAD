@@ -85,6 +85,7 @@ DEFAULT_SETTINGS = {
                                 # zone grid stops at
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
     "wire_gauge_shown": True,   # a wire layer's gauge and color beside its wires
+    "wire_gauge_height": 0.06,  # gauge labels' text, paper inches (wire numbers: 0.08)
     "wire_gauge_each": "group",  # once for wires side by side alike ("group"), or "each" run
     "footprint_label": "tag",   # what a footprint placed shows to start (Footprint label)
     "wire_around": True,        # a wire goes round the symbols in its way (wires.route_around)
@@ -386,10 +387,10 @@ class Wire(Polyline):
     wires. What it connects is worked out from where its ends are (wires.py), never stored, so
     it can't go stale; moving a symbol drags the ends that sat on its pins."""
     kind = "wire"
-    __slots__ = ("num", "num_lock", "own_num", "labels", "awg", "same_num")
+    __slots__ = ("num", "num_lock", "own_num", "labels", "awg", "same_num", "show_color")
 
     def __init__(self, points, closed=False, num=None, num_lock=False, own_num=False,
-                 labels=(), awg="", same_num=False, **kw):
+                 labels=(), awg="", same_num=False, show_color=False, **kw):
         kw.setdefault("layer", "WIRES")
         super().__init__(points, False, **kw)
         # its wire number (every wire of a connected group has the same: wirenums.py) and
@@ -409,6 +410,10 @@ class Wire(Polyline):
         # its own gauge (Wire size: "10", "2/0"), or "" for its layer's (the owner, 0.18.2:
         # "per wire, with the layer as default")
         self.awg = str(awg or "").strip()
+        # its insulation color written in its gauge label too (Wire color label: the owner,
+        # 0.18.4, "I don't think we need to include the wire color. Maybe that can be a
+        # toggle-able option on a per-wire basis?")
+        self.show_color = bool(show_color)
 
     def _data(self):
         d = super()._data()
@@ -424,13 +429,15 @@ class Wire(Polyline):
             d["labels"] = list(self.labels)
         if self.awg:
             d["awg"] = self.awg
+        if self.show_color:
+            d["show_color"] = True
         return d
 
     @classmethod
     def _from(cls, d):
         return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
                    d.get("own_num", False), d.get("labels") or (), d.get("awg", ""),
-                   d.get("same_num", False),
+                   d.get("same_num", False), d.get("show_color", False),
                    layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
 
     def length(self):

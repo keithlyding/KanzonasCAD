@@ -40,7 +40,19 @@ class GaugeTest(unittest.TestCase):
             ed.add(self.s, M.Wire([(2.0, 8.0), (2.0, 3.0)], layer="POWER"))
             ed.add(self.s, M.Wire([(8.0, 2.0), (12.0, 2.0)]))           # (WIRES: none)
         got = sorted((t.text, round(t.angle)) for t in wirenums.gauge_labels(self.p, self.s))
-        self.assertEqual(got, [("10 AWG BRN", 0), ("10 AWG BRN", 90)])
+        self.assertEqual(got, [("10 AWG", 0), ("10 AWG", 90)])     # (the gauge, 0.18.4)
+        # (Wire color label: the color too, on the wires asked)
+        up = [w for w in self.s.wires() if w.points[0][0] == 2.0][0]
+        self.v.set_selection({up.id})
+        self.v.run(C.WireColorLabelCmd)
+        got = sorted((t.text, round(t.angle)) for t in wirenums.gauge_labels(self.p, self.s))
+        self.assertEqual(got, [("10 AWG", 0), ("10 AWG BRN", 90)])
+        self.v.set_selection({up.id})
+        self.v.run(C.WireColorLabelCmd)                                  # (and off again)
+        self.assertEqual(sorted(t.text for t in wirenums.gauge_labels(self.p, self.s)),
+                         ["10 AWG", "10 AWG"])
+        self.v.set_selection({w.id for w in self.s.wires() if w.layer == "POWER"})
+        self.v.run(C.WireColorLabelCmd)
         across = [t for t in wirenums.gauge_labels(self.p, self.s) if t.angle == 0][0]
         self.assertLess(across.bbox()[3], 5.0)                          # (under the wire)
         num = [t for t in wirenums.labels(self.p, self.s) if t.pos[1] > 4.0 and t.angle == 0]
@@ -53,6 +65,10 @@ class GaugeTest(unittest.TestCase):
             ed.add(self.s, M.Wire([(4.0, 5.0), (4.0, 2.0)], layer="POWER"))
         self.assertEqual([t.text for t in wirenums.gauge_labels(self.p, self.s)], ["12 AWG"])
         self.set_layer("POWER", awg="", wire_color="RED")
+        self.assertEqual(wirenums.gauge_labels(self.p, self.s), [])       # (no gauge)
+        with self.p.edit("color") as ed:
+            for w in list(self.s.wires()):
+                ed.change(self.s, w.copy(show_color=True))
         self.assertEqual([t.text for t in wirenums.gauge_labels(self.p, self.s)], ["RED"])
 
     def test_off_saved_and_undone(self):
@@ -94,8 +110,10 @@ class GaugeTest(unittest.TestCase):
         if self.v.cmd is not None:
             self.v.cmd.enter()
         self.assertEqual(self.p.layers["WIRE ORANGE"].wire_color, "ORG")
-        # (side by side: one label naming the three, in order across, 0.18.4; on every wire
-        # as asked, each its own)
+        # (side by side: one label naming the three, in order across, 0.18.4, their colors
+        # shown as asked; on every wire as asked, each its own)
+        self.v.set_selection({w.id for w in self.s.wires()})
+        self.v.run(C.WireColorLabelCmd)
         texts = [t.text for t in wirenums.gauge_labels(self.p, self.s)]
         self.assertEqual(texts, ["BRN, ORG, YEL"])
         with self.p.edit("each") as ed:

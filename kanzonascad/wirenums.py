@@ -612,6 +612,35 @@ def number_at(sheet, ins):
     return ""
 
 
+def match_arrow_layers(ed, project, name):
+    """The wires at a pair's destination arrows (name) take the layer of the wire at its
+    source arrow: the wire they continue (the owner, 0.18.4: "if I add a destination arrow,
+    not only should the wire number change, but its layer needs to match the source layer
+    as well"). All of each one's joined wires on its sheet. Returns how many changed."""
+    ends = connectors(project).get(name, [])
+    src = None
+    for s, c in ends:
+        if c.block == ARROWS[0]:
+            src = next((w for _n, q in c.pin_points() for w in s.query_point(q, TOL)
+                        if getattr(w, "kind", "") == "wire" and w.touches(q, TOL)), None)
+            if src is not None:
+                break
+    if src is None:
+        return 0
+    n = 0
+    for s, c in ends:
+        if c.block != ARROWS[1]:
+            continue
+        roots = _sheet_groups(s)
+        mine = {roots.get(w.id) for _n, q in c.pin_points() for w in s.query_point(q, TOL)
+                if getattr(w, "kind", "") == "wire" and w.touches(q, TOL)}
+        for w in list(s.wires()):
+            if roots.get(w.id) in mine and w.layer != src.layer:
+                ed.change(s, w.copy(layer=src.layer))
+                n += 1
+    return n
+
+
 def wire_end(sheet, wire, p):
     """(sheet, end point, direction out) of the end of wire nearer p."""
     a, b = wire.points[0], wire.points[-1]
@@ -811,15 +840,19 @@ def _closest_on(p, a, b):
 
 
 def gauge_labels(project, sheet):
-    """A wire layer's gauge and color (Layers: AWG, Wire color) beside its wires: one label
-    per run of joined wires on the layer, on its longest straight piece, on the other side of
-    the wire from its number (under it, or right of it when upright), a little smaller."""
+    """A wire layer's gauge (Layers: AWG) beside its wires, and its insulation color (Wire
+    color) where a wire is set to show it (Wire color label): one label per run of joined wires
+    on the layer, on its longest straight piece, on the other side of the wire from its
+    number (under it, or right of it when upright), smaller (Gauge label height; the owner,
+    0.18.4: "Maybe text size needs to be smaller. And I don't think we need to include the
+    wire color")."""
     if not project.settings.get("wire_gauge_shown", True) or sheet is project.title_block:
         return []
     shown = {n: lay.wire_label() for n, lay in project.layers.items() if lay.wire_label()}
     h = float(project.settings.get("wire_number_height", 0.08)) * sheet.k()
+    gh = float(project.settings.get("wire_gauge_height", 0.06)) * sheet.k()
     every = project.settings.get("wire_gauge_each", "group") == "each"
-    sig = (sheet.version, sheet.scale, h, tuple(sorted(shown.items())), every,
+    sig = (sheet.version, sheet.scale, h, gh, tuple(sorted(shown.items())), every,
            tuple(sorted((n, lay.wire_color) for n, lay in project.layers.items())))
     got = getattr(sheet, "_gauge_labels", None)
     if got is not None and got[0] == sig:
@@ -833,7 +866,7 @@ def gauge_labels(project, sheet):
             continue
         lay = project.layers.get(w.layer)
         g = str(w.awg or (lay.awg if lay is not None else "")).strip()
-        color = lay.wire_color if lay is not None else ""
+        color = lay.wire_color if lay is not None and w.show_color else ""
         if g or color:
             labeled.append((w, gauge_text(g) if g else "", color or ""))
     if not labeled:
@@ -860,7 +893,6 @@ def gauge_labels(project, sheet):
     for g, colors, a, b in bests:
         text = " ".join(t for t in (g, ", ".join(c for c in colors if c)) if t)
         mx, my = _clear_spot(a, b, busy)
-        gh = h * 0.85
         if abs(a[1] - b[1]) > abs(a[0] - b[0]):
             out.append(Text((mx + h * 0.4 + gh, my), text, gh, 90.0, "center"))
         else:

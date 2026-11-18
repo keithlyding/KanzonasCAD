@@ -23,10 +23,11 @@ class GaugeBundleTest(unittest.TestCase):
         self.win.close()
         self.assertTrue(APP)
 
-    def wires(self, xs, y0=2.0, y1=6.0, layer="480V BLK", awg=""):
+    def wires(self, xs, y0=2.0, y1=6.0, layer="480V BLK", awg="", color=False):
         with self.p.edit("w") as ed:
             for x in xs:
-                ed.add(self.s, M.Wire([(x, y0), (x, y1)], layer=layer, awg=awg))
+                ed.add(self.s, M.Wire([(x, y0), (x, y1)], layer=layer, awg=awg,
+                                      show_color=color))
 
     def labels(self):
         return [(t.text, round(t.pos[0], 3), round(t.pos[1], 3))
@@ -36,7 +37,7 @@ class GaugeBundleTest(unittest.TestCase):
         self.wires([2.0, 2.25, 2.5, 2.75])                  # (a starter's conductors)
         got = self.labels()
         self.assertEqual(len(got), 1, got)
-        self.assertEqual(got[0][0], "12 AWG BLK")
+        self.assertEqual(got[0][0], "12 AWG")               # (the gauge alone, 0.18.4)
         self.assertGreater(got[0][1], 2.75)                 # (right of the rightmost)
         # every wire again, as asked in Schematic settings
         with self.p.edit("each") as ed:
@@ -49,7 +50,7 @@ class GaugeBundleTest(unittest.TestCase):
         self.wires([2.75], awg="10")                        # (one of its own size beside)
         self.wires([3.0], layer="24VDC BLU")                # (another color beside)
         got = sorted(t for t, _x, _y in self.labels())
-        self.assertEqual(got, ["10 AWG BLK", "12 AWG BLK", "12 AWG BLK", "16 AWG BLU"])
+        self.assertEqual(got, ["10 AWG", "12 AWG", "12 AWG", "16 AWG"])
 
     def test_side_by_side_but_not_along_each_other(self):
         self.wires([2.0], 2.0, 4.0)
@@ -68,18 +69,34 @@ class GaugeBundleTest(unittest.TestCase):
         # (the owner's DS201 bus: BRN, ORG, YEL, "too busy": one label, the colors in order)
         with self.p.edit("bus") as ed:
             for y, lay in ((8.0, "480V BRN"), (7.75, "480V ORG"), (7.5, "480V YEL")):
-                ed.add(self.s, M.Wire([(1.0, y), (6.0, y)], layer=lay))
+                ed.add(self.s, M.Wire([(1.0, y), (6.0, y)], layer=lay, show_color=True))
         got = self.labels()
         self.assertEqual(len(got), 1, got)
         self.assertEqual(got[0][0], "12 AWG BRN, ORG, YEL")
         self.assertLess(got[0][2], 7.5)                     # (under the lowest)
 
     def test_conductors_and_a_ground_upright(self):
-        self.wires([2.0, 2.25, 2.5])
-        self.wires([2.75], layer="480V GRN")
+        self.wires([2.0, 2.25, 2.5], color=True)
+        self.wires([2.75], layer="480V GRN", color=True)
         got = self.labels()
         self.assertEqual([t for t, _x, _y in got], ["12 AWG BLK, GRN"])
+        # (only the ground's color shown: only it named)
+        with self.p.edit("off") as ed:
+            for w in list(self.s.wires()):
+                if w.layer == "480V BLK":
+                    ed.change(self.s, w.copy(show_color=False))
+        self.assertEqual([t for t, _x, _y in self.labels()], ["12 AWG GRN"])
         self.assertGreater(got[0][1], 2.75)
+
+    def test_smaller_than_the_numbers(self):
+        self.wires([2.0])
+        t = wirenums.gauge_labels(self.p, self.s)[0]
+        self.assertAlmostEqual(t.height, 0.06 * self.s.k())
+        self.assertLess(t.height, float(self.p.settings["wire_number_height"]) * self.s.k())
+        with self.p.edit("h") as ed:
+            ed.project_settings({"wire_gauge_height": 0.05})
+        self.assertAlmostEqual(wirenums.gauge_labels(self.p, self.s)[0].height,
+                               0.05 * self.s.k())
 
     def test_kept_up_to_date(self):
         self.wires([2.0, 2.25])

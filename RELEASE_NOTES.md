@@ -16,10 +16,14 @@ build fails without them.
   nearest 1/8, 1/16, 1/32 or 1/64: 1-9/16"). Dimension units (Modify menu, DU) changes the
   dimensions you select: D decimal, F fractional, or type 1/32.
 
-- Wires side by side of one gauge (a starter's conductors to its drive, a bus) show their
-  gauge and colors once, beside the outside wire: "12 AWG BLK", or "12 AWG BRN, ORG, YEL" for
-  a bus of three colors, instead of a label on every wire. Project properties, Schematic,
-  "Gauge and color shown" puts it back on every wire.
+- Wire gauge labels are smaller and show the gauge only ("12 AWG"), once for wires side by
+  side (a starter's conductors to its drive, a bus), beside the outside wire. Wire color label
+  (Modify menu, WCL) adds the color on the wires you pick ("12 AWG BRN"). Project properties,
+  Schematic: "Gauge label height", and "Gauge and color shown" to put it on every wire.
+- A source arrow placed on a numbered wire takes the wire's number as its name: nothing to
+  type. A destination arrow's wire takes the source's number and its layer too.
+- Each source or destination arrow shows only its other half's place: a destination its
+  source, not every arrow of that name.
 
 **Fixed**
 - Pasting into another project brings the layers that project doesn't have with their colors

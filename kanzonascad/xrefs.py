@@ -101,7 +101,14 @@ def live_all(project):
     for name, ends in connectors(project).items():
         for s, c in ends:
             hh = hk[s.id]
-            others = [_where(project, os_, oc) for os_, oc in ends if oc is not c]
+            pair = [(os_, oc) for os_, oc in ends if oc is not c]
+            if c.block in ARROWS:
+                # (an arrow shows only its other half's place: a source its destinations, a
+                # destination its source, not the other destinations of that name; the owner,
+                # 0.18.4: "just the source and destination for that specific wire location")
+                want = ARROWS[1] if c.block == ARROWS[0] else ARROWS[0]
+                pair = [(os_, oc) for os_, oc in pair if oc.block == want] or pair
+            others = [_where(project, os_, oc) for os_, oc in pair]
             text = ", ".join(others) if others else "?"
             if c.block in ARROWS:
                 # a source or destination arrow: its wire's number and the other's place

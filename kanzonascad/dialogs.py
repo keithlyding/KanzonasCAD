@@ -415,7 +415,7 @@ def project_properties(parent, project, tab=0):
                       "the wires they leave meeting end to end.")
     wclean.setChecked(bool(st.get("wire_cleanup", True)))
     form.addRow("", wclean)
-    wgauge = QCheckBox("Show a wire layer's gauge and color beside its wires")
+    wgauge = QCheckBox("Show a wire layer's gauge beside its wires")
     wgauge.setToolTip("Layers: AWG and Wire color. Each run of wire on such a layer shows "
                       "them (10 AWG BRN), under its wire number.")
     wgauge.setChecked(bool(st.get("wire_gauge_shown", True)))
@@ -429,6 +429,13 @@ def project_properties(parent, project, tab=0):
                       "color (a starter's three conductors to its drive, a bus), show it once, on "
                       "the outside wire")
     form.addRow("Gauge and color shown", wgroup)
+    wgh = QDoubleSpinBox()
+    wgh.setObjectName("wire_gauge_height")
+    wgh.setDecimals(4)
+    wgh.setRange(0.01, 5)
+    wgh.setSuffix(" in")
+    wgh.setValue(float(st.get("wire_gauge_height", 0.06)))
+    form.addRow("Gauge label height", wgh)
     wlead = QCheckBox("A second wire on a pin leaves it on a 45-degree lead")
     wlead.setToolTip("Double landing as drawn by hand: a wire started or ended on a pin that "
                      "already has one bends off it beside the first. Off: it runs straight "
@@ -572,6 +579,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_clear"] = wclear.value()
     settings["wire_gauge_shown"] = wgauge.isChecked()
     settings["wire_gauge_each"] = wgroup.currentData()
+    settings["wire_gauge_height"] = wgh.value()
     settings["footprint_label"] = fp_show.currentData()
     settings["duct_hatch"] = hatch.isChecked()
     settings["xref_height"] = xref_h.value()

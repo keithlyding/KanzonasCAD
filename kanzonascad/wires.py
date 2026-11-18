@@ -200,7 +200,8 @@ def break_under(ed, sheet, ins):
         total = cum[-1]
         # (both pieces keep its number to start: numbering gives the second its own)
         keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
-                    own_num=w.own_num, same_num=w.same_num, awg=w.awg)
+                    own_num=w.own_num, same_num=w.same_num, awg=w.awg,
+                    show_color=w.show_color)
         ed.remove(sheet, w.id)
         if lo > TOL:
             ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, lo),
@@ -626,7 +627,8 @@ def trim_wire(sheet, w, click):
     lo = max([s for s in cuts if TOL < s < s0 - TOL], default=0.0)
     hi = min([s for s in cuts if s0 + TOL < s < total - TOL], default=total)
     keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
-                own_num=w.own_num, same_num=w.same_num, awg=w.awg)
+                own_num=w.own_num, same_num=w.same_num, awg=w.awg,
+                    show_color=w.show_color)
     out, ends = [], []
     if lo > TOL:
         piece = _poly_piece(pts, cum, 0.0, lo)
@@ -724,7 +726,7 @@ def join_at(ed, sheet, points):
         if len(merged) < 2 or doubles_back(merged):
             continue
         ed.remove(sheet, b.id)
-        ed.change(sheet, a.copy(points=merged,
+        ed.change(sheet, a.copy(points=merged, show_color=a.show_color or b.show_color,
                                 labels=_joined_labels(a, ia != -1, b, ib != 0)))
         n += 1
     return n

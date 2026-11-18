@@ -2802,6 +2802,19 @@ class InsertCmd(Command):
         at, self.placed_mirror = self._fit(p)
         p = self._on_rail(at)
         d = self.defn
+        if d.wiring == "link" and not self.attrs.get("TAG") and d.name == "Source arrow":
+            # (a source arrow on a numbered wire is named by the wire's number, unless another
+            # source has it: the owner, 0.18.4, "I have to type in the wire name for source
+            # symbols. That should intuitively grab the wire number of what I attach it to")
+            from .wirenums import number_at, connectors
+            num = number_at(self.ctx.sheet(), self._make(p, d, self.placed_mirror))
+            taken = any(c.block == d.name for _s, c in
+                        connectors(self.ctx.project).get(num.upper(), []))
+            if num and not taken:
+                self.ctx.message("Source arrow %s: a destination arrow named %s continues it"
+                                 % (num, num))
+                self._place(p, dict(self.attrs, TAG=num.upper()))
+                return
         if d.wiring == "link" and not self.attrs.get("TAG"):
             # an off-sheet connector: its name pairs it with the other end
             from .wirenums import next_name, connectors
@@ -2875,6 +2888,10 @@ class InsertCmd(Command):
             if ins.layer not in project.layers:
                 ed.layer(ins.layer, None, M.Layer(ins.layer, M.ADAPTIVE).to_dict())
             ed.add(sheet, ins)
+            if defn.wiring == "link" and ins.attrs.get("TAG"):
+                # (a destination arrow's wire takes its source's layer, 0.18.4)
+                from .wirenums import match_arrow_layers
+                match_arrow_layers(ed, project, ins.attrs["TAG"].strip().upper())
             if self.defn.kind == "symbol":
                 # placed on a wire: the wire is cut between its pins
                 from .wires import break_under
@@ -4386,6 +4403,7 @@ class SignalArrowsCmd(Command):
         num = src_sheet.entities[s_w.id].num if s_w.id in src_sheet.entities else None
         with self.ctx.edit(self.title) as ed:
             name = wirenums.cross_reference(ed, project, s_end, end, defs[0], defs[1], True)
+            wirenums.match_arrow_layers(ed, project, name)
             if num and wirenums.enabled(project):
                 wirenums.sync(ed, project)
                 cur = src_sheet.entities[s_w.id]
@@ -4552,6 +4570,51 @@ class WireSizeCmd(Command):
     def enter(self):
         if self.picking and self.wires:
             self._ask_size()
+            return
+        self.finish()
+
+
+class WireColorLabelCmd(Command):
+    """WIRECOLOR (Wire color label): the selected wires, or wires clicked one by one, write
+    their insulation color in their gauge label too (12 AWG BRN), or stop (the owner, 0.18.4:
+    the color "can be a toggle-able option on a per-wire basis"). On when any of them is off,
+    else off."""
+    name, title = "WIRECOLOR", "Wire color label"
+
+    def begin(self):
+        self.wires = [e.id for e in _selected(self.ctx) if isinstance(e, M.Wire)]
+        if self.wires:
+            self._apply()
+            return
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click the wires to show or hide their color (Enter when done)")
+
+    def pick(self, p):
+        w = _pick_wire(self.ctx, p)
+        if w is None:
+            self.ctx.message("Click a wire")
+            return
+        if w.id not in self.wires:
+            self.wires.append(w.id)
+            self.ctx.set_selection(set(self.wires))
+
+    def _apply(self):
+        sheet = self.ctx.sheet()
+        ws = [sheet.entities[i] for i in self.wires if i in sheet.entities]
+        on = any(not w.show_color for w in ws)
+        if ws:
+            with self.ctx.edit(self.title) as ed:
+                for w in ws:
+                    if w.show_color != on:
+                        ed.change(sheet, w.copy(show_color=on))
+        self.ctx.message("%d wire(s): color %s in the gauge label" % (len(ws), "shown" if on
+                                                                       else "not shown"))
+        self.ctx.set_selection(set())
+        self.finish()
+
+    def enter(self):
+        if self.wires:
+            self._apply()
             return
         self.finish()
 
@@ -4964,6 +5027,7 @@ COMMANDS = {
     "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
     "WIRESIZE": (WireSizeCmd, ["WSZ"]),
     "DIMUNITS": (DimUnitsCmd, ["DU"]),
+    "WIRECOLOR": (WireColorLabelCmd, ["WCL"]),
     "STRETCH": (StretchCmd, ["S"]),
     "NUMSOURCE": (NumberSourceCmd, ["NSRC"]),
     "SIGARROW": (SignalArrowsCmd, ["SDA", "SOURCEARROW", "XARROW"]),

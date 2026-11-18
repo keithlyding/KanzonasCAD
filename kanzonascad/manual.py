@@ -104,13 +104,15 @@ print in it.</p>
 <p><b>Wire gauge and color</b>: in <b>Layers...</b>, double-click a wire layer's <b>AWG</b> or
 <b>Wire color</b> to give its wires a gauge (14, 10, 2/0...) and insulation color (BLK, BRN,
 GRN/YEL...), picked from the usual ones or typed. Each run of joined wires on that layer then
-shows them, <b>10 AWG BRN</b>, on the other side of the wire from its number (under it, or right
-of it on an upright wire), a little smaller; Project properties, Schematic, <b>Show a wire
-layer's gauge and color beside its wires</b> turns that off. Wires side by side of one gauge
-(within 3/4" of each other on paper, running along each other: a starter's conductors to its
-drive, a bus) show it <b>once</b>, beside the outside one (the rightmost of upright wires, the
-lowest of those across), with their colors listed once each in order across them: <b>12 AWG
-BRN, ORG, YEL</b>, or <b>12 AWG BLK</b> when they're alike. <b>Gauge and color shown</b>, On
+shows its gauge, <b>10 AWG</b>, on the other side of the wire from its number (under it, or
+right of it on an upright wire), smaller (Project properties, Schematic: <b>Gauge label
+height</b>, 0.06" to start); <b>Show a wire layer's gauge beside its wires</b> there turns it
+off. <b>Wire color label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) writes the
+color too, on the wires you select or click (<b>10 AWG BRN</b>); again, and it stops. Wires
+side by side of one gauge (within 3/4" of each other on paper, running along each other: a
+starter's conductors to its drive, a bus) show it <b>once</b>, beside the outside one (the
+rightmost of upright wires, the lowest of those across), with the colors shown of them listed
+once each in order across them (<b>12 AWG BRN, ORG, YEL</b>). <b>Gauge and color shown</b>, On
 every wire, puts it back on each. The layers a bus adds (WIRE BROWN,
 WIRE ORANGE...) come with their color's name; give them a gauge once and every wire on them
 shows it. A wire color of two names, <b>BLU/WHT</b> say, draws the layer's wires striped: the
@@ -857,13 +859,18 @@ away from the line where the wire leaves, a destination arrow's tip is on the li
 into it, where the wire arrives. Past each arrow's far end (not over the wire), the wire's
 number and the other arrow's place (<b>2046 / 7-A2</b>), turned the way the arrow is: on a wire
 running up and down it reads up, in line with the wire (as that wire's number reads); across,
-it is level.</li>
+it is level. A source arrow placed on the end of a numbered wire is named by the wire's number (2046):
+nothing to type (unless another source arrow has that name: then it asks). A destination arrow
+offers the name of a source still waiting for it; placed, its wire takes the source's number
+and its layer (480V BRN, with its color and gauge). Each arrow shows only its other half's
+place: a destination its source, a source its destinations.</li>
 <li><b>Source/destination arrows</b> (SIGARROW, SDA; Draw menu, Schematic tab:
 Cross-references), as AutoCAD Electrical's signal arrows: click near the open end of the wire
 where it leaves (an end on nothing: a Source arrow goes there), then near the open end where it
 arrives, on this sheet or another (go to it in the Sheets panel: the command waits), and a
 Destination arrow goes there. They get a new name, the two wires become one wire with the
-source's number, and each arrow shows that number and the other's place. It goes on with the
+source's number and the destination's wire takes the source wire's layer, and each arrow shows
+that number and the other's place. It goes on with the
 next pair; Enter or Esc ends it. An end connected to something, or the same wire twice, is
 refused with a message.</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
@@ -982,6 +989,8 @@ object, only the piece a click there would cut away lights up. U undoes the last
 then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>
 <tr><td>Aligned dimension</td><td>DIMALIGNED, DAL</td><td>The same, measured along the line
 between the two points (slanted too).</td></tr>
+<tr><td>Wire color label</td><td>WIRECOLOR, WCL</td><td>The selected (or clicked) wires write
+their color in their gauge label too, or stop.</td></tr>
 <tr><td>Dimension units</td><td>DIMUNITS, DU</td><td>The selected (or clicked) dimensions:
 D decimal, F fractional, or 1/8, 1/16, 1/32, 1/64.</td></tr>
 <tr><td>Hatch</td><td>HATCH, H, BHATCH, BH, FILL</td><td>Click inside a closed shape to fill it

@@ -122,18 +122,18 @@ class WireSizeTest(unittest.TestCase):
         return [t.text for t in wirenums.gauge_labels(self.p, self.s)]
 
     def test_size_of_its_own_and_back_to_the_layers(self):
-        self.assertEqual(self.gauges(), ["12 AWG BLK"])
+        self.assertEqual(self.gauges(), ["12 AWG"])
         self.v.set_selection({self.w.id})
         self.v.run(C.WireSizeCmd)
         type_in(self.v, "10 awg")
         self.assertIsNone(self.v.cmd)
         self.assertEqual(self.now().awg, "10")
-        self.assertEqual(self.gauges(), ["10 AWG BLK"])
+        self.assertEqual(self.gauges(), ["10 AWG"])
         self.v.set_selection({self.w.id})
         self.v.run(C.WireSizeCmd)
         type_in(self.v, "L")
         self.assertEqual(self.now().awg, "")
-        self.assertEqual(self.gauges(), ["12 AWG BLK"])
+        self.assertEqual(self.gauges(), ["12 AWG"])
         self.p.undo()
         self.assertEqual(self.now().awg, "10")
 
@@ -148,7 +148,7 @@ class WireSizeTest(unittest.TestCase):
         self.assertIsNotNone(self.v.cmd)
         type_in(self.v, "250 mcm")
         self.assertEqual(self.now().awg, "250 kcmil")
-        self.assertEqual(self.gauges(), ["250 kcmil BLK"])           # (no "AWG" after kcmil)
+        self.assertEqual(self.gauges(), ["250 kcmil"])               # (no "AWG" after kcmil)
 
     def test_gauges_typed(self):
         g = C.wire_gauge
