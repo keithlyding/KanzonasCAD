@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.3
+
+**Fixed**
+- Tracking (Extension) now picks up a midpoint, a center or a quadrant you hover, as AutoCAD
+  does: hover the middle of a box's edge, move straight down, and text or a part centers under
+  it. Before, only ends, intersections, pins and insertion points were picked up, and Parallel
+  took the point.
+
 ## 0.18.2
 
 **New**

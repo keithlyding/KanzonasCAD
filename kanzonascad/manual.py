@@ -1004,8 +1004,10 @@ last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point)
 <b>Nearest</b> (NEA: the closest point on any object). And three that follow what the cursor
 has hovered over, as AutoCAD's tracking (a small green cross marks what was picked up):
 <b>Extension</b> (EXT: hover over a line's end, then move along the line past it: a dotted line
-follows it out; and, as AutoCAD's object snap tracking, hover over a wire's end, a pin or an
-intersection and the points straight across and straight up or down from it snap, first where
+follows it out; and, as AutoCAD's object snap tracking, hover over a wire's end, a pin, an
+intersection, a midpoint, a center or a quadrant and the points straight across and straight
+up or down from it snap (to center text under a box, hover the middle of the box's edge, then
+move straight down), first where
 that line meets the one you are drawing: draw a wire across, hover over another wire's end
 above, and the wire stops exactly under it; where such a line, or a line's extension, crosses
 a line, a wire or a circle, that crossing snaps too), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the

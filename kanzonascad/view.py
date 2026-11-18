@@ -83,6 +83,12 @@ def _local_parts(e, rect):
     return out
 
 
+# the snap points hovering picks up for tracking (Extension): a midpoint and a center too, as
+# AutoCAD's (the owner, 0.18.3, moving text to center it under the middle of a box: the box's
+# midpoint wasn't picked up, and Parallel took the point instead)
+ACQUIRED = ("end", "int", "node", "insert", "mid", "center", "quad", "gcen")
+
+
 class CadView(QWidget):
     promptChanged = Signal(str, list, bool)     # text, [(label, key)], typing
     messaged = Signal(str)
@@ -703,11 +709,12 @@ class CadView(QWidget):
         return (best[1], best[2])
 
     def _acquire(self):
-        """Hovering acquires what tracking follows (as AutoCAD's): the ends under an
-        Endpoint snap (for Extension), the line under the cursor (for Parallel)."""
+        """Hovering acquires what tracking follows (as AutoCAD's): the point under any
+        object snap (for Extension: in line with it), the ends under an Endpoint snap (their
+        extensions), the line under the cursor (for Parallel)."""
         modes = self.snap_modes()
         if "ext" in modes and self.snap is not None and \
-                self.snap[0] in ("end", "int", "node", "insert"):
+                self.snap[0] in ACQUIRED:
             # (a wire's end, a pin...: what is in line with it snaps, across and up or down)
             q0 = self.snap[1]
             if not any(G.dist(q0, t) < 1e-9 for t in self.track_pts):
