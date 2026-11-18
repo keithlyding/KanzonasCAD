@@ -19,6 +19,8 @@ build fails without them.
   printed.
 
 **Fixed**
+- Editing a wire duct's size (or maker) in its Properties window took its light hatch (the
+  mask, Panel settings) off it. It stays now.
 - A Move or Copy typed (@0,-0.5, say) with the object snaps on could go a different distance
   than typed, for the whole selection, when a footprint in it came over a DIN rail: the rail
   magnet pulled it. Typed points and distances now go exactly as typed; the magnet works for

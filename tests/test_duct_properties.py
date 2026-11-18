@@ -36,6 +36,24 @@ class DuctPropertiesTest(unittest.TestCase):
         self.assertIn("1.5 x 4", " ".join(r["size"] for r in materials.rows(self.p)))
         self.assertTrue(any("Wire duct, 1.5 x 4" in r["desc"] for r in bom.rows(self.p)))
 
+    def test_the_mask_stays(self):
+        # (0.18.2, the owner: "When I edit wire duct dimensions, and I have selected a mask
+        # for the project, the mask goes away on the edited duct")
+        with self.p.edit("masks") as ed:
+            for x in (self.a, self.b):
+                e = self.s.entities[x.id]
+                ed.change(self.s, e.copy(attrs=dict(e.attrs, HATCH="1", MFR="Panduit")))
+        d = RunPropertiesDialog(self.win, self.p, self.s.entities[self.a.id],
+                                [self.s.entities[self.b.id]])
+        d.width.setValue(1.57)
+        d.edits["MFR"].setText("")                      # (cleared: gone)
+        got = d.changed()
+        self.assertEqual(len(got), 2)
+        for new in got:
+            self.assertEqual(new.attrs.get("HATCH"), "1")
+            self.assertNotIn("MFR", new.attrs)
+            self.assertAlmostEqual(new.width, 1.57)
+
     def test_standard_size(self):
         d = RunPropertiesDialog(self.win, self.p, self.a)
         i = d.standard.findData(M.DUCT_SIZES.index((3, 4)))

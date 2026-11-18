@@ -1166,16 +1166,25 @@ class RunPropertiesDialog(QDialog):
             _n, w, d = M.RAIL_PROFILES[key]
         else:
             key, w, d = "", self.width.value(), self.depth.value()
-        attrs = {k: x.text().strip() for k, x in self.edits.items() if x.text().strip()}
+        typed = {k: x.text().strip() for k, x in self.edits.items()}
+
+        def kept(e):
+            # (its other attributes kept, the mask among them: HATCH, Panel settings; only
+            # what this window shows changed. The owner, 0.18.2: "When I edit wire duct
+            # dimensions, and I have selected a mask for the project, the mask goes away")
+            a = {k: v for k, v in e.attrs.items() if k not in typed}
+            a.update({k: v for k, v in typed.items() if v})
+            return a
         out = []
-        new = self.e.copy(size=key, width=w, depth=d, attrs=attrs, stock=self.stock.value())
+        new = self.e.copy(size=key, width=w, depth=d, attrs=kept(self.e),
+                          stock=self.stock.value())
         if abs(self.length.value() - self.e.length()) > 1e-9:
             new = new.with_length(self.length.value())
         if new.to_dict() != self.e.to_dict():
             out.append(new)
         if self.all is not None and self.all.isChecked():
             for o in self.others:
-                c = o.copy(size=key, width=w, depth=d, attrs=dict(attrs),
+                c = o.copy(size=key, width=w, depth=d, attrs=kept(o),
                            stock=self.stock.value())
                 if c.to_dict() != o.to_dict():
                     out.append(c)
