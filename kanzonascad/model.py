@@ -2383,7 +2383,21 @@ class Insert(Entity):
         for name, q, _ang, _a in self.attr_spots():
             if count[name] == 1 and name != "TAG":
                 out.append((name, q))
+        if d.role == "child" and not any(a["attr"] == "TERM" for a in d.attr_texts):
+            # where its cross-reference (its device's place, 2-E6) goes: dragged to a place of
+            # its own, or under it (xrefs.live_all); the owner, 0.19.2, "is there a way to
+            # edit the location of the cross reference ... I could put it inside of it"
+            out.append(("@XREF", self.xref_point()))
         return out
+
+    def xref_point(self):
+        """Where a contact's cross-reference is centered when dragged to a place of its own
+        (attr_at "@XREF", in the block's coordinates), else the middle of its underside."""
+        at = self.attr_at.get("@XREF")
+        if at:
+            return self.to_world(at[:2])
+        bb = self._compute_bbox()
+        return ((bb[0] + bb[2]) / 2.0, bb[1])
 
     def label_value(self, key=None):
         """What a footprint's label line for key says (its first one when None): "?" for an
