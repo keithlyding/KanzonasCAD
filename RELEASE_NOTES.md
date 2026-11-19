@@ -6,41 +6,32 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
-## 0.19.9
-
-**Fixed**
-- Copying, moving or pasting a symbol (a breaker, say) onto a wire now cuts the wire and lands
-  it on both of the symbol's terminals, as inserting it there does.
-- With A second wire on a pin leaves it on a 45-degree lead on, a jumper between two pins one
-  above the other (S11 to S52) now goes straight out, straight down and down the lead, instead
-  of running past the lead and back.
+## 0.19.10
 
 **New**
-- That lead is now 1/4 inch on paper (it was 1/8). On pins closer together it keeps off the
-  next pin's wire, going the other side or getting shorter.
-
-## 0.19.8
-
-**New**
+- Contact blocks for pushbuttons, emergency stops and selector switches (Library,
+  JIC/Pushbuttons and switches: Pushbutton contact NO/NC, Selector switch contact NO/NC): more
+  contacts of one operator on other rungs. Placed straight above or below it, they are joined to
+  it by a dashed line drawn by itself, which follows them when they move.
 - Bus can start from pins you pick one at a time: type P (Pick pins), click each pin (a safety
   relay's S52, S12, S21 and S22, say, skipping S11), and press Enter. The pins must be on one
   side of one symbol and evenly spaced.
-
-## 0.19.7
-
-**New**
 - A wire you draw from or onto another wire (a tap, or carrying it on) now goes on that wire's
   layer, so it has the same voltage, color and gauge, whatever layer is current. A wire that
   joins wires of two different layers stays on the current layer, and the command line warns
   you that it may tie two conductors together.
-
-## 0.19.6
-
-**New**
 - Changing a sheet's kind in Sheet properties (to Panel, say) while nothing is drawn on it now
   sets its scale to the project's scale for that kind. A sheet with a drawing keeps its scale.
 - The device under a source or destination arrow's reference now skips terminals and shows the
   device past them (PLC1 rather than TB1-12). A terminal with nothing past it still shows.
+- The 45-degree lead of a second wire on a pin is now 1/4 inch on paper (it was 1/8). On pins
+  closer together it keeps off the next pin's wire, going the other side or getting shorter.
+
+**Fixed**
+- Copying, moving or pasting a symbol (a breaker, say) onto a wire now cuts the wire and lands
+  it on both of the symbol's terminals, as inserting it there does.
+- With the 45-degree lead on, a jumper between two pins one above the other (S11 to S52) now
+  goes straight out, straight down and down the lead, instead of running past the lead and back.
 
 ## 0.19.5
 
