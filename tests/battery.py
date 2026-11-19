@@ -502,6 +502,10 @@ def mouse_drag(v, rnd):
         v.set_selection(set())
         return
     before = {i: s.entities[i].bbox() for i in v.sel}
+    # (a contact block dragged onto or off its operator's dashed line hides or shows its tag,
+    # 0.19.10, so its box changes size: its place is checked instead)
+    was_at = {i: (s.entities[i].pos, s.entities[i].hidden) for i in v.sel
+              if isinstance(s.entities[i], M.Insert)}
     w0, w1 = v.to_world(QPointF(start)), v.to_world(QPointF(end))
     d = (w1[0] - w0[0], w1[1] - w0[1])
     # wires and symbols with pins are dragged with Snap on, as they are drawn (a freehand drag
@@ -529,8 +533,19 @@ def mouse_drag(v, rnd):
         e = s.entities.get(i)
         assert e is not None, "a dragged object is gone"
         nb = e.bbox()
+        if i in was_at and isinstance(e, M.Insert) and e.hidden != was_at[i][1]:
+            pos, hid = was_at[i]
+            assert set(e.hidden) ^ set(hid) == {"TAG"} and e.defn is not None and \
+                e.defn.prefix in XR.LINKED, \
+                "dragging %s changed what it shows: %r to %r" % (e.block, hid, e.hidden)
+            assert all(abs(e.pos[k] - pos[k] - d[k]) <= tol + 1e-9 for k in range(2)), \
+                "dragged %s by %s, it moved %s" % (e.block, d, (e.pos[0] - pos[0],
+                                                                e.pos[1] - pos[1]))
+            BC.CHECKED["drag: a contact block's tag on or off its dashed line"] += 1
+            continue
         assert all(abs(nb[k] - b[k] - d[k % 2]) <= tol + 1e-9 for k in range(4)), \
-            "dragged %s by %s, it moved %s" % (e.kind, d, (nb[0] - b[0], nb[1] - b[1]))
+            "dragged %s by %s, it moved %s (its box %s to %s)" % (
+                e.kind, d, (nb[0] - b[0], nb[1] - b[1]), b, nb)
     BC.CHECKED["drag"] += 1
     v.set_selection(set())
 
