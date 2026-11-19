@@ -16,6 +16,12 @@ build fails without them.
   sheet, and on to another sheet now show the right places: the left ladder's foot shows the
   right ladder's head, and so on. A source with nothing after it yet shows "?".
 
+**New**
+- A destination arrow paired with List... or Pick on drawing now stays linked to that source
+  arrow: it shows that one, and follows it when its wire is renumbered, until you delete that
+  source arrow. Double-click a destination arrow to change it (Comes from) or set it back to
+  Automatic.
+
 ## 0.19.10
 
 **New**

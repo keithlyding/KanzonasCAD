@@ -3035,7 +3035,16 @@ class InsertCmd(Command):
         if not name:
             self.ctx.message("That one has no name yet: give it one first")
             return
-        self._place(self.pending, dict(self.attrs, TAG=name))
+        attrs = dict(self.attrs, TAG=name)
+        from .wirenums import ARROWS, link_to
+        if self.defn.name == ARROWS[1] and other.block == ARROWS[0]:
+            # (a destination keeps the very source arrow chosen, not only its name: renumbered,
+            # it follows it; only that arrow gone loses it, the owner, 0.19.11)
+            sh = next((x for x in self.ctx.project.sheets
+                       if x.entities.get(other.id) is other), None)
+            if sh is not None:
+                attrs["FROM"] = link_to(sh, other)
+        self._place(self.pending, attrs)
         self.ctx.message("Paired with %s %s" % (other.block.lower(), name))
 
     def _pick_pair_on_drawing(self, host):

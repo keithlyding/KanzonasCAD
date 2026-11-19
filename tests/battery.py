@@ -2088,6 +2088,16 @@ def random_editing(log, out, ops, seed, drawing=None):
             "a destination paired from the list took %r, not %r (was %r)" % (
                 got[0].attrs.get("TAG"), now and now.attrs["TAG"], want[1].attrs["TAG"]))
         BC.CHECKED["arrow paired as chosen"] += 1
+        # (0.19.11: linked to that very source arrow, and its cross-reference shows that one
+        # whatever the order of the others of its name)
+        cur = s.entities[got[0].id]
+        linked = WN.linked_source(p, cur)
+        assert linked is not None and linked[1] is now, \
+            "a destination paired from the list isn't linked to that source arrow"
+        pairs = XR.arrow_pairs(p, WN.connectors(p).get(cur.attrs["TAG"].strip().upper(), []))
+        assert [oc for _os, oc in pairs.get(id(cur), [])] == [now], \
+            "a linked destination is paired with another source"
+        BC.CHECKED["linked destination shows its source"] += 1
 
     def op_wire_color():
         # (0.18.4: Wire color label on the selected wires: on when any is off, else off;

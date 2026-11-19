@@ -477,10 +477,50 @@ def _assemble(project):
 
 
 # ---- numbering -------------------------------------------------------------------------------
+def link_to(sheet, src):
+    """A destination arrow's link to the source arrow it was paired with: "sheet id:id"."""
+    return "%s:%s" % (sheet.id, src.id)
+
+
+def linked_source(project, dest):
+    """(sheet, source arrow) a destination arrow was paired with by hand (its FROM: List..., Pick
+    on drawing, or Comes from in its attributes), or None: not linked, or that source arrow is
+    gone (the link is lost only with it; the owner, 0.19.11: "I would want it to be locked to
+    the wire I chose. And the only way it would lose it is if I deleted the wire")."""
+    got = (dest.attrs.get("FROM") or "").split(":")
+    if len(got) != 2:
+        return None
+    try:
+        sid, iid = int(got[0]), int(got[1])
+    except ValueError:
+        return None
+    sh = project.sheet_by_id(sid)
+    src = sh.entities.get(iid) if sh is not None else None
+    if src is None or getattr(src, "block", None) != ARROWS[0]:
+        return None
+    return sh, src
+
+
+def follow_links(ed, project):
+    """Destination arrows linked to a source arrow take its name (the wire's number), whatever
+    it becomes: a renumbered wire keeps its linked destinations."""
+    for s in project.sheets:
+        for d in list(s.inserts()):
+            if d.block != ARROWS[1] or not d.attrs.get("FROM"):
+                continue
+            got = linked_source(project, d)
+            if got is None:
+                continue
+            name = (got[1].attrs.get("TAG") or "").strip().upper()
+            if name and name != (d.attrs.get("TAG") or "").strip().upper():
+                ed.change(s, d.copy(attrs=dict(d.attrs, TAG=name)))
+
+
 def sync(ed, project, renumber=None):
     """Give every group its number (see the module's notes); renumber: a sheet (or several:
     Update numbers and cross-references, 0.18) whose
     unlocked groups are numbered again from 001."""
+    follow_links(ed, project)
     if not enabled(project):
         return
     gs, info, dist, tapped, conns = _assemble(project)
@@ -573,6 +613,7 @@ def sync(ed, project, renumber=None):
                 if w.num != num:
                     ed.change(s, w.copy(num=num, num_lock=w.num_lock and g in fixed))
     _follow_numbers(ed, conns, want)
+    follow_links(ed, project)
 
 
 def _follow_numbers(ed, conns, want):

@@ -148,7 +148,22 @@ def arrow_pairs(project, ends):
         return ga[1] is None or ga != gb
     out = {id(e): [] for _s, e in srcs + dsts}
     taken = set()
+    # (a destination linked by hand to a source arrow, first: that pair holds whatever the
+    # order, and that source takes no other one by itself)
+    from .wirenums import linked_source
+    by_id = {id(e): (s, e) for s, e in srcs}
+    spoken = set()
+    for d in dsts:
+        got = linked_source(project, d[1])
+        if got is not None and id(got[1]) in by_id:
+            sv = by_id[id(got[1])]
+            taken.add(id(d[1]))
+            spoken.add(id(sv[1]))
+            out[id(sv[1])].append(d)
+            out[id(d[1])].append(sv)
     for sv in srcs:
+        if id(sv[1]) in spoken:
+            continue
         free = [d for d in dsts if id(d[1]) not in taken and apart(sv, d)]
         after = [d for d in free if key(d) > key(sv)]
         # (only forward: a source with none after it waits ("?") rather than taking one
