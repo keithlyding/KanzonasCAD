@@ -66,11 +66,12 @@ class MakerFieldsTest(unittest.TestCase):
         lib.save_part(Part(manufacturer="Phoenix Contact", catalog="3044102"))
         self.assertEqual(lib.maker_values("manufacturer"),
                          ["Allen-Bradley", "Phoenix Contact", "Siemens"])
+        # (and the program's own Allen-Bradley POINT I/O modules, 0.19)
         self.assertEqual(lib.maker_values("family", "Allen-Bradley"),
-                         ["ControlLogix", "PowerFlex 525"])
+                         ["ControlLogix", "POINT I/O", "PowerFlex 525"])
         self.assertEqual(lib.maker_values("family", "Siemens"), ["SIMATIC S7-1500"])
         self.assertEqual(lib.maker_values("family"),
-                         ["ControlLogix", "PowerFlex 525", "SIMATIC S7-1500"])
+                         ["ControlLogix", "POINT I/O", "PowerFlex 525", "SIMATIC S7-1500"])
         self.assertEqual(lib.maker_values("series", "Allen-Bradley", "ControlLogix"), ["B"])
         self.assertEqual(lib.maker_values("series", "Siemens", "ControlLogix"), [])
         # the dialog's lists follow what is typed
@@ -165,10 +166,13 @@ class BlockWindowTest(unittest.TestCase):
         self.assertEqual([mf.itemText(i) for i in range(mf.count())],
                          ["All manufacturers", "Allen-Bradley", "Siemens"])
         mf.setCurrentIndex(mf.findData("Allen-Bradley"))
-        self.assertEqual(shown(), ["AB in", "AB out"])
+        # (with the program's own Allen-Bradley POINT I/O modules, 0.19)
+        from kanzonascad.symbols_jic import IO_MODULES
+        ours = ["%s module" % m[0] for m in IO_MODULES]
+        self.assertEqual(shown(), sorted(["AB in", "AB out"] + ours))
         ff = panel.family_filter
         self.assertEqual([ff.itemText(i) for i in range(ff.count())],
-                         ["All families", "CompactLogix", "ControlLogix"])
+                         ["All families", "CompactLogix", "ControlLogix", "POINT I/O"])
         ff.setCurrentIndex(ff.findData("ControlLogix"))
         self.assertEqual(shown(), ["AB out"])
         mf.setCurrentIndex(0)

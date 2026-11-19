@@ -1610,6 +1610,24 @@ def _paths_cross(paths):
     return False
 
 
+def _into_symbol(sheet, p, pin, way):
+    """Whether going way from pin (a pin at p of a symbol on sheet) heads into that symbol's
+    body: the side faces away from that way."""
+    for e in sheet.query_point(p, 1e-6):
+        if isinstance(e, M.Insert) and e.defn is not None and \
+                any(G.dist(q, p) <= 1e-6 for _n, q in e.pin_points()):
+            bb = None
+            for x in e.defn.entities:
+                bb = G.bbox_union(bb, x._map(e.to_world, rot=e.angle, factor=e.scale,
+                                             mirror=None).bbox())
+            if bb is None:
+                return False
+            c = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
+            inward = (c[0] - pin[0], c[1] - pin[1])
+            return inward[0] * way[0] + inward[1] * way[1] > 1e-9
+    return False
+
+
 def pin_side(sheet, p, tol=1e-6):
     """The pins of a symbol on one side of it, in a line through the pin at p and evenly
     spaced (a 3-pole device's L1, L2, L3; a VFD's T1-T3): ([world points] in the block's pin
@@ -2443,22 +2461,17 @@ class BusCmd(Command):
                     return "the bus turns too close to the pins for its spacing: click a " \
                         "point farther out first"
         a, b = main[-2], main[-1]
-        travel = (b[0] - a[0], b[1] - a[1])
-        for e in sheet.query_point(p, 1e-6):
-            if isinstance(e, M.Insert) and e.defn is not None and \
-                    any(G.dist(q, p) <= 1e-6 for _n, q in e.pin_points()):
-                bb = None
-                for x in e.defn.entities:
-                    bb = G.bbox_union(bb, x._map(e.to_world, rot=e.angle, factor=e.scale,
-                                                 mirror=None).bbox())
-                if bb is None:
-                    break
-                c = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
-                inward = (c[0] - pins[0][0], c[1] - pins[0][1])
-                if inward[0] * travel[0] + inward[1] * travel[1] < -1e-9:
-                    return "that side of it faces away from the bus (the wires would run " \
-                        "through it): come at it from the other side"
-                break
+        if _into_symbol(sheet, p, pins[0], (a[0] - b[0], a[1] - b[1])):
+            return "that side of it faces away from the bus (the wires would run " \
+                "through it): come at it from the other side"
+        # (and at its start: a bus leaving a symbol's pins into the symbol ran its wires
+        # through it, cut under it, and left its pins bare though it said it had landed, the
+        # long battery, 0.19, seed 3542)
+        if _into_symbol(sheet, main[0], main[0], (main[1][0] - main[0][0],
+                                                  main[1][1] - main[0][1])):
+            return "it leaves its first pins through their own symbol (that side faces away " \
+                "from where it goes): start from the symbol's other side, or click a point " \
+                "out from the pins first"
         return None
 
     def _why_not_landed(self, sheet, p):

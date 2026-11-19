@@ -189,6 +189,85 @@ def _terminal_block(name, terminals, prefix, description, width=2.25):
                 description=description)
 
 
+# ---- PLC I/O modules: the whole module, a terminal a rung ---------------------------------------
+# (the owner, 0.19: "generic plc i/o schematic symbols ... somewhat flexible (e.g., number of
+# points). Also, not all i/o is wired the same", 1734-IB8, OB8(E), IE8C and OE4C, from Rockwell's
+# wiring diagrams the owner sent; asked: one box for the whole module, as a 1756-IF16 drawn
+# "SLOT 7" with its terminals down one side, one a rung)
+IO_STEP = 0.5       # its terminals apart: a rung each (Bus's spacing to start)
+IO_W = 1.0          # the box's width
+IO_HEAD = 0.375     # from the box's top to its first terminal: room for its catalog number
+
+
+def _io_terminals(word, n, first=0):
+    """[(terminal, what it is)] of n points numbered from first: ("0", "IN 0")..."""
+    return [(str(first + i), "%s %d" % (word, i)) for i in range(n)]
+
+
+# Rockwell's POINT I/O terminal maps (terminal number: what it is), from their wiring diagrams.
+# The 1734-IB8 and 1734-OB8(E) bring their V and C through a 1734-VTM / CTM (or a TB3 base):
+# those are modules of their own here too.
+IO_MODULES = [
+    ("1734-IB8", "Allen-Bradley", "24V DC sinking input module, 8 points (POINT I/O)",
+     _io_terminals("IN", 8)),
+    ("1734-OB8", "Allen-Bradley", "24V DC sourcing output module, 8 points (POINT I/O)",
+     _io_terminals("OUT", 8)),
+    ("1734-OB8E", "Allen-Bradley",
+     "24V DC sourcing output module, electronically protected, 8 points (POINT I/O)",
+     _io_terminals("OUT", 8)),
+    ("1734-IE8C", "Allen-Bradley", "Analog current input module, 8 channels (POINT I/O)",
+     _io_terminals("IN", 8)),
+    ("1734-OE4C", "Allen-Bradley", "Analog current output module, 4 channels (POINT I/O)",
+     _io_terminals("OUT", 4) + [("4", "C"), ("5", "C"), ("6", "V"), ("7", "V")]),
+    ("1734-VTM", "Allen-Bradley", "Voltage terminal module: V (12/24V DC) on all 8 terminals "
+     "(POINT I/O)", [(str(i), "V") for i in range(8)]),
+    ("1734-CTM", "Allen-Bradley", "Common terminal module: C on all 8 terminals (POINT I/O)",
+     [(str(i), "C") for i in range(8)]),
+]
+# any make: a digital or analog module of 4, 8 or 16 points (Edit block renames its terminals)
+IO_GENERIC = [(kind, word, n) for kind, word in (("digital input", "IN"),
+                                                 ("digital output", "OUT"),
+                                                 ("analog input", "IN"),
+                                                 ("analog output", "OUT"))
+              for n in (4, 8, 16)]
+
+
+def io_module(name, terminals, description, catalog="", maker="", family=""):
+    """A PLC I/O module drawn whole: a box with its catalog number at the top and its terminals
+    down its left side, one a rung (IO_STEP apart), each a pin with its number and what it is
+    ("0  IN 0"); its tag above, its slot (SLOT) over the catalog number. A device of its own
+    (PLC prefix) whose points (PLC input, PLC output) can belong to it."""
+    o, pins = [], []
+    n = len(terminals)
+    top = IO_HEAD
+    bottom = -(n - 1) * IO_STEP - IO_STEP / 2
+    o.append(_box(0.0, bottom, IO_W, top))
+    if catalog:
+        o.append(Text((IO_W / 2, top - 0.2), catalog, 0.08, align="center"))
+    for i, (num, what) in enumerate(terminals):
+        y = -i * IO_STEP
+        o.append(Line((-PIN, y), (-0.03125, y)))
+        o.append(Circle((0.0, y), 0.03125))
+        o.append(Text((0.08, y - 0.03), "%s  %s" % (num, what), 0.07))
+        pins.append({"name": num, "pos": (-PIN, y)})
+    attrs = [{"attr": "SLOT", "pos": (IO_W / 2, top + 0.06), "height": 0.08}]
+    return BlockDef(name, "symbol", o, pins, (IO_W / 2, top + 0.22), 0.1, "JIC/PLC",
+                    description, "parent", "", "PLC", builtin=True, attr_texts=attrs,
+                    manufacturer=maker, family=family, catalog=catalog)
+
+
+def io_modules():
+    """The PLC I/O modules: Rockwell POINT I/O ones by catalog number, and generic ones."""
+    out = [io_module("%s module" % cat, terms, desc, cat, maker, "POINT I/O")
+           for cat, maker, desc, terms in IO_MODULES]
+    for kind, word, n in IO_GENERIC:
+        out.append(io_module("PLC %s module, %d points" % (kind, n),
+                             _io_terminals(word, n),
+                             "A PLC %s module of %d points, drawn whole (any make: Edit block "
+                             "renames its terminals)" % (kind, n)))
+    return out
+
+
 def builtin_symbols():
     S = []
     # ---- relays, contactors, timers ------------------------------------------------------
@@ -462,6 +541,7 @@ def builtin_symbols():
                   [{"name": "OUT", "pos": (PIN, 0)}], tag=(-0.25, 0.14),
                   description="PLC output point (its address: double-click, ADDR)",
                   attr_texts=[{"attr": "ADDR", "pos": (-0.25, -0.17), "height": 0.07}]))
+    S += io_modules()
     # ---- wiring ---------------------------------------------------------------------------
     # terminals belong to a terminal strip (TB601) and number themselves 1, 2, 3 on it
     o = [_box(-0.375, -0.125, 0.375, 0.125), Text((0, -0.03), "TERMINALS", 0.07,

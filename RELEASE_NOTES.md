@@ -6,6 +6,22 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19
+
+**New**
+- PLC I/O modules drawn whole (Library, JIC/PLC): a box with the catalog number at the top
+  and the terminals down the left, one a rung, each with its number and what it is
+  ("0  IN 0"); wires land on them and keep their own numbers. Its slot shows over the catalog
+  number. Rockwell POINT I/O as their wiring diagrams give: 1734-IB8, OB8, OB8E, IE8C, OE4C,
+  VTM and CTM. For other makes, generic digital and analog input and output modules of 4, 8
+  or 16 points (Edit block renames their terminals). They go on the Bill of materials with
+  their catalog number.
+
+**Fixed**
+- A bus started on a symbol's pins and taken back through that same symbol (from a
+  disconnect's L side toward another to its right, say) no longer claims to land with its
+  wires cut under the symbol: it says why, and how to start it from the other side.
+
 ## 0.18.7
 
 **New**

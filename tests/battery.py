@@ -586,7 +586,9 @@ def random_editing(log, out, ops, seed, drawing=None):
     syms = ["Contact NO", "Contact NC", "Relay coil", "Pushbutton NO", "Pushbutton NC",
             "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC",
             "Disconnect 3-pole", "Fuses 3-pole", "Circuit breaker 3-pole",
-            "Fused disconnect 3-pole", "Starter 3-pole", "Drive control terminals"]
+            "Fused disconnect 3-pole", "Starter 3-pole", "Drive control terminals",
+            # (0.19: PLC I/O modules drawn whole, a terminal a rung)
+            "1734-IB8 module", "1734-OE4C module", "PLC digital output module, 16 points"]
     syms = [n for n in syms if lib.get("symbol", n) is not None]
     start = norm(p.to_dict())
     counts = {}
@@ -3081,6 +3083,11 @@ def mixed_project(win):
             v.input_text("")
     v.run(C.InsertCmd, lib.get("symbol", "Circuit breaker 3-pole"), {"TAG": "CB1"})
     type_in(v, "3,2")
+    # (0.19) a PLC I/O module drawn whole, its slot shown
+    v.run(C.InsertCmd, lib.get("symbol", "1734-IB8 module"), {"TAG": "PLC1", "SLOT": "2"})
+    type_in(v, "20,8")
+    while v.cmd is not None:
+        v.cmd.enter()
     # (0.17.5) a motor with its ratings, one hidden, one and its tag turned
     v.run(C.InsertCmd, lib.get("symbol", "Motor 3-phase"), {"TAG": "MTR1"})
     type_in(v, "6,2")
