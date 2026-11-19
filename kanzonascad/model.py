@@ -57,6 +57,9 @@ DEFAULT_SETTINGS = {
     "text_height": 0.125,       # new text
     "tag_height": 0.1,          # device tags on symbols
     "fp_label_height": 0.08,    # what footprints show on them, paper inches (0.1 before 0.18.1)
+    "fp_label_color": "",       # their color ("": the footprint's; the owner, 0.18.7: a
+                                # footprint on layer 0 is white, "I want the tagname to be
+                                # discernible")
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
@@ -2147,10 +2150,11 @@ class Insert(Entity):
     commas: label_keys)."""
     kind = "insert"
     __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "label",
-                 "hidden", "attr_at", "attr_rot", "_world", "_body")
+                 "hidden", "attr_at", "attr_rot", "label_color", "_world", "_body")
 
     def __init__(self, block, pos, angle=0.0, scale=1.0, mirror=False, attrs=None, defn=None,
-                 tag_h=None, label="", hidden=(), attr_at=None, attr_rot=None, **kw):
+                 tag_h=None, label="", hidden=(), attr_at=None, attr_rot=None, label_color=None,
+                 **kw):
         super().__init__(**kw)
         self.block = str(block)
         self.pos = _pt(pos)
@@ -2172,6 +2176,8 @@ class Insert(Entity):
         # attributes"): {name: degrees in the block's own coordinates}, so it turns with the
         # block afterward, as in AutoCAD; one not listed is drawn as its block says
         self.attr_rot = {str(k): float(v) % 360.0 for k, v in (attr_rot or {}).items()}
+        # a footprint's label color (Panel settings: Footprint label color), None: its own
+        self.label_color = str(label_color) if label_color else None
         self._world = None
         self._body = None                   # (its drawing's box: wires.body_box)
 
@@ -2190,6 +2196,8 @@ class Insert(Entity):
             d["attr_at"] = {k: list(v) for k, v in self.attr_at.items()}
         if self.attr_rot:
             d["attr_rot"] = dict(self.attr_rot)
+        if self.label_color:
+            d["label_color"] = self.label_color
         return d
 
     @classmethod
@@ -2197,7 +2205,8 @@ class Insert(Entity):
         return cls(d["block"], d["pos"], d.get("angle", 0.0), d.get("scale", 1.0),
                    d.get("mirror", False), d.get("attrs", {}), blocks.get(d["block"]),
                    d.get("tag_h"), d.get("label", ""), d.get("hidden", ()), d.get("attr_at"),
-                   d.get("attr_rot"), layer=d.get("layer", "0"), color=d.get("color"), id=d.get("id"))
+                   d.get("attr_rot"), d.get("label_color"), layer=d.get("layer", "0"),
+                   color=d.get("color"), id=d.get("id"))
 
     def copy(self, **changes):
         d = self.to_dict()
@@ -2430,6 +2439,7 @@ class Insert(Entity):
         """The block's content placed on the sheet, plus the tag text."""
         if self._world is None:
             out = []
+            labels = []
             d = self.defn
             if d is None:
                 # its block is missing from the project: show an X where it sits
@@ -2444,7 +2454,8 @@ class Insert(Entity):
                         w = _mirror_fix(e, w, self)
                     out.append(w)
                 if d.kind == "footprint":
-                    out += [t for _k, t in self.label_texts()]
+                    labels = [t for _k, t in self.label_texts()]
+                    out += labels
                 else:
                     t = self.tag_text()
                     if t is not None:
@@ -2460,6 +2471,9 @@ class Insert(Entity):
                 w.layer = self.layer
                 if not keep:
                     w.color = self.color
+            if self.label_color:
+                for w in labels:
+                    w.color = self.label_color
             self._world = out
         return self._world
 
@@ -3234,6 +3248,12 @@ class Edit:
                     if isinstance(e, Insert) and e.label:
                         # a footprint's label: paper-sized, its own height (0.18.1)
                         self.change(s, e.copy(tag_h=float(after["fp_label_height"]) * s.k()))
+        if after.get("fp_label_color", "") != before.get("fp_label_color", ""):
+            for s in p.sheets:
+                for e in list(s.entities.values()):
+                    if isinstance(e, Insert) and e.defn is not None and \
+                            e.defn.kind == "footprint":
+                        self.change(s, e.copy(label_color=after["fp_label_color"] or None))
 
     def block(self, defn):
         """Put a block definition in the project (or replace the one of that name); block
@@ -3615,6 +3635,21 @@ class _EditContext:
                 if op[0] == "ent":
                     kinds.add((op[3] or {}).get("kind"))
                     kinds.add((op[4] or {}).get("kind"))
+            if "insert" in kinds:
+                # footprints added or changed any way (placed, pasted, imported, updated
+                # from the library): their labels in the color Panel settings gives (0.18.7)
+                want = self.ed.project.settings.get("fp_label_color") or None
+                seen = set()
+                for op in list(self.ed.ops):
+                    if op[0] != "ent" or (op[4] or {}).get("kind") != "insert" or \
+                            (op[1], op[2]) in seen:
+                        continue
+                    seen.add((op[1], op[2]))
+                    s = self.ed.project.sheet_by_id(op[1])
+                    e = s.entities.get(op[2]) if s is not None else None
+                    if e is not None and e.defn is not None and e.defn.kind == "footprint" \
+                            and e.label_color != want:
+                        self.ed.change(s, e.copy(label_color=want))
             if sheets or "insert" in kinds or "dashbox" in kinds:
                 # a device added, removed or retagged: its contacts (and dashed boxes) show
                 # its tag

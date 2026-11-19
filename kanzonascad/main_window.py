@@ -716,20 +716,24 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
         ])
         # schematic and panel work, both always there (any sheet can hold either)
+        # Schematic and Panel laid out alike (the owner, 0.18.7: "make the things that both
+        # the schematic and the panel tabs have in common in the same general location and
+        # look and feel"): what you draw first, then placing parts (the same buttons in the same
+        # order), Modify, Dimensions; the tab's own groups; then Parts, Layers and Settings at
+        # the right end
         r.add_tab("Schematic", [
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"], a["dash_box"]]),
+            # (the owner, 0.18: "0.17.4's schematic ribbon goes off the screen. Block
+            # properties should generally only be visible when editing/creating a block":
+            # Edit block here, the rest on the Block tab; a tab too wide for the window
+            # shows its groups' buttons small, from the right: Ribbon.fit)
+            ("Symbols", "small", [a["insert_symbol"], a["make_block"], a["edit_block"],
+                                  a["explode"], a["attr_vis"], a["del_comp"]]),
             # (the owner: "Copy is not included in schematic and needs to be")
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["stretch"],
                                  a["erase"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
                                       a["dim_units"]]),
-            # (the owner, 0.18: "0.17.4's schematic ribbon goes off the screen. Block
-            # properties should generally only be visible when editing/creating a block":
-            # Edit block here, the rest on the Block tab; a tab too wide for the window
-            # shows its groups' buttons small, from the right: Ribbon.fit)
-            ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["edit_block"],
-                                  a["explode"], a["attr_vis"], a["del_comp"]]),
-            ("Parts", "large", [a["new_part"]]),
             ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["wire_size"], a["wire_color"],
                                      a["del_wire"], a["del_dot"], a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
@@ -737,24 +741,28 @@ class MainWindow(BlockEditing, QMainWindow):
                                     a["num_source"]]),
             ("Cross-references", "large", [a["sig_arrows"], a["xref_update"], a["xref_freeze"],
                                            a["xref_auto"]]),
+            ("Parts", "small", [a["new_part"]]),
             ("Layers", "small", [self.sch_layer_box, self.sch_layer_states, a["layers"],
-                                 a["wire_layers"], a["object_color"], a["lay_off"],
-                                 a["lay_on"]]),
-            ("Settings", "large", [a["schematic_settings"]]),
+                                 a["object_color"], a["lay_off"], a["lay_on"],
+                                 a["wire_layers"]]),
+            ("Settings", "small", [a["schematic_settings"]]),
         ])
         r.add_tab("Panel", [
-            ("Footprints", "large", [a["insert_footprint"], a["make_block"], a["edit_block"],
+            ("Rail and duct", "large", [a["rail"], a["duct"]]),
+            ("Footprints", "small", [a["insert_footprint"], a["make_block"], a["edit_block"],
                                      a["explode"], a["attr_vis"],
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
-            ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
-            ("Real size", "small", [a["scale"], a["sheet_scale"]]),
+            ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["stretch"],
+                                 a["erase"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
                                       a["dim_units"]]),
-            ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
+            ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Arrange", "large", [a["align_obj"], a["distribute"]]),
-            ("Parts", "small", [a["new_part"], a["panel_settings"]]),
+            ("Reports", "large", [a["materials"]]),
+            ("Parts", "small", [a["new_part"]]),
             ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
+            ("Settings", "small", [a["panel_settings"]]),
         ])
         r.add_tab("Sheets", [
             ("Sheets", "large", [a["sheet_add"], a["sheet_dup"], a["sheet_del"]]),
@@ -2134,10 +2142,26 @@ class MainWindow(BlockEditing, QMainWindow):
     # ---- sheets ----------------------------------------------------------------------------
     def _fill_sheets(self):
         lst = self.sheet_list
+        v = self.view()
+        want = [] if v is None else [
+            ("%s   %s%s" % (v.project.sheet_number(s), s.title or "(untitled)",
+                            "" if s.kind == "schematic" else "  [%s]" % M.SHEET_KINDS[s.kind]),
+             s.id) for s in v.project.sheets]
+        have = [(lst.item(i).text(), lst.item(i).data(Qt.UserRole)) for i in range(lst.count())]
+        if want and want == have:
+            # (nothing to rebuild, only the highlight to move: a list rebuilt under the mouse
+            # loses the second click of a double-click, and Sheet properties never opened,
+            # the owner, 0.18.7)
+            lst.blockSignals(True)
+            for i in range(lst.count()):
+                if lst.item(i).data(Qt.UserRole) == v.sheet_id and \
+                        lst.currentItem() is not lst.item(i):
+                    lst.setCurrentItem(lst.item(i))
+            lst.blockSignals(False)
+            return
         lst.blockSignals(True)
         picked = set(self.selected_sheet_ids())
         lst.clear()
-        v = self.view()
         if v is not None:
             p = v.project
             items = []

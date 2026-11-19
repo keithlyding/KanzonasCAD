@@ -526,6 +526,20 @@ def project_properties(parent, project, tab=0):
     fp_h.setToolTip("How tall what footprints show on them is, on paper (every footprint in "
                     "the project)")
     form.addRow("Footprint label height (on paper)", fp_h)
+    # (the owner, 0.18.7: footprints are mostly on layer 0, white: "I want the tagname to be
+    # discernible")
+    fp_c_on = QCheckBox("In a color of their own:")
+    fp_c_on.setObjectName("fp_label_color_on")
+    fp_c_on.setChecked(bool(st.get("fp_label_color")))
+    fp_c = _color_button(st.get("fp_label_color") or "#00ffff")
+    fp_c.setObjectName("fp_label_color")
+    fp_c.setToolTip("What footprints show on them (tag, part number...) in this color on "
+                    "every footprint, whatever the footprint's own color; unticked, the "
+                    "footprint's")
+    row_c = QHBoxLayout()
+    row_c.addWidget(fp_c_on)
+    row_c.addWidget(fp_c, 1)
+    form.addRow("Footprint label color", row_c)
     stocks = {}
     for key, label in (("rail_stock", "DIN rail bought in lengths of"),
                        ("duct_stock", "Wire duct bought in lengths of")):
@@ -593,6 +607,8 @@ def project_properties(parent, project, tab=0):
     settings["duct_hatch"] = hatch.isChecked()
     settings["xref_height"] = xref_h.value()
     settings["fp_label_height"] = fp_h.value()
+    settings["fp_label_color"] = fp_c.color if fp_c_on.isChecked() and fp_c.color not in (
+        None, M.ADAPTIVE) else ""
     settings["dim_height"] = dim_h.value()
     settings["dim_units"] = dim_u.currentData()
     for key, b in stocks.items():

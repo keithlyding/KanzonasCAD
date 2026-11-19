@@ -2086,6 +2086,22 @@ def random_editing(log, out, ops, seed, drawing=None):
                     "showing" if got.show_color else "hiding")
         BC.CHECKED["wire color label as asked"] += 1
 
+    def op_fp_label_color():
+        # (0.18.7: Panel settings, Footprint label color: every footprint's labels take it, or
+        # their footprint's color again when it's off; undone with the rest)
+        want = rnd.choice(["", "#00ffff", "#ffff00"])
+        with p.edit("Footprint label color") as ed:
+            ed.project_settings({"fp_label_color": want})
+        for sh in p.sheets:
+            for e in sh.inserts():
+                if e.defn is not None and e.defn.kind == "footprint":
+                    assert (e.label_color or "") == want, \
+                        "a footprint's labels are %r, the setting %r" % (e.label_color, want)
+                    if want and e.label_texts():
+                        assert {w.color for w in e.world_entities() if isinstance(w, M.Text)
+                                and w.text in {t.text for _k, t in e.label_texts()}} == {want}
+                    BC.CHECKED["footprint label color as set"] += 1
+
     def op_dim_units():
         # (0.18.4: Dimension units on the selected dimensions, D, F or a precision typed; new
         # dimensions as the project says, now and then changed; each reads its true length in
@@ -2848,7 +2864,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

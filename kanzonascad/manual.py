@@ -20,7 +20,10 @@ and reports come next.</i></p>
 <b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>, and
 <b>Block</b> while you edit a block; each
 group of buttons has its name under it (Rail and duct, Dimensions, Numbering...). Move, Copy,
-Rotate, Mirror and Erase are on the Schematic and Panel tabs too (Modify), not only Home. Double-click a
+Rotate, Mirror, Stretch and Erase are on the Schematic and Panel tabs too (Modify), not only Home.
+The Schematic and Panel tabs are laid out alike: what you draw first (Wire and Bus; DIN rail and
+Wire duct), then placing parts (Symbols; Footprints: the same buttons in the same order), Modify,
+Dimensions, the tab's own groups, and Parts, Layers and Settings at the right end. Double-click a
 tab name (or <b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
 <b>Ribbon group names</b> (View) turns the names off, for a more compact ribbon, and on
 again. When the window is too narrow for a tab, its groups shrink from the right: big
@@ -153,7 +156,7 @@ are on one layer with one size.</p>
 it (the box shows their layer, empty when they are on several); with nothing selected it
 becomes the current layer. A hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
-Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the layer box, the layer list,
+Locked, color, current layer). Quicker, on the Home tab's Layers group (the Schematic and Panel tabs have the layer box, the layer list,
 Layers..., Color, Hide layer and Show all too) and the Modify menu:</p>
 <ul>
 <li>The <b>layer list</b> button next to the current layer: every layer with its light bulb
@@ -1221,6 +1224,9 @@ block's label spot, set in Edit block), turned up the page or reading from the r
 part is turned. Each shown line has a grip: select the footprint and drag a line's grip to put
 that line anywhere; it then stays there on the part, moving and turning with it. They are
 <b>0.08"</b> tall on paper to start: Panel settings, <b>Footprint label height</b>, sets it
+(and <b>Footprint label color</b>, <b>In a color of their own</b>, draws them in a color of
+their own on every footprint, so a tag stays readable on a white footprint on layer 0;
+unticked, they take the footprint's color)
 for every footprint in the project (projects made before 0.18.1 take 0.08" when opened; their
 labels were the tag height). An empty tag or description shows "?"; an empty rating shows no
 line. It prints and goes into PDF and DXF exports. Changing the tag, part number or
@@ -1271,7 +1277,7 @@ the stock lengths to buy (Panel materials has their cuts). The lines are numbere
 leader's balloon (Leader, B) can show a part's item number on the panel. <b>Save as
 CSV...</b> writes it for a spreadsheet or a purchase order. Give parts their manufacturer and
 catalog number by double-clicking them, or through a part from the library.</li>
-<li><b>Panel materials...</b> (Panel tab) lists the project's rail and duct per size and part:
+<li><b>Panel materials...</b> (Panel tab: Reports) lists the project's rail and duct per size and part:
 the pieces and their cut lengths, the total length, and how many stock lengths that takes
 (the cuts packed into stock lengths, longest first; saw cuts take no width). <b>Save as
 CSV...</b> writes it for a spreadsheet or a purchase order. The bill of materials takes it

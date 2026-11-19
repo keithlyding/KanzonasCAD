@@ -6,6 +6,21 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.7
+
+**New**
+- Footprint labels (tag, part number...) in a color of their own: Panel settings, Footprint
+  label color. A tag stays readable on a white footprint on layer 0.
+- The Schematic and Panel tabs are laid out alike: drawing first, then Symbols or Footprints
+  (the same buttons in the same order), Modify, Dimensions, the tab's own tools, and Parts,
+  Layers and Settings at the right end. Stretch is on the Panel tab too.
+
+**Fixed**
+- Double-clicking a sheet in the Sheets list opens its Sheet properties again: the first
+  click rebuilt the list under the mouse and the second click was lost.
+- Wire numbering's tap bookkeeping no longer depends on which wire it looks at first when two
+  wire ends are a hair apart.
+
 ## 0.18.6
 
 **New**

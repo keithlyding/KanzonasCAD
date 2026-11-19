@@ -179,13 +179,20 @@ def _adjacent(sheet, w, split_taps=False, tapped_out=None):
         for p in pts:
             tw = (_same_pt(p, w.points[0]) or _same_pt(p, w.points[-1])) and apart(w, p, o)
             to = (_same_pt(p, o.points[0]) or _same_pt(p, o.points[-1])) and apart(o, p, w)
+            # (kept at the tap's own end, not the point as the other wire has it: the two
+            # can differ by a hair, and which is seen first depends on the order, seed 44)
             if tw and tapped_out is not None:
-                _note_tap(tapped_out, (w.id, o.id), p)
+                _note_tap(tapped_out, (w.id, o.id), _own_end(w, p))
             if to and tapped_out is not None:
-                _note_tap(tapped_out, (o.id, w.id), p)
+                _note_tap(tapped_out, (o.id, w.id), _own_end(o, p))
             if not tw and not to:
                 out.add(o.id)
     return out
+
+
+def _own_end(w, p):
+    """w's end at p (within TOL)."""
+    return w.points[0] if _same_pt(p, w.points[0]) else w.points[-1]
 
 
 def _note_tap(found, k, p):
@@ -412,7 +419,7 @@ def _assemble(project):
     """Local groups joined across sheets by off-sheet connectors: {group key: [(sheet,
     [wires])]}, {group key: [home order, page sheet, numbers, locked]}, distribution links,
     taps [(tapped group, tap group, (sheet index, sort key))], off-sheet connectors {name:
-    [group key or None, [(sheet, connector id, block name)]]}."""
+    [group key or None, [(sheet, connector id, block name, on a wire)]]}."""
     u = _Union()
     names = {}
     named = {}
@@ -425,7 +432,7 @@ def _assemble(project):
         for name, r in links:
             names.setdefault(name, []).append((s.id, r))
         for name, iid, block, rs in ins_named:
-            named.setdefault(name, []).append((s, iid, block))
+            named.setdefault(name, []).append((s, iid, block, bool(rs)))
             if block == ARROWS[0]:
                 for r in rs:
                     if r in local:
@@ -576,7 +583,8 @@ def _follow_numbers(ed, conns, want):
     moves = {}
     for name, (g, ends) in conns.items():
         num = (want.get(g) or "").strip().upper() if g is not None else ""
-        if num and num != name and any(b == ARROWS[0] for _s, _i, b in ends):
+        # (a source arrow on a wire of its own: one on nothing has no number to follow)
+        if num and num != name and any(b == ARROWS[0] and on for _s, _i, b, on in ends):
             moves[name] = num
     if not moves:
         return
@@ -586,7 +594,7 @@ def _follow_numbers(ed, conns, want):
     for name, num in moves.items():
         if len(claimed[num]) > 1 or (num in conns and num not in moves):
             continue
-        for s, iid, _b in conns[name][1]:
+        for s, iid, _b, _on in conns[name][1]:
             ins = s.entities.get(iid)
             if ins is not None:
                 ed.change(s, ins.copy(attrs=dict(ins.attrs, TAG=num)))
