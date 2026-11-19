@@ -196,7 +196,12 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
       the owner's AutoCAD Electrical before going further.
     - Tested by reading the export back (ezdxf: blocks, inserts, attributes match the
       drawing) and by the owner opening it in AutoCAD.
-12. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
+12. PLC I/O (0.19 started it: whole-module boxes, Rockwell POINT I/O 1734-IB8/OB8/OB8E/IE8C/
+    OE4C/VTM/CTM and generic 4/8/16-point modules; the owner asked for one box per module, as
+    a 1756-IF16 "SLOT 7" with its terminals down one side, one a rung). Still to come: a
+    module continued on the next sheet ("SLOT 7 CONTINUED"), modules with two terminals a
+    channel (IN/RTN), more catalogs as the owner sends their wiring diagrams.
+13. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions

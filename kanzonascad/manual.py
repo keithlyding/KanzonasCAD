@@ -795,6 +795,20 @@ lists where its terminals are.</li>
 <li><b>PLC input</b> and <b>PLC output</b> points belong to a <b>PLC I/O card</b> the same
 way, and list under it; double-click a point to type its <b>address</b> (I:0/3, %I0.3...),
 shown under it.</li>
+<li><b>PLC I/O modules</b>, drawn whole (Library, JIC/PLC): a box with the module's catalog
+number at the top and its terminals down its left side, one a rung (1/2" apart), each a pin
+with its terminal number and what it is (<b>0  IN 0</b>); wires land on the left and each
+point keeps its own wire number. Its tag goes above (PLC prefix: PLC601), and its
+<b>SLOT</b> (double-click it, type 3) over the catalog number. Rockwell POINT I/O, as their
+wiring diagrams give: <b>1734-IB8</b> (inputs 0-7), <b>1734-OB8</b> and <b>1734-OB8E</b>
+(outputs 0-7), <b>1734-IE8C</b> (current inputs 0-7), <b>1734-OE4C</b> (outputs 0-3, C on 4
+and 5, V on 6 and 7), and the <b>1734-VTM</b> and <b>1734-CTM</b> that bring V and C to the
+IB8 and OB8 (all eight terminals V, or C). For any other make, <b>PLC digital input</b>,
+<b>digital output</b>, <b>analog input</b> and <b>analog output module</b> of 4, 8 or 16
+points: <b>Edit block...</b> renames their terminals to match the module, and Save block as
+keeps it in your library under its own name. Each carries its manufacturer and catalog
+number, so the Bill of materials lists it; PLC input and output points can belong to it as to
+a PLC I/O card. To put the terminals on the right, Mirror it.</li>
 </ul>
 
 <h2>Wire numbers</h2>
