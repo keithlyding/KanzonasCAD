@@ -86,6 +86,12 @@ DEFAULT_SETTINGS = {
     # source and destination arrows show the device at their wire's other end under their
     # reference; a sheet (Sheet properties) or an arrow (its attributes) can say otherwise
     "xref_device": True,
+    # the scale a new sheet starts at, by its kind (paper / real, its preset's name or ""):
+    # panel sheets theirs, every other kind the schematic one; a sheet's own scale (Sheet
+    # scale, Sheet properties) is its own afterward (the owner, 0.19.4: "a project default
+    # for scale, which can be overridden on individual sheets"; new sheets only)
+    "scale_schematic": [1.0, ""],
+    "scale_panel": [1.0, ""],
     "tb_position": "corner",    # the title block: in the lower right corner, or a strip down
                                 # the right ("right") or along the bottom ("bottom") that the
                                 # zone grid stops at
@@ -3334,13 +3340,27 @@ class Project:
         self.revision = 0           # counts the changes (edits, undo, redo): the views keep a
                                     # picture of the drawing until it moves on
 
-    def make_sheet(self, title=""):
-        """A new sheet laid out as the project says (not yet in the project)."""
+    def make_sheet(self, title="", kind="schematic"):
+        """A new sheet laid out as the project says (not yet in the project): its size, zones,
+        and the scale for its kind."""
         st = self.settings
         s = Sheet(title=title, size=st["size"], cols=st["cols"], rows=st["rows"],
                   col_start=st["col_start"], row_start=st["row_start"])
         s.reserve = self.reserve()
+        s.kind = kind if kind in SHEET_KINDS else "schematic"
+        s.scale, s.scale_name = self.default_scale(s.kind)
         return s
+
+    def default_scale(self, kind):
+        """(paper / real, preset name) a new sheet of this kind starts at: panel sheets the
+        panel one, every other kind the schematic one; 1:1 when the setting can't be read."""
+        got = self.settings.get("scale_panel" if kind == "panel" else "scale_schematic")
+        try:
+            k = float(got[0])
+            name = str(got[1] or "") if len(got) > 1 else ""
+        except (TypeError, ValueError, IndexError):
+            return 1.0, ""
+        return (k, name) if k > 0 else (1.0, "")
 
     @classmethod
     def new(cls):

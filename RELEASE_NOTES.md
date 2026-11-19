@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.4
+
+**New**
+- Set the scale new sheets start at for the whole project: New panel sheets' scale (Panel
+  settings) and New sheets' scale for schematic sheets (Schematic settings). Each sheet can
+  still have its own scale (Sheet scale, the status bar, Sheet properties); sheets you already
+  made keep theirs.
+
 ## 0.19.3
 
 **New**

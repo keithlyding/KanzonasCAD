@@ -2625,8 +2625,31 @@ def random_editing(log, out, ops, seed, drawing=None):
             win._set_scale(name, val)
 
     def op_new_sheet():
-        if len(p.sheets) < 6:
-            win.add_sheet()
+        if len(p.sheets) >= 6:
+            return
+        # (0.19.4: a new sheet starts at the project's scale for its kind, Project properties;
+        # the sheets already made keep theirs)
+        if rnd.random() < 0.3:
+            pick = rnd.choice(M.SCALE_PRESETS)
+            with p.edit("New sheets' scale") as ed:
+                ed.project_settings({rnd.choice(["scale_schematic", "scale_panel"]):
+                                     [pick[1], pick[0]]})
+        kept = {sh.id: (sh.scale, sh.scale_name) for sh in p.sheets}
+        n = len(p.sheets)
+        win.add_sheet()
+        new = [sh for sh in p.sheets if sh.id not in kept]
+        assert len(p.sheets) == n + 1 and len(new) == 1, "New sheet didn't add one sheet"
+        sh = new[0]
+        key = "scale_panel" if sh.kind == "panel" else "scale_schematic"
+        want = tuple(p.settings.get(key) or (1.0, ""))
+        assert (sh.scale, sh.scale_name) == (float(want[0]), want[1]), (
+            "a new %s sheet is at %r, the project's %r" % (sh.kind, (sh.scale, sh.scale_name),
+                                                           want))
+        for other in p.sheets:
+            if other.id in kept:
+                assert (other.scale, other.scale_name) == kept[other.id], \
+                    "a new sheet changed another sheet's scale"
+        BC.CHECKED["new sheet at the project's scale"] += 1
 
     def op_switch_sheet():
         v.show_sheet(rnd.choice(p.sheets).id)
