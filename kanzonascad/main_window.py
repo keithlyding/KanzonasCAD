@@ -447,6 +447,13 @@ class MainWindow(BlockEditing, QMainWindow):
           tip="What has to be pulled between panels (each sheet's location: Sheet properties) "
               "and where each wire lands on both sides; the cable, its type and the wires' "
               "colors or numbers (save as CSV or PDF)")
+        A("wire_list", "&Wire list...", self.show_wire_list, icon="wire_list", label="Wire list",
+          tip="Every wire by its number: its size and color and what it lands on, with where "
+              "(save as CSV)")
+        A("terminal_list", "&Terminal strip list...", self.show_terminal_list,
+          icon="terminal_list", label="Terminals",
+          tip="Every terminal strip, terminal by terminal, with the wires on each side and "
+              "where it is (save as CSV)")
         A("materials", "Panel &materials...", self.show_materials, icon="materials",
           label="Materials",
           tip="The DIN rail and wire duct this project takes: lengths, stock pieces and cuts "
@@ -655,7 +662,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
-                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "materials", None,
+                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "materials", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
                   "layers", "wire_layers",
@@ -776,7 +783,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Print", "large", [a["print"]]),
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
             ("Import", "large", [a["import_dxf"], a["import_pdf"]]),
-            ("Reports", "large", [a["bom"], a["cables"], a["materials"]]),
+            ("Reports", "large", [a["bom"], a["cables"], a["wire_list"], a["terminal_list"],
+                                  a["materials"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
         ])
         r.add_tab("View", [
@@ -2608,6 +2616,31 @@ class MainWindow(BlockEditing, QMainWindow):
         if dialogs.cables_dialog(self, v.project, self._last_dir()):
             self._say("Cables between locations: kept with the project (Undo takes it back)")
 
+    def show_wire_list(self):
+        v = self.view()
+        if v is None:
+            return
+        from . import reports
+        dialogs.report_dialog(self, "Wire list", reports.WIRE_HEAD, reports.wire_rows(v.project),
+                              self._last_dir(), "wire list.csv",
+                              "No numbered wires yet: draw wires (Wire, Bus) with wire numbers "
+                              "on (Project properties, Schematic).",
+                              "Worked out from the drawing: a wire's landings are the pins it "
+                              "ends on, terminals by strip and number (TB1-12); off-sheet "
+                              "connectors carry it on.")
+
+    def show_terminal_list(self):
+        v = self.view()
+        if v is None:
+            return
+        from . import reports
+        dialogs.report_dialog(self, "Terminal strip list", reports.TERM_HEAD,
+                              reports.terminal_rows(v.project), self._last_dir(),
+                              "terminal strip list.csv",
+                              "No terminals yet: place Terminal symbols on a Terminal strip.",
+                              "Each terminal with the wire numbers on its left and right pins, "
+                              "as drawn; a terminal with no number yet shows ?.")
+
     def show_materials(self):
         v = self.view()
         if v is None:
@@ -3224,7 +3257,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",
-                  "rail", "duct", "materials", "bom", "cables", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "rail", "duct", "materials", "bom", "cables", "wire_list", "terminal_list", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",

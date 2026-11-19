@@ -588,7 +588,12 @@ def random_editing(log, out, ops, seed, drawing=None):
             "Disconnect 3-pole", "Fuses 3-pole", "Circuit breaker 3-pole",
             "Fused disconnect 3-pole", "Starter 3-pole", "Drive control terminals",
             # (0.19: PLC I/O modules drawn whole, a terminal a rung)
-            "1734-IB8 module", "1734-OE4C module", "PLC digital output module, 16 points"]
+            "1734-IB8 module", "1734-OE4C module", "PLC digital output module, 16 points",
+            # (0.19.1: IN/RTN channels; a module over two sheets, its continued piece a part
+            # of it as a contact of its coil)
+            "PLC analog input module, 4 channels IN/RTN",
+            "PLC digital input module, 16 points, points 0-7",
+            "PLC digital input module, points 8-15 continued"]
     syms = [n for n in syms if lib.get("symbol", n) is not None]
     start = norm(p.to_dict())
     counts = {}
