@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.4
+
+**Fixed**
+- Taps you had set one by one (a number of their own, or the wire's number) kept that choice
+  when you changed "Wires tapped off a wire are numbered" for the project. Project properties
+  now has "Apply to taps set one by one too" under it (ticked when you change the setting):
+  every tap then follows the project, in one step.
+
 ## 0.18.3
 
 **New**
