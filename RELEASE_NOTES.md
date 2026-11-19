@@ -14,6 +14,7 @@ build fails without them.
   contacts of one operator on other rungs. Placed straight above or below it, they are joined to
   it by a dashed line drawn by itself, which follows them when they move. Only the operator
   shows the tag; blocks on the line don't repeat it.
+- A Save button just left of Undo and Redo, after the menus.
 - Bus can start from pins you pick one at a time: type P (Pick pins), click each pin (a safety
   relay's S52, S12, S21 and S22, say, skipping S11), and press Enter. The pins must be on one
   side of one symbol and evenly spaced.

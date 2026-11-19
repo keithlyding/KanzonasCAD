@@ -1481,7 +1481,7 @@ it switches while KanzonasCAD is open.</li>
 <ul>
 <li><b>Undo</b> (Ctrl+Z) and <b>Redo</b> (Ctrl+Y or Ctrl+Shift+Z): every change, including
 sheet and layer changes, can be undone. Their arrows also sit right after the menus (File,
-Edit, View...), always a click away.</li>
+Edit, View...), always a click away, with <b>Save</b> (Ctrl+S) just before them.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
 insertion point (the copied objects' lower left corner lands there). Works between projects,
 and after KanzonasCAD is closed and started again. Their layers come with them: a layer the
