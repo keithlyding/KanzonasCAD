@@ -3351,6 +3351,13 @@ class Project:
         s.scale, s.scale_name = self.default_scale(s.kind)
         return s
 
+    def kind_scale(self, sheet, kind):
+        """The scale a sheet takes when its kind is changed to this one: the project's for
+        that kind while nothing is drawn on it, else None (it keeps its own)."""
+        if sheet.entities or sheet is self.title_block:
+            return None
+        return self.default_scale(kind)
+
     def default_scale(self, kind):
         """(paper / real, preset name) a new sheet of this kind starts at: panel sheets the
         panel one, every other kind the schematic one; 1:1 when the setting can't be read."""

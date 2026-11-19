@@ -62,25 +62,49 @@ def _group_of(sheet, c):
     return wirenums._sheet_groups(sheet).get(wire.id)
 
 
-def far_device(sheet, c):
-    """The device the wire on an arrow's pin goes straight to on the arrow's sheet: its tag
-    (VFD201; a terminal by its strip and number, TB1-12), or None when that wire tees off or
-    lands on nothing, or carries on to another connector (the owner, 0.19.5: "If there's a T,
-    I don't need to see a device. I really just want to be able to look at the source page and
-    know the downstream device is the plc without having to flip there")."""
+def _straight_to(sheet, root, skip):
+    """The one (insert, pin) a sheet-local wire group lands on, or None when it lands on none
+    or more than one (a T), or carries on through a connector; skip: the connector or
+    terminal it was reached from."""
     from . import pull, wirenums
-    root = _group_of(sheet, c)
-    if root is None:
-        return None
-    lands = pull._sheet_landings(sheet).get(root, ())
+    lands = [(i, p) for i, p in pull._sheet_landings(sheet).get(root, ()) if i is not skip]
     if len(lands) != 1:
         return None
     roots = wirenums._sheet_groups(sheet)
     for e in sheet.inserts():
-        if e is not c and e.defn is not None and e.defn.wiring == "link" and \
+        if e is not skip and e.defn is not None and e.defn.wiring == "link" and \
                 root in wirenums._pin_wires(sheet, e, roots).values():
             return None                 # (the wire goes on: through another connector)
-    ins, pin = lands[0]
+    return lands[0]
+
+
+def far_device(sheet, c):
+    """The device the wire on an arrow's pin goes straight to on the arrow's sheet: its tag
+    (VFD201), or None when that wire tees off, lands on nothing or carries on to another
+    connector (the owner, 0.19.5: "If there's a T, I don't need to see a device. I really
+    just want to be able to look at the source page and know the downstream device is the plc
+    without having to flip there"). Terminals are passed through to the device past them (the
+    owner, 0.19.6); a terminal with nothing straight past it, or a T there, is shown itself
+    (TB1-12)."""
+    from . import pull, wirenums
+    root = _group_of(sheet, c)
+    if root is None:
+        return None
+    got = _straight_to(sheet, root, c)
+    if got is None:
+        return None
+    roots = wirenums._sheet_groups(sheet)
+    seen = set()
+    while pull.is_terminal(got[0]) and id(got[0]) not in seen:
+        ins, pin = got
+        seen.add(id(ins))
+        past = [r for name, r in wirenums._pin_wires(sheet, ins, roots).items()
+                if name != pin and r != root]
+        nxt = _straight_to(sheet, past[0], ins) if len(set(past)) == 1 else None
+        if nxt is None:
+            break                       # (nothing straight past it: the terminal itself)
+        root, got = past[0], nxt
+    ins, pin = got
     if pull.is_terminal(ins):
         return pull.landing_name(ins, pin)
     return (ins.attrs.get("TAG", "") or "").strip() or ins.block

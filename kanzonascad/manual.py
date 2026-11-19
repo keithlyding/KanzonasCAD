@@ -927,8 +927,10 @@ place: a destination its source, a source its destination. A wire carried on ove
 sheets (page 4 to 5 to 6, a destination and a source on page 5) shows only the next or the
 previous hop: page 4's source shows page 5, page 6's destination shows page 5's source. A
 source carried to two sheets with no hop between them shows both. On a second line under it,
-the device the wire goes straight to at the other arrow (<b>VFD201</b>, or a terminal as
-<b>TB1-12</b>), so you see where the wire goes and to what without turning to that page. It
+the device the wire goes straight to at the other arrow (<b>VFD201</b>), so you see where the
+wire goes and to what without turning to that page. Terminals on the way are passed through to
+the device past them; a terminal with nothing past it, or a T past it, shows itself
+(<b>TB1-12</b>). It
 is set at three levels, each overriding the one before: <b>Source and destination arrows show
 the device at the other end</b> (Project properties, Schematic; on to start), <b>Arrows show
 the far device</b> in Sheet properties (<b>As the project</b>, <b>Shown</b> or <b>Off</b>, for
@@ -1222,7 +1224,9 @@ sheets, and <b>New sheets' scale</b> (Project properties, Schematic tab; Schemat
 for schematic, report and other sheets. Both start at 1:1. A new sheet takes the one for its
 kind (New sheet makes one of the kind of the sheet shown); after that its scale is its own:
 Sheet scale..., the status bar or Sheet properties change it for that sheet alone. Changing the
-project's setting changes no sheet already made, and changing a sheet's kind keeps its
+project's setting changes no sheet already made. Changing a sheet's kind in Sheet properties
+while nothing is drawn on it changes its scale to the project's for that kind (shown in the
+Scale box before you press OK, so you can pick another); a sheet with a drawing on it keeps its
 scale.</li>
 <li>When the drawing runs past the border or over the title block at the sheet's scale, the
 status bar says <b>doesn't fit</b> (in amber), and Export to PDF asks before printing it cut

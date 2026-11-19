@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.6
+
+**New**
+- Changing a sheet's kind in Sheet properties (to Panel, say) while nothing is drawn on it now
+  sets its scale to the project's scale for that kind. A sheet with a drawing keeps its scale.
+- The device under a source or destination arrow's reference now skips terminals and shows the
+  device past them (PLC1 rather than TB1-12). A terminal with nothing past it still shows.
+
 ## 0.19.5
 
 **Fixed**

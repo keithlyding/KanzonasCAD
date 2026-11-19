@@ -120,6 +120,23 @@ def sheet_properties(parent, project, sheet):
     order.setCurrentIndex(order.findData(sheet.number_order))
     order.setToolTip("The order Renumber sheet numbers devices in (and, later, wires)")
     scale = _scale_box(sheet.scale, sheet.scale_name)
+    scale.setObjectName("scale")
+
+    def kind_changed(_i):
+        # (nothing on the sheet yet: it takes the project's scale for its new kind; the owner,
+        # 0.19.6: "If nothing on the page, change to default scale"; picked again afterward
+        # if you like)
+        got = project.kind_scale(sheet, kind.currentData())
+        if got is not None:
+            k, n = got
+            i = next((j for j in range(scale.count()) if scale.itemData(j) == (n, k)), -1)
+            if i >= 0:
+                scale.setCurrentIndex(i)
+            else:
+                tmp = M.Sheet()
+                tmp.scale, tmp.scale_name = k, n
+                scale.setEditText(tmp.scale_text())
+    kind.currentIndexChanged.connect(kind_changed)
     scale.setToolTip("Panel sheets: draw everything at real size; the scale only sets how big "
                      "it prints. Type 1:6 for a scale that isn't listed.")
     from .scalefit import ROTATIONS
