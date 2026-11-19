@@ -2239,8 +2239,8 @@ class MainWindow(BlockEditing, QMainWindow):
         p = v.project
         self._leave_title_block(v)
         cur = v.sheet()
-        s = p.make_sheet("Sheet %d" % (len(p.sheets) + 1))
-        s.kind = cur.kind if cur is not p.title_block else "schematic"
+        s = p.make_sheet("Sheet %d" % (len(p.sheets) + 1),
+                         cur.kind if cur is not p.title_block else "schematic")
         with p.edit("New sheet") as ed:
             ed.add_sheet(s, p.sheets.index(cur) + 1)
         v.show_sheet(s.id)

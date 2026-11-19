@@ -119,18 +119,7 @@ def sheet_properties(parent, project, sheet):
         order.addItem(label, key)
     order.setCurrentIndex(order.findData(sheet.number_order))
     order.setToolTip("The order Renumber sheet numbers devices in (and, later, wires)")
-    scale = QComboBox()
-    scale.setEditable(True)
-    for name, v in M.SCALE_PRESETS:
-        tmp = M.Sheet()
-        tmp.scale, tmp.scale_name = v, name
-        scale.addItem(tmp.scale_text(), (name, v))
-    i = next((j for j in range(scale.count())
-              if scale.itemData(j) == (sheet.scale_name, sheet.scale)), -1)
-    if i >= 0:
-        scale.setCurrentIndex(i)
-    else:
-        scale.setEditText(sheet.scale_text())
+    scale = _scale_box(sheet.scale, sheet.scale_name)
     scale.setToolTip("Panel sheets: draw everything at real size; the scale only sets how big "
                      "it prints. Type 1:6 for a scale that isn't listed.")
     from .scalefit import ROTATIONS
@@ -246,6 +235,25 @@ def sheet_properties(parent, project, sheet):
                 for e in list(sheet.entities.values()):
                     ed.change(sheet, e.moved(*moved))
     return True
+
+
+def _scale_box(k, name=""):
+    """An editable box of the scale presets, showing this scale (typed when not a preset);
+    read back with _scale_of."""
+    box = QComboBox()
+    box.setEditable(True)
+    for n, v in M.SCALE_PRESETS:
+        tmp = M.Sheet()
+        tmp.scale, tmp.scale_name = v, n
+        box.addItem(tmp.scale_text(), (n, v))
+    i = next((j for j in range(box.count()) if box.itemData(j) == (name, k)), -1)
+    if i >= 0:
+        box.setCurrentIndex(i)
+    else:
+        tmp = M.Sheet()
+        tmp.scale, tmp.scale_name = k, name
+        box.setEditText(tmp.scale_text())
+    return box
 
 
 def _scale_of(combo):
@@ -494,6 +502,12 @@ def project_properties(parent, project, tab=0):
                     "at the other arrow (VFD201). A sheet (Sheet properties) or one arrow (its "
                     "attributes) can say otherwise.")
     form.addRow("", xdev)
+    sch_scale = _scale_box(*project.default_scale("schematic"))
+    sch_scale.setObjectName("scale_schematic")
+    sch_scale.setToolTip("The scale a new schematic, report or other sheet starts at; each "
+                         "sheet's own afterward (Sheet scale, Sheet properties). Sheets already "
+                         "made keep theirs.")
+    form.addRow("New sheets' scale", sch_scale)
     wire_color = _color_button(project.layer_color("WIRES"))
     form.addRow("Wire color (layer WIRES)", wire_color)
     sym_color = _color_button(project.layer_color("SYMBOLS"))
@@ -503,6 +517,12 @@ def project_properties(parent, project, tab=0):
     # ---- Panel -----------------------------------------------------------------------------
     page = QWidget()
     form = QFormLayout(page)
+    pnl_scale = _scale_box(*project.default_scale("panel"))
+    pnl_scale.setObjectName("scale_panel")
+    pnl_scale.setToolTip("The scale a new panel sheet starts at (draw at real size; the scale "
+                         "sets how big it prints); each sheet's own afterward (Sheet scale, "
+                         "Sheet properties). Sheets already made keep theirs.")
+    form.addRow("New panel sheets' scale", pnl_scale)
     fp_color = _color_button(project.layer_color("PANEL"))
     form.addRow("Footprint color (layer PANEL)", fp_color)
     dim_color = _color_button(project.layer_color("DIMENSIONS"))
@@ -577,8 +597,7 @@ def project_properties(parent, project, tab=0):
                      "finger slots and mounting holes")
     form.addRow("", hatch)
     form.addRow(_gray("Objects take their layer's color (ByLayer), as in AutoCAD, unless you "
-                      "give them their own (Modify > Color...). Panel scale and dimension "
-                      "settings come with the dimension tools."))
+                      "give them their own (Modify > Color...)."))
     tabs.addTab(page, "Panel")
     tabs.setCurrentIndex(tab)
     outer.addWidget(_buttons(dlg))
@@ -587,6 +606,11 @@ def project_properties(parent, project, tab=0):
         if dlg.exec() != QDialog.Accepted:
             return False
         fmt = zf.text().strip() or "{sheet}-{row}{col}"
+        scales = {"scale_schematic": _scale_of(sch_scale), "scale_panel": _scale_of(pnl_scale)}
+        if None in scales.values():
+            QMessageBox.warning(parent, "Project properties", "Type a scale as 1:4 (or pick one "
+                                                              "from the list).")
+            continue
         try:
             fmt.format(sheet="6", row="D", col=1)
             break
@@ -603,6 +627,8 @@ def project_properties(parent, project, tab=0):
             del fields[k]                               # empty: Drawn date in an older one)
     settings = dict(st)
     settings.update(layout.values())
+    for key, (name, k) in scales.items():
+        settings[key] = [float(k), name]
     settings["text_height"] = text_h.value()
     settings["tb_position"] = tbpos.currentData()
     settings["show_border"] = show_border.isChecked()

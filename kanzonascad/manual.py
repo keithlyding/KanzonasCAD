@@ -1212,6 +1212,14 @@ never turns a sheet by itself. PDF pages print the sheet as turned.</li>
 <li>Click <b>Scale 1:4</b> in the status bar for a short list: <b>Fit</b> (with the scale it
 would pick), the common scales, and <b>More...</b> (the Sheet scale window). A sheet's scale
 is also in Sheet properties.</li>
+<li><b>The scale new sheets start at</b> is a project setting, one for each kind of sheet:
+<b>New panel sheets' scale</b> (Project properties, Panel tab; Panel settings...) for panel
+sheets, and <b>New sheets' scale</b> (Project properties, Schematic tab; Schematic settings...)
+for schematic, report and other sheets. Both start at 1:1. A new sheet takes the one for its
+kind (New sheet makes one of the kind of the sheet shown); after that its scale is its own:
+Sheet scale..., the status bar or Sheet properties change it for that sheet alone. Changing the
+project's setting changes no sheet already made, and changing a sheet's kind keeps its
+scale.</li>
 <li>When the drawing runs past the border or over the title block at the sheet's scale, the
 status bar says <b>doesn't fit</b> (in amber), and Export to PDF asks before printing it cut
 off.</li>
