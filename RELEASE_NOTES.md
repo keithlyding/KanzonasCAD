@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.5
+
+**Fixed**
+- A wire carried over several sheets by source and destination arrows: each arrow now shows
+  only the next or previous sheet's arrow, not every arrow of that wire.
+- The device under an arrow's reference is now the one device that wire goes straight to on
+  the other sheet. When the wire tees off there, or goes on to another arrow, no device shows.
+
 ## 0.19.4
 
 **New**

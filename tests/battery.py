@@ -2127,13 +2127,13 @@ def random_editing(log, out, ops, seed, drawing=None):
         def second_lines():
             n = 0
             for name, ends in WN.connectors(p).items():
+                pairs = XR.arrow_pairs(p, ends)
                 for sh, c in ends:
                     if c.block not in WN.ARROWS or not on(sh, c):
                         continue
-                    want = WN.ARROWS[1] if c.block == WN.ARROWS[0] else WN.ARROWS[0]
-                    pair = [(os_, oc) for os_, oc in ends if oc is not c]
-                    pair = [(os_, oc) for os_, oc in pair if oc.block == want] or pair
-                    if any(XR.far_devices(os_, oc) for os_, oc in pair):
+                    pair = pairs.get(id(c)) or [(os_, oc) for os_, oc in ends
+                                                if oc.block in WN.ARROWS and oc.block != c.block]
+                    if any(XR.far_device(os_, oc) for os_, oc in pair):
                         n += 1
             return n
 
