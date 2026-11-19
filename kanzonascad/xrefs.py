@@ -307,8 +307,14 @@ def _joined(project, sheet):
     if _links["sig"] != sig:
         _links["sig"], _links["by_sheet"] = sig, {}
     got = _links["by_sheet"].get(sheet.id)
-    if got is not None:
-        return got
+    if got is None:
+        got = _links["by_sheet"][sheet.id] = joined_now(sheet)
+    return got
+
+
+def joined_now(sheet):
+    """(links, ids of the contact blocks they join) on one sheet, worked out now (not kept:
+    the edit hook asks in the middle of an edit, model.Edit)."""
     out, ids = [], set()
     parents, blocks = {}, []
     for e in sheet.inserts():
@@ -339,8 +345,27 @@ def _joined(project, sheet):
             out.append(((par.pos[0], lo), (par.pos[0], hi)))
         else:
             out.append(((lo, par.pos[1]), (hi, par.pos[1])))
-    _links["by_sheet"][sheet.id] = (out, ids)
     return out, ids
+
+
+def sync_block_tags(ed, sheets):
+    """Contact blocks on a dashed line show no tag of their own, as in the owner's print (the
+    line shows where they belong; the owner, 0.19.11: "Yes"); one taken off the line shows it
+    again. Only a tag hidden here (TAGLINK) comes back: one hidden by hand stays hidden."""
+    for s in sheets:
+        _lines, ids = joined_now(s)
+        for e in list(s.inserts()):
+            d = e.defn
+            if d is None or d.role != "child" or d.prefix not in LINKED:
+                continue
+            mine = e.attrs.get("TAGLINK") == "1"
+            if e.id in ids and "TAG" not in e.hidden:
+                attrs = dict(e.attrs, TAGLINK="1")
+                ed.change(s, e.copy(hidden=frozenset(e.hidden) | {"TAG"}, attrs=attrs))
+            elif e.id not in ids and mine:
+                attrs = dict(e.attrs)
+                attrs.pop("TAGLINK", None)
+                ed.change(s, e.copy(hidden=frozenset(e.hidden) - {"TAG"}, attrs=attrs))
 
 
 def dashes(a, b, k=1.0):

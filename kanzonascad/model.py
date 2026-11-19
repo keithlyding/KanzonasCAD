@@ -3708,6 +3708,12 @@ class _EditContext:
                 # its tag
                 from .tags import sync_children
                 sync_children(self.ed, self.ed.project)
+                # contact blocks put on (or taken off) a pushbutton's dashed line: their tag
+                # hidden (or shown again), 0.19.11
+                from .xrefs import sync_block_tags
+                touched = {op[1] for op in self.ed.ops if op[0] == "ent"}
+                sync_block_tags(self.ed, [s for s in self.ed.project.sheets
+                                          if sheets or s.id in touched])
             if sheets or "insert" in kinds or "wire" in kinds or any(
                     op[0] == "settings" for op in self.ed.ops):
                 # wires drawn, cut, joined or moved, symbols placed on them: wire numbers
