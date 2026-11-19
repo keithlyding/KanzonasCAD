@@ -2545,6 +2545,40 @@ def random_editing(log, out, ops, seed, drawing=None):
                 n, "has no" if want else "got")
         BC.CHECKED["bus from picked pins"] += 1
 
+    def op_column_feed():
+        # (0.19.11: drops fed down a column, each drawn on from the corner of the one before,
+        # as the owner's page 12: with taps numbered apart, each drop but the last has a
+        # number of its own, off the run's)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        before = set(s.entities)
+        n = rnd.randint(2, 4)
+        x0, x1, top = o[0] + 2.0 * k, o[0] + 4.0 * k, o[1] + (2.0 * n + 1.0) * k
+        paths = [[(o[0], top + k), (x0, top + k), (x0, top), (x1, top)]]
+        for i in range(1, n):
+            y = top - 2.0 * i * k
+            paths.append([(x1, y), (x0, y), (x0, y + 2.0 * k)])
+        for pts in paths:
+            v.run(C.WireCmd)
+            type_in(v, *(fmt(q) for q in pts))
+            finish()
+        if not wirenums.enabled(p) or wirenums.tap_mode(p) == "same":
+            return
+        made = [w for i, w in s.entities.items() if i not in before and isinstance(w, M.Wire)]
+        tol = 1e-6 * max(1.0, k)
+
+        def num_at(q):
+            got = {w.num for w in made if w.num and any(G.dist(q, r) <= tol for r in w.points)}
+            return got.pop() if len(got) == 1 else None
+        drops = [num_at((x1, top - 2.0 * i * k)) for i in range(n)]
+        if None in drops or any(w.own_num or w.same_num for w in made):
+            return                      # (a drop not drawn as asked: a snap took it elsewhere)
+        assert len(set(drops[:-1])) == n - 1 and drops[-1] not in drops[:-1], \
+            "a column of drops shares a number: %r" % drops
+        BC.CHECKED["column of drops numbered apart"] += 1
+
     def op_contact_blocks():
         # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
         # line from it through the farthest, worked out from where they are; none of them
@@ -3103,7 +3137,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

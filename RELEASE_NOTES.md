@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.11
+
+**Fixed**
+- Wires feeding a column of devices (each drive's S1 drawn on from the corner of the wire
+  above) now number each drop as a tap (9005-1, 9005-2...) instead of all sharing the run's
+  number. For a drawing made before this version, run Clean up wires on the sheet once.
+
 ## 0.19.10
 
 **New**

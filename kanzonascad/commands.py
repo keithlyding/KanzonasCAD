@@ -5115,7 +5115,8 @@ class CleanWiresCmd(Command):
         self.ctx.set_selection(set())
         done = ["%d %s" % (got[k], label) for k, label in (
             ("joined", "joined end to end"), ("duplicates", "drawn twice, removed"),
-            ("empty", "of no length, removed"), ("tidied", "with extra points, tidied"))
+            ("empty", "of no length, removed"), ("tidied", "with extra points, tidied"),
+            ("split", "cut at a corner another wire carries on from (its turn a tap)"))
             if got[k]]
         self.ctx.message("Clean up wires (%s): %s. %s" % (
             "selected wires" if sel else "this sheet", ", ".join(done) if done else

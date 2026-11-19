@@ -784,7 +784,12 @@ leaving the gap.</li>
 <li><b>Clean up wires</b> (WIRECLEAN): cleans the selected wires, or every wire on the sheet
 when none is selected, in one step (Undo puts it back): wires of no length and extra points
 (repeated, or in the middle of a straight run) go, a wire drawn over another goes, and two
-wires meeting end to end with nothing else there (no pin, no third wire) become one. The
+wires meeting end to end with nothing else there (no pin, no third wire) become one. A wire
+ending on another wire's corner and carrying straight on from it (a column of drives fed one
+after another, each drop drawn on from the corner of the one before) cuts that wire at the
+corner, so its leg turning off to the device is a tap of the run with a number of its own
+(9005-1, 9005-2...); Wire does this as you draw, and Clean up wires does it for a drawing made
+before version 0.19.11. The device where the run ends keeps the run's number. The
 command line then says what it did and how many wire ends connect to nothing, which is
 usually a wire stopping short of where it should go. A wire that runs straight back over
 itself at an end (drawn out past where it was needed and clicked back) loses the doubled piece,
