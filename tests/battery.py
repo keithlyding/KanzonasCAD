@@ -2103,6 +2103,58 @@ def random_editing(log, out, ops, seed, drawing=None):
             "a destination paired from the list took %r, not %r (was %r)" % (
                 got[0].attrs.get("TAG"), now and now.attrs["TAG"], want[1].attrs["TAG"]))
         BC.CHECKED["arrow paired as chosen"] += 1
+        # (0.19.11: linked to that very source arrow, and its cross-reference shows that one
+        # whatever the order of the others of its name)
+        cur = s.entities[got[0].id]
+        linked = WN.linked_source(p, cur)
+        assert linked is not None and linked[1] is now, \
+            "a destination paired from the list isn't linked to that source arrow"
+        pairs = XR.arrow_pairs(p, WN.connectors(p).get(cur.attrs["TAG"].strip().upper(), []))
+        assert [oc for _os, oc in pairs.get(id(cur), [])] == [now], \
+            "a linked destination is paired with another source"
+        BC.CHECKED["linked destination shows its source"] += 1
+
+    def op_source_master():
+        # (0.19.11: a destination placed on a wire whose number is locked on its own page (a
+        # foreign number) doesn't take its source's wire over: the source's wire keeps a number
+        # of its own page, worked out from the source's sheet, and the destination follows)
+        from kanzonascad import wirenums as WN
+        if not WN.enabled(p) or len(p.sheets) < 2:
+            return
+        srcs = [(sh, c) for sh in p.sheets for c in sh.inserts()
+                if c.block == WN.ARROWS[0] and c.attrs.get("TAG")]
+        if not srcs:
+            return
+        sh, src = rnd.choice(srcs)
+        home = [w for w in sh.wires() if w.touches(src.pin_points()[0][1])]
+        if not home or s is sh or any(w.num_lock and w.num == home[0].num
+                                      for w in sh.wires()):
+            return                  # (a number typed on the source's page holds: not this)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        foreign = "%s%03d" % (p.sheet_number(s), rnd.randint(700, 899))
+        with p.edit("a wire numbered by hand") as ed:
+            ed.add(s, M.Wire([o, (o[0] + 3.0 * k, o[1])], num=foreign, num_lock=True))
+        win.pick_connector = lambda cands: next(
+            ((x, c) for x, c in cands if c is src), None)
+        try:
+            v.run(C.InsertCmd, lib.get("symbol", WN.ARROWS[1]), {})
+            v.input_text(fmt(o))
+            if v.cmd is not None:
+                v.input_text(C.PAIR_LIST)
+            finish()
+        finally:
+            win.__dict__.pop("pick_connector", None)
+        now = [w for w in sh.wires() if w.touches(src.pin_points()[0][1])]
+        if not now or not now[0].num or now[0].num_lock:
+            return
+        got = WN.split(now[0].num)
+        assert got and got[0] == p.sheet_number(sh), \
+            "a source arrow's wire on page %s took %s from a destination's page" % (
+                p.sheet_number(sh), now[0].num)
+        BC.CHECKED["a source's wire keeps its page's number"] += 1
 
     def op_wire_color():
         # (0.18.4: Wire color label on the selected wires: on when any is off, else off;
@@ -2159,8 +2211,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 for sh, c in ends:
                     if c.block not in WN.ARROWS or not on(sh, c):
                         continue
-                    pair = pairs.get(id(c)) or [(os_, oc) for os_, oc in ends
-                                                if oc.block in WN.ARROWS and oc.block != c.block]
+                    pair = pairs.get(id(c), [])
                     if any(XR.far_device(os_, oc) for os_, oc in pair):
                         n += 1
             return n
@@ -2559,6 +2610,40 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert (tuple(q) in ends) == want, "Bus from picked pins: %s %s a wire" % (
                 n, "has no" if want else "got")
         BC.CHECKED["bus from picked pins"] += 1
+
+    def op_column_feed():
+        # (0.19.11: drops fed down a column, each drawn on from the corner of the one before,
+        # as the owner's page 12: with taps numbered apart, each drop but the last has a
+        # number of its own, off the run's)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        before = set(s.entities)
+        n = rnd.randint(2, 4)
+        x0, x1, top = o[0] + 2.0 * k, o[0] + 4.0 * k, o[1] + (2.0 * n + 1.0) * k
+        paths = [[(o[0], top + k), (x0, top + k), (x0, top), (x1, top)]]
+        for i in range(1, n):
+            y = top - 2.0 * i * k
+            paths.append([(x1, y), (x0, y), (x0, y + 2.0 * k)])
+        for pts in paths:
+            v.run(C.WireCmd)
+            type_in(v, *(fmt(q) for q in pts))
+            finish()
+        if not wirenums.enabled(p) or wirenums.tap_mode(p) == "same":
+            return
+        made = [w for i, w in s.entities.items() if i not in before and isinstance(w, M.Wire)]
+        tol = 1e-6 * max(1.0, k)
+
+        def num_at(q):
+            got = {w.num for w in made if w.num and any(G.dist(q, r) <= tol for r in w.points)}
+            return got.pop() if len(got) == 1 else None
+        drops = [num_at((x1, top - 2.0 * i * k)) for i in range(n)]
+        if None in drops or any(w.own_num or w.same_num for w in made):
+            return                      # (a drop not drawn as asked: a snap took it elsewhere)
+        assert len(set(drops[:-1])) == n - 1 and drops[-1] not in drops[:-1], \
+            "a column of drops shares a number: %r" % drops
+        BC.CHECKED["column of drops numbered apart"] += 1
 
     def op_contact_blocks():
         # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
@@ -3118,7 +3203,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

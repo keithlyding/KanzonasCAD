@@ -2289,6 +2289,7 @@ class MainWindow(BlockEditing, QMainWindow):
             elif isinstance(c, M.Insert) and c.defn is not None and c.defn.wiring == "link":
                 attrs = dict(c.attrs)
                 attrs.pop("TAG", None)
+                attrs.pop("FROM", None)          # (nor the source a destination was linked to)
                 c = c.copy(attrs=attrs)
                 c.id = None
             ents.append(c)

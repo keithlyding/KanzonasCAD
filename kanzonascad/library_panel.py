@@ -779,6 +779,23 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
                        "arrow: as Sheet properties (or Project properties) says, or this "
                        "arrow's own choice")
         form.addRow("Show the far device", far)
+    came = None
+    if ins.block == ARROWS[1] and project is not None:
+        # (the source arrow it continues, chosen by hand: kept whatever that wire's number
+        # becomes, until that arrow is deleted; Automatic pairs it by order, the owner, 0.19.11)
+        from .wirenums import connectors, link_to
+        came = QComboBox()
+        came.setObjectName("comes_from")
+        came.addItem("Automatic (the source before it)", None)
+        for name, ends in sorted(connectors(project).items()):
+            for s_, c in ends:
+                if c.block == ARROWS[0]:
+                    came.addItem("%s   (%s)" % (name, project.zone_text(s_, c.pos[0], c.pos[1])
+                                                or project.sheet_number(s_)), link_to(s_, c))
+        came.setCurrentIndex(max(came.findData(ins.attrs.get("FROM")), 0))
+        came.setToolTip("The source arrow this destination continues: kept whatever that "
+                        "wire's number becomes, until that source arrow is deleted")
+        form.addRow("Comes from", came)
     v.addLayout(form)
     # which of them show on the drawing, on this copy (the owner: "add the ability to hide and
     # show attributes"); the values are kept either way
@@ -923,6 +940,11 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
             out.pop("XREF", None)
         else:
             out["XREF"] = "0"
+    if came is not None:
+        if came.currentData() is None:
+            out.pop("FROM", None)
+        else:
+            out["FROM"] = came.currentData()
     if far is not None:
         if far.currentData() is None:
             out.pop("XDEV", None)

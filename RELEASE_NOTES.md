@@ -6,6 +6,25 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.11
+
+**Fixed**
+- Wires feeding a column of devices (each drive's S1 drawn on from the corner of the wire
+  above) now number each drop as a tap (9005-1, 9005-2...) instead of all sharing the run's
+  number. For a drawing made before this version, run Clean up wires on the sheet once.
+- Source and destination arrows carried down one ladder, across to the next ladder on the same
+  sheet, and on to another sheet now show the right places: the left ladder's foot shows the
+  right ladder's head, and so on. A source with nothing after it yet shows "?".
+- A wire carried by a source arrow keeps a number of the source's page. A number locked on a
+  destination's wire on another page no longer takes the source's wire over (page 2's wire
+  taking a page 11 number).
+
+**New**
+- A destination arrow paired with List... or Pick on drawing now stays linked to that source
+  arrow: it shows that one, and follows it when its wire is renumbered, until you delete that
+  source arrow. Double-click a destination arrow to change it (Comes from) or set it back to
+  Automatic.
+
 ## 0.19.10
 
 **New**

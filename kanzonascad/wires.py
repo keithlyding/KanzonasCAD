@@ -816,7 +816,90 @@ def tidy_new(ed, sheet, w):
     one carried on from another wire's end joins it. Returns "duplicate", "joined" or None."""
     if _drop_if_covered(ed, sheet, w):
         return "duplicate"
-    return "joined" if join_at(ed, sheet, _ends([w])) else None
+    joined = join_at(ed, sheet, _ends([w]))
+    cur = sheet.entities.get(w.id)
+    split_corner_taps(ed, sheet, [cur] if isinstance(cur, Wire) else [])
+    return "joined" if joined else None
+
+
+def _straight_on(u, v):
+    """Do legs u and v (directions out of one point) run on from each other in a line?"""
+    return abs(u[0] * v[1] - u[1] * v[0]) <= 1e-9 * max(1.0, abs(u[0]) + abs(u[1])) * \
+        max(1.0, abs(v[0]) + abs(v[1])) and u[0] * v[0] + u[1] * v[1] < 0
+
+
+def _corner_at(w, p):
+    """The index of w's corner (a point between its ends) at p, or None."""
+    for i in range(1, len(w.points) - 1):
+        if _same(w.points[i], p):
+            return i
+    return None
+
+
+def _leg_out(w, i, toward):
+    q, r = w.points[i], w.points[i + toward]
+    return (r[0] - q[0], r[1] - q[1])
+
+
+def split_corner_taps(ed, sheet, ws):
+    """A wire whose end lands on another wire's corner and carries straight on from one of its
+    legs (a line of drives fed down a column: each drop drawn on from the corner of the one
+    before): the other wire is cut at that corner, so its leg turning off is a wire of its own,
+    a tap off the run, numbered -1, -2... (the owner, 0.19.11: "all my connections to each
+    drive s1 and s2 are staying the same wire instead of offering -1, -2"). Both ways round: an
+    end of w on another's corner, and another's end on a corner of w. Returns how many wires
+    were cut."""
+    cut = 0
+    todo = [w for w in ws if isinstance(w, Wire)]
+    seen = set()
+    while todo:
+        w = todo.pop()
+        if w.id not in sheet.entities or w.id in seen:
+            continue
+        seen.add(w.id)
+        pairs = []                       # (the wire cut, its corner index, the wire on it)
+        for end in (0, -1):
+            p = w.points[end]
+            u = _leg_out(w, 0 if end == 0 else len(w.points) - 1, 1 if end == 0 else -1)
+            for o in _near(sheet, p):
+                if not isinstance(o, Wire) or o.id == w.id:
+                    continue
+                i = _corner_at(o, p)
+                if i is not None and (_straight_on(u, _leg_out(o, i, -1)) or
+                                      _straight_on(u, _leg_out(o, i, 1))):
+                    pairs.append((o, i))
+        for i in range(1, len(w.points) - 1):
+            p = w.points[i]
+            for o in _near(sheet, p):
+                if not isinstance(o, Wire) or o.id == w.id:
+                    continue
+                for end in (0, -1):
+                    if not _same(o.points[end], p):
+                        continue
+                    u = _leg_out(o, 0 if end == 0 else len(o.points) - 1, 1 if end == 0 else -1)
+                    if _straight_on(u, _leg_out(w, i, -1)) or _straight_on(u, _leg_out(w, i, 1)):
+                        pairs.append((w, i))
+        for o, i in pairs:
+            o = sheet.entities.get(o.id)
+            if not isinstance(o, Wire) or i >= len(o.points) - 1:
+                continue
+            # (both pieces keep its number to start: numbering gives the turning-off one its
+            # own; its labels stay with the piece they are on)
+            pts, cum = _poly_cum(o.points, False)
+            at = cum[i]
+            keep = dict(layer=o.layer, color=o.color, num=o.num, num_lock=o.num_lock,
+                        own_num=o.own_num, same_num=o.same_num, awg=o.awg,
+                        show_color=o.show_color, pin_tap=o.pin_tap)
+            ed.remove(sheet, o.id)
+            a = ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, at),
+                                   labels=_labels_between(o, 0.0, at), **keep))
+            b = ed.add(sheet, Wire(_poly_piece(pts, cum, at, cum[-1]),
+                                   labels=_labels_between(o, at, cum[-1]), **keep))
+            cut += 1
+            todo += [a, b]
+            if o.id == w.id:
+                break                    # (w itself cut: its pieces are looked at again)
+    return cut
 
 
 def doubles_back(pts):
@@ -871,7 +954,7 @@ def cleanup(ed, sheet, ws=None):
     doubled piece (unfold)."""
     from .model import _tidy
     ws = list(sheet.wires() if ws is None else ws)
-    got = {"empty": 0, "tidied": 0, "duplicates": 0, "joined": 0, "loose": 0}
+    got = {"empty": 0, "tidied": 0, "duplicates": 0, "joined": 0, "split": 0, "loose": 0}
     for w in ws:
         cur = sheet.entities.get(w.id)
         if not isinstance(cur, Wire):
@@ -890,6 +973,11 @@ def cleanup(ed, sheet, ws=None):
             got["duplicates"] += 1
     left = [sheet.entities[w.id] for w in ws if isinstance(sheet.entities.get(w.id), Wire)]
     got["joined"] = join_at(ed, sheet, _ends(left))
+    # (a wire carried straight on from another's corner: that one cut there, its leg turning
+    # off a tap of its own, 0.19.11)
+    got["split"] = split_corner_taps(ed, sheet, [w for w in (
+        sheet.wires() if ws is None else [sheet.entities.get(x.id) for x in ws])
+        if isinstance(w, Wire)])
     for w in sheet.wires() if ws is None else [sheet.entities.get(w.id) for w in ws]:
         if not isinstance(w, Wire):
             continue
