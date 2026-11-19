@@ -873,7 +873,7 @@ number and the other arrow's place (<b>2046 / 7-A2</b>), turned the way the arro
 running up and down it reads up, in line with the wire (as that wire's number reads); across,
 it is level. A source arrow placed on the end of a numbered wire is named by the wire's number (2046):
 nothing to type (unless another source arrow has that name: then it asks). A destination arrow
-offers the name of a source still waiting for it; placed, its wire takes the source's number
+offers the name of a source still waiting for it (or <b>List...</b> on the command line picks the one it continues from a list of them, wire number and place, waiting ones first; <b>Pick on drawing</b> lets you go to its sheet and click it, and comes back); placed, its wire takes the source's number
 and its layer (480V BRN, with its color and gauge). Each arrow shows only its other half's
 place: a destination its source, a source its destinations.</li>
 <li><b>Source/destination arrows</b> (SIGARROW, SDA; Draw menu, Schematic tab:

@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.5
+
+**New**
+- Placing a destination arrow (or an off-sheet connector), pick exactly which one it continues:
+  List... on the command line shows them with their wire number and place, waiting ones
+  first; Pick on drawing lets you go to that sheet and click it. Typing a name still works.
+
 ## 0.18.4
 
 **Fixed**

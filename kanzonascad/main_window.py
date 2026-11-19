@@ -2722,7 +2722,7 @@ class MainWindow(BlockEditing, QMainWindow):
 
     _picking = None             # (the sheet shown before, what to do with the device picked)
 
-    def pick_device_for(self, done):
+    def pick_device_for(self, done, kind="device"):
         """Pick a device on the drawing, on any sheet (the owner, 0.16: "be able to navigate
         to a sheet and select it"): commands.PickDeviceCmd runs on the sheet shown, and again
         on each sheet gone to; a device clicked, or Esc, goes back to the sheet it started on
@@ -2731,11 +2731,12 @@ class MainWindow(BlockEditing, QMainWindow):
         if v is None:
             return
         self._picking = (v, v.sheet_id, done)
+        self._pick_kind = kind
 
         def got(dev):
             QTimer.singleShot(0, lambda: self._picked(dev))
         self._pick_got = got
-        v.run(C.PickDeviceCmd, got)
+        v.run(C.PickDeviceCmd, got, kind)
 
     def _picked(self, dev):
         state = self._picking
@@ -2755,21 +2756,37 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         v = state[0]
         if not isinstance(v.cmd, C.PickDeviceCmd):
-            v.run(C.PickDeviceCmd, self._pick_got)
+            v.run(C.PickDeviceCmd, self._pick_got, getattr(self, "_pick_kind", "device"))
 
-    def pick_parent(self, cands):
-        """The device a contact belongs to, picked from a list: (sheet, device) or None."""
+    def pick_connector(self, cands):
+        """The arrow or off-sheet connector a new one pairs with, picked from a list: (sheet,
+        connector) or None (a test replaces it)."""
+        from . import wirenums
         v = self.view()
+        if v is None or not cands:
+            self.statusBar().showMessage("No arrow or connector to pair with yet", 5000)
+            return None
+        ends = wirenums.connectors(v.project)
+        rows = []
+        for s, c in cands:
+            name = c.attrs.get("TAG", "?")
+            others = [os_ for os_, oc in ends.get(name.upper(), []) if oc is not c]
+            rows.append("%s   %s   wire %s   %s   %s" % (
+                name, c.block, wirenums.number_at(s, c) or "?",
+                v.project.zone_text(s, c.pos[0], c.pos[1]) or "?",
+                "paired" if others else "waiting"))
+        i = self._pick_row("Pair with", "Pick the arrow or connector this one continues "
+                           "(waiting ones first):", rows)
+        return cands[i] if i is not None else None
+
+    def _pick_row(self, title, text, rows):
+        """A window listing rows to pick one of: its index, or None."""
         dlg = QDialog(self)
-        dlg.setWindowTitle("Contact belongs to")
+        dlg.setWindowTitle(title)
         lay = QVBoxLayout(dlg)
-        lay.addWidget(QLabel("Pick the coil or device this contact belongs to:"))
+        lay.addWidget(QLabel(text))
         lst = QListWidget()
-        for s, e in cands:
-            where = v.project.zone_text(s, e.pos[0], e.pos[1]) if v else ""
-            desc = e.attrs.get("DESC", "")
-            lst.addItem("%s   %s   %s%s" % (e.attrs.get("TAG", "?"), where, e.block,
-                                            ("   " + desc) if desc else ""))
+        lst.addItems(rows)
         lst.setCurrentRow(0)
         lst.itemDoubleClicked.connect(lambda _i: dlg.accept())
         lay.addWidget(lst)
@@ -2779,7 +2796,20 @@ class MainWindow(BlockEditing, QMainWindow):
         lay.addWidget(box)
         if dlg.exec() != QDialog.Accepted or lst.currentRow() < 0:
             return None
-        return cands[lst.currentRow()]
+        return lst.currentRow()
+
+    def pick_parent(self, cands):
+        """The device a contact belongs to, picked from a list: (sheet, device) or None."""
+        v = self.view()
+        rows = []
+        for s, e in cands:
+            where = v.project.zone_text(s, e.pos[0], e.pos[1]) if v else ""
+            desc = e.attrs.get("DESC", "")
+            rows.append("%s   %s   %s%s" % (e.attrs.get("TAG", "?"), where, e.block,
+                                            ("   " + desc) if desc else ""))
+        i = self._pick_row("Contact belongs to", "Pick the coil or device this contact belongs "
+                           "to:", rows)
+        return cands[i] if i is not None else None
 
     def renumber_sheet(self):
         v = self.view()

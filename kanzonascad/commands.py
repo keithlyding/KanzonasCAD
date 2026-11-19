@@ -2605,6 +2605,9 @@ class MakeBlockCmd(Command):
         self.finish()
 
 
+PAIR_LIST, PAIR_PICK = "*LIST", "*PICK"     # (an arrow's pairing buttons: no name is either)
+
+
 class InsertCmd(Command):
     """Place a symbol or footprint (from the Library panel): pick where; R turns it 90
     degrees, F flips it side to side, V upside down. A symbol with pins is held by its first pin (L1, 1, A1...), so the
@@ -2694,6 +2697,18 @@ class InsertCmd(Command):
     def text(self, s):
         k = s.strip().upper()
         if self.pending is not None and self.link_name is not None:
+            # (paired with a chosen one, from a list or clicked on any sheet: the owner,
+            # 0.18.5, "AutoCAD allows for specific ones, but I have to tell it where it is, by
+            # either selecting it from a drop down or navigating to the sheet and clicking")
+            host = getattr(self.ctx, "host", None)
+            if k == PAIR_LIST:
+                pick = getattr(host, "pick_connector", None)
+                got = pick(self._pair_candidates()) if pick is not None else None
+                if got is not None:
+                    self._pair_with(got[1])
+                return True
+            if k == PAIR_PICK and host is not None and hasattr(host, "pick_device_for"):
+                return self._pick_pair_on_drawing(host)
             self._place(self.pending, dict(self.attrs, TAG=k))
             return True
         if self.pending is not None:
@@ -2742,6 +2757,48 @@ class InsertCmd(Command):
             self._ask()
             return True
         return False
+
+    def _pair_candidates(self):
+        """[(sheet, connector)] this one may pair with: of the other kind (a destination for a
+        source arrow, a source for a destination), or any for an off-sheet connector; those
+        still waiting for their other half first, then in sheet order."""
+        from .wirenums import ARROWS, connectors
+        want = {ARROWS[0]: ARROWS[1], ARROWS[1]: ARROWS[0]}.get(self.defn.name)
+        ends = connectors(self.ctx.project)
+        out = []
+        for name, es in ends.items():
+            for s, c in es:
+                if want is None or c.block == want:
+                    waiting = not any(oc is not c and (want is None or oc.block != want)
+                                      for _os, oc in es)
+                    out.append((not waiting, self.ctx.project.sheets.index(s)
+                                if s in self.ctx.project.sheets else 0, name, s, c))
+        out.sort(key=lambda t: t[:3])
+        return [(s, c) for _w, _i, _n, s, c in out]
+
+    def _pair_with(self, other):
+        name = other.attrs.get("TAG", "").strip().upper()
+        if not name:
+            self.ctx.message("That one has no name yet: give it one first")
+            return
+        self._place(self.pending, dict(self.attrs, TAG=name))
+        self.ctx.message("Paired with %s %s" % (other.block.lower(), name))
+
+    def _pick_pair_on_drawing(self, host):
+        """The arrow (or connector) this one pairs with, clicked on any sheet: back on this
+        sheet, it is placed with that one's name."""
+        ctx, at, defn, attrs = self.ctx, self.pending, self.defn, dict(self.attrs)
+        angle, mirror = self.angle, self.placed_mirror
+
+        def done(other):
+            if other is None:
+                return
+            cmd = ctx.run(InsertCmd, defn, attrs)
+            cmd.angle, cmd.placed_mirror = angle, mirror
+            cmd.pending = at
+            cmd._pair_with(other)
+        host.pick_device_for(done, kind="connector")
+        return True
 
     def _pick_on_drawing(self, host):
         """The device this contact (or footprint) belongs to, clicked on the drawing: back on
@@ -2827,9 +2884,10 @@ class InsertCmd(Command):
             self.pending = p
             self.link_name = next_name(self.ctx.project, self.ctx.sheet())
             waiting = self.link_name in connectors(self.ctx.project)
-            self.ctx.prompt("Connector name: Enter for %s (%s), or type a name"
-                            % (self.link_name, "continues the wire from another sheet"
-                               if waiting else "a new one"))
+            self.ctx.prompt("Connector name: Enter for %s (%s), type a name, or pick the one "
+                            "it pairs with" % (self.link_name, "continues the wire from "
+                                               "another sheet" if waiting else "a new one"),
+                            [("List...", PAIR_LIST), ("Pick on drawing", PAIR_PICK)])
             return
         if d.kind == "symbol" and d.role == "child" and not self.attrs.get("PARENT") \
                 and not self.attrs.get("TAG"):
@@ -2982,18 +3040,27 @@ class PickDeviceCmd(Command):
     name, title = "PICKDEVICE", "Pick device"
     repeatable = False
 
-    def __init__(self, ctx, got):
+    def __init__(self, ctx, got, kind="device"):
         super().__init__(ctx)
         self.got = got
+        self.kind = kind                # "device", or "connector" (an arrow, off-sheet)
 
     def begin(self):
-        self.ctx.prompt("Click the device it belongs to (go to any sheet first if it's on "
-                        "another; Esc stops)")
+        if self.kind == "connector":
+            self.ctx.prompt("Click the arrow or off-sheet connector to pair it with (go to any "
+                            "sheet first if it's on another; Esc stops)")
+        else:
+            self.ctx.prompt("Click the device it belongs to (go to any sheet first if it's on "
+                            "another; Esc stops)")
 
     def point(self, p):
         from . import tags
         e = self.ctx.pick_entity(p, M.Insert) if hasattr(self.ctx, "pick_entity") else None
-        if e is None or not tags.is_device(e) or not e.attrs.get("DEV"):
+        if self.kind == "connector":
+            if e is None or e.defn is None or e.defn.wiring != "link":
+                self.ctx.message("That isn't an arrow or off-sheet connector: click one")
+                return
+        elif e is None or not tags.is_device(e) or not e.attrs.get("DEV"):
             self.ctx.message("That isn't a device with a tag: click a coil, a breaker, a "
                              "distribution block...")
             return
