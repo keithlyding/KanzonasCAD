@@ -115,12 +115,11 @@ class XrefDeviceTest(unittest.TestCase):
         self.p.undo()
         self.assertEqual(self.lines(self.s1)[1:], [self.t2])
 
-    def test_far_devices_each_way(self):
-        names = xrefs.far_devices(self.s2, self.arrow(self.s2, "Destination arrow"))
-        self.assertEqual(names, [self.t2])
-        self.assertEqual(xrefs.far_devices(self.s1, self.arrow(self.s1, "Source arrow")),
-                         [self.t1])
-
+    def test_far_device_each_way(self):
+        self.assertEqual(xrefs.far_device(self.s2, self.arrow(self.s2, "Destination arrow")),
+                         self.t2)
+        self.assertEqual(xrefs.far_device(self.s1, self.arrow(self.s1, "Source arrow")),
+                         self.t1)
 
 if __name__ == "__main__":
     unittest.main()

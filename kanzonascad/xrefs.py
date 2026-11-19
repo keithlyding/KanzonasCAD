@@ -53,24 +53,82 @@ def shows_device(project, sheet, ins):
     return bool(project.settings.get("xref_device", True))
 
 
-def far_devices(sheet, c):
-    """The tags of the devices the wire on an arrow's pin lands on, on the arrow's sheet: a
-    terminal by its strip and number (TB1-12), anything else by its tag (VFD201), each once,
-    devices before terminals."""
-    from . import pull, wirenums
+def _group_of(sheet, c):
+    """The sheet-local wire group root of the wire on a connector's pin, or None."""
+    from . import wirenums
     _d, wire = _wire_in(sheet, c)
     if wire is None:
-        return []
-    root = wirenums._sheet_groups(sheet).get(wire.id)
-    devs, terms = [], []
-    for ins, pin in pull._sheet_landings(sheet).get(root, ()):
-        if pull.is_terminal(ins):
-            name, got = pull.landing_name(ins, pin), terms
-        else:
-            name, got = (ins.attrs.get("TAG", "") or "").strip() or ins.block, devs
-        if name not in got:
-            got.append(name)
-    return sorted(devs, key=pull._natural) + sorted(terms, key=pull._natural)
+        return None
+    return wirenums._sheet_groups(sheet).get(wire.id)
+
+
+def far_device(sheet, c):
+    """The device the wire on an arrow's pin goes straight to on the arrow's sheet: its tag
+    (VFD201; a terminal by its strip and number, TB1-12), or None when that wire tees off or
+    lands on nothing, or carries on to another connector (the owner, 0.19.5: "If there's a T,
+    I don't need to see a device. I really just want to be able to look at the source page and
+    know the downstream device is the plc without having to flip there")."""
+    from . import pull, wirenums
+    root = _group_of(sheet, c)
+    if root is None:
+        return None
+    lands = pull._sheet_landings(sheet).get(root, ())
+    if len(lands) != 1:
+        return None
+    roots = wirenums._sheet_groups(sheet)
+    for e in sheet.inserts():
+        if e is not c and e.defn is not None and e.defn.wiring == "link" and \
+                root in wirenums._pin_wires(sheet, e, roots).values():
+            return None                 # (the wire goes on: through another connector)
+    ins, pin = lands[0]
+    if pull.is_terminal(ins):
+        return pull.landing_name(ins, pin)
+    return (ins.attrs.get("TAG", "") or "").strip() or ins.block
+
+
+def arrow_pairs(project, ends):
+    """{id(arrow): [(sheet, other arrow)]} for the source and destination arrows of one name:
+    each arrow with only its neighbors in the chain, not every arrow of that name (the owner,
+    0.19.5: "the exact previous or next wire"; a wire carried page 4 -> 5 -> 6 has a
+    destination and a source on page 5, on one wire). Each source takes the first
+    destination after it in the project's order (sheets, then across and down) that isn't on
+    its own wire, else the last one before it; a destination left over (one source carried to
+    two sheets) takes the source just before it, else the first one after."""
+    from .wirenums import ARROWS
+    pos = {s.id: i for i, s in enumerate(project.sheets)}
+
+    def key(item):
+        s, e = item
+        return (pos.get(s.id, 0), tags.order_key(s, "across")(e.pos))
+    srcs = sorted(((s, e) for s, e in ends if e.block == ARROWS[0]), key=key)
+    dsts = sorted(((s, e) for s, e in ends if e.block == ARROWS[1]), key=key)
+    group = {id(e): (s.id, _group_of(s, e)) for s, e in srcs + dsts}
+
+    def apart(a, b):
+        ga, gb = group[id(a[1])], group[id(b[1])]
+        return ga[1] is None or ga != gb
+    out = {id(e): [] for _s, e in srcs + dsts}
+    taken = set()
+    for sv in srcs:
+        free = [d for d in dsts if id(d[1]) not in taken and apart(sv, d)]
+        after = [d for d in free if key(d) > key(sv)]
+        got = after[0] if after else (free[-1] if free else None)
+        if got is not None:
+            taken.add(id(got[1]))
+            out[id(sv[1])].append(got)
+            out[id(got[1])].append(sv)
+    for d in dsts:
+        if id(d[1]) in taken:
+            continue
+        cands = [sv for sv in srcs if apart(sv, d)]
+        before = [sv for sv in cands if key(sv) < key(d)]
+        got = before[-1] if before else (cands[0] if cands else None)
+        if got is not None:
+            out[id(d[1])].append(got)
+            out[id(got[1])].append(d)
+    for k in out:
+        out[k].sort(key=key)
+    return out
 
 
 def _where(project, sheet, e):
@@ -134,15 +192,17 @@ def live_all(project):
     # off-sheet connectors: where the same name's other ends are
     from .wirenums import connectors, ARROWS, number_at
     for name, ends in connectors(project).items():
+        pairs = arrow_pairs(project, ends) if any(c.block in ARROWS for _s, c in ends) else {}
         for s, c in ends:
             hh = hk[s.id]
             pair = [(os_, oc) for os_, oc in ends if oc is not c]
             if c.block in ARROWS:
-                # (an arrow shows only its other half's place: a source its destinations, a
-                # destination its source, not the other destinations of that name; the owner,
-                # 0.18.4: "just the source and destination for that specific wire location")
-                want = ARROWS[1] if c.block == ARROWS[0] else ARROWS[0]
-                pair = [(os_, oc) for os_, oc in pair if oc.block == want] or pair
+                # (an arrow shows only its other half's place: a source its next destination,
+                # a destination its source, not the others of that name; the owner, 0.18.4:
+                # "just the source and destination for that specific wire location", and
+                # 0.19.5: "the exact previous or next wire")
+                pair = pairs.get(id(c)) or [(os_, oc) for os_, oc in pair
+                                            if oc.block in ARROWS and oc.block != c.block]
             others = [_where(project, os_, oc) for os_, oc in pair]
             text = ", ".join(others) if others else "?"
             if c.block not in ARROWS:
@@ -167,9 +227,9 @@ def live_all(project):
             if shows_device(project, s, c):
                 far = []
                 for os_, oc in pair:
-                    for n in far_devices(os_, oc):
-                        if n not in far:
-                            far.append(n)
+                    n = far_device(os_, oc)
+                    if n and n not in far:
+                        far.append(n)
                 if far:
                     lines.append(", ".join(far))
             for item in _arrow_lines(s, c, lines, hh):
