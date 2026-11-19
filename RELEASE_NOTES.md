@@ -13,6 +13,11 @@ build fails without them.
   List... on the command line shows them with their wire number and place, waiting ones
   first; Pick on drawing lets you go to that sheet and click it. Typing a name still works.
 
+**Fixed**
+- A bus started (or ended) on pins that already have wires leaves each pin on a 45-degree
+  lead, as a single wire does, when "A second wire on a pin leaves it on a 45-degree lead" is
+  on. Before, a bus came straight off the pins.
+
 ## 0.18.4
 
 **Fixed**

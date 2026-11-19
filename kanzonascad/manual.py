@@ -672,7 +672,9 @@ one, or end it there, and the new wire runs straight onto the pin like the first
 settings, <b>A second wire on a pin leaves it on a 45-degree lead</b>, makes it leave the pin on
 a short 45-degree lead (1/8 inch on paper) and then run beside the first, as drawn by hand (to
 the side the cursor is on; a third wire takes the other side; the lead keeps its angle when the
-symbol moves); it is off to start. Several wires on a pin get no dot: the pin is the connection.</li>
+symbol moves); it is off to start. A <b>Bus</b> started or ended on pins that already have
+wires does the same, each of its wires on its own lead, all bending the way the bus turns.
+Several wires on a pin get no dot: the pin is the connection.</li>
 <li><b>Junction dots</b>: a dot goes only where a wire taps off another: where <b>three or more
 wire ends meet</b>, or where a wire <b>ends on another wire's middle or bend</b> (a T), so that
 wires leave the point three or more ways. Two wires meeting end to end get no dot, straight or

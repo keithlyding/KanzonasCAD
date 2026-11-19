@@ -1777,6 +1777,39 @@ def bus_layer_list(layers, count):
     return [layers[min(i, len(layers) - 1)] for i in range(count)]
 
 
+def bus_leads(sheet, pts):
+    """A bus wire's points with a 45-degree lead where it starts or ends on a pin that already
+    has a wire (as the Wire command draws a double landing; the owner, 0.18.5: drops tapped
+    off a disconnect's line side with Bus, the setting on, came straight off the pins). The
+    lead bends toward where the wire turns next, so the bus's wires keep apart; its first
+    piece runs beside the wire already there, its next corner moved over to stay square."""
+    from .wires import lead
+    pts = [tuple(q) for q in pts]
+    for at_end in (False, True):
+        if len(pts) < 2:
+            break
+        seq = pts[::-1] if at_end else pts
+        p0, p1 = seq[0], seq[1]
+        toward = seq[2] if len(seq) > 2 else p1
+        got = lead(sheet, p0, toward)
+        if got is None:
+            continue
+        corner, out = got
+        along = (p1[0] - p0[0], p1[1] - p0[1])
+        if abs(along[0] * out[1] - along[1] * out[0]) > 1e-9 or \
+                along[0] * out[0] + along[1] * out[1] <= 0:
+            continue                    # (not leaving the pin the way the lead does)
+        if out[0]:                      # (across: the piece moved up or down to the corner)
+            q1 = (p1[0], corner[1])
+        else:
+            q1 = (corner[0], p1[1])
+        if G.dist(corner, p0) >= G.dist(p1, p0):
+            continue                    # (a piece shorter than the lead: left as it is)
+        seq = [p0, corner, q1] + seq[2:]
+        pts = seq[::-1] if at_end else seq
+    return [tuple(q) for q in M._tidy(pts)]
+
+
 class BusCmd(Command):
     """BUS: several wires side by side (three phases, say). Start it on a symbol's pin and it
     takes that side's pins (a disconnect's L1, L2, L3: how many and how far apart, the others
@@ -2450,8 +2483,11 @@ class BusCmd(Command):
 
     def _paths(self, pts):
         paths = self._on_pins(bus_paths(pts, self.count, self.spacing, self._flip_for(pts)))
-        return self._onto(self._onto(paths, self.tap_start, True, pts), self.tap_end, False,
-                          pts)
+        paths = self._onto(self._onto(paths, self.tap_start, True, pts), self.tap_end, False,
+                           pts)
+        if self.ctx.project.settings.get("wire_lead", False):
+            paths = [bus_leads(self.ctx.sheet(), q) for q in paths]
+        return paths
 
     def _make(self, fan=None):
         made = 0

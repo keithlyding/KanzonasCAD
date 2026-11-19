@@ -849,6 +849,10 @@ def random_editing(log, out, ops, seed, drawing=None):
 
     def op_bus():
         # (0.16: started on a symbol's pins it takes them; S straight; L layers)
+        if rnd.random() < 0.15:
+            # (0.18.5: now and then with 45-degree leads at pins that already have a wire)
+            with p.edit("leads") as ed:
+                ed.project_settings({"wire_lead": not p.settings.get("wire_lead", False)})
         sides = []
         for e in s.inserts():
             for _n, q in e.pin_points():
