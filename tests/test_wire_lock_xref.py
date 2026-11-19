@@ -74,7 +74,7 @@ class WireLockXrefTest(unittest.TestCase):
         finally:
             dialogs.QDialog.exec = real
         self.assertTrue(got["ticked"])
-        self.assertEqual(out, ("1077", False, True))
+        self.assertEqual(out, ("1077", "", True))
 
     def test_source_puts_connectors_on_both(self):
         other = self.num(self.s2, self.b)

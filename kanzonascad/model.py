@@ -64,13 +64,29 @@ DEFAULT_SETTINGS = {
     "duct_hatch": False,        # wire duct drawn with a light hatch (Panel settings)
     "xref_height": 0.065,       # cross-reference text (0.08 before 0.18: "slightly smaller")
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
+    # a wire tapped off another (its end on the other's middle): "same" its number, "suffix"
+    # its number with -1, -2... in the numbering order (a tap off a tap: a, b...), "own" a
+    # number of its own (the owner, 0.18.3: "all three wires tapping off the bus are still
+    # the same wire number ... Those need to change where they tap off"; asked: -1, -2 per
+    # tap in order, on to start; a project from before keeps "same")
+    "tap_numbers": "suffix",
     "wire_number_height": 0.08,
     "dim_height": 0.1,          # dimension text, paper inches
+    # the border with its zones and the title block drawn and printed on every sheet that
+    # doesn't say otherwise (Sheet properties; the owner, 0.18.4: "turn the title block and/or
+    # grid off and on, for the whole project and for individual sheets")
+    "show_border": True,
+    # new dimensions read decimal (12.50") or fractional to the nearest 1/16 (1-9/16"): "decimal",
+    # "1/8", "1/16", "1/32", "1/64"; each dimension keeps its own (Dimension units)
+    "dim_units": "decimal",
+    "show_title_block": True,
     "tb_position": "corner",    # the title block: in the lower right corner, or a strip down
                                 # the right ("right") or along the bottom ("bottom") that the
                                 # zone grid stops at
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
     "wire_gauge_shown": True,   # a wire layer's gauge and color beside its wires
+    "wire_gauge_height": 0.06,  # gauge labels' text, paper inches (wire numbers: 0.08)
+    "wire_gauge_each": "group",  # once for wires side by side alike ("group"), or "each" run
     "footprint_label": "tag",   # what a footprint placed shows to start (Footprint label)
     "wire_around": True,        # a wire goes round the symbols in its way (wires.route_around)
     "wire_clear": 0.125,        # ...that far from them, paper inches
@@ -371,10 +387,10 @@ class Wire(Polyline):
     wires. What it connects is worked out from where its ends are (wires.py), never stored, so
     it can't go stale; moving a symbol drags the ends that sat on its pins."""
     kind = "wire"
-    __slots__ = ("num", "num_lock", "own_num", "labels", "awg")
+    __slots__ = ("num", "num_lock", "own_num", "labels", "awg", "same_num", "show_color")
 
     def __init__(self, points, closed=False, num=None, num_lock=False, own_num=False,
-                 labels=(), awg="", **kw):
+                 labels=(), awg="", same_num=False, show_color=False, **kw):
         kw.setdefault("layer", "WIRES")
         super().__init__(points, False, **kw)
         # its wire number (every wire of a connected group has the same: wirenums.py) and
@@ -385,12 +401,19 @@ class Wire(Polyline):
         # not one group with it for numbering (the owner, 0.17.2: "when I tap off a wire, I
         # can either change the wire number or leave as is")
         self.own_num = bool(own_num)
+        # a tap that keeps the number of the wire it taps whatever the project's tap numbers
+        # (0.18.3: S at the tap's question; a branch of a ladder rung, say)
+        self.same_num = bool(same_num) and not self.own_num
         # its number shown again at these distances along it from its first point (Wire
         # number label: placed by hand; the number they show is never stored, so never stale)
         self.labels = sorted(round(float(t), 6) for t in (labels or ()) if float(t) >= 0)
         # its own gauge (Wire size: "10", "2/0"), or "" for its layer's (the owner, 0.18.2:
         # "per wire, with the layer as default")
         self.awg = str(awg or "").strip()
+        # its insulation color written in its gauge label too (Wire color label: the owner,
+        # 0.18.4, "I don't think we need to include the wire color. Maybe that can be a
+        # toggle-able option on a per-wire basis?")
+        self.show_color = bool(show_color)
 
     def _data(self):
         d = super()._data()
@@ -400,16 +423,21 @@ class Wire(Polyline):
                 d["num_lock"] = True
         if self.own_num:
             d["own_num"] = True
+        if self.same_num:
+            d["same_num"] = True
         if self.labels:
             d["labels"] = list(self.labels)
         if self.awg:
             d["awg"] = self.awg
+        if self.show_color:
+            d["show_color"] = True
         return d
 
     @classmethod
     def _from(cls, d):
         return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
                    d.get("own_num", False), d.get("labels") or (), d.get("awg", ""),
+                   d.get("same_num", False), d.get("show_color", False),
                    layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
 
     def length(self):
@@ -882,6 +910,34 @@ def fmt_inches(v, places=2):
     return "%.*f\"" % (places, v)
 
 
+DIM_UNITS = ("decimal", "1/8", "1/16", "1/32", "1/64")
+
+
+def dim_units(text):
+    """A dimension format typed or kept ("decimal", "1/16"...; "" and anything else: decimal)."""
+    t = str(text or "").strip().lower()
+    return t if t in DIM_UNITS else "decimal"
+
+
+def fmt_length(v, units="decimal"):
+    """A length in a dimension's format: decimal (12.50\") or fractional to the nearest 1/8,
+    1/16, 1/32 or 1/64, reduced, a dash between the whole inches and the fraction as US
+    drawings write it (1-9/16\", 3/4\", 2\"; the owner, 0.18.4: "change dimensions to decimal
+    or fractional")."""
+    units = dim_units(units)
+    if units == "decimal":
+        return fmt_inches(v)
+    den = int(units.split("/")[1])
+    n = int(round(abs(v) * den))
+    whole, num = divmod(n, den)
+    sign = "-" if v < 0 and n else ""
+    if not num:
+        return "%s%d\"" % (sign, whole)
+    g = math.gcd(num, den)
+    frac = "%d/%d" % (num // g, den // g)
+    return "%s%s%s\"" % (sign, ("%d-" % whole) if whole else "", frac)
+
+
 class Composite(Entity):
     """An object drawn as several plain pieces (lines, texts) worked out from a few values:
     dimensions, DIN rail, wire duct. Subclasses give parts(); hit tests, boxes and export
@@ -927,17 +983,20 @@ class Dimension(Composite):
     (across or up and down, whichever loc points to) or "aligned" (along p1-p2). height: its
     text height, in drawing units (on a scaled panel sheet, the paper height times the
     scale's factor: it reads the same on paper at any scale). text: what to show instead of
-    the measured length ("" measures; <> in it stands for the measured length)."""
+    the measured length ("" measures; <> in it stands for the measured length). units: how
+    the length reads, "decimal" (12.50\") or a fraction's precision ("1/16": 1-9/16\")."""
     kind = "dimension"
-    __slots__ = ("p1", "p2", "loc", "mode", "height", "text", "_parts")
+    __slots__ = ("p1", "p2", "loc", "mode", "height", "text", "units", "_parts")
 
-    def __init__(self, p1, p2, loc, mode="linear", height=0.1, text="", **kw):
+    def __init__(self, p1, p2, loc, mode="linear", height=0.1, text="", units="decimal",
+                 **kw):
         kw.setdefault("layer", "DIMENSIONS")
         super().__init__(**kw)
         self.p1, self.p2, self.loc = _pt(p1), _pt(p2), _pt(loc)
         self.mode = "aligned" if mode == "aligned" else "linear"
         self.height = float(height)
         self.text = str(text or "")
+        self.units = dim_units(units)
         self._parts = None
 
     def _data(self):
@@ -945,13 +1004,15 @@ class Dimension(Composite):
              "height": self.height}
         if self.text:
             d["text"] = self.text
+        if self.units != "decimal":
+            d["units"] = self.units
         return d
 
     @classmethod
     def _from(cls, d):
         return cls(d["p1"], d["p2"], d["loc"], d.get("mode", "linear"), d.get("height", 0.1),
-                   d.get("text", ""), layer=d.get("layer", "DIMENSIONS"), color=d.get("color"),
-                   id=d.get("id"))
+                   d.get("text", ""), d.get("units", "decimal"),
+                   layer=d.get("layer", "DIMENSIONS"), color=d.get("color"), id=d.get("id"))
 
     # ---- geometry --------------------------------------------------------------------------
     def direction(self):
@@ -974,7 +1035,7 @@ class Dimension(Composite):
         return self.direction()[1]
 
     def label(self):
-        v = fmt_inches(self.value())
+        v = fmt_length(self.value(), self.units)
         if not self.text:
             return v
         return self.text.replace("<>", v)
@@ -2701,6 +2762,10 @@ class Sheet:
         # says (None: Project properties' "Wire numbers follow the tags' order"; the owner,
         # 0.18: "both a sheet and project setting")
         self.wire_order_tags = None
+        # the border and zones, the title block: shown (True), not (False), or as the project
+        # says (None: Project properties, Schematic)
+        self.show_border = None
+        self.show_title_block = None
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
@@ -2928,6 +2993,8 @@ class Sheet:
              "number_order": self.number_order,
              "number_from": self.number_from,
              "wire_order_tags": self.wire_order_tags,
+             "show_border": self.show_border,
+             "show_title_block": self.show_title_block,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
              "rotation": self.rotation,
@@ -2961,6 +3028,8 @@ class Sheet:
             "down", "wires") else "across"
         self.number_from = d.get("number_from")
         self.wire_order_tags = d.get("wire_order_tags")
+        self.show_border = d.get("show_border")
+        self.show_title_block = d.get("show_title_block")
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         try:
@@ -3450,6 +3519,8 @@ class Project:
         for bd in d.get("blocks", []) or []:
             b = BlockDef.from_dict(bd)
             p.blocks[b.name] = b
+        if "tap_numbers" not in (d.get("settings") or {}):
+            p.settings["tap_numbers"] = "same"      # (from before 0.18.3: numbers as they were)
         old_labels = "fp_label_height" not in (d.get("settings") or {})
         ratio = DEFAULT_SETTINGS["fp_label_height"] / float(p.settings.get("tag_height") or 0.1)
         for sd in d.get("sheets", []):

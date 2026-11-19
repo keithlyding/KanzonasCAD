@@ -163,6 +163,19 @@ def _partition(groups):
     return sorted(sorted(g) for g in by.values())
 
 
+def _number_state(p, s, w):
+    """What numbering knew of wire w, for a failure's message."""
+    g = wirenums.group_of(p, s, w)
+    other = wirenums.taps(s, w)
+    return "taps %s; tap numbers %s; own %s, same %s; its group %s" % (
+        other.num if other is not None else None, wirenums.tap_mode(p), w.own_num, w.same_num,
+        [(x.id, x.num, x.num_lock) for _s, x in (g[1] if g else [])][:6])
+
+
+def _tap_pairs(sheet):
+    return sorted((k, tuple(q)) for k, q in sheet._wire_adj_split[2].items())
+
+
 def check_groups(sheet):
     """The wire groups kept up to date edit by edit are the ones worked out from scratch."""
     kept = _partition(wirenums._sheet_groups(sheet))
@@ -171,6 +184,15 @@ def check_groups(sheet):
     fresh = _partition(wirenums._sheet_groups(sheet))
     sheet._wire_groups, sheet._wire_adj = saved
     assert kept == fresh, "wire groups kept up to date differ from a fresh count"
+    # (taps numbered apart, 0.18.3: their groups and the taps found, kept edit by edit too)
+    kept = (_partition(wirenums._sheet_groups(sheet, True)), _tap_pairs(sheet))
+    saved = sheet._wire_groups_split, sheet._wire_adj_split
+    sheet._wire_groups_split = sheet._wire_adj_split = None
+    fresh = (_partition(wirenums._sheet_groups(sheet, True)), _tap_pairs(sheet))
+    sheet._wire_groups_split, sheet._wire_adj_split = saved
+    assert kept == fresh, "taps kept up to date differ from a fresh count: %s" % (
+        sorted(set(kept[1]) ^ set(fresh[1]))[:4],)
+    BC.CHECKED["taps kept up to date"] += 1
     kept = (wires.junctions(sheet), sorted(crossings.found(sheet)))
     saved = (sheet._junctions, sheet._junction_state, sheet._crossings,
              sheet._crossing_state)
@@ -1633,9 +1655,24 @@ def random_editing(log, out, ops, seed, drawing=None):
                     # there, or on a pin it was taken to)
                     assert any(G.dist(r, want) < 1e-6 for y in s.wires()
                                for r in (y.points[0], y.points[-1])) or \
-                        wires.pins_on(s, want), "Stretch: an end at %s didn't go to %s" % (
+                        wires.pins_on(s, want) or pulled_on(want), \
+                        "Stretch: an end at %s didn't go to %s" % (
                             x.points[i], want)
         BC.CHECKED["stretch moves the ends in the window"] += 1
+
+    def pulled_on(want):
+        # (0.18.3, the owner's choice: an end left less than wires.PULL from a pin or another
+        # wire is put on it, the battery sweep, seed 1803; so an end may sit that near where
+        # it was sent, but only joined there: on a pin, or on another wire)
+        for y in s.wires():
+            for r in (y.points[0], y.points[-1]):
+                if G.dist(r, want) < wires.PULL and (wires.pins_on(s, r) or any(
+                        o.id != y.id and o.distance(r) <= wires.TOL
+                        for o in s.query((r[0] - 1e-6, r[1] - 1e-6, r[0] + 1e-6, r[1] + 1e-6))
+                        if isinstance(o, M.Wire))):
+                    BC.CHECKED["an end pulled on, joined"] += 1
+                    return True
+        return False
 
     def op_grips():
         # (0.18) several grips picked with Shift (the view's picked grips), one of them
@@ -1658,7 +1695,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         for (wid, i), g in start.items():
             want = (g[0] + d[0], g[1] + d[1])
             assert any(G.dist(r, want) < 1e-6 for y in s.wires() for r in y.points) or \
-                wires.pins_on(s, want), "a picked grip at %s didn't go to %s" % (g, want)
+                wires.pins_on(s, want) or pulled_on(want), \
+                "a picked grip at %s didn't go to %s" % (g, want)
         BC.CHECKED["picked grips move together"] += 1
 
     def op_lock_numbers():
@@ -1679,8 +1717,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         for w in target:
             got = s.entities.get(w.id)
             if got is not None and got.num:
-                assert got.num_lock == o["lock"], "wire %s %slocked after %s" % (
-                    got.num, "" if got.num_lock else "un", "Lock" if o["lock"] else "Unlock")
+                assert got.num_lock == o["lock"], "wire %s %slocked after %s (%s)" % (
+                    got.num, "" if got.num_lock else "un", "Lock" if o["lock"] else "Unlock",
+                    _number_state(p, s, got))
         BC.CHECKED["Lock numbers as asked"] += 1
 
     def op_number_bus():
@@ -1740,11 +1779,16 @@ def random_editing(log, out, ops, seed, drawing=None):
             ed.sheet_meta(s, number_order="across", number_from=None)
 
     def op_tap():
-        # (0.17.2: a wire drawn off the middle of another asks; Enter: its number, N: one of
-        # its own; worked out from the numbers after. On a wire of its own, just past the
-        # drawing: what the tap means is then known)
+        # (0.17.2: a wire drawn off the middle of another asks; 0.18.3: Enter numbers it as
+        # the project's tap numbers say (the same, the wire's with -1, or its own), S keeps
+        # the wire's number, N gives it one of its own; worked out from the numbers after. On
+        # a wire of its own, just past the drawing: what the tap means is then known)
         if not wirenums.enabled(p):
             return
+        if rnd.random() < 0.2:
+            with p.edit("tap numbers") as ed:
+                ed.project_settings({"tap_numbers": rnd.choice(["same", "suffix", "own"])})
+        mode = wirenums.tap_mode(p)
         k = s.k()
         o = clear_of_drawing(k)
         if o is None:
@@ -1762,16 +1806,27 @@ def random_editing(log, out, ops, seed, drawing=None):
             v.cmd.enter()
         asked = v.cmd is not None and v.cmd.tapped is not None
         assert asked, "a wire drawn off another's middle didn't ask about its number"
-        own = rnd.random() < 0.5
-        v.input_text("N" if own else "S")
+        said = rnd.choice(["N", "S", ""])
+        if said:
+            v.input_text(said)
+        else:
+            v.enter()
         finish()
         tap = [x for x in s.wires() if x.touches(to) and x.touches(m)]
         main = s.entities.get(w.id)
         assert len(tap) == 1 and main is not None, "the tap or the wire it taps is gone"
+        how = {"N": "own", "S": "same"}.get(said, mode)
         if main.num and tap[0].num:
-            assert (tap[0].num != main.num) == own, "a tap %s: %s, %s" % (
-                "with its own number" if own else "keeping the number", tap[0].num, main.num)
+            want = {"same": main.num, "suffix": main.num + ("a" if "-" in main.num else "-1")}
+            if how == "own":
+                assert tap[0].num != main.num, "a tap with its own number: %s, %s" % (
+                    tap[0].num, main.num)
+            else:
+                assert tap[0].num == want[how], "a tap (%s, %r typed) numbered %s off %s" % (
+                    mode, said, tap[0].num, main.num)
             BC.CHECKED["tap numbered as asked"] += 1
+            if how == "suffix":
+                BC.CHECKED["tap numbered -1 off the wire"] += 1
 
     def op_wire_size():
         # (0.18.2: Wire size: a wire clicked given a gauge of its own, or the layer's again;
@@ -1806,11 +1861,15 @@ def random_editing(log, out, ops, seed, drawing=None):
         now = s.entities.get(w.id)
         want = "" if typed == "L" else C.wire_gauge(typed)
         assert now is not None and now.awg == want, (typed, now and now.awg)
-        if p.settings.get("wire_gauge_shown", True) and (want or p.layers.get(now.layer) and
-                                                          p.layers[now.layer].wire_label()):
-            from kanzonascad import wirelayers
-            text = wirelayers.wire_label(p.layers.get(now.layer), now.awg)
-            assert text in [t.text for t in wirenums.gauge_labels(p, s)], (text, now.layer)
+        lay = p.layers.get(now.layer)
+        g = now.awg or (lay.awg if lay is not None else "")
+        if p.settings.get("wire_gauge_shown", True) and g:
+            # (its gauge shown: the label of its run, or of the wires side by side with it of
+            # that gauge, starts with it; the color only where asked, 0.18.3, the owner: "I
+            # don't think we need to include the wire color")
+            text = M.gauge_text(g)
+            got = [t.text for t in wirenums.gauge_labels(p, s)]
+            assert any(t == text or t.startswith(text + " ") for t in got), (text, now.layer)
         BC.CHECKED["wire size as typed"] += 1
 
     def op_wire_label():
@@ -1965,6 +2024,89 @@ def random_editing(log, out, ops, seed, drawing=None):
             if v.cmd is not None:
                 v.input_text(fmt(q))
         finish()
+
+    def op_wire_color():
+        # (0.18.4: Wire color label on the selected wires: on when any is off, else off;
+        # worked out from the wires before)
+        ws = s.wires()
+        if not ws:
+            return
+        pick = rnd.sample(ws, min(len(ws), rnd.randint(1, 3)))
+        want = any(not w.show_color for w in pick)
+        v.set_selection({w.id for w in pick})
+        v.run(C.WireColorLabelCmd)
+        finish()
+        for w in pick:
+            got = s.entities.get(w.id)
+            if got is not None:
+                assert got.show_color == want, "Wire color label left a wire %s" % (
+                    "showing" if got.show_color else "hiding")
+        BC.CHECKED["wire color label as asked"] += 1
+
+    def op_dim_units():
+        # (0.18.4: Dimension units on the selected dimensions, D, F or a precision typed; new
+        # dimensions as the project says, now and then changed; each reads its true length in
+        # its format, worked out here from its two points)
+        if rnd.random() < 0.2:
+            with p.edit("dim units") as ed:
+                ed.project_settings({"dim_units": rnd.choice(M.DIM_UNITS)})
+        ds = [e for e in s.entities.values() if isinstance(e, M.Dimension)]
+        if not ds:
+            return
+        pick = rnd.sample(ds, min(len(ds), rnd.randint(1, 3)))
+        v.set_selection({d.id for d in pick})
+        v.run(C.DimUnitsCmd)
+        typed = rnd.choice(["D", "F", "1/8", "1/16", "1/32", "1/64"])
+        v.input_text(typed)
+        finish()
+        proj = M.dim_units(p.settings.get("dim_units"))
+        want = {"D": "decimal", "F": proj if proj != "decimal" else "1/16"}.get(typed, typed)
+        for d in pick:
+            got = s.entities.get(d.id)
+            if got is None or got.text:
+                continue
+            a, b = got.p1, got.p2
+            u, val = got.direction()
+            true = abs((b[0] - a[0]) * u[0] + (b[1] - a[1]) * u[1])
+            assert got.units == want, "Dimension units %r gave %s, not %s" % (typed, got.units,
+                                                                                 want)
+            if want == "decimal":
+                expect = "%.2f\"" % true
+            else:
+                den = int(want.split("/")[1])
+                n = int(round(true * den))
+                w_, r_ = divmod(n, den)
+                if r_:
+                    import math as _m
+                    g = _m.gcd(r_, den)
+                    expect = "%s%d/%d\"" % ("%d-" % w_ if w_ else "", r_ // g, den // g)
+                else:
+                    expect = "%d\"" % w_
+            assert got.label() == expect, "a dimension of %r reads %s, not %s" % (
+                true, got.label(), expect)
+            BC.CHECKED["dimension reads in its units"] += 1
+
+    def op_frame():
+        # (0.18.4: border and zones, title block, off and on for the project or a sheet: what
+        # is drawn is what the sheet's say, else the project's)
+        what = rnd.choice(["show_border", "show_title_block"])
+        with p.edit("frame") as ed:
+            if rnd.random() < 0.5:
+                ed.project_settings({what: rnd.random() < 0.6})
+            else:
+                ed.sheet_meta(s, **{what: rnd.choice([None, True, False])})
+        on = {}
+        for k in ("show_border", "show_title_block"):
+            own = getattr(s, k)
+            on[k] = bool(p.settings.get(k, True)) if own is None else own
+        ents = sheetframe.frame_entities(p, s)
+        n_b = len(sheetframe.border_entities(s)) if on["show_border"] else 0
+        assert (len(ents) > n_b) == (on["show_title_block"] and bool(
+            p.title_block.entities)), "the title block %s drawn, the sheet says %s" % (
+                "is" if len(ents) > n_b else "isn't", on["show_title_block"])
+        assert sum(1 for e in ents if e.layer == sheetframe.FRAME_LAYER) >= (
+            1 if on["show_border"] else 0), "the border isn't drawn"
+        BC.CHECKED["border and title block as set"] += 1
 
     texts = ["NOTE", "SEE DETAIL A", "LINE ONE\nLINE TWO", "A LONGER NOTE THAT WRAPS"]
     win.ask_mtext = lambda text="": rnd.choice(texts + [""])
@@ -2663,7 +2805,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -2927,6 +3069,13 @@ def mixed_project(win):
         ed.add(panel, M.Rail((4, 4), (34, 4), "TS35x7.5", *M.RAIL_PROFILES["TS35x7.5"][1:]))
         ed.add(panel, M.Duct((4, 10), (34, 10), "", 2, 3))
         ed.add(panel, M.Dimension((4, 4), (34, 4), (19, 1), height=0.125 * panel.k()))
+        ed.add(panel, M.Dimension((4, 10), (5.5625, 10), (5, 12), height=0.125 * panel.k(),
+                                  units="1/16"))
+        ed.sheet_meta(panel, show_title_block=False)
+    with p.edit("a wire showing its color") as ed:
+        w0 = next(iter(p.sheets[0].wires()), None)
+        if w0 is not None:
+            ed.change(p.sheets[0], w0.copy(show_color=True))
     with p.edit("notes") as ed:
         s = p.sheets[0]
         ed.add(s, M.Leader([(14, 9), (15, 10), (16, 10)], "SEE NOTE 1"))

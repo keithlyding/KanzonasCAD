@@ -55,6 +55,11 @@ gets that room) and a <b>title block</b> in the lower right corner.</p>
 of every wire number (6001, 6002 ...).</p>
 <ul>
 <li><b>New sheet</b> adds a sheet after the one shown, the same size and zones.</li>
+<li><b>Duplicate sheet</b> (Sheets menu and tab) adds a copy of the sheet shown just after it,
+with everything on it, titled "(copy)", on a page of its own (the next free number when the
+original's was typed). Its devices get tags of its page (CR201 becomes CR301), its wires new
+numbers, and its off-sheet connectors and arrows no name (so it isn't joined to the original's
+wires: name them for the copy). One step, so Undo takes it back.</li>
 <li><b>Delete sheet</b> removes the sheet shown (Undo brings it back).</li>
 <li><b>Move sheet up</b> and <b>Move sheet down</b> change the order (and so the automatic
 page numbers).</li>
@@ -104,9 +109,18 @@ print in it.</p>
 <p><b>Wire gauge and color</b>: in <b>Layers...</b>, double-click a wire layer's <b>AWG</b> or
 <b>Wire color</b> to give its wires a gauge (14, 10, 2/0...) and insulation color (BLK, BRN,
 GRN/YEL...), picked from the usual ones or typed. Each run of joined wires on that layer then
-shows them, <b>10 AWG BRN</b>, on the other side of the wire from its number (under it, or right
-of it on an upright wire), a little smaller; Project properties, Schematic, <b>Show a wire
-layer's gauge and color beside its wires</b> turns that off. The layers a bus adds (WIRE BROWN,
+shows its gauge, <b>10 AWG</b>: in line with its number, just after it (<b>2018&nbsp;&nbsp;12
+AWG</b>), when the wire's straight piece has room and nothing is in the way, else on the other
+side of the wire from its number (under it, or right of it on an upright wire), slid along the
+wire off any other wire's number or label; smaller (Project properties, Schematic: <b>Gauge label
+height</b>, 0.06" to start); <b>Show a wire layer's gauge beside its wires</b> there turns it
+off. <b>Wire color label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) writes the
+color too, on the wires you select or click (<b>10 AWG BRN</b>); again, and it stops. Wires
+side by side of one gauge (within 3/4" of each other on paper, running along each other: a
+starter's conductors to its drive, a bus) show it <b>once</b>, beside the outside one (the
+rightmost of upright wires, the lowest of those across), with the colors shown of them listed
+once each in order across them (<b>12 AWG BRN, ORG, YEL</b>). <b>Gauge and color shown</b>, On
+every wire, puts it back on each. The layers a bus adds (WIRE BROWN,
 WIRE ORANGE...) come with their color's name; give them a gauge once and every wire on them
 shows it. A wire color of two names, <b>BLU/WHT</b> say, draws the layer's wires striped: the
 layer's color with stripes of the second (a 24 VDC common), on the screen and printed (not when
@@ -212,6 +226,11 @@ PROJECT), revision rows (REV1, REV1DET, BY1, RD1: <code>{{Rev 1}}</code>, its de
 date; KanzonasCAD's Rev 1 is the latest revision), any other its own name, a field of the
 project to fill in Project properties. Their values come along into Project properties when the
 project's are empty. The sheet must be upright (not turned) to do it.</p>
+<p><b>Show on sheets</b> (Project properties, General): untick <b>Border and zones</b> or
+<b>Title block</b> to leave them off every sheet: not drawn, printed or exported. A sheet can
+say otherwise in its Sheet properties: <b>Border and zones</b> and <b>Title block</b> there are
+<b>As the project</b> (to start), <b>Shown</b> or <b>Off</b>, for that sheet alone. Grid
+references (6-D1) still follow the zones when the border is off.</p>
 <p><b>Title block position</b> (Project properties, General) says where the title block sits:</p>
 <ul>
 <li><b>Lower right corner</b> (to start): the zones run the full width and height of the
@@ -689,7 +708,8 @@ Align: click the device to line up with, then the devices to line up, and press 
 slides along its own wire (as Scoot) into line: the same column on rungs across, the same row
 on wires up and down. One that would leave its wire stops where its wire ends (the command
 line says so).</li>
-<li>Wires are ordinary objects otherwise: grips stretch their corners, Trim and Erase work on
+<li>Wires are ordinary objects otherwise: grips stretch their corners (an end dropped less than
+0.01" from a pin or another wire is put on it), Trim and Erase work on
 them (trimmed pieces stay wires), and they print and export (DXF) as polylines.</li>
 </ul>
 
@@ -772,12 +792,30 @@ side with a <b>short line</b> back to the wire (drawn, printed and exported with
 number you put with Wire number label stays where you put it. A wire longer than 6 inches on paper shows it near <b>both ends</b> instead (Project
 properties, Schematic: <b>Number near both ends of wires longer than</b>; Off for one).</p>
 <ul>
-<li><b>One number per connected wire</b>: wires joined end to end or in a T share it. A
-symbol's pins don't join wires, so the number changes through a device or a terminal.</li>
+<li><b>One number per connected wire</b>: wires joined end to end share it. A symbol's pins
+don't join wires, so the number changes through a device or a terminal.</li>
+<li><b>Taps</b> (a wire whose end is on the middle of another, with a dot: a drop off a bus) are
+numbered as Project properties, Schematic, <b>Wires tapped off a wire are numbered</b> says:
+<ul>
+<li><b>The wire's number with -1, -2, -3</b> (new projects): the drops off bus wire 2007 are
+2007-1, 2007-2, 2007-3 in the sheet's numbering order, those off 2008 are 2008-1, 2008-2...,
+and a tap off a tap takes a letter, 2007-1a, 2007-1b. The wires past the device a drop lands
+on are numbered as usual. Adding or removing a drop renumbers the others on that wire
+(unless their numbers are locked).</li>
+<li><b>The same number as the wire</b> (projects from before 0.18.3 keep this one): a tap is
+one wire with the wire it taps.</li>
+<li><b>A number of its own</b>: each tap takes the next free number of its page.</li>
+</ul>
+A drop is a tap too where a bus wire ends at it and another wire carries straight on from there
+(the bus going on to another row). A wire that ends on another's bend and carries straight on
+along it is the same wire, not a tap: to number a drop drawn as one wire with the run that goes
+on, draw the drop as a wire of its own.
+Changing it renumbers the taps in one step (Undo puts them back). A number you typed stays.</li>
 <li><b>Tapping off a wire</b>: draw a wire from (or to) the middle of another and the command line
-asks: <b>Enter</b> keeps that wire's number (they are one wire), <b>N</b> gives the tap a number
-of its own (it stays connected, with its dot; only the numbers differ). Double-click the tap
-to change it later: <b>A number of its own</b>.</li>
+asks: <b>Enter</b> numbers the tap as the project says, <b>S</b> gives it the same number as that
+wire whatever the project says (a branch of a ladder rung, say: a seal-in contact), <b>N</b>
+gives it a number of its own (it stays connected, with its dot; only the numbers differ).
+Double-click the tap to change it later: <b>Tapped off</b> has the same three choices.</li>
 <li><b>Wire number label</b> (WIRELABEL, WL; Modify menu, Schematic tab: Edit wires): click a
 wire anywhere along it and its number shows there too, as many places as you like. It always
 shows the wire's number as it is now, never a copy typed in, so renumbering changes every one.
@@ -793,7 +831,8 @@ on it, Trim), the part later in order takes a new number.</li>
 <b>Lock this number</b> ticks itself when you type one: numbering leaves a locked number alone.
 Untick it to keep the number for now but let numbering change it (Renumber sheet, a new page
 number, or a number that isn't of its sheet's page). Clear the number to let numbering give one
-back. For a tap, the same window has <b>A number of its own</b>.</li>
+back. For a tap, the same window has <b>Tapped off</b>: as the project numbers taps, the same
+number as the wire it taps, or a number of its own.</li>
 <li>Typing a number another wire already has asks whether this is a <b>cross-reference</b>:
 <b>Source</b> (this wire goes on to that one) or <b>Destination</b> (it comes from there) puts a
 pair of arrows with a new name on the open end of each wire (the end on nothing): a <b>Source
@@ -826,13 +865,20 @@ whichever way the connector is turned. <b>Source arrow</b> and <b>Destination ar
 (Library, JIC/Wiring) are the same, drawn as arrows on the wire's end: a source arrow points
 away from the line where the wire leaves, a destination arrow's tip is on the line, pointing
 into it, where the wire arrives. Past each arrow's far end (not over the wire), the wire's
-number and the other arrow's place (<b>2046 / 7-A2</b>).</li>
+number and the other arrow's place (<b>2046 / 7-A2</b>), turned the way the arrow is: on a wire
+running up and down it reads up, in line with the wire (as that wire's number reads); across,
+it is level. A source arrow placed on the end of a numbered wire is named by the wire's number (2046):
+nothing to type (unless another source arrow has that name: then it asks). A destination arrow
+offers the name of a source still waiting for it; placed, its wire takes the source's number
+and its layer (480V BRN, with its color and gauge). Each arrow shows only its other half's
+place: a destination its source, a source its destinations.</li>
 <li><b>Source/destination arrows</b> (SIGARROW, SDA; Draw menu, Schematic tab:
 Cross-references), as AutoCAD Electrical's signal arrows: click near the open end of the wire
 where it leaves (an end on nothing: a Source arrow goes there), then near the open end where it
 arrives, on this sheet or another (go to it in the Sheets panel: the command waits), and a
 Destination arrow goes there. They get a new name, the two wires become one wire with the
-source's number, and each arrow shows that number and the other's place. It goes on with the
+source's number and the destination's wire takes the source wire's layer, and each arrow shows
+that number and the other's place. It goes on with the
 next pair; Enter or Esc ends it. An end connected to something, or the same wire twice, is
 refused with a message.</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
@@ -919,7 +965,8 @@ the originals (the mirrored objects show while it asks). Text stays readable.</t
 three ends of a bus, say), then a base point and where it goes. Wire ends in the window move
 and their wires stay square (a corner slides along, or a jog is added); a line's ends and a
 polyline's corners in it move; an object wholly in it, and a symbol, text or circle whose
-insertion point or center is in it, moves whole (wires on a symbol's pins follow). One step.
+insertion point or center is in it, moves whole (wires on a symbol's pins follow). A wire
+end it leaves less than 0.01" from a pin or another wire is put on it. One step.
 </td></tr>
 <tr><td>Array</td><td>ARRAY, AR</td><td>Copies of the selected objects in rows and columns
 (R, to start: how many rows, how many columns, the distance between rows (up; negative: down)
@@ -951,6 +998,10 @@ object, only the piece a click there would cut away lights up. U undoes the last
 then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>
 <tr><td>Aligned dimension</td><td>DIMALIGNED, DAL</td><td>The same, measured along the line
 between the two points (slanted too).</td></tr>
+<tr><td>Wire color label</td><td>WIRECOLOR, WCL</td><td>The selected (or clicked) wires write
+their color in their gauge label too, or stop.</td></tr>
+<tr><td>Dimension units</td><td>DIMUNITS, DU</td><td>The selected (or clicked) dimensions:
+D decimal, F fractional, or 1/8, 1/16, 1/32, 1/64.</td></tr>
 <tr><td>Hatch</td><td>HATCH, H, BHATCH, BH, FILL</td><td>Click inside a closed shape to fill it
 (SOLID, ANSI31, ANSI37, LINES pick the pattern; SP the spacing, AN the angle); Enter
 ends.</td></tr>
@@ -1004,8 +1055,10 @@ last point), <b>Tangent</b> (TAN: touching a circle or arc, from the last point)
 <b>Nearest</b> (NEA: the closest point on any object). And three that follow what the cursor
 has hovered over, as AutoCAD's tracking (a small green cross marks what was picked up):
 <b>Extension</b> (EXT: hover over a line's end, then move along the line past it: a dotted line
-follows it out; and, as AutoCAD's object snap tracking, hover over a wire's end, a pin or an
-intersection and the points straight across and straight up or down from it snap, first where
+follows it out; and, as AutoCAD's object snap tracking, hover over a wire's end, a pin, an
+intersection, a midpoint, a center or a quadrant and the points straight across and straight
+up or down from it snap (to center text under a box, hover the middle of the box's edge, then
+move straight down), first where
 that line meets the one you are drawing: draw a wire across, hover over another wire's end
 above, and the wire stops exactly under it; where such a line, or a line's extension, crosses
 a line, a wire or a circle, that crossing snaps too), <b>Parallel</b> (PAR: hover over a line, then move roughly its way from the
@@ -1202,11 +1255,18 @@ CSV...</b> writes it for a spreadsheet or a purchase order. The bill of material
 in.</li>
 <li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Home,
 Schematic and Panel tabs (Dimensions), measure the true distance, so they're right at any scale; they show inches with two
-decimals (12.50"). The second point follows Ortho and Polar from the first, as any point
+decimals (12.50") or, as Project properties, Panel, <b>Dimension units</b> says, fractional
+to the nearest 1/8, 1/16, 1/32 or 1/64 (1-9/16", 3/4"). Changing it there changes the
+dimensions already drawn too, unless you untick <b>Change the dimensions already drawn
+too</b>. The second point follows Ortho and Polar from the first, as any point
 does, except that an object snap at the mouse is taken first (so a corner off the Ortho line
 still snaps). Their grips move the measured points
 and the line; they go on layer DIMENSIONS (its color: Project properties, Panel). Dimension
 text height: Project properties.</li>
+<li><b>Dimension units</b> (DIMUNITS, DU; Modify menu, and Dimensions on the Home, Schematic and
+Panel tabs): the selected dimensions, or dimensions you click (Enter when done), read
+<b>D</b> decimal or <b>F</b> fractional (to the project's precision, 1/16 unless it says
+another), or type the precision: 1/8, 1/16, 1/32, 1/64. Each dimension keeps its own.</li>
 <li><b>Hatch</b> (H; Draw menu, Home tab) fills an area: click inside a closed shape (a closed
 polyline, a rectangle, a circle) and it is filled, the smallest shape around the click; closed
 shapes inside it stay open (islands: a cutout's holes, a label). The buttons, or typing their
@@ -1304,7 +1364,9 @@ sheet and layer changes, can be undone. Their arrows also sit right after the me
 Edit, View...), always a click away.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
 insertion point (the copied objects' lower left corner lands there). Works between projects,
-and after KanzonasCAD is closed and started again.</li>
+and after KanzonasCAD is closed and started again. Their layers come with them: a layer the
+project you paste into doesn't have is added as it was (its color, line type, wire size and
+color); a layer it already has keeps its own.</li>
 <li><b>Delete</b> erases the selection.</li>
 </ul>
 
@@ -1442,7 +1504,9 @@ and never turn the drawing.</li>
 paper around it; <b>Display</b>, what the drawing window shows now; <b>Window</b>, two corners
 you pick: choosing it hides the Print window, you pick the corners on the drawing (snaps
 work; Esc goes back without one), and the Print window comes back. <b>Pick window &lt;</b>
-picks again. Display and Window print the sheet shown.</li>
+picks again. Display and Window print the sheet shown. To print only part of a sheet (a
+few devices, one rung), use Window, as in AutoCAD. A border or title block turned off
+(Project or Sheet properties) isn't printed.</li>
 <li><b>Sheets</b>: <b>This sheet</b> (the one shown), <b>All sheets</b>, or <b>These
 sheets</b>, ticked in the list (<b>Tick all</b>, <b>Tick none</b>). With several sheets
 selected in the Sheets panel (Ctrl+click, Shift+click), the window starts with those ticked.

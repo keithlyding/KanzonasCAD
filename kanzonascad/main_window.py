@@ -415,6 +415,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("trim_wire", "Trim w&ire", C.TrimWireCmd, "Trim wire")
         self._cmd_act("wire_label", "Wire number &label", C.WireLabelCmd, "Wire label")
         self._cmd_act("wire_size", "Wire si&ze", C.WireSizeCmd, "Wire size")
+        self._cmd_act("wire_color", "Wire color &label", C.WireColorLabelCmd, "Color label")
         self._cmd_act("sig_arrows", "Source/destination &arrows", C.SignalArrowsCmd, "Arrows")
         self._cmd_act("stretch", "Stretc&h", C.StretchCmd, "Stretch")
         self._cmd_act("num_source", "Numbering s&ource", C.NumberSourceCmd, "Source")
@@ -429,6 +430,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("lay_unlock", "&Unlock all layers", C.LayerUnlockAllCmd, "Unlock all")
         self._cmd_act("dim_linear", "&Linear dimension", C.DimLinearCmd, "Linear")
         self._cmd_act("dim_aligned", "Ali&gned dimension", C.DimAlignedCmd, "Aligned")
+        self._cmd_act("dim_units", "Dimension &units", C.DimUnitsCmd, "Units")
         self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
         self._cmd_act("dash_box", "Dashed bo&x", C.DashBoxCmd, "Dashed box")
         self._cmd_act("hatch", "&Hatch", C.HatchCmd, "Hatch")
@@ -478,6 +480,7 @@ class MainWindow(BlockEditing, QMainWindow):
           tip="Cross-references follow every change (off: they change only with Update "
               "cross-references)")
         A("sheet_add", "&New sheet", self.add_sheet, label="New sheet")
+        A("sheet_dup", "D&uplicate sheet", self.duplicate_sheet, label="Duplicate sheet")
         A("sheet_del", "&Delete sheet", self.delete_sheet, label="Delete sheet")
         A("sheet_up", "Move sheet &up", lambda: self.move_sheet(-1), label="Move up")
         A("sheet_down", "Move sheet do&wn", lambda: self.move_sheet(1), label="Move down")
@@ -638,8 +641,8 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Modify")
         for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "offset", "erase",
                   "trim", "number", None,
-                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "del_wire", "del_dot", "clean_wires", "del_comp", None,
-                  "object_color", "FPLABEL", None, "lay_off", "lay_iso",
+                  "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot", "clean_wires", "del_comp", None,
+                  "dim_units", "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
             if k == "FPLABEL":
                 lm = m.addMenu("&Footprint label")
@@ -649,7 +652,8 @@ class MainWindow(BlockEditing, QMainWindow):
             else:
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Sheets")
-        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_cw", "sheet_ccw",
+        for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
+                  "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
                   "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "materials", None,
                   "sheet_props",
@@ -701,7 +705,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
             # (the owner, 0.17.4: "I also need the measuring tool repeated in home and
             # schematic tabs")
-            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
+                                      a["dim_units"]]),
             ("Layers", "small", [self.layer_box, self.layer_states, a["layers"], a["lay_off"],
                                  a["lay_iso"], a["lay_on"], a["lay_lock"], a["lay_unlock"]]),
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
@@ -712,7 +717,8 @@ class MainWindow(BlockEditing, QMainWindow):
             # (the owner: "Copy is not included in schematic and needs to be")
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["stretch"],
                                  a["erase"]]),
-            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
+                                      a["dim_units"]]),
             # (the owner, 0.18: "0.17.4's schematic ribbon goes off the screen. Block
             # properties should generally only be visible when editing/creating a block":
             # Edit block here, the rest on the Block tab; a tab too wide for the window
@@ -720,7 +726,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Symbols", "large", [a["insert_symbol"], a["make_block"], a["edit_block"],
                                   a["explode"], a["attr_vis"], a["del_comp"]]),
             ("Parts", "large", [a["new_part"]]),
-            ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["wire_size"],
+            ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["wire_size"], a["wire_color"],
                                      a["del_wire"], a["del_dot"], a["clean_wires"]]),
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Numbering", "large", [a["update_numbers"], a["renumber"], a["lock_numbers"],
@@ -736,7 +742,8 @@ class MainWindow(BlockEditing, QMainWindow):
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["erase"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
-            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"]]),
+            ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
+                                      a["dim_units"]]),
             ("Rail and duct", "large", [a["rail"], a["duct"], a["materials"]]),
             ("Arrange", "large", [a["align_obj"], a["distribute"]]),
             ("Parts", "small", [a["new_part"], a["panel_settings"]]),
@@ -744,7 +751,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
         ])
         r.add_tab("Sheets", [
-            ("Sheets", "large", [a["sheet_add"], a["sheet_del"]]),
+            ("Sheets", "large", [a["sheet_add"], a["sheet_dup"], a["sheet_del"]]),
             ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
             ("Rotate", "small", [a["sheet_cw"], a["sheet_ccw"]]),
             ("Properties", "large", [a["sheet_props"], a["project_props"], a["layers"]]),
@@ -1805,13 +1812,22 @@ class MainWindow(BlockEditing, QMainWindow):
         ents = self._selected()
         if not ents:
             return False
+        v = self.view()
         bb = None
         for e in ents:
             bb = G.bbox_union(bb, e.bbox())
         blocks = {e.block: e.defn.to_dict() for e in ents
                   if isinstance(e, M.Insert) and e.defn is not None}
+        # (their layers come along, with their colors and the rest: pasted into a project
+        # without them, they are added as they were; the owner, 0.18.4)
+        used = {e.layer for e in ents}
+        for e in ents:
+            if isinstance(e, M.Insert) and e.defn is not None:
+                used.update(x.layer for x in e.defn.entities)
+        lays = v.project.layers
         data = {"base": [bb[0], bb[1]], "entities": [e.to_dict() for e in ents],
-                "blocks": list(blocks.values())}
+                "blocks": list(blocks.values()),
+                "layers": [lays[n].to_dict() for n in sorted(used) if n in lays]}
         mime = QMimeData()
         mime.setData(CLIP_MIME, json.dumps(data).encode("utf-8"))
         mime.setText("%d KanzonasCAD object(s)" % len(ents))
@@ -1844,9 +1860,9 @@ class MainWindow(BlockEditing, QMainWindow):
         except (ValueError, KeyError, TypeError) as ex:
             self.statusBar().showMessage("The clipboard's objects can't be read: %s" % ex, 5000)
             return
-        for e in ents:
-            v.project.ensure_layer(e.layer)
-        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks)
+        layers = {d["name"]: d for d in data.get("layers", []) or []
+                  if isinstance(d, dict) and d.get("name")}
+        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks, layers)
         v.setFocus()
 
     def select_all(self):
@@ -2164,7 +2180,8 @@ class MainWindow(BlockEditing, QMainWindow):
 
     def _sheet_menu(self, pos):
         m = QMenu(self)
-        for k in ("sheet_add", "sheet_del", "sheet_up", "sheet_down", "sheet_props"):
+        for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down",
+                  "sheet_props"):
             m.addAction(self.acts[k])
         m.addSeparator()
         it = self.sheet_list.itemAt(pos)
@@ -2193,6 +2210,57 @@ class MainWindow(BlockEditing, QMainWindow):
         if s.kind == "panel":
             self.cmdline.add_history("New panel sheet: Sheet scale (Panel tab, or Scale in the "
                                      "status bar) can pick its scale from the cabinet's size.")
+
+    def duplicate_sheet(self):
+        """Duplicate sheet: a copy of the sheet shown, everything on it, just after it, on its
+        own page (the owner, 0.18.4: "I need to be able to duplicate a sheet inside the
+        project"). Its devices get tags of its page, as pasted ones do; its wires numbers of
+        their own (numbering gives them); its off-sheet connectors and arrows no name, so the
+        copy isn't joined to the wires the originals are. One step."""
+        v = self.view()
+        if v is None:
+            return
+        p = v.project
+        self._leave_title_block(v)
+        cur = v.sheet()
+        if cur is p.title_block:
+            return
+        from . import tags
+        meta = cur.meta_dict()
+        for k in ("id", "number", "xref_shown", "xref_frozen", "no_dots", "number_from"):
+            meta.pop(k, None)
+        meta["title"] = ("%s (copy)" % cur.title).strip() if cur.title else "Copy"
+        s = p.make_sheet(meta["title"])
+        s.set_meta(dict(s.meta_dict(), **meta))
+        if cur.number:
+            # (a page number typed on the original: the next one free, not the automatic one,
+            # which could be the original's)
+            used = {p.sheet_number(x) for x in p.sheets}
+            n = int(cur.number) + 1 if str(cur.number).isdigit() else len(p.sheets) + 1
+            while str(n) in used:
+                n += 1
+            s.number = str(n)
+        ents = []
+        for e in cur.entities.values():
+            c = e.copy()
+            c.id = None
+            if isinstance(c, M.Wire):
+                c = c.copy(num=None, num_lock=False)
+                c.id = None
+            elif isinstance(c, M.Insert) and c.defn is not None and c.defn.wiring == "link":
+                attrs = dict(c.attrs)
+                attrs.pop("TAG", None)
+                c = c.copy(attrs=attrs)
+                c.id = None
+            ents.append(c)
+        with p.edit("Duplicate sheet") as ed:
+            ed.add_sheet(s, p.sheets.index(cur) + 1)
+            for e in tags.retag_copies(p, s, ents):
+                ed.add(s, e)
+        v.show_sheet(s.id)
+        self._fill_sheets()
+        self.cmdline.add_history("Duplicated %s as %s (page %s)" % (
+            cur.title or "the sheet", s.title, p.sheet_number(s)))
 
     def delete_sheet(self):
         v = self.view()
@@ -2822,18 +2890,20 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         cur = v.sheet().entities.get(wire.id, wire)
         other = wirenums.taps(v.sheet(), cur)
+        was = "own" if cur.own_num else "same" if cur.same_num else ""
         got = self.ask_wire_number(cur.num, other.num if other is not None else None,
-                                   cur.own_num, locked=cur.num_lock) \
-            if other is not None or cur.own_num else \
+                                   was, locked=cur.num_lock) \
+            if other is not None or cur.own_num or cur.same_num else \
             self.ask_wire_number(cur.num, locked=cur.num_lock)
         if got is None:
             return
         num, own = got[:2]
+        own = "own" if own is True else "" if own is False else (own or "")
         lock = got[2] if len(got) > 2 else (cur.num_lock if num == (cur.num or "") else
                                             bool(num))
         same = num == (cur.num or "") and lock == cur.num_lock and \
-            (cur.num_lock or not num or own != cur.own_num)
-        if same and own == cur.own_num:
+            (cur.num_lock or not num or own != was)
+        if same and own == was:
             return
         go_same = False
         if num and num != (cur.num or ""):
@@ -2848,10 +2918,11 @@ class MainWindow(BlockEditing, QMainWindow):
                 self._say("Wire %s locked: another wire has that number, and numbering "
                           "would change an unlocked one" % num)
         with v.project.edit("Wire number") as ed:
-            if own != cur.own_num:
+            if own != was:
                 # (its own number where it taps another, or back to that wire's: numbering
                 # gives it one first, then a number typed takes over)
-                cur = cur.copy(own_num=own, num=None, num_lock=False)
+                cur = cur.copy(own_num=own == "own", same_num=own == "same", num=None,
+                               num_lock=False)
                 ed.change(v.sheet(), cur)
                 wirenums.sync(ed, v.project)
                 cur = v.sheet().entities[cur.id]
@@ -2919,10 +2990,14 @@ class MainWindow(BlockEditing, QMainWindow):
         from .dialogs import cross_reference_question
         return cross_reference_question(self, num, where)
 
-    def ask_wire_number(self, num, tap_of=None, own=False, locked=False):
-        """The Wire number window: (number, own, locked) or None (a test replaces it)."""
+    def ask_wire_number(self, num, tap_of=None, own="", locked=False):
+        """The Wire number window: (number, own: "", "same" or "own", locked) or None (a test
+        replaces it)."""
+        from . import wirenums
         from .dialogs import wire_number_dialog
-        return wire_number_dialog(self, num, tap_of, own, locked)
+        v = self.view()
+        mode = wirenums.tap_mode(v.project) if v is not None else "same"
+        return wire_number_dialog(self, num, tap_of, own, locked, mode)
 
     def _toggle_title_block(self, on):
         v = self.view()
@@ -3076,17 +3151,17 @@ class MainWindow(BlockEditing, QMainWindow):
         a = self.acts
         for k in ("save", "save_as", "import_dxf", "import_pdf", "export_dxf", "export_dxf_all", "export_pdf",
                   "close", "select_all", "zoom_ext", "zoom_sheet", "zoom_in", "zoom_out",
-                  "sheet_add", "sheet_props", "project_props", "layers", "drafting",
+                  "sheet_add", "sheet_dup", "sheet_props", "project_props", "layers", "drafting",
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
-                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "leader", "hatch", "mtext", "use_tb",
+                  "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",
                   "rail", "duct", "materials", "bom", "cables", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
                   "scale", "mirror", "array", "offset", "dash_box", "number", "erase", "trim",
                   "paste",
-                  "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "wire_size", "del_wire", "del_dot",
+                  "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot",
                   "clean_wires", "del_comp", "wire_layers"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())

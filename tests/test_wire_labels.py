@@ -26,6 +26,8 @@ class WireLabelTest(unittest.TestCase):
         v = self.v
         v.osnap_on = v.snap_on = v.ortho_on = v.polar_on = False
         self.s, self.p = v.sheet(), v.project
+        with self.p.edit("taps") as ed:      # (0.17.2's way: a tap the wire's number to start;
+            ed.project_settings({"tap_numbers": "same"})     # -1, -2...: test_0183_tap_numbers)
         self.said = []
         v.messaged.connect(self.said.append)
 

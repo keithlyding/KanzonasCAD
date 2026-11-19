@@ -200,7 +200,8 @@ def break_under(ed, sheet, ins):
         total = cum[-1]
         # (both pieces keep its number to start: numbering gives the second its own)
         keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
-                    own_num=w.own_num, awg=w.awg)
+                    own_num=w.own_num, same_num=w.same_num, awg=w.awg,
+                    show_color=w.show_color)
         ed.remove(sheet, w.id)
         if lo > TOL:
             ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, lo),
@@ -626,7 +627,8 @@ def trim_wire(sheet, w, click):
     lo = max([s for s in cuts if TOL < s < s0 - TOL], default=0.0)
     hi = min([s for s in cuts if s0 + TOL < s < total - TOL], default=total)
     keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
-                own_num=w.own_num, awg=w.awg)
+                own_num=w.own_num, same_num=w.same_num, awg=w.awg,
+                    show_color=w.show_color)
     out, ends = [], []
     if lo > TOL:
         piece = _poly_piece(pts, cum, 0.0, lo)
@@ -724,7 +726,7 @@ def join_at(ed, sheet, points):
         if len(merged) < 2 or doubles_back(merged):
             continue
         ed.remove(sheet, b.id)
-        ed.change(sheet, a.copy(points=merged,
+        ed.change(sheet, a.copy(points=merged, show_color=a.show_color or b.show_color,
                                 labels=_joined_labels(a, ia != -1, b, ib != 0)))
         n += 1
     return n
@@ -892,6 +894,59 @@ def heal(ed, sheet, ins):
 
 
 MISS = 0.03125      # paper inches: a wire end this near a pin or wire without joining it
+
+
+PULL = 0.01         # real inches: a moved wire end this near a pin or wire is put on it
+
+
+def moved_ends(sheet, changed):
+    """[(wire id, 0 or -1)] of the wire ends the changed copies (not yet written) move."""
+    out = []
+    for e in changed:
+        old = sheet.entities.get(e.id)
+        if not isinstance(e, Wire) or not isinstance(old, Wire) or len(e.points) < 2:
+            continue
+        for i in (0, -1):
+            if G.dist(e.points[i], old.points[i]) > TOL:
+                out.append((e.id, i))
+    return out
+
+
+def pull_on(ed, sheet, ends, hi=PULL):
+    """Wire ends an edit moved (Stretch, a grip) that stop less than hi from a pin or another
+    wire without joining it are put exactly on it: the nearest pin, or the nearest point of
+    the nearest run (the owner's choice, 0.18.3, "pull close ends on": a gap of a few
+    thousandths is never meant; the battery, seed 1803, a tap end on a nearly flat slanted
+    wire stretched sideways stopped 0.0021" under a wire). Returns how many."""
+    n = 0
+    for wid, i in ends:
+        w = sheet.entities.get(wid)
+        if not isinstance(w, Wire) or len(w.points) < 2:
+            continue
+        p = w.points[i]
+        if near_misses(sheet, [p], hi) == []:
+            continue                    # (joined, or nothing that near)
+        best = None
+        box = (p[0] - hi, p[1] - hi, p[0] + hi, p[1] + hi)
+        for o in sheet.query(box):
+            if isinstance(o, Wire) and o.id != w.id:
+                for a, b in zip(o.points, o.points[1:]):
+                    q, _t = G.closest_on_segment(p, a, b)
+                    d = G.dist(p, q)
+                    if TOL < d < hi and (best is None or d < best[0]):
+                        best = (d, q)
+            elif isinstance(o, Insert) and o.defn is not None and o.defn.pins:
+                for _n, q in o.pin_points():
+                    d = G.dist(p, q)
+                    if TOL < d < hi and (best is None or d < best[0] + TOL):
+                        best = (d, q)       # (a pin wins over a wire as near)
+        if best is None:
+            continue
+        got = w.end_moved(i, best[1])
+        if len(got.points) >= 2:
+            ed.change(sheet, got)
+            n += 1
+    return n
 
 
 def near_misses(sheet, points, hi=None):

@@ -6,6 +6,53 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.3
+
+**New**
+- Wires tapped off a wire (the drops off a bus) are numbered from it: off bus wire 2007, the
+  drops are 2007-1, 2007-2, 2007-3 in the sheet's numbering order, and a tap off a tap is
+  2007-1a. A drop where the bus wire ends and another carries on straight counts too.
+  Project properties, Schematic, "Wires tapped off a wire are numbered" chooses this,
+  the same number as the wire, or a number of their own. New projects start with -1, -2;
+  projects from before keep their numbers until you change it.
+- Drawing a tap asks as before: Enter numbers it as the project says, S keeps the wire's
+  number (a ladder branch, say), N gives it a number of its own. Double-click a tap to change
+  it later.
+- Turn the border and zones, and the title block, off and on: for every sheet in Project
+  properties (General, "Show on sheets"), or for one sheet in its Sheet properties (as the
+  project, shown, or off). What's off isn't drawn, printed or exported.
+- Dimensions in fractions: Project properties, Panel, "Dimension units" (decimal, or to the
+  nearest 1/8, 1/16, 1/32 or 1/64: 1-9/16"). Dimension units (Modify menu, DU) changes the
+  dimensions you select: D decimal, F fractional, or type 1/32.
+- Wire gauge labels sit in line with the wire number ("2018  12 AWG") where the wire has room,
+  are smaller and show the gauge only ("12 AWG"), once for wires side by
+  side (a starter's conductors to its drive, a bus), beside the outside wire. Wire color label
+  (Modify menu, WCL) adds the color on the wires you pick ("12 AWG BRN"). Project properties,
+  Schematic: "Gauge label height", and "Gauge and color shown" to put it on every wire.
+- A source arrow placed on a numbered wire takes the wire's number as its name: nothing to
+  type. A destination arrow's wire takes the source's number and its layer too.
+- Duplicate sheet (Sheets menu and tab): a copy of the sheet shown, everything on it, on a
+  page of its own, its devices and wires numbered for that page.
+- Each source or destination arrow shows only its other half's place: a destination its
+  source, not every arrow of that name.
+
+**Fixed**
+- A gauge label no longer sits on another wire's number: it moves along its wire to a clear
+  spot.
+- Pasting into another project brings the layers that project doesn't have with their colors
+  and settings; a layer it already has keeps its own.
+- A wire end moved by Stretch or a grip that stops less than 0.01" from a pin or another wire
+  is put on it, instead of being left a hair short and not connected.
+- A wire crossing's loop (or gap) is drawn in the colors of its own wires, stripes too, and
+  exported on the jumping wire's layer. Before, it kept the default wire layer's color after
+  the wires were moved to another layer.
+- The text of a source or destination arrow turns with the arrow: on a wire running up and
+  down it reads up, in line with the wire past the arrow's tip, instead of lying level.
+- Tracking (Extension) now picks up a midpoint, a center or a quadrant you hover, as AutoCAD
+  does: hover the middle of a box's edge, move straight down, and text or a part centers under
+  it. Before, only ends, intersections, pins and insertion points were picked up, and Parallel
+  took the point.
+
 ## 0.18.2
 
 **New**

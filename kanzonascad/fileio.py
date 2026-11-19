@@ -63,10 +63,14 @@ def export_dxf(project, sheet, path, include_frame=True):
             continue
         # block references go out as their lines and texts, on the reference's layer
         ents.extend(e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e])
-    for p, u, _cu, st in jumps:
+    for (p, u, _cu, st), (jid, _cid) in zip(jumps, crossings.jump_wires(project, sheet)):
         if st == "loop":
-            ents.append(M.Polyline(crossings.loop_points(p, u, r), layer="WIRES"
-                                   if "WIRES" in project.layers else "0"))
+            # (on the jumping wire's layer, in its color: the loop is a piece of it)
+            w = sheet.entities.get(jid) if jid is not None else None
+            lay = w.layer if w is not None else ("WIRES" if "WIRES" in project.layers
+                                                 else "0")
+            ents.append(M.Polyline(crossings.loop_points(p, u, r), layer=lay,
+                                   color=w.color if w is not None else None))
     if include_frame:
         with printing():                # ({Print date}: now)
             ents = frame_entities(project, sheet) + ents

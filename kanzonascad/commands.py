@@ -1056,9 +1056,12 @@ class GripCmd(Command):
         if not got and self._run() is not None:
             _run_drag(self.ctx, self.ent, self._run(), p, say=True)
         if got:
+            from .wires import moved_ends, pull_on
+            ends = moved_ends(sheet, list(got.values()))
             with self.ctx.edit("Stretch") as ed:
                 for e in got.values():
                     ed.change(sheet, e)
+                pull_on(ed, sheet, ends)
         self.finish()
 
     def preview(self, p):
@@ -1147,11 +1150,14 @@ class StretchCmd(Command):
             self.base = self.last = p
             self.ctx.prompt("Second point")
         else:
-            got = stretched(self.ctx.sheet(), self.rect, p[0] - self.base[0],
-                            p[1] - self.base[1])
+            sheet = self.ctx.sheet()
+            got = stretched(sheet, self.rect, p[0] - self.base[0], p[1] - self.base[1])
             if got:
+                from .wires import moved_ends, pull_on
+                ends = moved_ends(sheet, got)
                 with self.ctx.edit(self.title) as ed:
-                    put_changed(ed, self.ctx.sheet(), got)
+                    put_changed(ed, sheet, got)
+                    pull_on(ed, sheet, ends)
             self.finish()
 
     def preview(self, p):
@@ -1168,10 +1174,11 @@ class PasteCmd(Command):
     name, title = "PASTE", "Paste"
     repeatable = False
 
-    def __init__(self, ctx, ents, base, blocks=None):
+    def __init__(self, ctx, ents, base, blocks=None, layers=None):
         super().__init__(ctx)
         self.ents, self.base_pt = ents, base
         self.blocks = blocks or {}
+        self.layers = layers or {}          # {name: Layer dict} copied with them
 
     def begin(self):
         self.ctx.prompt("Specify insertion point")
@@ -1190,6 +1197,17 @@ class PasteCmd(Command):
         ids = set()
         with self.ctx.edit("Paste") as ed:
             project = self.ctx.project
+            # (their layers the project doesn't have, as they were where they were copied:
+            # color, line type, wire size...; a layer it has keeps its own, the owner, 0.18.4)
+            used = {e.layer for e in self.ents}
+            for e in self.ents:
+                if isinstance(e, M.Insert) and e.block in self.blocks:
+                    used.update(x.layer for x in self.blocks[e.block].entities)
+            for name in sorted(used):
+                if name and name not in project.layers:
+                    d = self.layers.get(name)
+                    ed.layer(name, None, M.Layer.from_dict(d).to_dict() if d is not None
+                             else M.Layer(name).to_dict())
             names = {}
             for e in self.ents:
                 if isinstance(e, M.Insert) and e.block in self.blocks:
@@ -1299,7 +1317,7 @@ class WireCmd(Command):
 
     def point(self, p):
         if self.tapped is not None:
-            self.ctx.message("Enter keeps the wire's number, or N for a new one")
+            self.ctx.message(self._tap_choices())
             return
         from .wires import connects_at
         if not self.points:
@@ -1323,12 +1341,19 @@ class WireCmd(Command):
         k = s.strip().upper()
         if self.tapped is not None:
             if k in ("N", "S"):
+                from . import wirenums
                 sheet = self.ctx.sheet()
                 w = sheet.entities.get(self.tapped)
-                if k == "N" and w is not None:
+                mode = wirenums.tap_mode(self.ctx.project)
+                if w is not None and k == "N" and mode != "own":
                     with self.ctx.edit("Wire number of its own") as ed:
                         ed.change(sheet, w.copy(own_num=True))
                     self.ctx.message("The tap takes a number of its own")
+                elif w is not None and k == "S" and mode != "same":
+                    # (the wire's number whatever the project's tap numbers: a ladder branch)
+                    with self.ctx.edit("Same wire number") as ed:
+                        ed.change(sheet, w.copy(same_num=True))
+                    self.ctx.message("The tap keeps the number of the wire it taps")
                 self.finish()
                 return True
             return False
@@ -1377,11 +1402,21 @@ class WireCmd(Command):
                 if other is not None:
                     self.tapped = e.id
                     self.points = []
-                    self.ctx.prompt("Tapped off wire %s: Enter keeps its number, or N for a new "
-                                    "number" % (other.num or "?"),
+                    self.ctx.prompt("Tapped off wire %s: %s" % (other.num or "?",
+                                                              self._tap_choices()),
                                     [("Same number", "S"), ("New number", "N")])
                     return True
         return False
+
+    def _tap_choices(self):
+        """What Enter, S and N do at a tap: Enter, the project's tap numbers (0.18.3)."""
+        from . import wirenums
+        mode = wirenums.tap_mode(self.ctx.project)
+        if mode == "suffix":
+            return "Enter gives it the wire's number with -1, -2..., S the same number, N a new one"
+        if mode == "own":
+            return "Enter gives it a new number, S the wire's number"
+        return "Enter keeps its number, or N for a new number"
 
     def enter(self):
         if self.tapped is not None:
@@ -2773,6 +2808,19 @@ class InsertCmd(Command):
         at, self.placed_mirror = self._fit(p)
         p = self._on_rail(at)
         d = self.defn
+        if d.wiring == "link" and not self.attrs.get("TAG") and d.name == "Source arrow":
+            # (a source arrow on a numbered wire is named by the wire's number, unless another
+            # source has it: the owner, 0.18.4, "I have to type in the wire name for source
+            # symbols. That should intuitively grab the wire number of what I attach it to")
+            from .wirenums import number_at, connectors
+            num = number_at(self.ctx.sheet(), self._make(p, d, self.placed_mirror))
+            taken = any(c.block == d.name for _s, c in
+                        connectors(self.ctx.project).get(num.upper(), []))
+            if num and not taken:
+                self.ctx.message("Source arrow %s: a destination arrow named %s continues it"
+                                 % (num, num))
+                self._place(p, dict(self.attrs, TAG=num.upper()))
+                return
         if d.wiring == "link" and not self.attrs.get("TAG"):
             # an off-sheet connector: its name pairs it with the other end
             from .wirenums import next_name, connectors
@@ -2846,6 +2894,10 @@ class InsertCmd(Command):
             if ins.layer not in project.layers:
                 ed.layer(ins.layer, None, M.Layer(ins.layer, M.ADAPTIVE).to_dict())
             ed.add(sheet, ins)
+            if defn.wiring == "link" and ins.attrs.get("TAG"):
+                # (a destination arrow's wire takes its source's layer, 0.18.4)
+                from .wirenums import match_arrow_layers
+                match_arrow_layers(ed, project, ins.attrs["TAG"].strip().upper())
             if self.defn.kind == "symbol":
                 # placed on a wire: the wire is cut between its pins
                 from .wires import break_under
@@ -3360,6 +3412,9 @@ class DimLinearCmd(Command):
     def _height(self):
         return float(self.ctx.project.settings.get("dim_height", 0.1)) * self.ctx.sheet().k()
 
+    def _units(self):
+        return M.dim_units(self.ctx.project.settings.get("dim_units", "decimal"))
+
     # (its two points follow Ortho and Polar as any point does, an object snap near the mouse
     # first: the owner, 0.17.4, "Linear measurement is not following polar or ortho"; until
     # then they went where picked)
@@ -3373,7 +3428,8 @@ class DimLinearCmd(Command):
         elif len(self.pts) == 2:
             self.ctx.prompt("Specify dimension line location")
         else:
-            d = M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height())
+            d = M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height(),
+                            units=self._units())
             with self.ctx.edit(self.title) as ed:
                 if d.layer not in self.ctx.project.layers:
                     ed.layer(d.layer, None, M.Layer(d.layer, "#00c8c8").to_dict())
@@ -3385,7 +3441,8 @@ class DimLinearCmd(Command):
         if len(self.pts) == 1:
             return [M.Line(self.pts[0], p)]
         if len(self.pts) == 2:
-            return [M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height())]
+            return [M.Dimension(self.pts[0], self.pts[1], p, self.mode, self._height(),
+                                units=self._units())]
         return []
 
 
@@ -4352,6 +4409,7 @@ class SignalArrowsCmd(Command):
         num = src_sheet.entities[s_w.id].num if s_w.id in src_sheet.entities else None
         with self.ctx.edit(self.title) as ed:
             name = wirenums.cross_reference(ed, project, s_end, end, defs[0], defs[1], True)
+            wirenums.match_arrow_layers(ed, project, name)
             if num and wirenums.enabled(project):
                 wirenums.sync(ed, project)
                 cur = src_sheet.entities[s_w.id]
@@ -4518,6 +4576,119 @@ class WireSizeCmd(Command):
     def enter(self):
         if self.picking and self.wires:
             self._ask_size()
+            return
+        self.finish()
+
+
+class WireColorLabelCmd(Command):
+    """WIRECOLOR (Wire color label): the selected wires, or wires clicked one by one, write
+    their insulation color in their gauge label too (12 AWG BRN), or stop (the owner, 0.18.4:
+    the color "can be a toggle-able option on a per-wire basis"). On when any of them is off,
+    else off."""
+    name, title = "WIRECOLOR", "Wire color label"
+
+    def begin(self):
+        self.wires = [e.id for e in _selected(self.ctx) if isinstance(e, M.Wire)]
+        if self.wires:
+            self._apply()
+            return
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click the wires to show or hide their color (Enter when done)")
+
+    def pick(self, p):
+        w = _pick_wire(self.ctx, p)
+        if w is None:
+            self.ctx.message("Click a wire")
+            return
+        if w.id not in self.wires:
+            self.wires.append(w.id)
+            self.ctx.set_selection(set(self.wires))
+
+    def _apply(self):
+        sheet = self.ctx.sheet()
+        ws = [sheet.entities[i] for i in self.wires if i in sheet.entities]
+        on = any(not w.show_color for w in ws)
+        if ws:
+            with self.ctx.edit(self.title) as ed:
+                for w in ws:
+                    if w.show_color != on:
+                        ed.change(sheet, w.copy(show_color=on))
+        self.ctx.message("%d wire(s): color %s in the gauge label" % (len(ws), "shown" if on
+                                                                       else "not shown"))
+        self.ctx.set_selection(set())
+        self.finish()
+
+    def enter(self):
+        if self.wires:
+            self._apply()
+            return
+        self.finish()
+
+
+class DimUnitsCmd(Command):
+    """DIMUNITS (Dimension units): the selected dimensions, or dimensions clicked one by one,
+    read decimal (12.50") or fractional (1-9/16"; the owner, 0.18.4: "change dimensions to
+    decimal or fractional"). D: decimal; F: fractional, to the project's precision (1/16
+    unless it says otherwise); or type the precision: 1/8, 1/16, 1/32, 1/64."""
+    name, title = "DIMUNITS", "Dimension units"
+
+    def begin(self):
+        self.dims = [e.id for e in _selected(self.ctx) if isinstance(e, M.Dimension)]
+        if self.dims:
+            self._ask()
+            return
+        self.picking = True
+        self.ctx.set_selection(set())
+        self.ctx.prompt("Click the dimensions to change (Enter when done)")
+
+    def pick(self, p):
+        e = self.ctx.pick_entity(p, M.Dimension)
+        if e is None:
+            self.ctx.message("Click a dimension")
+            return
+        if e.id not in self.dims:
+            self.dims.append(e.id)
+            self.ctx.set_selection(set(self.dims))
+
+    def _ask(self):
+        self.picking = False
+        sheet = self.ctx.sheet()
+        now = sorted({sheet.entities[i].units for i in self.dims if i in sheet.entities})
+        self.ctx.prompt("Units for %d dimension(s), now %s: D decimal, F fractional, or 1/8, "
+                        "1/16, 1/32, 1/64" % (len(self.dims), now[0] if len(now) == 1
+                                               else "mixed"),
+                        [("Decimal", "D"), ("Fractional", "F")])
+
+    def text(self, s):
+        if self.picking:
+            return False
+        k = s.strip().upper()
+        if k in ("D", "DECIMAL"):
+            got = "decimal"
+        elif k in ("F", "FRACTIONAL", "FRACTION"):
+            st = M.dim_units(self.ctx.project.settings.get("dim_units", "decimal"))
+            got = st if st != "decimal" else "1/16"
+        elif s.strip() in M.DIM_UNITS[1:]:
+            got = s.strip()
+        else:
+            self.ctx.message("Type D (decimal), F (fractional), or 1/8, 1/16, 1/32 or 1/64")
+            return True
+        sheet = self.ctx.sheet()
+        ds = [sheet.entities[i] for i in self.dims if i in sheet.entities]
+        changed = [d for d in ds if d.units != got]
+        if changed:
+            with self.ctx.edit(self.title) as ed:
+                for d in changed:
+                    ed.change(sheet, d.copy(units=got))
+        self.ctx.message("%d dimension(s): %s" % (len(ds), "decimal" if got == "decimal"
+                                                   else "fractional, to %s\"" % got))
+        self.ctx.set_selection(set())
+        self.finish()
+        return True
+
+    def enter(self):
+        if self.picking and self.dims:
+            self._ask()
             return
         self.finish()
 
@@ -4861,6 +5032,8 @@ COMMANDS = {
     "TRIMWIRE": (TrimWireCmd, ["AETRIM", "TW"]),
     "WIRELABEL": (WireLabelCmd, ["WL", "WNL"]),
     "WIRESIZE": (WireSizeCmd, ["WSZ"]),
+    "DIMUNITS": (DimUnitsCmd, ["DU"]),
+    "WIRECOLOR": (WireColorLabelCmd, ["WCL"]),
     "STRETCH": (StretchCmd, ["S"]),
     "NUMSOURCE": (NumberSourceCmd, ["NSRC"]),
     "SIGARROW": (SignalArrowsCmd, ["SDA", "SOURCEARROW", "XARROW"]),

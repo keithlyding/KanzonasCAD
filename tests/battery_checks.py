@@ -596,7 +596,10 @@ def print_lands(project, sheet, page_w, page_h, fit, dpi=20, box=None, turn_ok=T
     paper) inside its edges."""
     import json
     from PySide6.QtGui import QColor, QImage, QPainter
-    from kanzonascad import print_out
+    from kanzonascad import print_out, sheetframe
+    # (its frame is printed only where the sheet shows its border: 0.18.4, border and zones
+    # off, seed 61; without it the drawing alone needn't fill the page)
+    whole = whole and sheetframe.shows(project, sheet, "border")
     w, h = sheet.paper_inches()
     k = sheet.k()
 

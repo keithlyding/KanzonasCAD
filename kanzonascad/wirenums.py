@@ -24,6 +24,7 @@ import math
 import re
 from functools import lru_cache
 
+from . import geometry as G
 from . import tags
 from .model import Text
 
@@ -78,75 +79,187 @@ def _touching(sheet, p):
     return sheet.query_point(p, TOL)
 
 
-def _adjacent(sheet, w):
+def _same_pt(p, q):
+    return abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
+
+
+def _unit(p, q):
+    dx, dy = q[0] - p[0], q[1] - p[1]
+    d = (dx * dx + dy * dy) ** 0.5
+    return (dx / d, dy / d) if d > 1e-12 else None
+
+
+def _legs(w, p):
+    """The ways w leaves p (unit vectors), and how p is on w: "end", "corner" (one of its
+    bends) or "middle" (along a straight piece)."""
+    pts = w.points
+    if _same_pt(p, pts[0]) or _same_pt(p, pts[-1]):
+        seq = pts if _same_pt(p, pts[0]) else pts[::-1]
+        for q in seq[1:]:
+            u = _unit(p, q)
+            if u is not None:
+                return [u], "end"
+        return [], "end"
+    for q in pts[1:-1]:
+        if _same_pt(p, q):
+            k = next(i for i, r in enumerate(pts) if _same_pt(p, r))
+            legs = [u for u in (_unit(p, pts[k - 1]), _unit(p, pts[k + 1])) if u is not None]
+            return legs, "corner"
+    for q, r in zip(pts, pts[1:]):
+        if G.dist_to_segment(p, q, r) <= TOL:
+            u = _unit(q, r)
+            if u is not None:
+                return [u, (-u[0], -u[1])], "middle"
+    return [], "middle"
+
+
+def _straight(u, v):
+    return u[0] * v[0] + u[1] * v[1] < -0.999
+
+
+def tap_at(sheet, a, p, b):
+    """a's end p, on wire b: is a tapped off b there? On b's middle, yes. On one of b's
+    bends, unless a carries straight on from b's piece there (b then is the one turning off:
+    both one run). End to end, a is a tap when two other ends there make a straight run
+    through p and b is one of them (a bus ending at a drop and going on: the owner's
+    drawing, 0.18.3, M207's L1)."""
+    la, _ = _legs(a, p)
+    lb, how = _legs(b, p)
+    if how == "middle":
+        return True
+    if not la:
+        return False
+    if how == "corner":
+        return not any(_straight(la[0], u) for u in lb)
+    ends = []
+    for o in _touching(sheet, p):
+        if o.kind == "wire" and (_same_pt(p, o.points[0]) or _same_pt(p, o.points[-1])):
+            got, _ = _legs(o, p)
+            if got:
+                ends.append((o.id, got[0]))
+    runs = [(x, y) for i, (x, u) in enumerate(ends) for y, v in ends[i + 1:]
+            if _straight(u, v)]
+    if len(runs) != 1:
+        return False
+    return a.id not in runs[0] and b.id in runs[0]
+
+
+def _adjacent(sheet, w, split_taps=False, tapped_out=None):
     """Ids of the wires w connects with: one whose middle or end w ends on, or one that ends
-    on w (its middle or end)."""
-    def tapped(a, p, b):
-        # (a's end p on b's middle, a with a number of its own: not one group for numbering,
+    on w (its middle or end). split_taps: a wire tapped off another (tap_at) is not joined to
+    it (numbered apart: tap_numbers "suffix" or "own") unless it keeps that wire's number
+    (same_num). tapped_out: a dict given {(tap id, tapped id): the tap's end there} of the
+    taps kept apart, w's own and those off w."""
+    def apart(a, p, b):
+        # (a's end p tapped off b, a with a number of its own: not one group for numbering,
         # the owner, 0.17.2)
-        return a.own_num and not any(abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
-                                     for q in (b.points[0], b.points[-1]))
-    out = set()
+        return (a.own_num or (split_taps and not a.same_num)) and tap_at(sheet, a, p, b)
+    near = {}
     for p in (w.points[0], w.points[-1]):
         for o in _touching(sheet, p):
-            if o is not w and o.kind == "wire" and o.touches(p, TOL) and not tapped(w, p, o):
-                out.add(o.id)
+            if o is not w and o.kind == "wire" and o.touches(p, TOL):
+                near[o.id] = o
     x0, y0, x1, y1 = w.bbox()
     for o in sheet.query((x0 - TOL, y0 - TOL, x1 + TOL, y1 + TOL)):
-        if o is w or o.kind != "wire" or o.id in out:
-            continue
-        for p in (o.points[0], o.points[-1]):
-            if w.touches(p, TOL) and not tapped(o, p, w):
+        if o is not w and o.kind == "wire" and o.id not in near and any(
+                w.touches(q, TOL) for q in (o.points[0], o.points[-1])):
+            near[o.id] = o
+    out = set()
+    for o in near.values():
+        # (each place they meet: joined there unless one is tapped off the other; one end
+        # joined and the other tapping is a tap too, the battery, 0.18.3, seed 37)
+        pts = [p for p in (w.points[0], w.points[-1]) if o.touches(p, TOL)]
+        pts += [q for q in (o.points[0], o.points[-1]) if w.touches(q, TOL) and
+                not any(_same_pt(q, r) for r in pts)]
+        for p in pts:
+            tw = (_same_pt(p, w.points[0]) or _same_pt(p, w.points[-1])) and apart(w, p, o)
+            to = (_same_pt(p, o.points[0]) or _same_pt(p, o.points[-1])) and apart(o, p, w)
+            if tw and tapped_out is not None:
+                _note_tap(tapped_out, (w.id, o.id), p)
+            if to and tapped_out is not None:
+                _note_tap(tapped_out, (o.id, w.id), p)
+            if not tw and not to:
                 out.add(o.id)
-                break
     return out
 
 
+def _note_tap(found, k, p):
+    """A tap (tap id, tapped id) at p kept, at the lower of its ends when both tap: the same
+    whichever wire is looked at first."""
+    p = tuple(p)
+    q = found.get(k)
+    if q is None or p < q:
+        found[k] = p
+
+
 def taps(sheet, w):
-    """The wire w taps off (one of w's ends on the middle of it, not its end), or None."""
+    """The wire w taps off (tap_at, at one of w's ends), or None."""
     for p in (w.points[0], w.points[-1]):
         for o in _touching(sheet, p):
             if o is w or o.kind != "wire" or o.id == w.id or not o.touches(p, TOL):
                 continue
-            if not any(abs(p[0] - q[0]) <= TOL and abs(p[1] - q[1]) <= TOL
-                       for q in (o.points[0], o.points[-1])):
+            if tap_at(sheet, w, p, o):
                 return o
     return None
 
 
-def _sheet_groups(sheet):
+def tap_mode(project):
+    """How a wire tapped off another is numbered: "same", "suffix" or "own"."""
+    m = project.settings.get("tap_numbers", "same")
+    return m if m in ("same", "suffix", "own") else "same"
+
+
+def _sheet_groups(sheet, split_taps=False):
     """Wires of one sheet joined end to end / end to middle: {wire id: root id} (kept per
     sheet version). Which wires connect is kept per sheet and brought up to date for the
     wires an edit added, changed or removed only (entities are values: a changed wire is a
     new object), so an edit on a big sheet doesn't measure every wire again."""
-    got = getattr(sheet, "_wire_groups", None)
+    sfx = "_split" if split_taps else ""
+    got = getattr(sheet, "_wire_groups" + sfx, None)
     if got is not None and got[0] == sheet.version:
         return got[1]
     cur = {w.id: w for w in sheet.wires()}
-    st = getattr(sheet, "_wire_adj", None)
+    st = getattr(sheet, "_wire_adj" + sfx, None)
     if st is None:
-        adj = {i: _adjacent(sheet, w) for i, w in cur.items()}
+        pairs = {}
+        adj = {i: _adjacent(sheet, w, split_taps, pairs) for i, w in cur.items()}
     else:
-        old, adj = st
+        old, adj, pairs = st
         # (a wire whose points are the same, its number changed say, connects the same)
         stale = [i for i, w in cur.items() if old.get(i) is not w and
                  (old.get(i) is None or old[i].points != w.points or
-                  old[i].own_num != w.own_num)]
+                  old[i].own_num != w.own_num or old[i].same_num != w.same_num)]
         stale += [i for i in old if i not in cur]
+        # (and the wires ending where they end, before and after: whether a drop there is a
+        # tap depends on every end there, a run straight through; tap_at)
+        more = set()
+        for i in stale:
+            for x in (old.get(i), cur.get(i)):
+                if x is None:
+                    continue
+                for q in (x.points[0], x.points[-1]):
+                    more.update(o.id for o in _touching(sheet, q)
+                                if o.kind == "wire" and o.id in cur)
+        have = set(stale)
+        stale += [i for i in more if i not in have]
         for i in stale:
             for n in adj.pop(i, ()):
                 ns = adj.get(n)
                 if ns is not None:
                     ns.discard(i)
+        if pairs and stale:
+            gone = set(stale)
+            for k in [k for k in pairs if k[0] in gone or k[1] in gone]:
+                del pairs[k]
         for i in stale:
             w = cur.get(i)
             if w is None:
                 continue
-            a = _adjacent(sheet, w)
+            a = _adjacent(sheet, w, split_taps, pairs)
             adj[i] = a
             for n in a:
                 adj.setdefault(n, set()).add(i)
-    sheet._wire_adj = (cur, adj)
+    setattr(sheet, "_wire_adj" + sfx, (cur, adj, pairs))
     out = {}
     for i in cur:                       # (each group named by its lowest wire id)
         if i in out:
@@ -163,7 +276,7 @@ def _sheet_groups(sheet):
         if root != i:
             for n in comp:
                 out[n] = root
-    sheet._wire_groups = (sheet.version, out)
+    setattr(sheet, "_wire_groups" + sfx, (sheet.version, out))
     return out
 
 
@@ -188,18 +301,19 @@ def wire_order(project, sheet):
     return "across"
 
 
-def _summary(sheet, how=None):
+def _summary(sheet, how=None, taps_mode="same"):
     """What numbering needs to know of one sheet, kept until the sheet changes: its local
     groups {root: (sort key, [wires], [numbers], locked number or None)}, its off-sheet
-    connectors' groups [(name, root)] and its distribution blocks [(input root, [output
-    roots])]."""
+    connectors' groups [(name, root)], its distribution blocks [(input root, [output
+    roots])] and its taps [(tapped root, tap root, sort key of where it taps)] (tap_numbers
+    "suffix": numbered from the wire they tap)."""
     how = how or sheet.number_order
     sig = (sheet.version, how, sheet.size, sheet.cols, sheet.rows,
-           sheet.col_start, sheet.row_start, sheet.number_from)
+           sheet.col_start, sheet.row_start, sheet.number_from, taps_mode)
     got = getattr(sheet, "_num_summary", None)
     if got is not None and got[0] == sig:
         return got[1]
-    roots = _sheet_groups(sheet)
+    roots = _sheet_groups(sheet, taps_mode != "same")
     zsig = sig[1:] + (sheet.scale, sheet.reserve) + (
         (sheet.version,) if how == "wires" else ())
     cache = getattr(sheet, "_num_keys", None)
@@ -240,7 +354,23 @@ def _summary(sheet, how=None):
         elif d.wiring == "distribution" and d.pins and d.pins[0]["name"] in at:
             dists.append((at[d.pins[0]["name"]],
                           [at[p["name"]] for p in d.pins[1:] if p["name"] in at]))
-    out = (local, links, dists)
+    tapl = []
+    if taps_mode == "suffix":
+        # (the taps kept apart, found with the wires' connections: only the wires an edit
+        # touched are looked at again; one per tap, off the lowest id it taps)
+        ws = sheet.entities
+        one = {}
+        for (a, b), q in sheet._wire_adj_split[2].items():
+            if a in roots and b in roots and (a not in one or b < one[a][0]):
+                one[a] = (b, q)
+        for a, (b, q) in one.items():
+            if ws[a].own_num or roots[a] == roots[b]:
+                continue                # (a number of its own, asked for: not from the wire)
+            k = known.get(q)
+            if k is None:
+                k = known[q] = key(q)
+            tapl.append((roots[b], roots[a], k))
+    out = (local, links, dists, tapl)
     sheet._num_summary = (sig, out)
     return out
 
@@ -253,19 +383,21 @@ def _count(num):
 def groups(project):
     """({group key: [(sheet, wire)...]}, distribution links [(input group, [output groups in
     pin order])]) of the whole project."""
-    gs, _info, dist = _assemble(project)
+    gs, _info, dist, _taps = _assemble(project)
     return {k: [(s, w) for s, ws in nodes for w in ws] for k, nodes in gs.items()}, dist
 
 
 def _assemble(project):
     """Local groups joined across sheets by off-sheet connectors: {group key: [(sheet,
-    [wires])]}, {group key: [home order, page sheet, numbers, locked]}, distribution links."""
+    [wires])]}, {group key: [home order, page sheet, numbers, locked]}, distribution links,
+    taps [(tapped group, tap group, (sheet index, sort key))]."""
     u = _Union()
     names = {}
     sums = []
+    mode = tap_mode(project)
     for i, s in enumerate(project.sheets):
-        local, links, dists = _summary(s, wire_order(project, s))
-        sums.append((i, s, local, dists))
+        local, links, dists, tapl = _summary(s, wire_order(project, s), mode)
+        sums.append((i, s, local, dists, tapl))
         for name, r in links:
             names.setdefault(name, []).append((s.id, r))
     for nodes in names.values():
@@ -273,7 +405,7 @@ def _assemble(project):
             u.join(nodes[0], n)
     find = (lambda n: u.find(n) if n in u.up else n)
     gs, info = {}, {}
-    for i, s, local, _d in sums:
+    for i, s, local, _d, _t in sums:
         for r, (k, ws, nums, locked) in local.items():
             g = find((s.id, r))
             gs.setdefault(g, []).append((s, ws))
@@ -286,11 +418,13 @@ def _assemble(project):
                     cur[0], cur[1] = order, s
                 cur[2] = sorted(set(cur[2]) | set(nums), key=_count)
                 cur[3] = cur[3] or locked
-    dist = []
-    for _i, s, _local, dists in sums:
+    dist, tapped = [], []
+    for i, s, _local, dists, tapl in sums:
         for a, bs in dists:
             dist.append((find((s.id, a)), [find((s.id, b)) for b in bs]))
-    return gs, info, dist
+        for a, b, k in tapl:
+            tapped.append((find((s.id, a)), find((s.id, b)), (i, k)))
+    return gs, info, dist, tapped
 
 
 # ---- numbering -------------------------------------------------------------------------------
@@ -300,7 +434,7 @@ def sync(ed, project, renumber=None):
     unlocked groups are numbered again from 001."""
     if not enabled(project):
         return
-    gs, info, dist = _assemble(project)
+    gs, info, dist, tapped = _assemble(project)
     again = [] if renumber is None else [renumber] if not isinstance(renumber, (list, tuple,
                                                                                set)) \
         else list(renumber)
@@ -320,7 +454,17 @@ def sync(ed, project, renumber=None):
     for src, outs in dist:
         for i, o in enumerate(outs):
             if o != src:
-                outputs.setdefault(o, (src, i))
+                outputs.setdefault(o, (src, letters(i)))
+    # taps (tap_numbers "suffix"): the tapped wire's number with -1, -2... in the numbering
+    # order of where they tap; a tap off a tap, a, b...
+    by_src = {}
+    for src, o, k in sorted(tapped, key=lambda t: t[2]):
+        if o != src and o not in outputs and o not in by_src.get(src, ()):
+            by_src.setdefault(src, []).append(o)
+    for src, outs in by_src.items():
+        for i, o in enumerate(outs):
+            outputs.setdefault(o, (src, i, "tap"))
+    _break_loops(outputs, info)
     want = dict(fixed)
     # groups keep a number of theirs when it's right (of their page, not taken earlier)
     todo = []
@@ -351,12 +495,17 @@ def sync(ed, project, renumber=None):
     # distribution outputs: the input's number with a letter (chains follow, in order)
     for _ in range(len(outputs) + 1):
         changed = False
-        for o, (src, i) in outputs.items():
+        for o, how in outputs.items():
             if o in fixed:
                 continue
+            src = how[0]
             base = want.get(src)
             if base:
-                v = base + letters(i)
+                if len(how) == 3:               # (a tap: -1, -2...; off a tap: a, b...)
+                    v = base + (letters(how[1]).lower() if "-" in base
+                                else "-%d" % (how[1] + 1))
+                else:
+                    v = base + how[1]
                 if want.get(o) != v:
                     want[o] = v
                     changed = True
@@ -374,6 +523,23 @@ def sync(ed, project, renumber=None):
             for w in ws:
                 if w.num != num:
                     ed.change(s, w.copy(num=num, num_lock=w.num_lock and g in fixed))
+
+
+def _break_loops(outputs, info):
+    """Outputs whose numbers come from each other round a loop (two wires each tapping the
+    other's middle) would have none: the first of the loop in numbering order is numbered as
+    a wire of its own (the battery, 0.18.3, seed 37)."""
+    done = set()
+    for o in sorted(outputs, key=lambda g: info[g][0]):
+        path, x = [], o
+        while x in outputs and x not in done and x not in path:
+            path.append(x)
+            x = outputs[x][0]
+        if x in path:
+            loop = path[path.index(x):]
+            first = min(loop, key=lambda g: info[g][0])
+            del outputs[first]
+        done.update(path)
 
 
 def set_number(ed, project, sheet, wire, num, lock=True):
@@ -444,6 +610,35 @@ def number_at(sheet, ins):
             if getattr(w, "kind", "") == "wire" and w.num and w.touches(q, TOL):
                 return w.num
     return ""
+
+
+def match_arrow_layers(ed, project, name):
+    """The wires at a pair's destination arrows (name) take the layer of the wire at its
+    source arrow: the wire they continue (the owner, 0.18.4: "if I add a destination arrow,
+    not only should the wire number change, but its layer needs to match the source layer
+    as well"). All of each one's joined wires on its sheet. Returns how many changed."""
+    ends = connectors(project).get(name, [])
+    src = None
+    for s, c in ends:
+        if c.block == ARROWS[0]:
+            src = next((w for _n, q in c.pin_points() for w in s.query_point(q, TOL)
+                        if getattr(w, "kind", "") == "wire" and w.touches(q, TOL)), None)
+            if src is not None:
+                break
+    if src is None:
+        return 0
+    n = 0
+    for s, c in ends:
+        if c.block != ARROWS[1]:
+            continue
+        roots = _sheet_groups(s)
+        mine = {roots.get(w.id) for _n, q in c.pin_points() for w in s.query_point(q, TOL)
+                if getattr(w, "kind", "") == "wire" and w.touches(q, TOL)}
+        for w in list(s.wires()):
+            if roots.get(w.id) in mine and w.layer != src.layer:
+                ed.change(s, w.copy(layer=src.layer))
+                n += 1
+    return n
 
 
 def wire_end(sheet, wire, p):
@@ -645,53 +840,220 @@ def _closest_on(p, a, b):
 
 
 def gauge_labels(project, sheet):
-    """A wire layer's gauge and color (Layers: AWG, Wire color) beside its wires: one label
-    per run of joined wires on the layer, on its longest straight piece, on the other side of
-    the wire from its number (under it, or right of it when upright), a little smaller."""
+    """A wire layer's gauge (Layers: AWG) beside its wires, and its insulation color (Wire
+    color) where a wire is set to show it (Wire color label): one label per run of joined wires
+    on the layer, on its longest straight piece, on the other side of the wire from its
+    number (under it, or right of it when upright), smaller (Gauge label height; the owner,
+    0.18.4: "Maybe text size needs to be smaller. And I don't think we need to include the
+    wire color")."""
     if not project.settings.get("wire_gauge_shown", True) or sheet is project.title_block:
         return []
-    from . import wirelayers
     shown = {n: lay.wire_label() for n, lay in project.layers.items() if lay.wire_label()}
     h = float(project.settings.get("wire_number_height", 0.08)) * sheet.k()
-    sig = (sheet.version, sheet.scale, h, tuple(sorted(shown.items())),
+    gh = float(project.settings.get("wire_gauge_height", 0.06)) * sheet.k()
+    every = project.settings.get("wire_gauge_each", "group") == "each"
+    sig = (sheet.version, sheet.scale, h, gh, tuple(sorted(shown.items())), every,
            tuple(sorted((n, lay.wire_color) for n, lay in project.layers.items())))
     got = getattr(sheet, "_gauge_labels", None)
     if got is not None and got[0] == sig:
         return got[1]
     # (a wire of a size of its own, Wire size, shows it in place of its layer's: one label
     # for each run of joined wires of one layer and one size)
+    from .model import gauge_text
     labeled = []
     for w in sheet.wires():
-        text = wirelayers.wire_label(project.layers.get(w.layer), w.awg) if w.awg else \
-            shown.get(w.layer)
-        if text:
-            labeled.append((w, text))
+        if not (w.awg or w.layer in shown):
+            continue
+        lay = project.layers.get(w.layer)
+        g = str(w.awg or (lay.awg if lay is not None else "")).strip()
+        color = lay.wire_color if lay is not None and w.show_color else ""
+        if g or color:
+            labeled.append((w, gauge_text(g) if g else "", color or ""))
     if not labeled:
         sheet._gauge_labels = (sig, [])
         return []
     roots = _sheet_groups(sheet)
     parts = {}
-    for w, text in labeled:
-        parts.setdefault((roots.get(w.id, w.id), w.layer, text), []).append(w)
+    for w, g, color in labeled:
+        parts.setdefault((roots.get(w.id, w.id), w.layer, g, color), []).append(w)
     busy = _busy_points(sheet)
     out = []
-    for (_r, _layer, text), ws in parts.items():
+    bests = []
+    for (_r, _layer, g, color), ws in parts.items():
         best = None
         for w in ws:
             for a, b in zip(w.points, w.points[1:]):
                 d = abs(a[0] - b[0]) + abs(a[1] - b[1])
                 if best is None or d > best[0]:
                     best = (d, a, b)
-        if best is None:
+        if best is not None:
+            bests.append((g, [color], best[1], best[2]))
+    if not every:
+        bests = _one_per_bundle(bests, BUNDLE_GAP * sheet.k())
+    beside = _beside_numbers(project, sheet, h)
+    for g, colors, a, b in bests:
+        text = " ".join(t for t in (g, ", ".join(c for c in colors if c)) if t)
+        got = beside(text, gh, a, b)
+        if got is not None:
+            out.append(got)
             continue
-        _d, a, b = best
         mx, my = _clear_spot(a, b, busy)
-        g = h * 0.85
-        if abs(a[1] - b[1]) > abs(a[0] - b[0]):
-            out.append(Text((mx + h * 0.4 + g, my), text, g, 90.0, "center"))
-        else:
-            out.append(Text((mx, my - h * 0.4 - g), text, g, 0.0, "center"))
+        up = abs(a[1] - b[1]) > abs(a[0] - b[0])
+        first = None
+        # (across the wire from its number; slid along the piece, a little at a time, off
+        # another wire's number or label: the owner, 0.18.4, "the wire number is on top of the
+        # wire labels from the other wires")
+        lo, hi = sorted((a[1], b[1]) if up else (a[0], b[0]))
+        for k in range(0, 13):
+            step = (k + 1) // 2 * (1 if k % 2 else -1) * gh * 2.0
+            cx, cy = (mx, my + step) if up else (mx + step, my)
+            if not lo <= (cy if up else cx) <= hi:
+                continue
+            q = Text((cx + h * 0.4 + gh, cy), text, gh, 90.0, "center") if up else \
+                Text((cx, cy - h * 0.4 - gh), text, gh, 0.0, "center")
+            if first is None:
+                first = q
+            box = q.bbox()
+            if not beside.taken(box) and not any(o.bbox() and o.bbox()[0] < box[2] and
+                                                 o.bbox()[2] > box[0] and
+                                                 o.bbox()[1] < box[3] and o.bbox()[3] > box[1]
+                                                 for o in out):
+                first = q
+                break
+        out.append(first)
     sheet._gauge_labels = (sig, out)
+    return out
+
+
+def _beside_numbers(project, sheet, h):
+    """A function (text, height, a, b) -> Text or None: the gauge label in line with the wire
+    number on the piece a-b, just after it (right of it across, above it upright) or else just
+    before it, when the piece is long enough and nothing else is in the way (the owner,
+    0.18.4: "I would like the verbiage of the awg and color to be intuitively side-by-side if
+    there's enough room"). None: no number on that piece, or no room."""
+    from .geometry import segment_hits_rect
+    from .model import text_width
+    cell = 4.0 * h
+    nums = {}
+    taken = _text_boxes(labels(project, sheet), cell)
+    for t in labels(project, sheet):
+        x0, y0, x1, y1 = t.bbox()
+        up = abs(t.angle - 90.0) < 1e-6
+        if not up and abs(t.angle) > 1e-6:
+            continue
+        across = (x0 + x1) / 2.0 if up else (y0 + y1) / 2.0
+        nums.setdefault((up, int(across // cell)), []).append(t)
+    gap = 0.6 * h
+
+    def place(text, gh, a, b):
+        up = abs(a[1] - b[1]) > abs(a[0] - b[0])
+        if up and abs(a[0] - b[0]) > 1e-9 or not up and abs(a[1] - b[1]) > 1e-9:
+            return None
+        line = a[0] if up else a[1]
+        lo, hi = sorted((a[1], b[1]) if up else (a[0], b[0]))
+        best = None
+        k = int(line // cell)
+        for kk in (k - 1, k, k + 1):
+            for t in nums.get((up, kk), ()):
+                x0, y0, x1, y1 = t.bbox()
+                across = (x0 + x1) / 2.0 if up else (y0 + y1) / 2.0
+                along0, along1 = (y0, y1) if up else (x0, x1)
+                d = abs(across - line)
+                if d <= 2.5 * h and along0 >= lo - 1e-9 and along1 <= hi + 1e-9 and \
+                        (best is None or d < best[0]):
+                    best = (d, t, across, along0, along1)
+        if best is None:
+            return None
+        _d, t, across, along0, along1 = best
+        w = text_width(text, gh)
+        probe = Text((0.0, 0.0), text, gh, 90.0 if up else 0.0, "center").bbox()
+        off = ((probe[0] + probe[2]) / 2.0, (probe[1] + probe[3]) / 2.0)
+        for c in (along1 + gap + w / 2.0, along0 - gap - w / 2.0):
+            if c - w / 2.0 < lo + gap or c + w / 2.0 > hi - gap:
+                continue                # (past the piece's end: no room)
+            cx, cy = (across, c) if up else (c, across)
+            q = Text((cx - off[0], cy - off[1]), text, gh, 90.0 if up else 0.0, "center")
+            box = q.bbox()
+            if any(o.kind == "wire" and any(segment_hits_rect(p0, p1, box)
+                                            for p0, p1 in zip(o.points, o.points[1:]))
+                   for o in sheet.query(box)) or taken(box):
+                continue                # (another wire, its own bend, or a number in the way)
+            return q
+        return None
+    place.taken = taken
+    return place
+
+
+def _text_boxes(texts, cell):
+    """A function box -> True when it overlaps one of the texts (kept in cells of cell)."""
+    grid = {}
+    for t in texts:
+        b = t.bbox()
+        for i in range(int(b[0] // cell), int(b[2] // cell) + 1):
+            for j in range(int(b[1] // cell), int(b[3] // cell) + 1):
+                grid.setdefault((i, j), []).append(b)
+
+    def hits(box):
+        for i in range(int(box[0] // cell), int(box[2] // cell) + 1):
+            for j in range(int(box[1] // cell), int(box[3] // cell) + 1):
+                for b in grid.get((i, j), ()):
+                    if box[0] < b[2] and box[2] > b[0] and box[1] < b[3] and box[3] > b[1]:
+                        return True
+        return False
+    return hits
+
+
+BUNDLE_GAP = 0.75      # wires side by side this close (paper inches) share one gauge label
+
+
+def _one_per_bundle(bests, gap):
+    """Of the runs' labeled pieces [(gauge, [color], a, b)], one for each bundle: runs of one
+    gauge whose pieces run side by side, the same way, no farther apart than gap and along
+    each other for at least half the shorter one (the conductors from a starter to a drive,
+    a bus). The bundle's label goes on its outside wire (the rightmost of upright ones, the
+    lowest of those across: labels go right of upright wires and under the others) and names
+    their colors once each, in order across the bundle (top to bottom, left to right): 12 AWG
+    BRN, ORG, YEL. The owner, 0.18.4: "I don't need 12awg black on every wire ... Can this
+    intuitively mark the gauge and color of one wire instead of all of them?"; for a bus of
+    three colors, "one label per group", the colors listed."""
+    rows = {}
+    for i, (g, _c, a, b) in enumerate(bests):
+        up = abs(a[1] - b[1]) > abs(a[0] - b[0])
+        if up and abs(a[0] - b[0]) > 1e-6 or not up and abs(a[1] - b[1]) > 1e-6:
+            continue                    # (slanted: labeled on its own)
+        across = a[0] if up else a[1]   # (where it is, across its way)
+        lo, hi = sorted((a[1], b[1]) if up else (a[0], b[0]))
+        rows.setdefault((g, up), []).append((across, lo, hi, i))
+    up_ = list(range(len(bests)))
+
+    def find(i):
+        while up_[i] != i:
+            up_[i] = up_[up_[i]]
+            i = up_[i]
+        return i
+    for items in rows.values():
+        items.sort()
+        for k, (x, lo, hi, i) in enumerate(items):
+            for x2, lo2, hi2, j in items[k + 1:]:
+                if x2 - x > gap:
+                    break
+                if min(hi, hi2) - max(lo, lo2) >= 0.5 * min(hi - lo, hi2 - lo2) > 0:
+                    up_[find(j)] = find(i)
+    members = {}
+    for i, (g, colors, a, b) in enumerate(bests):
+        up = abs(a[1] - b[1]) > abs(a[0] - b[0])
+        # (the outside one: farthest right, or lowest; the colors in order across)
+        members.setdefault(find(i), []).append((a[0] if up else -a[1], i))
+    out = []
+    for r in sorted(members, key=lambda r: min(i for _s, i in members[r])):
+        ms = sorted(members[r])
+        g, _c, a, b = bests[ms[-1][1]]
+        colors = []
+        for _s, i in ms:
+            for c in bests[i][1]:
+                if c not in colors:
+                    colors.append(c)
+        out.append((g, colors, a, b))
     return out
 
 

@@ -159,6 +159,20 @@ def sheet_properties(parent, project, sheet):
     worder.setToolTip("The order wire numbers go in on this sheet: the tags' numbering order "
                       "(along the wires too), or across and down")
     form.addRow("Wire numbers in", worder)
+    shows = {}
+    for key, label, what in (("show_border", "Border and zones", "border and zones"),
+                             ("show_title_block", "Title block", "title block")):
+        box = QComboBox()
+        box.setObjectName(key)
+        box.addItem("As the project (%s)" % ("shown" if project.settings.get(key, True)
+                                             else "off"), None)
+        box.addItem("Shown", True)
+        box.addItem("Off", False)
+        box.setCurrentIndex(max(box.findData(getattr(sheet, key)), 0))
+        box.setToolTip("This sheet's %s: as Project properties says, or shown or off on this "
+                       "sheet alone (drawn, printed and exported as shown here)" % what)
+        form.addRow(label, box)
+        shows[key] = box
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
     form.addRow(_gray("The page number starts each wire number (page 6: 6001, 6002 ...) and "
@@ -196,7 +210,9 @@ def sheet_properties(parent, project, sheet):
     changes = dict(title=title.text().strip(), number=number.text().strip() or None,
                    own_layout=own.isChecked(), fields=fields, kind=kind.currentData(),
                    number_order=order.currentData(), location=loc.text().strip(),
-                   wire_order_tags=worder.currentData())
+                   wire_order_tags=worder.currentData(),
+                   show_border=shows["show_border"].currentData(),
+                   show_title_block=shows["show_title_block"].currentData())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     new_scale = picked != (sheet.scale_name, sheet.scale)
@@ -320,6 +336,17 @@ def project_properties(parent, project, tab=0):
                     "one back.")
     tbpos.currentIndexChanged.connect(lambda _i: swap.setChecked(False))
     form.addRow("", swap)
+    show_border = QCheckBox("Border and zones (the zone letters and numbers)")
+    show_border.setObjectName("show_border")
+    show_border.setChecked(bool(st.get("show_border", True)))
+    show_tb = QCheckBox("Title block")
+    show_tb.setObjectName("show_title_block")
+    show_tb.setChecked(bool(st.get("show_title_block", True)))
+    for b in (show_border, show_tb):
+        b.setToolTip("On every sheet that doesn't say otherwise in its Sheet properties: drawn, "
+                     "printed and exported, or left off")
+    form.addRow("Show on sheets", show_border)
+    form.addRow("", show_tb)
     tabs.addTab(page, "General")
 
     # ---- Schematic -------------------------------------------------------------------------
@@ -359,6 +386,17 @@ def project_properties(parent, project, tab=0):
     worder.setToolTip("Unticked, wire numbers go across and down even on a sheet numbered along "
                       "the wires; a sheet can choose otherwise in its Sheet properties")
     form.addRow("", worder)
+    taps = QComboBox()
+    taps.setObjectName("tap_numbers")
+    for key, label in (("suffix", "The wire's number with -1, -2, -3 (2007-1, 2007-2...)"),
+                       ("same", "The same number as the wire"),
+                       ("own", "A number of its own")):
+        taps.addItem(label, key)
+    taps.setCurrentIndex(max(taps.findData(st.get("tap_numbers", "same")), 0))
+    taps.setToolTip("A wire tapped off another (its end on the other's middle, a dot): a drop "
+                    "off a bus. With -1, -2..., in the numbering order; a tap off a tap takes "
+                    "a, b... (2007-1a). A number typed on a wire stays.")
+    form.addRow("Wires tapped off a wire are numbered", taps)
     cross = QComboBox()
     for key, label in (("plain", "Plain: the wires just cross"),
                        ("gap", "Gap: one wire is broken where it crosses"),
@@ -377,11 +415,27 @@ def project_properties(parent, project, tab=0):
                       "the wires they leave meeting end to end.")
     wclean.setChecked(bool(st.get("wire_cleanup", True)))
     form.addRow("", wclean)
-    wgauge = QCheckBox("Show a wire layer's gauge and color beside its wires")
+    wgauge = QCheckBox("Show a wire layer's gauge beside its wires")
     wgauge.setToolTip("Layers: AWG and Wire color. Each run of wire on such a layer shows "
                       "them (10 AWG BRN), under its wire number.")
     wgauge.setChecked(bool(st.get("wire_gauge_shown", True)))
     form.addRow("", wgauge)
+    wgroup = QComboBox()
+    wgroup.setObjectName("wire_gauge_each")
+    wgroup.addItem("Once for wires side by side of one gauge and color", "group")
+    wgroup.addItem("On every wire", "each")
+    wgroup.setCurrentIndex(max(wgroup.findData(st.get("wire_gauge_each", "group")), 0))
+    wgroup.setToolTip("Wires running side by side within 3/4\" of each other, of one gauge and "
+                      "color (a starter's three conductors to its drive, a bus), show it once, on "
+                      "the outside wire")
+    form.addRow("Gauge and color shown", wgroup)
+    wgh = QDoubleSpinBox()
+    wgh.setObjectName("wire_gauge_height")
+    wgh.setDecimals(4)
+    wgh.setRange(0.01, 5)
+    wgh.setSuffix(" in")
+    wgh.setValue(float(st.get("wire_gauge_height", 0.06)))
+    form.addRow("Gauge label height", wgh)
     wlead = QCheckBox("A second wire on a pin leaves it on a 45-degree lead")
     wlead.setToolTip("Double landing as drawn by hand: a wire started or ended on a pin that "
                      "already has one bends off it beside the first. Off: it runs straight "
@@ -431,6 +485,20 @@ def project_properties(parent, project, tab=0):
     dim_h.setSuffix(" in")
     dim_h.setValue(float(st.get("dim_height", 0.1)))
     form.addRow("Dimension text height (on paper)", dim_h)
+    dim_u = QComboBox()
+    dim_u.setObjectName("dim_units")
+    for key, text in (("decimal", "Decimal (12.50\")"), ("1/8", "Fractional, to 1/8\""),
+                      ("1/16", "Fractional, to 1/16\" (1-9/16\")"),
+                      ("1/32", "Fractional, to 1/32\""), ("1/64", "Fractional, to 1/64\"")):
+        dim_u.addItem(text, key)
+    dim_u.setCurrentIndex(max(dim_u.findData(M.dim_units(st.get("dim_units"))), 0))
+    form.addRow("Dimension units", dim_u)
+    dim_all = QCheckBox("Change the dimensions already drawn too")
+    dim_all.setObjectName("dim_units_all")
+    dim_all.setChecked(True)
+    dim_all.setToolTip("Unticked, only new dimensions read the new way; Dimension units (Modify "
+                       "menu) changes the dimensions you pick")
+    form.addRow("", dim_all)
     fp_show = QComboBox()
     for key, text in (("tag", "Its tag (the device it is)"), ("cat", "Its part number"),
                       ("desc", "Its description"), ("name", "Its block name"),
@@ -495,11 +563,14 @@ def project_properties(parent, project, tab=0):
     settings.update(layout.values())
     settings["text_height"] = text_h.value()
     settings["tb_position"] = tbpos.currentData()
+    settings["show_border"] = show_border.isChecked()
+    settings["show_title_block"] = show_tb.isChecked()
     settings["tag_height"] = tag_h.value()
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_number_height"] = num_h.value()
     settings["wire_label_ends"] = ends.value()
     settings["wire_order_tags"] = worder.isChecked()
+    settings["tap_numbers"] = taps.currentData()
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
@@ -507,11 +578,14 @@ def project_properties(parent, project, tab=0):
     settings["wire_around"] = waround.isChecked()
     settings["wire_clear"] = wclear.value()
     settings["wire_gauge_shown"] = wgauge.isChecked()
+    settings["wire_gauge_each"] = wgroup.currentData()
+    settings["wire_gauge_height"] = wgh.value()
     settings["footprint_label"] = fp_show.currentData()
     settings["duct_hatch"] = hatch.isChecked()
     settings["xref_height"] = xref_h.value()
     settings["fp_label_height"] = fp_h.value()
     settings["dim_height"] = dim_h.value()
+    settings["dim_units"] = dim_u.currentData()
     for key, b in stocks.items():
         # (a length the box can only show rounded, 1 m = 39.3700787 in, stays as it was
         # unless changed: OK alone changed it and marked the project modified)
@@ -551,6 +625,12 @@ def project_properties(parent, project, tab=0):
                         else:
                             attrs.pop("HATCH", None)
                         ed.change(s, e.copy(attrs=attrs))
+        if dim_all.isChecked() and settings["dim_units"] != M.dim_units(st.get("dim_units")):
+            # (every dimension in the project reads the new way)
+            for sh in project.sheets:
+                for e in list(sh.entities.values()):
+                    if isinstance(e, M.Dimension) and e.units != settings["dim_units"]:
+                        ed.change(sh, e.copy(units=settings["dim_units"]))
         for name, color in changed_colors.items():
             lay = project.layers.get(name)
             before = lay.to_dict() if lay else None
@@ -2023,11 +2103,12 @@ def pdf_import_dialog(parent, name, pages, k):
     return {"page": page.value(), "scale": scale.value(), "filled": filled.isChecked()}
 
 
-def wire_number_dialog(parent, num, tap_of=None, own=False, locked=False):
+def wire_number_dialog(parent, num, tap_of=None, own="", locked=False, mode="same"):
     """A wire's number (empty: numbering gives one), whether it is locked (the owner, 0.17.5:
     "should there be a checkbox to check locked or unlocked?": ticked by itself when a number
-    is typed), and, for a wire tapped off another (tap_of: that wire's number), whether it has
-    a number of its own. Returns (number, own, locked) or None."""
+    is typed), and, for a wire tapped off another (tap_of: that wire's number), how it is
+    numbered (own: "" as the project's tap numbers say (mode), "same" that wire's number,
+    "own" a number of its own). Returns (number, own, locked) or None."""
     dlg = QDialog(parent)
     dlg.setWindowTitle("Wire number")
     form = QFormLayout(dlg)
@@ -2045,15 +2126,21 @@ def wire_number_dialog(parent, num, tap_of=None, own=False, locked=False):
     form.addRow("", lock)
     box = None
     if tap_of is not None:
-        box = QCheckBox("A number of its own (not %s, the wire it taps off)" % (tap_of or "?"))
-        box.setChecked(own)
+        t = tap_of or "?"
+        box = QComboBox()
         box.setObjectName("own_num")
-        form.addRow("", box)
+        said = {"suffix": "%s with -1, -2... (%s-1)" % (t, t), "own": "a number of its own",
+                "same": "the same number, %s" % t}
+        box.addItem("As the project numbers taps: %s" % said.get(mode, said["same"]), "")
+        box.addItem("The same number as the wire it taps (%s)" % t, "same")
+        box.addItem("A number of its own (not %s)" % t, "own")
+        box.setCurrentIndex(max(box.findData(own or ""), 0))
+        form.addRow("Tapped off %s" % t, box)
     form.addRow(_buttons(dlg))
     if dlg.exec() != QDialog.Accepted:
         return None
     text = edit.text().strip().upper()
-    return text, (box.isChecked() if box is not None else own), bool(text) and lock.isChecked()
+    return text, (box.currentData() if box is not None else own), bool(text) and lock.isChecked()
 
 
 def _sheet_list(project, sheet, some):

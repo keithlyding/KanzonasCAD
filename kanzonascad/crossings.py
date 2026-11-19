@@ -119,27 +119,35 @@ def found(sheet, jump="vertical"):
                     pairs.update(new)
                     done.update(new)
     sheet._crossing_state = (cur, pairs)
-    out = []
+    out, ids = [], []
     for k in sorted(pairs):
         for p, s1, s2 in pairs[k]:
             first_jumps = _steep(s1) >= _steep(s2)
             if jump == "horizontal":
                 first_jumps = not first_jumps
             out.append((p, s1, s2) if first_jumps else (p, s2, s1))
-    sheet._crossings = (key, out)
+            ids.append(k if first_jumps else (k[1], k[0]))
+    sheet._crossings = (key, out, ids)
     return out
 
 
+def found_wires(sheet, jump="vertical"):
+    """found()'s crossings' wires, in the same order: [(jumping wire id, crossed wire id)]."""
+    found(sheet, jump)
+    return sheet._crossings[2]
+
+
 def _wire_segment_at(sheet, p):
-    """The wire piece passing through p, the steepest one when several do, or None."""
-    best = None
+    """(The wire piece passing through p, the steepest one when several do, its wire's id),
+    or (None, None)."""
+    best = wid = None
     for o in sheet.query((p[0] - TOL, p[1] - TOL, p[0] + TOL, p[1] + TOL)):
         if not isinstance(o, Wire):
             continue
         for seg in _segments(o):
             if _dist_seg(p, seg) <= 1e-4 and (best is None or _steep(seg) > _steep(best)):
-                best = seg
-    return best
+                best, wid = seg, o.id
+    return best, wid
 
 
 def _dist_seg(p, seg):
@@ -163,24 +171,35 @@ def jumps(project, sheet):
     if got is not None and got[0] == key:
         return got[1]                   # (worked out once per sheet change, not per paint)
     marks = [e for e in sheet.entities.values() if isinstance(e, WireCross)]
-    out = []
+    out, ids = [], []
     used = set()
-    for p, seg, oseg in (found(sheet, jump) if (st != "plain" or marks) else []):
-        mine = next((m for m in marks if math.hypot(m.pos[0] - p[0], m.pos[1] - p[1]) < 0.02),
-                    None)
-        s_ = mine.style if mine is not None else st
-        if mine is not None:
-            used.add(mine.id)
-        if s_ in ("gap", "loop"):
-            out.append((p, _unit(seg), _unit(oseg), s_))
+    if st != "plain" or marks:
+        for (p, seg, oseg), wids in zip(found(sheet, jump), found_wires(sheet, jump)):
+            mine = next((m for m in marks
+                         if math.hypot(m.pos[0] - p[0], m.pos[1] - p[1]) < 0.02), None)
+            s_ = mine.style if mine is not None else st
+            if mine is not None:
+                used.add(mine.id)
+            if s_ in ("gap", "loop"):
+                out.append((p, _unit(seg), _unit(oseg), s_))
+                ids.append(wids)
     for m in marks:
         if m.id in used or m.style not in ("gap", "loop"):
             continue
-        seg = _wire_segment_at(sheet, m.pos)
+        seg, wid = _wire_segment_at(sheet, m.pos)
         if seg is not None:
             out.append((m.pos, _unit(seg), None, m.style))
-    sheet._jumps = (key, out)
+            ids.append((wid, None))
+    sheet._jumps = (key, out, ids)
     return out
+
+
+def jump_wires(project, sheet):
+    """jumps()'s wires, in the same order: [(jumping wire id, crossed wire id or None)], so
+    each piece of a jump is drawn as its own wire (its layer's color: the owner, 0.18.3, wires
+    moved to another layer kept the old layer's color in their loops)."""
+    jumps(project, sheet)
+    return sheet._jumps[2]
 
 
 def _unit(seg):
