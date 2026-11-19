@@ -56,6 +56,7 @@ from kanzonascad import model as M  # noqa: E402
 from kanzonascad import geometry as G  # noqa: E402
 from kanzonascad import wires, crossings, wirenums, fileio, templates  # noqa: E402
 from kanzonascad import tags as tags_mod  # noqa: E402
+from kanzonascad import xrefs as XR  # noqa: E402
 from tests import battery_checks as BC  # noqa: E402
 
 
@@ -2109,6 +2110,60 @@ def random_editing(log, out, ops, seed, drawing=None):
                                 and w.text in {t.text for _k, t in e.label_texts()}} == {want}
                     BC.CHECKED["footprint label color as set"] += 1
 
+    def op_xref_device():
+        # (0.19.3: arrows show the device at their wire's other end on a second line, set for
+        # the project, a sheet or one arrow, each overriding the one before; worked out here
+        # from the three settings, the reference lines counted before and after)
+        from kanzonascad import wirenums as WN
+
+        def on(sh, c):
+            own = c.attrs.get("XDEV")
+            if own in ("1", "0"):
+                return own == "1"
+            if sh.xref_device is not None:
+                return bool(sh.xref_device)
+            return bool(p.settings.get("xref_device", True))
+
+        def second_lines():
+            n = 0
+            for name, ends in WN.connectors(p).items():
+                for sh, c in ends:
+                    if c.block not in WN.ARROWS or not on(sh, c):
+                        continue
+                    want = WN.ARROWS[1] if c.block == WN.ARROWS[0] else WN.ARROWS[0]
+                    pair = [(os_, oc) for os_, oc in ends if oc is not c]
+                    pair = [(os_, oc) for os_, oc in pair if oc.block == want] or pair
+                    if any(XR.far_devices(os_, oc) for os_, oc in pair):
+                        n += 1
+            return n
+
+        def shown():
+            return sum(len(XR.live(p, sh)) for sh in p.sheets)
+        before, lines = shown(), second_lines()
+        level = rnd.choice(["project", "sheet", "arrow"])
+        arrows = [c for c in s.inserts() if c.block in WN.ARROWS]
+        if level == "arrow" and not arrows:
+            level = "sheet"
+        with p.edit("Arrows show the far device") as ed:
+            if level == "project":
+                ed.project_settings({"xref_device": not p.settings.get("xref_device", True)})
+            elif level == "sheet":
+                ed.sheet_meta(s, xref_device=rnd.choice([None, True, False]))
+            else:
+                c = rnd.choice(arrows)
+                attrs = dict(c.attrs)
+                got = rnd.choice([None, "1", "0"])
+                if got is None:
+                    attrs.pop("XDEV", None)
+                else:
+                    attrs["XDEV"] = got
+                ed.change(s, c.copy(attrs=attrs))
+        after = shown()
+        assert after - before == second_lines() - lines, (
+            "arrows' far-device lines went from %d to %d shown, %d to %d set (%s)" % (
+                before, after, lines, second_lines(), level))
+        BC.CHECKED["arrow far device as set"] += 1
+
     def op_dim_units():
         # (0.18.4: Dimension units on the selected dimensions, D, F or a precision typed; new
         # dimensions as the project says, now and then changed; each reads its true length in
@@ -2871,7 +2926,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

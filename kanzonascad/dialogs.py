@@ -173,6 +173,17 @@ def sheet_properties(parent, project, sheet):
                        "sheet alone (drawn, printed and exported as shown here)" % what)
         form.addRow(label, box)
         shows[key] = box
+    xdev = QComboBox()
+    xdev.setObjectName("xref_device")
+    xdev.addItem("As the project (%s)" % ("shown" if project.settings.get("xref_device", True)
+                                          else "off"), None)
+    xdev.addItem("Shown", True)
+    xdev.addItem("Off", False)
+    xdev.setCurrentIndex(max(xdev.findData(sheet.xref_device), 0))
+    xdev.setToolTip("Whether this sheet's source and destination arrows show the device at "
+                    "the other end under their reference: as Project properties says, or "
+                    "shown or off on this sheet; an arrow's attributes can say otherwise")
+    form.addRow("Arrows show the far device", xdev)
     form.addRow("Page number", number)
     form.addRow("Revision", rev)
     form.addRow(_gray("The page number starts each wire number (page 6: 6001, 6002 ...) and "
@@ -212,7 +223,8 @@ def sheet_properties(parent, project, sheet):
                    number_order=order.currentData(), location=loc.text().strip(),
                    wire_order_tags=worder.currentData(),
                    show_border=shows["show_border"].currentData(),
-                   show_title_block=shows["show_title_block"].currentData())
+                   show_title_block=shows["show_title_block"].currentData(),
+                   xref_device=xdev.currentData())
     changes.update(layout.values() if own.isChecked() else project_layout)
     before = sheet.meta_dict()
     new_scale = picked != (sheet.scale_name, sheet.scale)
@@ -475,6 +487,13 @@ def project_properties(parent, project, tab=0):
     xref_h.setSuffix(" in")
     xref_h.setValue(float(st.get("xref_height", 0.08)))
     form.addRow("Cross-reference height", xref_h)
+    xdev = QCheckBox("Source and destination arrows show the device at the other end")
+    xdev.setObjectName("xref_device")
+    xdev.setChecked(bool(st.get("xref_device", True)))
+    xdev.setToolTip("Under an arrow's reference (4001 / 9-D2), the device its wire lands on "
+                    "at the other arrow (VFD201). A sheet (Sheet properties) or one arrow (its "
+                    "attributes) can say otherwise.")
+    form.addRow("", xdev)
     wire_color = _color_button(project.layer_color("WIRES"))
     form.addRow("Wire color (layer WIRES)", wire_color)
     sym_color = _color_button(project.layer_color("SYMBOLS"))
@@ -606,6 +625,7 @@ def project_properties(parent, project, tab=0):
     settings["footprint_label"] = fp_show.currentData()
     settings["duct_hatch"] = hatch.isChecked()
     settings["xref_height"] = xref_h.value()
+    settings["xref_device"] = xdev.isChecked()
     settings["fp_label_height"] = fp_h.value()
     settings["fp_label_color"] = fp_c.color if fp_c_on.isChecked() and fp_c.color not in (
         None, M.ADAPTIVE) else ""
