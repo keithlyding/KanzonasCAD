@@ -546,8 +546,9 @@ renumber or retag the coil, or move its sheet, and its contacts change with it.<
 to. The nearest device with the contact's prefix (CR for a relay contact; on this sheet first)
 is offered as a button (or type its tag); type another tag (<code>M601</code>) to take that
 device, or <b>L</b> for a list of them, or <b>P</b> to <b>pick it on the drawing</b>: go to any sheet
-(the Sheets panel) and click the device; you come back and the contact is placed, linked to
-it (Esc stops). A tag no device has yet is kept, and the contact links itself
+(the Sheets panel) and click the device (the pick box lights a device as you go over it;
+wires and other objects don't light up, as they can't be picked); you come back and the
+contact is placed, linked to it (Esc stops). A tag no device has yet is kept, and the contact links itself
 to the device that gets that tag. <b>Enter</b> places it on its own, linked to no device
 (its reference shows <b>?</b>; double-click it to link it later), and so does a contact with
 no device in the project to offer. A Starter 3-pole is a device of its own with its own tag

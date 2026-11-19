@@ -1049,7 +1049,13 @@ class CadView(QWidget):
                                            start_px.toTuple(), pos.toTuple())
             self._update_preview()
         if self.cmd is None or self.cmd.selecting() or self.cmd.picking:
-            self._hover = self.pick_entity(self.cursor) if self._window is None else None
+            # (a command picking one kind of object lights only what it would take: Pick
+            # device, a device and not the wire across it)
+            only = getattr(self.cmd, "hover_only", None) if self.cmd is not None else None
+            self._hover = self.pick_entity(self.cursor, only) if self._window is None else None
+            ok = getattr(self.cmd, "hover_ok", None) if self.cmd is not None else None
+            if ok is not None and self._hover is not None and not ok(self._hover):
+                self._hover = None
             self._hot_grip = self.grip_at(pos) if self.cmd is None else None
             # (a command picking objects may light only the part a click would act on: Trim,
             # the piece it would cut away)
