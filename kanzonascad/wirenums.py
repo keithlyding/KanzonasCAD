@@ -125,6 +125,11 @@ def tap_at(sheet, a, p, b):
     drawing, 0.18.3, M207's L1)."""
     la, _ = _legs(a, p)
     lb, how = _legs(b, p)
+    if how == "end" and a.pin_tap and not b.pin_tap:
+        # (a double landing: the wire asked to be a tap of the one already on the pin; by the
+        # wires alone, so what is kept of their connections stays right when the symbol
+        # moves or goes)
+        return True
     if how == "middle":
         return True
     if not la:
@@ -203,6 +208,20 @@ def taps(sheet, w):
     return None
 
 
+def pin_partner(sheet, w):
+    """Another wire with an end on the same pin as one of w's ends (a double landing), or
+    None."""
+    from .wires import pins_on
+    for p in (w.points[0], w.points[-1]):
+        if not pins_on(sheet, p):
+            continue
+        for o in _touching(sheet, p):
+            if o is not w and o.kind == "wire" and o.id != w.id and \
+                    (_same_pt(p, o.points[0]) or _same_pt(p, o.points[-1])):
+                return o
+    return None
+
+
 def tap_mode(project):
     """How a wire tapped off another is numbered: "same", "suffix" or "own"."""
     m = project.settings.get("tap_numbers", "same")
@@ -228,7 +247,8 @@ def _sheet_groups(sheet, split_taps=False):
         # (a wire whose points are the same, its number changed say, connects the same)
         stale = [i for i, w in cur.items() if old.get(i) is not w and
                  (old.get(i) is None or old[i].points != w.points or
-                  old[i].own_num != w.own_num or old[i].same_num != w.same_num)]
+                  old[i].own_num != w.own_num or old[i].same_num != w.same_num or
+                  old[i].pin_tap != w.pin_tap)]
         stale += [i for i in old if i not in cur]
         # (and the wires ending where they end, before and after: whether a drop there is a
         # tap depends on every end there, a run straight through; tap_at)
@@ -848,7 +868,8 @@ def gauge_labels(project, sheet):
     wire color")."""
     if not project.settings.get("wire_gauge_shown", True) or sheet is project.title_block:
         return []
-    shown = {n: lay.wire_label() for n, lay in project.layers.items() if lay.wire_label()}
+    shown = {n: lay.wire_label() for n, lay in project.layers.items()
+             if lay.wire_label() and lay.gauge_shown}
     h = float(project.settings.get("wire_number_height", 0.08)) * sheet.k()
     gh = float(project.settings.get("wire_gauge_height", 0.06)) * sheet.k()
     every = project.settings.get("wire_gauge_each", "group") == "each"
@@ -888,11 +909,18 @@ def gauge_labels(project, sheet):
                     best = (d, a, b)
         if best is not None:
             bests.append((g, [color], best[1], best[2]))
-    if not every:
-        bests = _one_per_bundle(bests, BUNDLE_GAP * sheet.k())
+    bests = _one_per_bundle(bests, BUNDLE_GAP * sheet.k()) if not every else \
+        [(g, c, a, b, [(a, b)]) for g, c, a, b in bests]
     beside = _beside_numbers(project, sheet, h)
-    for g, colors, a, b in bests:
+    marks = []
+    for g, colors, a, b, members in bests:
         text = " ".join(t for t in (g, ", ".join(c for c in colors if c)) if t)
+        if len(members) > 1:
+            got = _ring(sheet, members, text, gh, beside.taken, out)
+            if got is not None:
+                out.append(got[0])
+                marks.append(got[1])
+                continue
         got = beside(text, gh, a, b)
         if got is not None:
             out.append(got)
@@ -922,7 +950,74 @@ def gauge_labels(project, sheet):
                 break
         out.append(first)
     sheet._gauge_labels = (sig, out)
+    sheet._gauge_marks = (sig, marks)
     return out
+
+
+def gauge_marks(project, sheet):
+    """The ovals round groups of wires that share a gauge label and the leader from each to
+    its label: [(center, half width across, half length along, upright, [leader points])],
+    worked out with gauge_labels (the owner, 0.18.5: "can we have like a 3d circle that goes
+    around the 3 wires to say what gauge they all are?", asked: an oval and a leader line)."""
+    gauge_labels(project, sheet)
+    got = getattr(sheet, "_gauge_marks", None)
+    return got[1] if got is not None else []
+
+
+def _ring(sheet, members, text, gh, taken, placed):
+    """(label Text, mark) for a group of wires side by side: an oval across them where they
+    run along each other, clear of crossings, a leader from its outside end out at 45 degrees
+    and a short tail, the label level after it; or None when there's no clear spot."""
+    from .geometry import segment_hits_rect
+    from .model import text_width
+    up = abs(members[0][0][1] - members[0][1][1]) > abs(members[0][0][0] - members[0][1][0])
+    across = sorted(a[0] if up else a[1] for a, _b in members)
+    lo = max(min(a[1], b[1]) if up else min(a[0], b[0]) for a, b in members)
+    hi = min(max(a[1], b[1]) if up else max(a[0], b[0]) for a, b in members)
+    if hi - lo < 3 * gh:
+        return None                     # (too short a stretch side by side)
+    pad, thin = 1.2 * gh, 1.0 * gh
+    c_across = (across[0] + across[-1]) / 2.0
+    half = (across[-1] - across[0]) / 2.0 + pad
+    w = text_width(text, gh)
+    L = 3.0 * gh
+    tail = 1.5 * gh
+
+    def hits(box):
+        if taken(box) or any(box[0] < q[2] and box[2] > q[0] and box[1] < q[3] and
+                             box[3] > q[1] for q in (t.bbox() for t in placed)):
+            return True
+        return any(segment_hits_rect(p0, p1, box) for o in sheet.query(box)
+                   if getattr(o, "kind", "") == "wire"
+                   for p0, p1 in zip(o.points, o.points[1:]))
+    for f in (0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9):
+        along = lo + (hi - lo) * f
+        for sgn in (1.0, -1.0):         # (the leader up / right first, then the other way)
+            if up:
+                start = (c_across + half, along)
+                bend = (start[0] + L, along + sgn * L)
+                end = (bend[0] + tail, bend[1])
+                t = Text((end[0] + 0.4 * gh + w / 2.0, end[1] - gh / 2.0), text, gh, 0.0,
+                         "center")
+                ring_box = (c_across - half, along - thin, c_across + half, along + thin)
+            else:
+                start = (along, c_across - half)
+                bend = (along + sgn * L, start[1] - L)
+                end = (bend[0] + sgn * tail, bend[1])
+                t = Text(((end[0] + sgn * (0.4 * gh + w / 2.0)), end[1] - gh / 2.0), text, gh,
+                         0.0, "center")
+                ring_box = (along - thin, c_across - half, along + thin, c_across + half)
+            box = t.bbox()
+            if hits(box):
+                continue
+            # (the oval not on a wire's number or a crossing: it sits on the group's wires
+            # only, which it is drawn round)
+            if taken(ring_box):
+                continue
+            mark = ((c_across, along) if up else (along, c_across), half, thin, up,
+                    [start, bend, end])
+            return t, mark
+    return None
 
 
 def _beside_numbers(project, sheet, h):
@@ -1053,7 +1148,7 @@ def _one_per_bundle(bests, gap):
             for c in bests[i][1]:
                 if c not in colors:
                     colors.append(c)
-        out.append((g, colors, a, b))
+        out.append((g, colors, a, b, [bests[i][2:4] for _s, i in ms]))
     return out
 
 

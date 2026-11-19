@@ -205,9 +205,17 @@ class Ribbon(QTabWidget):
         if i < 0:
             return
         if not on and self.currentIndex() == i:
-            self.setCurrentIndex(0)
+            # (back to the tab that was on before it, not Home: the owner, 0.18.5, "When I edit
+            # a block and then exit out after finishing, my ribbon goes back to home")
+            back = getattr(self, "_before_tab", {}).get(title, 0)
+            self.setCurrentIndex(back if 0 <= back < self.count() and back != i and
+                                 self.isTabVisible(back) else 0)
         self.setTabVisible(i, bool(on))
         if on and select:
+            if self.currentIndex() != i:
+                if not hasattr(self, "_before_tab"):
+                    self._before_tab = {}
+                self._before_tab[title] = self.currentIndex()
             self.setCurrentIndex(i)
 
     def _group(self, title, size, items, page):

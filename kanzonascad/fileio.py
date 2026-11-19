@@ -89,6 +89,17 @@ def export_dxf(project, sheet, path, include_frame=True):
         ents.append(t.copy(layer="WIRES" if "WIRES" in project.layers else "0"))
     for a, b in label_leaders(project, sheet):
         ents.append(M.Line(a, b, layer="WIRES" if "WIRES" in project.layers else "0"))
+    # (the gauge labels, and the ovals round groups of wires with their leaders, 0.18.5)
+    from .wirenums import gauge_labels, gauge_marks
+    lay = "WIRES" if "WIRES" in project.layers else "0"
+    for t in gauge_labels(project, sheet):
+        ents.append(t.copy(layer=lay))
+    for (cx, cy), half, thin, up, leader in gauge_marks(project, sheet):
+        rx, ry = (half, thin) if up else (thin, half)
+        oval = [(cx + rx * math.cos(i * math.pi / 24), cy + ry * math.sin(i * math.pi / 24))
+                for i in range(48)]
+        ents.append(M.Polyline(oval, closed=True, layer=lay))
+        ents.append(M.Polyline(leader, layer=lay))
     for e in ents:
         _write(msp, e)
     doc.saveas(path)

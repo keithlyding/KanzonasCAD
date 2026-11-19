@@ -6,6 +6,28 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.5
+
+**New**
+- Placing a destination arrow (or an off-sheet connector), pick exactly which one it continues:
+  List... on the command line shows them with their wire number and place, waiting ones
+  first; Pick on drawing lets you go to that sheet and click it. Typing a name still works.
+- Drawing a second wire on a pin asks how it's numbered, as a tap does: Enter as the project
+  numbers taps (2001-1), S the same number, N a number of its own. Double-click it to change
+  it later.
+- Wires side by side that share a gauge label get a thin oval drawn across them with a short
+  leader out to the label ("12 AWG"). Gauge labels are now in DXF exports too.
+- Turn a layer's gauge label off: click its Gauge shown in Layers... (control power all 16 AWG
+  blue, say). Project properties still turns them all off at once.
+
+**Fixed**
+- A bus started (or ended) on pins that already have wires leaves each pin on a 45-degree
+  lead, as a single wire does, when "A second wire on a pin leaves it on a 45-degree lead" is
+  on. Before, a bus came straight off the pins.
+- In Edit block, an attribute's alignment (middle center for a rating, say) and angle are kept;
+  they went back to baseline.
+- Leaving a block's tab, the ribbon goes back to the tab you were on instead of Home.
+
 ## 0.18.4
 
 **Fixed**
