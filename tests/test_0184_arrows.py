@@ -89,6 +89,8 @@ class ArrowTest(unittest.TestCase):
 
     def test_a_number_a_source_has_asks(self):
         num = self.s1.entities[self.a.id].num
+        with self.p.edit("lock") as ed:             # (both wires keep it: 0.18.6, a source
+            ed.change(self.s1, self.s1.entities[self.a.id].copy(num_lock=True))  # follows)
         self.place(self.s1, "Source arrow", (6.0, 5.0))
         # (a second source on a wire of that number: named as before, asked)
         with self.p.edit("w") as ed:

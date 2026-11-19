@@ -695,3 +695,41 @@ def footprints_follow(project):
                     "footprint shows %s, its device is %s" % (e.attrs.get("TAG"),
                                                               dev.attrs.get("TAG"))
                 CHECKED["footprint follows its device"] += 1
+
+
+def arrows_follow(project):
+    """Every source arrow (and its destinations) goes by the number of the wire it sits on
+    (0.18.6), worked out from the wires at its pin: unless that number is the name of other
+    connectors on another wire already, or two pairs on wires of their own have the same number
+    (renaming would join them)."""
+    from kanzonascad import wirenums
+    if not wirenums.enabled(project):
+        return
+    # (which wire each wire piece is part of, worked out from scratch)
+    gs, _dist = wirenums.groups(project)
+    group = {(sh.id, w.id): k for k, members in gs.items() for sh, w in members}
+    names = {}
+    on = {}
+    srcs = []
+    for s in project.sheets:
+        for e in s.inserts():
+            if e.defn is None or e.defn.wiring != "link":
+                continue
+            name = e.attrs.get("TAG", "").strip().upper()
+            ws = [w for _n, q in e.pin_points() for w in s.query_point(q, 1e-6)
+                  if getattr(w, "kind", "") == "wire" and w.touches(q, 1e-6)]
+            if name:
+                names.setdefault(name, []).append(e)
+                on.setdefault(name, set()).update(group.get((s.id, w.id)) for w in ws)
+            if e.block == wirenums.ARROWS[0]:
+                nums = {w.num.upper() for w in ws if w.num}
+                if len(nums) == 1 and name:
+                    srcs.append((name, nums.pop(), group.get((s.id, ws[0].id))))
+    wanted = {}
+    for name, num, g in srcs:
+        wanted.setdefault(num, set()).add(g)
+    for name, num, g in srcs:
+        if num == name or len(wanted[num]) > 1 or (num in names and on.get(num) != {g}):
+            continue
+        raise AssertionError("source arrow %s sits on wire %s" % (name, num))
+    CHECKED["source arrows follow their wire's number"] += len(srcs)

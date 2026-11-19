@@ -20,7 +20,10 @@ and reports come next.</i></p>
 <b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>, and
 <b>Block</b> while you edit a block; each
 group of buttons has its name under it (Rail and duct, Dimensions, Numbering...). Move, Copy,
-Rotate, Mirror and Erase are on the Schematic and Panel tabs too (Modify), not only Home. Double-click a
+Rotate, Mirror, Stretch and Erase are on the Schematic and Panel tabs too (Modify), not only Home.
+The Schematic and Panel tabs are laid out alike: what you draw first (Wire and Bus; DIN rail and
+Wire duct), then placing parts (Symbols; Footprints: the same buttons in the same order), Modify,
+Dimensions, the tab's own groups, and Parts, Layers and Settings at the right end. Double-click a
 tab name (or <b>Collapse ribbon</b>, Ctrl+F1) to fold it away; click a tab to open it again.
 <b>Ribbon group names</b> (View) turns the names off, for a more compact ribbon, and on
 again. When the window is too narrow for a tab, its groups shrink from the right: big
@@ -90,7 +93,7 @@ current layer. To clean up (after importing a DXF, say), select several layers (
 Shift+click) or click <b>Select unused</b> (the empty ones), then <b>Delete</b>: empty layers
 go at once; if some hold objects (on any sheet or in the title block), it lists them and asks
 whether to delete them too, with everything on them, or keep them. Layer 0 always stays, and
-one Undo brings it all back. The Layer box on the Home tab (and on the Panel tab) picks the current layer; with objects selected, picking
+one Undo brings it all back. The Layer box on the Home tab (and on the Schematic and Panel tabs) picks the current layer; with objects selected, picking
 a layer moves them to it.</li>
 </ul>
 
@@ -130,7 +133,7 @@ WIRE ORANGE...) come with their color's name; give them a gauge once and every w
 shows it. A wire color of two names, <b>BLU/WHT</b> say, draws the layer's wires striped: the
 layer's color with stripes of the second (a 24 VDC common), on the screen and printed (not when
 printing in black only).</p>
-<p><b>Add wire layers...</b> (Format menu, Schematic tab: Look; also the <b>Wire layers...</b>
+<p><b>Add wire layers...</b> (Format menu, Schematic tab: Layers; also the <b>Wire layers...</b>
 button in Layers...) adds a layer for each wire of the systems you tick, with its color, gauge
 and wire color, ready to draw on (pick one as the current layer, then draw wires):</p>
 <ul>
@@ -153,7 +156,7 @@ are on one layer with one size.</p>
 it (the box shows their layer, empty when they are on several); with nothing selected it
 becomes the current layer. A hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
-Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the layer box, the layer list,
+Locked, color, current layer). Quicker, on the Home tab's Layers group (the Schematic and Panel tabs have the layer box, the layer list,
 Layers..., Color, Hide layer and Show all too) and the Modify menu:</p>
 <ul>
 <li>The <b>layer list</b> button next to the current layer: every layer with its light bulb
@@ -885,7 +888,11 @@ into it, where the wire arrives. Past each arrow's far end (not over the wire), 
 number and the other arrow's place (<b>2046 / 7-A2</b>), turned the way the arrow is: on a wire
 running up and down it reads up, in line with the wire (as that wire's number reads); across,
 it is level. A source arrow placed on the end of a numbered wire is named by the wire's number (2046):
-nothing to type (unless another source arrow has that name: then it asks). A destination arrow
+nothing to type (unless another source arrow has that name: then it asks). It keeps following
+it: when the wire is renumbered (a number typed, Renumber sheet, Update numbers), the source
+arrow takes the new number and its destination arrows follow their source. A wire carried on by
+arrows is numbered where its source is (page 6: 6012), whatever sheets its destinations are
+on. A name another pair already goes by is left alone, so two pairs never join. A destination arrow
 offers the name of a source still waiting for it (or <b>List...</b> on the command line picks the one it continues from a list of them, wire number and place, waiting ones first; <b>Pick on drawing</b> lets you go to its sheet and click it, and comes back); placed, its wire takes the source's number
 and its layer (480V BRN, with its color and gauge). Each arrow shows only its other half's
 place: a destination its source, a source its destinations.</li>
@@ -1217,6 +1224,9 @@ block's label spot, set in Edit block), turned up the page or reading from the r
 part is turned. Each shown line has a grip: select the footprint and drag a line's grip to put
 that line anywhere; it then stays there on the part, moving and turning with it. They are
 <b>0.08"</b> tall on paper to start: Panel settings, <b>Footprint label height</b>, sets it
+(and <b>Footprint label color</b>, <b>In a color of their own</b>, draws them in a color of
+their own on every footprint, so a tag stays readable on a white footprint on layer 0;
+unticked, they take the footprint's color)
 for every footprint in the project (projects made before 0.18.1 take 0.08" when opened; their
 labels were the tag height). An empty tag or description shows "?"; an empty rating shows no
 line. It prints and goes into PDF and DXF exports. Changing the tag, part number or
@@ -1226,7 +1236,9 @@ footprint) asks which schematic device it is, as a contact asks which coil: <b>E
 the one offered (the next device with no footprint yet, in page order; one with the
 footprint's catalog number first), a typed tag takes that device, <b>L</b> lists them, <b>N</b>
 leaves it a footprint of its own. It then carries the device's tag (and its manufacturer,
-catalog number and description where it has none), shows it, and follows it: renumber the
+catalog number and description where neither it nor its footprint block has one: a
+footprint's own, typed on it or set in its block's <b>Properties...</b> in the library, come
+first; its window shows the block's greyed where the copy has none), shows it, and follows it: renumber the
 schematic and the panel's labels change with it. It has the device's ratings too
 (horsepower, volts, amps, full-load amps, VA, primary and secondary volts, rating): its
 window (double-click it) lists them under <b>From its device</b>, and they are the same on
@@ -1265,7 +1277,7 @@ the stock lengths to buy (Panel materials has their cuts). The lines are numbere
 leader's balloon (Leader, B) can show a part's item number on the panel. <b>Save as
 CSV...</b> writes it for a spreadsheet or a purchase order. Give parts their manufacturer and
 catalog number by double-clicking them, or through a part from the library.</li>
-<li><b>Panel materials...</b> (Panel tab) lists the project's rail and duct per size and part:
+<li><b>Panel materials...</b> (Panel tab: Reports) lists the project's rail and duct per size and part:
 the pieces and their cut lengths, the total length, and how many stock lengths that takes
 (the cuts packed into stock lengths, longest first; saw cuts take no width). <b>Save as
 CSV...</b> writes it for a spreadsheet or a purchase order. The bill of materials takes it

@@ -373,14 +373,25 @@ def linked_values(attrs, device):
     return out
 
 
-def link_footprint(attrs, device):
+# a footprint block's own properties, the default for every copy of it
+OWN_FIELDS = {"MFR": "manufacturer", "CAT": "catalog", "DESC": "description"}
+
+
+def own_default(defn, key):
+    """What a footprint block says for key (MFR, CAT, DESC) where a copy has none ("")."""
+    return str(getattr(defn, OWN_FIELDS[key], "") or "") if defn is not None else ""
+
+
+def link_footprint(attrs, device, defn=None):
     """A footprint's attributes as the footprint of device: its id and tag, its ratings, and
-    the device's manufacturer, catalog number and description where the footprint has none."""
+    the device's manufacturer, catalog number and description where neither the footprint
+    copy nor its block (defn, Properties...) has one: the footprint's own come first (the
+    owner, 0.18.6: "shouldn't it default to the footprint settings?")."""
     out = dict(attrs or {})
     out["PARENT"] = device.attrs["DEV"]
     out["TAG"] = device.attrs.get("TAG", "")
-    for k in ("MFR", "CAT", "DESC"):
-        if not out.get(k) and device.attrs.get(k):
+    for k in OWN_FIELDS:
+        if not out.get(k) and not own_default(defn, k) and device.attrs.get(k):
             out[k] = device.attrs[k]
     return linked_values(out, device)
 

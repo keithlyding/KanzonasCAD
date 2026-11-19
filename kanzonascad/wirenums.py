@@ -179,13 +179,20 @@ def _adjacent(sheet, w, split_taps=False, tapped_out=None):
         for p in pts:
             tw = (_same_pt(p, w.points[0]) or _same_pt(p, w.points[-1])) and apart(w, p, o)
             to = (_same_pt(p, o.points[0]) or _same_pt(p, o.points[-1])) and apart(o, p, w)
+            # (kept at the tap's own end, not the point as the other wire has it: the two
+            # can differ by a hair, and which is seen first depends on the order, seed 44)
             if tw and tapped_out is not None:
-                _note_tap(tapped_out, (w.id, o.id), p)
+                _note_tap(tapped_out, (w.id, o.id), _own_end(w, p))
             if to and tapped_out is not None:
-                _note_tap(tapped_out, (o.id, w.id), p)
+                _note_tap(tapped_out, (o.id, w.id), _own_end(o, p))
             if not tw and not to:
                 out.add(o.id)
     return out
+
+
+def _own_end(w, p):
+    """w's end at p (within TOL)."""
+    return w.points[0] if _same_pt(p, w.points[0]) else w.points[-1]
 
 
 def _note_tap(found, k, p):
@@ -361,7 +368,7 @@ def _summary(sheet, how=None, taps_mode="same"):
             if w.num_lock and g[3] is None:
                 g[3] = w.num
     local = {r: (g[0], g[1], sorted(g[2], key=_count), g[3]) for r, g in local.items()}
-    links, dists = [], []
+    links, dists, named = [], [], []
     for ins in sheet.inserts():
         d = ins.defn
         if d is None or not d.wiring:
@@ -371,6 +378,7 @@ def _summary(sheet, how=None, taps_mode="same"):
             name = ins.attrs.get("TAG", "").strip().upper()
             if name:
                 links += [(name, r) for r in at.values()]
+                named.append((name, ins.id, d.name, tuple(at.values())))
         elif d.wiring == "distribution" and d.pins and d.pins[0]["name"] in at:
             dists.append((at[d.pins[0]["name"]],
                           [at[p["name"]] for p in d.pins[1:] if p["name"] in at]))
@@ -390,7 +398,7 @@ def _summary(sheet, how=None, taps_mode="same"):
             if k is None:
                 k = known[q] = key(q)
             tapl.append((roots[b], roots[a], k))
-    out = (local, links, dists, tapl)
+    out = (local, links, dists, tapl, named)
     sheet._num_summary = (sig, out)
     return out
 
@@ -403,23 +411,32 @@ def _count(num):
 def groups(project):
     """({group key: [(sheet, wire)...]}, distribution links [(input group, [output groups in
     pin order])]) of the whole project."""
-    gs, _info, dist, _taps = _assemble(project)
+    gs, _info, dist, _taps, _names = _assemble(project)
     return {k: [(s, w) for s, ws in nodes for w in ws] for k, nodes in gs.items()}, dist
 
 
 def _assemble(project):
     """Local groups joined across sheets by off-sheet connectors: {group key: [(sheet,
     [wires])]}, {group key: [home order, page sheet, numbers, locked]}, distribution links,
-    taps [(tapped group, tap group, (sheet index, sort key))]."""
+    taps [(tapped group, tap group, (sheet index, sort key))], off-sheet connectors {name:
+    [group key or None, [(sheet, connector id, block name, on a wire)]]}."""
     u = _Union()
     names = {}
+    named = {}
+    src_at = []
     sums = []
     mode = tap_mode(project)
     for i, s in enumerate(project.sheets):
-        local, links, dists, tapl = _summary(s, wire_order(project, s), mode)
+        local, links, dists, tapl, ins_named = _summary(s, wire_order(project, s), mode)
         sums.append((i, s, local, dists, tapl))
         for name, r in links:
             names.setdefault(name, []).append((s.id, r))
+        for name, iid, block, rs in ins_named:
+            named.setdefault(name, []).append((s, iid, block, bool(rs)))
+            if block == ARROWS[0]:
+                for r in rs:
+                    if r in local:
+                        src_at.append(((s.id, r), (i, local[r][0]), s))
     for nodes in names.values():
         for n in nodes[1:]:
             u.join(nodes[0], n)
@@ -438,13 +455,25 @@ def _assemble(project):
                     cur[0], cur[1] = order, s
                 cur[2] = sorted(set(cur[2]) | set(nums), key=_count)
                 cur[3] = cur[3] or locked
+    # a wire carried on by arrows is numbered where its source arrow is, whatever sheet its
+    # destinations are on: the destinations follow the source (the owner, 0.18.6: "Only
+    # sources should follow the wire number. Destination need to follow their source")
+    home = {}
+    for node, order, s in src_at:
+        g = find(node)
+        if g in info and (g not in home or order < home[g][0]):
+            home[g] = (order, s)
+    for g, (order, s) in home.items():
+        info[g][0], info[g][1] = order, s
     dist, tapped = [], []
     for i, s, _local, dists, tapl in sums:
         for a, bs in dists:
             dist.append((find((s.id, a)), [find((s.id, b)) for b in bs]))
         for a, b, k in tapl:
             tapped.append((find((s.id, a)), find((s.id, b)), (i, k)))
-    return gs, info, dist, tapped
+    conns = {name: [find(names[name][0]) if name in names else None, ends]
+             for name, ends in named.items()}
+    return gs, info, dist, tapped, conns
 
 
 # ---- numbering -------------------------------------------------------------------------------
@@ -454,7 +483,7 @@ def sync(ed, project, renumber=None):
     unlocked groups are numbered again from 001."""
     if not enabled(project):
         return
-    gs, info, dist, tapped = _assemble(project)
+    gs, info, dist, tapped, conns = _assemble(project)
     again = [] if renumber is None else [renumber] if not isinstance(renumber, (list, tuple,
                                                                                set)) \
         else list(renumber)
@@ -543,6 +572,35 @@ def sync(ed, project, renumber=None):
             for w in ws:
                 if w.num != num:
                     ed.change(s, w.copy(num=num, num_lock=w.num_lock and g in fixed))
+    _follow_numbers(ed, conns, want)
+
+
+def _follow_numbers(ed, conns, want):
+    """A source arrow's pair named by its wire's number, kept so (the owner, 0.18.6: "Source
+    tags need to auto-follow their respective wire numbers"): renumbered, the source arrow and
+    its destination arrows take the new number. Not when that would join two wires into one:
+    another pair has the name already, or two pairs would take it, on wires of their own (two
+    pairs on one wire take it together, the battery, 0.18.7, seed 2804)."""
+    moves = {}
+    for name, (g, ends) in conns.items():
+        num = (want.get(g) or "").strip().upper() if g is not None else ""
+        # (a source arrow on a wire of its own: one on nothing has no number to follow)
+        if num and num != name and any(b == ARROWS[0] and on for _s, _i, b, on in ends):
+            moves[name] = num
+    if not moves:
+        return
+    claimed = {}
+    for name, num in moves.items():
+        claimed.setdefault(num, set()).add(conns[name][0])
+    for name, num in moves.items():
+        g = conns[name][0]
+        if len(claimed[num]) > 1 or (num in conns and num not in moves and
+                                     conns[num][0] != g):
+            continue
+        for s, iid, _b, _on in conns[name][1]:
+            ins = s.entities.get(iid)
+            if ins is not None:
+                ed.change(s, ins.copy(attrs=dict(ins.attrs, TAG=num)))
 
 
 def _break_loops(outputs, info):

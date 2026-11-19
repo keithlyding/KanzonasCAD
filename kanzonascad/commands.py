@@ -2900,7 +2900,7 @@ class InsertCmd(Command):
         """Its attributes as device's contact (or, a footprint, as device's footprint)."""
         from . import tags
         if self.footprint_of:
-            return tags.link_footprint(self.attrs, device)
+            return tags.link_footprint(self.attrs, device, self.defn)
         return tags.link_attrs(self.attrs, device)
 
     def _make(self, p, defn, mirror=None):

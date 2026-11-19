@@ -50,3 +50,28 @@ class PanelLayersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SchematicLayersTest(unittest.TestCase):
+    """The Schematic tab has them too (the owner, 0.18.6: "I need layer selection in both the
+    schematic and the panel tabs as well as home")."""
+
+    def test_schematic_tab_has_the_layer_box_in_step(self):
+        win, v = window()
+        try:
+            page = [win.ribbon.widget(i).widget() for i in range(win.ribbon.count())
+                    if win.ribbon.tabText(i) == "Schematic"][0]
+            self.assertTrue(page.isAncestorOf(win.sch_layer_box))
+            self.assertTrue(page.isAncestorOf(win.sch_layer_states))
+            with v.project.edit("layer") as ed:
+                ed.layer("24VDC BLU", None, M.Layer("24VDC BLU").to_dict())
+            win._fill_layers()
+            items = [win.sch_layer_box.itemText(i) for i in range(win.sch_layer_box.count())]
+            win._layer_picked(items.index("24VDC BLU"), win.sch_layer_box)
+            self.assertEqual(v.layer(), "24VDC BLU")
+            self.assertEqual(win.layer_box.currentText(), "24VDC BLU")
+            self.assertEqual(win.panel_layer_box.currentText(), "24VDC BLU")
+        finally:
+            v.project.saved_at = len(v.project.undo_stack)
+            win.close()
+        self.assertTrue(APP)
