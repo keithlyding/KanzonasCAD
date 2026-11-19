@@ -224,6 +224,15 @@ IO_MODULES = [
     ("1734-CTM", "Allen-Bradley", "Common terminal module: C on all 8 terminals (POINT I/O)",
      [(str(i), "C") for i in range(8)]),
 ]
+def _in_rtn(n, first=0):
+    """[(terminal, what)] of n analog channels with two terminals each, the input above its
+    return, numbered as the owner's 1756-IF16 drawing: IN-0 on 2, RTN-0 on 1, IN-1 on 4..."""
+    out = []
+    for i in range(first, first + n):
+        out += [(str(2 * i + 2), "IN-%d" % i), (str(2 * i + 1), "RTN-%d" % i)]
+    return out
+
+
 # any make: a digital or analog module of 4, 8 or 16 points (Edit block renames its terminals)
 IO_GENERIC = [(kind, word, n) for kind, word in (("digital input", "IN"),
                                                  ("digital output", "OUT"),
@@ -232,11 +241,14 @@ IO_GENERIC = [(kind, word, n) for kind, word in (("digital input", "IN"),
               for n in (4, 8, 16)]
 
 
-def io_module(name, terminals, description, catalog="", maker="", family=""):
+def io_module(name, terminals, description, catalog="", maker="", family="", cont=False):
     """A PLC I/O module drawn whole: a box with its catalog number at the top and its terminals
     down its left side, one a rung (IO_STEP apart), each a pin with its number and what it is
     ("0  IN 0"); its tag above, its slot (SLOT) over the catalog number. A device of its own
-    (PLC prefix) whose points (PLC input, PLC output) can belong to it."""
+    (PLC prefix) whose points (PLC input, PLC output) can belong to it. cont: the rest of a
+    module continued on another sheet (the owner's drawing: "SLOT 7 CONTINUED"): a piece of
+    the module it belongs to, as a contact of its coil, showing its tag, CONTINUED over its
+    catalog number."""
     o, pins = [], []
     n = len(terminals)
     top = IO_HEAD
@@ -244,15 +256,18 @@ def io_module(name, terminals, description, catalog="", maker="", family=""):
     o.append(_box(0.0, bottom, IO_W, top))
     if catalog:
         o.append(Text((IO_W / 2, top - 0.2), catalog, 0.08, align="center"))
+    if cont:
+        o.append(Text((IO_W / 2, top + 0.06), "CONTINUED", 0.08, align="center"))
     for i, (num, what) in enumerate(terminals):
         y = -i * IO_STEP
         o.append(Line((-PIN, y), (-0.03125, y)))
         o.append(Circle((0.0, y), 0.03125))
         o.append(Text((0.08, y - 0.03), "%s  %s" % (num, what), 0.07))
         pins.append({"name": num, "pos": (-PIN, y)})
-    attrs = [{"attr": "SLOT", "pos": (IO_W / 2, top + 0.06), "height": 0.08}]
+    attrs = [] if cont else [{"attr": "SLOT", "pos": (IO_W / 2, top + 0.06), "height": 0.08}]
     return BlockDef(name, "symbol", o, pins, (IO_W / 2, top + 0.22), 0.1, "JIC/PLC",
-                    description, "parent", "", "PLC", builtin=True, attr_texts=attrs,
+                    description, "child" if cont else "parent", "", "PLC", builtin=True,
+                    attr_texts=attrs,
                     manufacturer=maker, family=family, catalog=catalog)
 
 
@@ -265,6 +280,35 @@ def io_modules():
                              _io_terminals(word, n),
                              "A PLC %s module of %d points, drawn whole (any make: Edit block "
                              "renames its terminals)" % (kind, n)))
+    # two terminals a channel, the input above its return (the owner's 1756-IF16 drawing)
+    for n in (4, 8, 16):
+        out.append(io_module("PLC analog input module, %d channels IN/RTN" % n, _in_rtn(n),
+                             "A PLC analog input module of %d channels, each an input and its "
+                             "return (IN-0 on terminal 2, RTN-0 on 1...); any make: Edit block "
+                             "renames its terminals" % n))
+    # a 16-point (16-channel) module over two sheets: its first 8 as the module itself (its
+    # tag and slot), the rest on the next sheet as a piece of it (it asks which module),
+    # CONTINUED at the top
+    for kind, word in (("digital input", "IN"), ("digital output", "OUT"),
+                       ("analog input", "IN"), ("analog output", "OUT")):
+        out.append(io_module("PLC %s module, 16 points, points 0-7" % kind,
+                             _io_terminals(word, 8),
+                             "The first half of a 16-point PLC %s module (points 0-7): its "
+                             "points 8-15 go on another sheet as its continued piece" % kind))
+        out.append(io_module("PLC %s module, points 8-15 continued" % kind,
+                             _io_terminals(word, 8, 8),
+                             "The rest of a 16-point PLC %s module continued on another sheet "
+                             "(points 8-15): a piece of the module, showing its tag" % kind,
+                             cont=True))
+    out.append(io_module("PLC analog input module, 16 channels IN/RTN, channels 0-7",
+                         _in_rtn(8),
+                         "The first half of a 16-channel IN/RTN analog input module (channels "
+                         "0-7): its channels 8-15 go on another sheet as its continued piece"))
+    out.append(io_module("PLC analog input module, channels 8-15 IN/RTN continued",
+                         _in_rtn(8, 8),
+                         "The rest of a 16-channel IN/RTN analog input module continued on "
+                         "another sheet (channels 8-15): a piece of the module, showing its tag",
+                         cont=True))
     return out
 
 

@@ -2293,7 +2293,12 @@ class Insert(Entity):
             # spot and running away from it, not centered over the outer pole (the owner, 0.16:
             # "I don't like the location of the tag when rotated sideways")
             p, axis = self.to_world(spot), self.to_world((spot[0], 0.0))
-            align, valign = ("left" if p[0] >= axis[0] else "right"), "middle"
+            # (a tag dragged onto the symbol's own line: centered there, not left or right by
+            # a rounding error that changed as the symbol moved, the sweep, 0.19.1, seed 3507:
+            # a fuse block's tag jumped sides when it was moved)
+            off = p[0] - axis[0]
+            align = "center" if abs(off) <= 1e-9 else ("left" if off > 0 else "right")
+            valign = "middle"
         return Text(self.to_world(spot), text, h, 0.0, align, valign)
 
     def _turned(self, name):

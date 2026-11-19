@@ -1320,6 +1320,50 @@ def run_properties(parent, project, e, others=()):
     return dlg.changed()
 
 
+def report_dialog(parent, title, head, rows, folder, filename, empty_text, note):
+    """A report as a table (reports.py: wire list, terminal strip list) with Save as CSV."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(title)
+    dlg.resize(980, 460)
+    lay = QVBoxLayout(dlg)
+    t = QTableWidget(len(rows), len(head))
+    t.setObjectName("report_table")
+    t.setHorizontalHeaderLabels(head)
+    t.verticalHeader().setVisible(False)
+    for i, row in enumerate(rows):
+        for j, cell in enumerate(row):
+            it = QTableWidgetItem(cell)
+            it.setFlags(it.flags() & ~Qt.ItemIsEditable)
+            t.setItem(i, j, it)
+    t.resizeColumnsToContents()
+    lay.addWidget(t, 1)
+    if not rows:
+        lay.addWidget(QLabel(empty_text))
+    lay.addWidget(_gray(note))
+    box = QDialogButtonBox(QDialogButtonBox.Close)
+    save = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    save.setEnabled(bool(rows))
+    box.rejected.connect(dlg.reject)
+
+    def do_save():
+        from PySide6.QtWidgets import QFileDialog
+        import os
+        from . import reports
+        path, _f = QFileDialog.getSaveFileName(dlg, "Save %s" % title.lower(),
+                                               os.path.join(folder, filename), "CSV (*.csv)")
+        if not path:
+            return
+        try:
+            n = reports.write_csv(path, head, rows)
+        except OSError as ex:
+            QMessageBox.warning(dlg, title, "Couldn't save %s:\n%s" % (path, ex))
+            return
+        QMessageBox.information(dlg, title, "Saved %d line(s) to %s." % (n, path))
+    save.clicked.connect(do_save)
+    lay.addWidget(box)
+    dlg.exec()
+
+
 def bom_dialog(parent, project, folder):
     """The bill of materials (bom.py): one line per part (manufacturer and catalog number)
     with how many, description, tags and sheets, rail and duct as stock lengths; Save as

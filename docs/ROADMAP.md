@@ -174,8 +174,9 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    pulled between panels and where all the wires need to be landed on both sides"; locations
    per sheet or device, runs with landings, cable tag/type/marking and colors editable, CSV and
    PDF; lengths left to the job), bill of materials (done in 0.14: parts by manufacturer and catalog number, a
-   device and its footprint once, rail and duct as stock lengths, CSV), wire list, terminal strip list (Report sheets; CSV and Excel
-   via openpyxl, MIT, imported only when exporting).
+   device and its footprint once, rail and duct as stock lengths, CSV), wire list and terminal
+   strip list (done in 0.19.1, CSV). Still to come: Excel export (openpyxl, MIT, imported only
+   when exporting) and report sheets drawn in the project.
 9. **PDF export opening in KanzonasPDF** when it is installed (export exists).
 10. **Check out / check in** sheets: export chosen sheets (with their blocks, parts and
    settings) for someone else, lock them while out, check them back in matched by sheet id
@@ -199,8 +200,10 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 12. PLC I/O (0.19 started it: whole-module boxes, Rockwell POINT I/O 1734-IB8/OB8/OB8E/IE8C/
     OE4C/VTM/CTM and generic 4/8/16-point modules; the owner asked for one box per module, as
     a 1756-IF16 "SLOT 7" with its terminals down one side, one a rung). Still to come: a
-    module continued on the next sheet ("SLOT 7 CONTINUED"), modules with two terminals a
-    channel (IN/RTN), more catalogs as the owner sends their wiring diagrams. Known: a wide bus
+    0.19.1 added modules continued on the next sheet (a 16-point module as "points 0-7" and a
+    linked "points 8-15 continued" piece) and IN/RTN analog input modules. Still to come: more
+    catalogs as the owner sends their wiring diagrams (a 1756-IF16 by its own terminal map once
+    its wiring mode is confirmed). Known: a wide bus
     (11 wires off a 16-point module) turned closer than it is wide runs its inner wires back
     over the ones drawn (the battery, seed 2203); a first try at refusing such turns also
     refused Bus's own routes around symbols, so it was taken back out of 0.19.
