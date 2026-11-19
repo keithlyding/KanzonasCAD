@@ -2099,6 +2099,48 @@ def random_editing(log, out, ops, seed, drawing=None):
             "a linked destination is paired with another source"
         BC.CHECKED["linked destination shows its source"] += 1
 
+    def op_source_master():
+        # (0.19.11: a destination placed on a wire whose number is locked on its own page (a
+        # foreign number) doesn't take its source's wire over: the source's wire keeps a number
+        # of its own page, worked out from the source's sheet, and the destination follows)
+        from kanzonascad import wirenums as WN
+        if not WN.enabled(p) or len(p.sheets) < 2:
+            return
+        srcs = [(sh, c) for sh in p.sheets for c in sh.inserts()
+                if c.block == WN.ARROWS[0] and c.attrs.get("TAG")]
+        if not srcs:
+            return
+        sh, src = rnd.choice(srcs)
+        home = [w for w in sh.wires() if w.touches(src.pin_points()[0][1])]
+        if not home or s is sh or any(w.num_lock and w.num == home[0].num
+                                      for w in sh.wires()):
+            return                  # (a number typed on the source's page holds: not this)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        foreign = "%s%03d" % (p.sheet_number(s), rnd.randint(700, 899))
+        with p.edit("a wire numbered by hand") as ed:
+            ed.add(s, M.Wire([o, (o[0] + 3.0 * k, o[1])], num=foreign, num_lock=True))
+        win.pick_connector = lambda cands: next(
+            ((x, c) for x, c in cands if c is src), None)
+        try:
+            v.run(C.InsertCmd, lib.get("symbol", WN.ARROWS[1]), {})
+            v.input_text(fmt(o))
+            if v.cmd is not None:
+                v.input_text(C.PAIR_LIST)
+            finish()
+        finally:
+            win.__dict__.pop("pick_connector", None)
+        now = [w for w in sh.wires() if w.touches(src.pin_points()[0][1])]
+        if not now or not now[0].num or now[0].num_lock:
+            return
+        got = WN.split(now[0].num)
+        assert got and got[0] == p.sheet_number(sh), \
+            "a source arrow's wire on page %s took %s from a destination's page" % (
+                p.sheet_number(sh), now[0].num)
+        BC.CHECKED["a source's wire keeps its page's number"] += 1
+
     def op_wire_color():
         # (0.18.4: Wire color label on the selected wires: on when any is off, else off;
         # worked out from the wires before)
@@ -3146,7 +3188,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

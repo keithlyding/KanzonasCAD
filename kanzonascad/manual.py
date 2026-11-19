@@ -954,7 +954,10 @@ nothing to type (unless another source arrow has that name: then it asks). It ke
 it: when the wire is renumbered (a number typed, Renumber sheet, Update numbers), the source
 arrow takes the new number and its destination arrows follow their source. A wire carried on by
 arrows is numbered where its source is (page 6: 6012), whatever sheets its destinations are
-on. A name another pair already goes by is left alone, so two pairs never join. A destination arrow
+on. A number locked on a destination's wire before an arrow joined it to the source (typed
+there earlier) doesn't take the source's wire over: the source keeps a number of its own page and
+the destination follows; a number typed on either side once they are joined numbers the whole
+wire. A name another pair already goes by is left alone, so two pairs never join. A destination arrow
 offers the name of a source still waiting for it (or <b>List...</b> on the command line picks the one it continues from a list of them, wire number and place, waiting ones first; <b>Pick on drawing</b> lets you go to its sheet and click it, and comes back; a destination paired either way is <b>linked</b> to that source arrow: it shows that one whatever the order of the others, and follows it when its wire is renumbered, until that source arrow is deleted. Double-click a destination arrow to change it: <b>Comes from</b> lists every source arrow, or <b>Automatic</b> pairs it by order); placed, its wire takes the source's number
 and its layer (480V BRN, with its color and gauge). Each arrow shows only its other half's
 place: a destination its source, a source its destination. A wire carried on over several

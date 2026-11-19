@@ -442,10 +442,13 @@ def _assemble(project):
             u.join(nodes[0], n)
     find = (lambda n: u.find(n) if n in u.up else n)
     gs, info = {}, {}
+    locks = {}                                  # group -> [(sheet, its locked number)]
     for i, s, local, _d, _t in sums:
         for r, (k, ws, nums, locked) in local.items():
             g = find((s.id, r))
             gs.setdefault(g, []).append((s, ws))
+            if locked:
+                locks.setdefault(g, []).append((s, locked))
             order = (i, k)
             cur = info.get(g)
             if cur is None:
@@ -465,6 +468,12 @@ def _assemble(project):
             home[g] = (order, s)
     for g, (order, s) in home.items():
         info[g][0], info[g][1] = order, s
+        # (and only a number locked on the source's page holds it: one locked on a
+        # destination's wire, before the arrows joined them, doesn't take the source's wire
+        # over; the source gets a number of its own page and its destinations follow, the
+        # owner, 0.19.11: "it defaulted to a page 11, which it should never do. It is the
+        # source, so it should have defaulted to another number for page 2")
+        info[g][3] = next((n for ls, n in locks.get(g, ()) if ls is s), None)
     dist, tapped = [], []
     for i, s, _local, dists, tapl in sums:
         for a, bs in dists:

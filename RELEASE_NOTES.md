@@ -15,6 +15,9 @@ build fails without them.
 - Source and destination arrows carried down one ladder, across to the next ladder on the same
   sheet, and on to another sheet now show the right places: the left ladder's foot shows the
   right ladder's head, and so on. A source with nothing after it yet shows "?".
+- A wire carried by a source arrow keeps a number of the source's page. A number locked on a
+  destination's wire on another page no longer takes the source's wire over (page 2's wire
+  taking a page 11 number).
 
 **New**
 - A destination arrow paired with List... or Pick on drawing now stays linked to that source
