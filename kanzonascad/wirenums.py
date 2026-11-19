@@ -578,8 +578,9 @@ def sync(ed, project, renumber=None):
 def _follow_numbers(ed, conns, want):
     """A source arrow's pair named by its wire's number, kept so (the owner, 0.18.6: "Source
     tags need to auto-follow their respective wire numbers"): renumbered, the source arrow and
-    its destination arrows take the new number. Not when another pair has that name already
-    (they would join into one), or two pairs would take one name."""
+    its destination arrows take the new number. Not when that would join two wires into one:
+    another pair has the name already, or two pairs would take it, on wires of their own (two
+    pairs on one wire take it together, the battery, 0.18.7, seed 2804)."""
     moves = {}
     for name, (g, ends) in conns.items():
         num = (want.get(g) or "").strip().upper() if g is not None else ""
@@ -590,9 +591,11 @@ def _follow_numbers(ed, conns, want):
         return
     claimed = {}
     for name, num in moves.items():
-        claimed.setdefault(num, []).append(name)
+        claimed.setdefault(num, set()).add(conns[name][0])
     for name, num in moves.items():
-        if len(claimed[num]) > 1 or (num in conns and num not in moves):
+        g = conns[name][0]
+        if len(claimed[num]) > 1 or (num in conns and num not in moves and
+                                     conns[num][0] != g):
             continue
         for s, iid, _b, _on in conns[name][1]:
             ins = s.entities.get(iid)
