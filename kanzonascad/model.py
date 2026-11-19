@@ -3351,6 +3351,13 @@ class Project:
         s.scale, s.scale_name = self.default_scale(s.kind)
         return s
 
+    def kind_scale(self, sheet, kind):
+        """The scale a sheet takes when its kind is changed to this one: the project's for
+        that kind while nothing is drawn on it, else None (it keeps its own)."""
+        if sheet.entities or sheet is self.title_block:
+            return None
+        return self.default_scale(kind)
+
     def default_scale(self, kind):
         """(paper / real, preset name) a new sheet of this kind starts at: panel sheets the
         panel one, every other kind the schematic one; 1:1 when the setting can't be read."""
@@ -3701,6 +3708,12 @@ class _EditContext:
                 # its tag
                 from .tags import sync_children
                 sync_children(self.ed, self.ed.project)
+                # contact blocks put on (or taken off) a pushbutton's dashed line: their tag
+                # hidden (or shown again), 0.19.11
+                from .xrefs import sync_block_tags
+                touched = {op[1] for op in self.ed.ops if op[0] == "ent"}
+                sync_block_tags(self.ed, [s for s in self.ed.project.sheets
+                                          if sheets or s.id in touched])
             if sheets or "insert" in kinds or "wire" in kinds or any(
                     op[0] == "settings" for op in self.ed.ops):
                 # wires drawn, cut, joined or moved, symbols placed on them: wire numbers

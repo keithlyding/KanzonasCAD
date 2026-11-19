@@ -2038,11 +2038,12 @@ class MainWindow(BlockEditing, QMainWindow):
             d.view.update()
 
     def _build_quick_access(self, mb):
-        """Undo and Redo as icons right after the menus (added once the menus are in)."""
+        """Save, Undo and Redo as icons right after the menus (added once the menus are in;
+        Save the owner's, 0.19.10: "a save button to the left of the undo/redo buttons")."""
         self._quick = []
 
         def add():
-            for key in ("undo", "redo"):
+            for key in ("save", "undo", "redo"):
                 src = self.acts[key]
                 q = QAction(src.icon(), "", self)
                 q.setToolTip("%s (%s)" % (src.text().replace("&", ""),

@@ -179,8 +179,14 @@ class BlockWorkflowTest(unittest.TestCase):
         self.assertTrue(any(n.startswith("Pushbutton NO") for n in names))
         panel.search.setText("e-stop")
         panel.search.setText("emergency")
-        self.assertEqual(sum(tree.topLevelItem(i).childCount()
-                             for i in range(tree.topLevelItemCount())), 1)
+        # (the emergency stop, and since 0.19.10 the contact blocks made for it)
+        found = sorted(tree.topLevelItem(i).child(j).text(0).split("  (")[0]
+                       for i in range(tree.topLevelItemCount())
+                       for j in range(tree.topLevelItem(i).childCount()))
+        self.assertEqual(len(found), 3, found)
+        self.assertEqual([n for n in found if n.startswith("Emergency stop")], ["Emergency stop NC"])
+        self.assertEqual([n for n in found if n.startswith("Pushbutton contact")],
+                         ["Pushbutton contact NC", "Pushbutton contact NO"])
         w.acts["insert_symbol"].trigger()
         self.assertTrue(w.library_dialog.isVisible())
         self.assertEqual(panel.tabs.currentIndex(), 0)

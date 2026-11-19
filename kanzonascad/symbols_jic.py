@@ -366,6 +366,33 @@ def builtin_symbols():
     S.append(_sym("Selector switch 2-position", "JIC/Pushbuttons and switches", o, "parent",
                   "NO", "SS", tag=TAG, description="Two-position selector switch"))
 
+    # contact blocks: more contacts of a pushbutton, an emergency stop or a selector switch,
+    # belonging to it (its tag, listed under it); one in the same column on its sheet is joined
+    # to it by a dashed line (xrefs.links; the owner, 0.19.10: "Can you add secondary contacts
+    # like that EStop", its print: two NC blocks and an NO one under a mushroom head)
+    o = []
+    _pb_terminals(o)
+    o.append(Line((-0.15625, 0.09375), (0.15625, 0.09375)))
+    S.append(_sym("Pushbutton contact NO", "JIC/Pushbuttons and switches", o, "child", "NO",
+                  "PB", description="A pushbutton's (or emergency stop's) contact block, "
+                                    "normally open"))
+    o = []
+    _pb_terminals(o)
+    o.append(Line((-0.15625, -0.0625), (0.15625, -0.0625)))
+    S.append(_sym("Pushbutton contact NC", "JIC/Pushbuttons and switches", o, "child", "NC",
+                  "PB", description="A pushbutton's (or emergency stop's) contact block, "
+                                    "normally closed"))
+    o = []
+    _pb_terminals(o)
+    o.append(Line((-0.125, 0.03125), (0.09375, 0.15625)))
+    S.append(_sym("Selector switch contact NO", "JIC/Pushbuttons and switches", o, "child", "NO",
+                  "SS", description="A selector switch's contact block, normally open"))
+    o = []
+    _pb_terminals(o)
+    o.append(Line((-0.125, -0.03125), (0.15625, -0.0625)))
+    S.append(_sym("Selector switch contact NC", "JIC/Pushbuttons and switches", o, "child", "NC",
+                  "SS", description="A selector switch's contact block, normally closed"))
+
     def sensor(name, prefix, actuator, nc, desc):
         o = []
         _pb_terminals(o)

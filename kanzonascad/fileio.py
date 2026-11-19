@@ -83,6 +83,11 @@ def export_dxf(project, sheet, path, include_frame=True):
             t.layer = "XREFS" if xl is not None else (
                 "SYMBOLS" if "SYMBOLS" in project.layers else "0")
             ents.append(t)
+    # the dashed lines joining pushbuttons to their stacked contact blocks, on layer SYMBOLS
+    from .xrefs import links, dashes
+    for a, b in links(project, sheet):
+        for q, r in dashes(a, b, sheet.k()):
+            ents.append(M.Line(q, r, layer="SYMBOLS" if "SYMBOLS" in project.layers else "0"))
     # the wire numbers, on layer WIRES
     from .wirenums import labels, label_leaders
     for t in labels(project, sheet):

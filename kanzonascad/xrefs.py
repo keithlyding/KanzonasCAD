@@ -62,25 +62,49 @@ def _group_of(sheet, c):
     return wirenums._sheet_groups(sheet).get(wire.id)
 
 
-def far_device(sheet, c):
-    """The device the wire on an arrow's pin goes straight to on the arrow's sheet: its tag
-    (VFD201; a terminal by its strip and number, TB1-12), or None when that wire tees off or
-    lands on nothing, or carries on to another connector (the owner, 0.19.5: "If there's a T,
-    I don't need to see a device. I really just want to be able to look at the source page and
-    know the downstream device is the plc without having to flip there")."""
+def _straight_to(sheet, root, skip):
+    """The one (insert, pin) a sheet-local wire group lands on, or None when it lands on none
+    or more than one (a T), or carries on through a connector; skip: the connector or
+    terminal it was reached from."""
     from . import pull, wirenums
-    root = _group_of(sheet, c)
-    if root is None:
-        return None
-    lands = pull._sheet_landings(sheet).get(root, ())
+    lands = [(i, p) for i, p in pull._sheet_landings(sheet).get(root, ()) if i is not skip]
     if len(lands) != 1:
         return None
     roots = wirenums._sheet_groups(sheet)
     for e in sheet.inserts():
-        if e is not c and e.defn is not None and e.defn.wiring == "link" and \
+        if e is not skip and e.defn is not None and e.defn.wiring == "link" and \
                 root in wirenums._pin_wires(sheet, e, roots).values():
             return None                 # (the wire goes on: through another connector)
-    ins, pin = lands[0]
+    return lands[0]
+
+
+def far_device(sheet, c):
+    """The device the wire on an arrow's pin goes straight to on the arrow's sheet: its tag
+    (VFD201), or None when that wire tees off, lands on nothing or carries on to another
+    connector (the owner, 0.19.5: "If there's a T, I don't need to see a device. I really
+    just want to be able to look at the source page and know the downstream device is the plc
+    without having to flip there"). Terminals are passed through to the device past them (the
+    owner, 0.19.6); a terminal with nothing straight past it, or a T there, is shown itself
+    (TB1-12)."""
+    from . import pull, wirenums
+    root = _group_of(sheet, c)
+    if root is None:
+        return None
+    got = _straight_to(sheet, root, c)
+    if got is None:
+        return None
+    roots = wirenums._sheet_groups(sheet)
+    seen = set()
+    while pull.is_terminal(got[0]) and id(got[0]) not in seen:
+        ins, pin = got
+        seen.add(id(ins))
+        past = [r for name, r in wirenums._pin_wires(sheet, ins, roots).items()
+                if name != pin and r != root]
+        nxt = _straight_to(sheet, past[0], ins) if len(set(past)) == 1 else None
+        if nxt is None:
+            break                       # (nothing straight past it: the terminal itself)
+        root, got = past[0], nxt
+    ins, pin = got
     if pull.is_terminal(ins):
         return pull.landing_name(ins, pin)
     return (ins.attrs.get("TAG", "") or "").strip() or ins.block
@@ -172,12 +196,15 @@ def live_all(project):
                     children.setdefault(dev, []).append((s, e))
     out = {s.id: [] for s in project.sheets}
     hk = {s.id: h * s.k() for s in project.sheets}     # (paper height on scaled sheets)
+    joined = {s.id: _joined(project, s)[1] for s in project.sheets}
     key = _order(project)
     for dev, (s, parent) in index.items():
         if parent.attrs.get("XREF") == "0":
             continue
-        items = sorted((c for c in children.get(dev, []) if c[1].attrs.get("XREF") != "0"),
-                       key=key)
+        # (a contact block joined to it by the dashed line isn't listed: the line shows it,
+        # as in the owner's print, 0.19.10)
+        items = sorted((c for c in children.get(dev, []) if c[1].attrs.get("XREF") != "0"
+                        and c[1].id not in joined.get(c[0].id, ())), key=key)
         if not items:
             continue
         hh = hk[s.id]
@@ -237,6 +264,8 @@ def live_all(project):
     for s, c in contacts:
         if tags.numbered(c):
             continue                    # (a terminal shows its number, not where its strip is)
+        if c.id in joined[s.id]:
+            continue                    # (joined to its device by the dashed line)
         hh = hk[s.id]
         got = index.get(c.attrs.get("PARENT")) if c.attrs.get("PARENT") else None
         text = _where(project, got[0], got[1]) if got is not None else "?"
@@ -256,6 +285,101 @@ def live_all(project):
         x += text_width(b.tag(), b.height) + hh * 0.6 + text_width(text, hh) / 2
         out[s.id].append((round(x, 6), round(y, 6), text, hh))
     _cache["sig"], _cache["by_sheet"] = sig, out
+    return out
+
+
+LINKED = ("PB", "SS")            # contact blocks drawn joined to their device (xrefs.links)
+_links = {"sig": None, "by_sheet": {}}
+
+
+def links(project, sheet):
+    """The dashed lines joining a pushbutton (an emergency stop, a selector switch) to its
+    contact blocks in the same column on its sheet, as one operator works them all: [(a, b)],
+    from the device through the farthest block (the owner, 0.19.10, his print's E-stop with
+    two NC blocks and an NO one; asked: drawn by itself when stacked, following them when
+    they move). Worked out from the drawing, as the cross-references are."""
+    return _joined(project, sheet)[0]
+
+
+def _joined(project, sheet):
+    """(links, ids of the contact blocks they join) on one sheet, kept until it changes."""
+    sig = _signature(project)
+    if _links["sig"] != sig:
+        _links["sig"], _links["by_sheet"] = sig, {}
+    got = _links["by_sheet"].get(sheet.id)
+    if got is None:
+        got = _links["by_sheet"][sheet.id] = joined_now(sheet)
+    return got
+
+
+def joined_now(sheet):
+    """(links, ids of the contact blocks they join) on one sheet, worked out now (not kept:
+    the edit hook asks in the middle of an edit, model.Edit)."""
+    out, ids = [], set()
+    parents, blocks = {}, []
+    for e in sheet.inserts():
+        d = e.defn
+        if d is None or d.kind != "symbol":
+            continue
+        if d.role == "parent" and e.attrs.get("DEV"):
+            parents[e.attrs["DEV"]] = e
+        elif d.role == "child" and d.prefix in LINKED and e.attrs.get("PARENT"):
+            blocks.append(e)
+    tol = 1e-3 * sheet.k()
+    by_parent = {}
+    for b in blocks:
+        par = parents.get(b.attrs["PARENT"])
+        if par is not None:
+            by_parent.setdefault(par.attrs["DEV"], (par, []))[1].append(b)
+    for par, kids in by_parent.values():
+        across = abs(math.sin(math.radians(par.angle))) < 1e-9  # (rungs across: a column)
+        ax = 0 if across else 1                                  # (the coordinate kept)
+        col = [b for b in kids if abs(b.pos[ax] - par.pos[ax]) <= tol and
+               abs(math.sin(math.radians(b.angle - par.angle))) < 1e-9]
+        if not col:
+            continue
+        ids.update(b.id for b in col)
+        along = [b.pos[1 - ax] for b in col] + [par.pos[1 - ax]]
+        lo, hi = min(along), max(along)
+        if across:
+            out.append(((par.pos[0], lo), (par.pos[0], hi)))
+        else:
+            out.append(((lo, par.pos[1]), (hi, par.pos[1])))
+    return out, ids
+
+
+def sync_block_tags(ed, sheets):
+    """Contact blocks on a dashed line show no tag of their own, as in the owner's print (the
+    line shows where they belong; the owner, 0.19.11: "Yes"); one taken off the line shows it
+    again. Only a tag hidden here (TAGLINK) comes back: one hidden by hand stays hidden."""
+    for s in sheets:
+        _lines, ids = joined_now(s)
+        for e in list(s.inserts()):
+            d = e.defn
+            if d is None or d.role != "child" or d.prefix not in LINKED:
+                continue
+            mine = e.attrs.get("TAGLINK") == "1"
+            if e.id in ids and "TAG" not in e.hidden:
+                attrs = dict(e.attrs, TAGLINK="1")
+                ed.change(s, e.copy(hidden=frozenset(e.hidden) | {"TAG"}, attrs=attrs))
+            elif e.id not in ids and mine:
+                attrs = dict(e.attrs)
+                attrs.pop("TAGLINK", None)
+                ed.change(s, e.copy(hidden=frozenset(e.hidden) - {"TAG"}, attrs=attrs))
+
+
+def dashes(a, b, k=1.0):
+    """A dashed line from a to b as its dashes: [(p, q)], 1/16 inch dashes and gaps on paper."""
+    L = math.hypot(b[0] - a[0], b[1] - a[1])
+    if L <= 1e-12:
+        return []
+    ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+    d = 0.0625 * k
+    out, t = [], 0.0
+    while t < L:
+        e = min(t + d, L)
+        out.append(((a[0] + ux * t, a[1] + uy * t), (a[0] + ux * e, a[1] + uy * e)))
+        t += 2 * d
     return out
 
 

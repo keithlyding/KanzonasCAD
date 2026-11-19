@@ -502,6 +502,10 @@ def mouse_drag(v, rnd):
         v.set_selection(set())
         return
     before = {i: s.entities[i].bbox() for i in v.sel}
+    # (a contact block dragged onto or off its operator's dashed line hides or shows its tag,
+    # 0.19.10, so its box changes size: its place is checked instead)
+    was_at = {i: (s.entities[i].pos, s.entities[i].hidden) for i in v.sel
+              if isinstance(s.entities[i], M.Insert)}
     w0, w1 = v.to_world(QPointF(start)), v.to_world(QPointF(end))
     d = (w1[0] - w0[0], w1[1] - w0[1])
     # wires and symbols with pins are dragged with Snap on, as they are drawn (a freehand drag
@@ -529,8 +533,19 @@ def mouse_drag(v, rnd):
         e = s.entities.get(i)
         assert e is not None, "a dragged object is gone"
         nb = e.bbox()
+        if i in was_at and isinstance(e, M.Insert) and e.hidden != was_at[i][1]:
+            pos, hid = was_at[i]
+            assert set(e.hidden) ^ set(hid) == {"TAG"} and e.defn is not None and \
+                e.defn.prefix in XR.LINKED, \
+                "dragging %s changed what it shows: %r to %r" % (e.block, hid, e.hidden)
+            assert all(abs(e.pos[k] - pos[k] - d[k]) <= tol + 1e-9 for k in range(2)), \
+                "dragged %s by %s, it moved %s" % (e.block, d, (e.pos[0] - pos[0],
+                                                                e.pos[1] - pos[1]))
+            BC.CHECKED["drag: a contact block's tag on or off its dashed line"] += 1
+            continue
         assert all(abs(nb[k] - b[k] - d[k % 2]) <= tol + 1e-9 for k in range(4)), \
-            "dragged %s by %s, it moved %s" % (e.kind, d, (nb[0] - b[0], nb[1] - b[1]))
+            "dragged %s by %s, it moved %s (its box %s to %s)" % (
+                e.kind, d, (nb[0] - b[0], nb[1] - b[1]), b, nb)
     BC.CHECKED["drag"] += 1
     v.set_selection(set())
 
@@ -658,6 +673,19 @@ def random_editing(log, out, ops, seed, drawing=None):
                 assert new[0].layer == want, "a wire drawn on %s went on %s" % (want,
                                                                               new[0].layer)
                 BC.CHECKED["wire on the current layer"] += 1
+        if len(new) == 1:
+            # (0.19.7: a wire starting or ending on wires of one layer takes that layer,
+            # whatever the current one; worked out from the wires touching its ends now)
+            w = new[0]
+            touched = set()
+            for q in (w.points[0], w.points[-1]):
+                for o in s.wires():
+                    if o.id != w.id and o.touches(q, wires.TOL):
+                        touched.add(o.layer)
+            if len(touched) == 1:
+                assert w.layer in touched, "a wire joined to %s went on %s" % (
+                    touched.pop(), w.layer)
+                BC.CHECKED["wire joined takes its layer"] += 1
 
     def clear_of_drawing(k):
         # a spot off on its own: just past the right of what is drawn (not hundreds of times
@@ -2484,6 +2512,147 @@ def random_editing(log, out, ops, seed, drawing=None):
                                {"name": "GND", "pos": (1.0, -0.5)}],
                          prefix="VFD", tag_pos=(0.5, 0.9), role="device")
 
+    # (0.19.8: a safety relay's column of pins, some of them picked one at a time for a bus)
+    relay = M.BlockDef("Battery safety relay", "symbol",
+                       [M.Polyline([(0.0, 1.0), (3.0, 1.0), (3.0, 4.5), (0.0, 4.5)], True)],
+                       pins=[{"name": n, "pos": (0.0, 4.0 - 0.5 * i)} for i, n in enumerate(
+                           ["S11", "S52", "S12", "S21", "S22", "13"])] +
+                       [{"name": "A2", "pos": (3.0, 4.0)}],
+                       prefix="SR", tag_pos=(1.5, 4.7), role="device")
+
+    def op_bus_pick():
+        # Bus, Pick pins: an evenly spaced few of a symbol's column clicked in any order; a
+        # wire leaves each of them and none leaves the others (worked out from the pins)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        before = set(s.entities)
+        v.run(C.InsertCmd, relay, {})
+        v.input_text(fmt((o[0] + 4.0 * k, o[1])))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) != 1:
+            return
+        e = new[0]
+        col = [(n, q) for n, q in e.pin_points() if n != "A2"]
+        step = rnd.choice([1, 2])
+        start = rnd.randrange(0, len(col) - step)
+        chosen = col[start::step][:rnd.randint(2, 4)]
+        if len(chosen) < 2:
+            return
+        clicks = [q for _n, q in chosen]
+        rnd.shuffle(clicks)
+        far = min(q[0] for _n, q in col) - 2.0 * k
+        v.run(C.BusCmd)
+        type_in(v, "P", *(fmt(q) for q in clicks))
+        type_in(v, "")
+        if v.cmd is None or getattr(v.cmd, "step", "") != "path" or len(v.cmd.points) != 1:
+            finish()
+            return
+        type_in(v, fmt((far, v.cmd.points[0][1])))
+        finish()
+        made = [w for i, w in s.entities.items() if i not in before and isinstance(w, M.Wire)]
+        ends = {tuple(q) for w in made for q in (w.points[0], w.points[-1])}
+        for n, q in col:
+            want = any(G.dist(q, c) <= 1e-9 for c in clicks)
+            assert (tuple(q) in ends) == want, "Bus from picked pins: %s %s a wire" % (
+                n, "has no" if want else "got")
+        BC.CHECKED["bus from picked pins"] += 1
+
+    def op_contact_blocks():
+        # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
+        # line from it through the farthest, worked out from where they are; none of them
+        # listed under it nor showing a reference of their own)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        before = set(s.entities)
+        v.run(C.InsertCmd, lib.get("symbol", "Emergency stop NC"), {})
+        v.input_text(fmt((o[0] + 2.0 * k, o[1] + 3.0 * k)))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) != 1 or not new[0].attrs.get("DEV"):
+            return
+        es = new[0]
+        first_pin = es.pin_points()[0][1]
+        blocks = []
+        for i in range(rnd.randint(1, 3)):
+            name = rnd.choice(["Pushbutton contact NO", "Pushbutton contact NC"])
+            got = set(s.entities)
+            v.run(C.InsertCmd, lib.get("symbol", name), {})
+            v.input_text(fmt((first_pin[0], first_pin[1] - (i + 1) * k)))
+            while v.cmd is not None:
+                v.input_text("")
+            made = [e for j, e in s.entities.items() if j not in got and isinstance(e, M.Insert)]
+            if len(made) != 1:
+                return
+            with p.edit("belongs") as ed:
+                ed.change(s, made[0].copy(attrs=tags_mod.link_attrs(dict(made[0].attrs),
+                                                                     s.entities[es.id])))
+            blocks.append(made[0].id)
+        es = s.entities[es.id]
+        ys = [s.entities[b].pos[1] for b in blocks] + [es.pos[1]]
+        tol = 1e-6 * max(1.0, k)
+        mine = [(a, b) for a, b in XR.links(p, s) if abs(a[0] - es.pos[0]) <= tol and
+                abs(b[0] - es.pos[0]) <= tol]
+        assert mine and abs(min(a[1] for a, _b in mine) - min(ys)) <= tol and \
+            abs(max(b[1] for _a, b in mine) - max(ys)) <= tol, \
+            "contact blocks under %s not joined from it to the farthest: %r, blocks at %r" % (
+                es.attrs.get("TAG"), mine, ys)
+        boxes = [s.entities[b].bbox() for b in blocks]
+        for x, y, *_r in XR.live(p, s):
+            assert not any(bb[0] - k <= x <= bb[2] + k and bb[1] - 0.5 * k <= y <= bb[1]
+                           for bb in boxes), "a joined contact block shows a reference"
+        BC.CHECKED["contact blocks joined"] += 1
+
+    def op_copy_onto_wire():
+        # (a symbol copied, moved or pasted onto a wire cuts it between its pins, as one
+        # inserted does: the owner, "it didn't automatically break the wires and reattach on
+        # both terminations"; worked out from the pins and the wire)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        before = set(s.entities)
+        v.run(C.InsertCmd, lib.get("symbol", "Relay coil"), {})
+        v.input_text(fmt((o[0] + 2.0 * k, o[1] + 3.0 * k)))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) != 1:
+            return
+        src = new[0]
+        with p.edit("a wire") as ed:
+            ed.add(s, M.Wire([o, (o[0] + 4.0 * k, o[1])]))
+        how = rnd.choice(["copy", "move", "paste"])
+        to = (src.pos[0], o[1])
+        v.set_selection({src.id})
+        if how == "paste":
+            win.copy_clip()
+            win.paste()
+            if v.cmd is None:
+                return
+            b = v.cmd.base_pt
+            type_in(v, fmt((b[0], b[1] - (src.pos[1] - o[1]))))
+        else:
+            v.run(C.CopyCmd if how == "copy" else C.MoveCmd)
+            type_in(v, fmt(src.pos), fmt(to))
+        finish()
+        placed = [e for i, e in s.entities.items() if isinstance(e, M.Insert) and
+                  e.block == "Relay coil" and G.dist(e.pos, to) <= 1e-6 * max(1.0, k)]
+        if len(placed) != 1:
+            return                      # (not placed there: snapped elsewhere, say)
+        pins = [q for _n, q in placed[0].pin_points()]
+        lo, hi = min(q[0] for q in pins), max(q[0] for q in pins)
+        on = [x for x in s.wires() if all(abs(q[1] - o[1]) <= 1e-6 * max(1.0, k)
+                                          for q in x.points) and
+              min(q[0] for q in x.points) < hi and max(q[0] for q in x.points) > lo]
+        assert not on, "a coil %s onto a wire left it running between its pins: %r" % (
+            {"copy": "copied", "move": "moved", "paste": "pasted"}[how],
+            [x.points for x in on])
+        BC.CHECKED["symbol copied onto a wire cuts it"] += 1
+
     def op_same_name_pins():
         # a symbol with two pins of one name, a wire on each pin, off on its own; moved,
         # scooted or turned through the commands: every pin keeps its wire
@@ -2949,7 +3118,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

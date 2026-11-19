@@ -103,7 +103,12 @@ own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel 
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
 layer it sits on, or its own color if you gave it one. Wires go on the current layer when it
 is a wire layer (WIRES, one named WIRE..., one with a gauge or wire color, or one Add wire
-layers made), else on layer WIRES; symbols on
+layers made), else on layer WIRES. A wire (or a bus wire, with the Bus layers left at Wires)
+that starts or ends on another wire, a tap off it or carrying it on, takes that wire's layer
+instead: it is the same conductor, so the same voltage, color and gauge (a size typed on the
+new wire is still its own), and the rubber band shows it in that color as you draw. A wire
+joining wires of two different layers stays on the current layer, and the command line warns
+that two conductors may be tied together. Symbols go on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them. On the black drawing,
 black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
@@ -553,6 +558,19 @@ to the device that gets that tag. <b>Enter</b> places it on its own, linked to n
 (its reference shows <b>?</b>; double-click it to link it later), and so does a contact with
 no device in the project to offer. A Starter 3-pole is a device of its own with its own tag
 (M), not a contact of a coil: its auxiliary and overload contacts belong to it.</li>
+<li><b>Contact blocks</b> (Library, JIC/Pushbuttons and switches: <b>Pushbutton contact NO</b>,
+<b>Pushbutton contact NC</b>, <b>Selector switch contact NO</b>, <b>Selector switch contact
+NC</b>): more contacts of one pushbutton, emergency stop or selector switch, on other rungs (an
+E-stop's second NC for another circuit, an NO to a PLC input). They belong to it as any contact
+does (PB or SS: the nearest pushbutton or switch is offered). Placed in its column on its sheet
+(straight above or below it), they are joined to it by a <b>dashed line</b> drawn by itself, from
+the operator through the farthest block, as one operator works them all; it follows them when
+they move, and a block moved out of the column leaves it. Blocks joined by the line show no
+tag and no reference of their own, and aren't listed under the operator (the line shows where
+they belong; only the operator shows the tag); one on another sheet, or out of the column, shows
+its tag and reference and is listed as usual. A block's tag you hide yourself (double-click it,
+Shown on the drawing) stays hidden either way. Relay
+contacts are never joined this way.</li>
 <li><b>Changing it later</b>: double-click the contact. "Belongs to" lists the project's
 devices; pick one or type a tag. Deleting a coil leaves its contacts unlinked (showing
 <b>?</b>) until a device takes that tag again.</li>
@@ -633,7 +651,13 @@ phases say. <b>Start it on a symbol's pin</b> (a disconnect's L1, L2 or L3, a br
 and it takes that side of the symbol: as many wires as it has pins there, as far apart as they
 are, the first from its first pin and the others from the others, whichever way you head off
 (the first leg leaves the pins square); whichever pin you start on, the next clicks are where
-that pin's wire goes. Click a pin of a symbol with as many pins as far apart (any of a fuse
+that pin's wire goes. To start from only some of a side's pins (a safety relay's S52, S12,
+S21 and S22, not S11 above them), type <b>P</b> (<b>Pick pins</b>) first and click each pin, in
+any order: each one picked shows a short stub, a pin clicked again is left out, and Enter goes
+on, the bus with a wire from each of them, the first from the first in the symbol's order. They
+must be one symbol's pins, in one line and evenly spaced (every other pin is fine; a bus keeps
+its wires the same distance apart, so draw an odd one as a wire). Click a pin of a symbol with
+as many pins as far apart (any of a fuse
 block's L1, L2, L3) and the bus lands wire for wire (T1 on L1, T2 on L2...) and is done,
 arriving square onto its pins: when it can't with the corners you have, it takes one more (a
 Z: across, up or down, across again), each wire on its own pin and none crossing another.
@@ -686,9 +710,12 @@ it; select and Erase it to take it away.</li>
 <li><b>Two wires on one terminal</b> (double landing): start a wire on a pin that already has
 one, or end it there, and the new wire runs straight onto the pin like the first. Schematic
 settings, <b>A second wire on a pin leaves it on a 45-degree lead</b>, makes it leave the pin on
-a short 45-degree lead (1/8 inch on paper) and then run beside the first, as drawn by hand (to
+a short 45-degree lead (1/4 inch on paper) and then run beside the first, as drawn by hand (to
 the side the cursor is on; a third wire takes the other side; the lead keeps its angle when the
-symbol moves); it is off to start. Drawing a second wire on a pin asks how it is numbered, as
+symbol moves); it is off to start. A wire coming from farther out arrives along the lead's way;
+one coming from beside the pin (a jumper from the pin just above it, S11 to S52) comes straight
+out of its own pin, straight down onto the lead's corner and down the lead, never past the
+corner and back; leaving such a pin to go back beside it does the same the other way. Drawing a second wire on a pin asks how it is numbered, as
 a tap does: <b>Enter</b> as the project numbers taps (with -1, -2: the wire on the pin's
 number -1), <b>S</b> the same number, <b>N</b> a number of its own; double-click it to change
 it later (Wire number window, <b>Tapped off</b>). A <b>Bus</b> started or ended on pins that already have
@@ -709,7 +736,9 @@ Mirror, Scale, dragging it or its grip), staying straight across and up or down 
 where needed), on every pin, two pins with the same name too (a drive's two GND). Select the
 wires too and they move with it instead.</li>
 <li><b>Placing a symbol on a wire</b> cuts the wire between the symbol's pins, as AutoCAD
-Electrical does: drop a contact onto a rung and it is wired in.</li>
+Electrical does: drop a contact onto a rung and it is wired in. The same goes for a symbol
+copied (Copy), moved (Move) or pasted (Ctrl+V) onto a wire: the wire is cut between its pins and
+lands on both of them, in the same step (Undo puts the wire back whole).</li>
 <li><b>Scoot</b> (SCOOT, AESCOOT; Modify menu, Schematic tab): select devices (a motor, a
 drive, a contact...), a base point, then where to. They move <b>with everything attached to
 them</b>: the symbols wired to them, and theirs (a motor brings its drive and its contactor;
@@ -927,8 +956,10 @@ place: a destination its source, a source its destination. A wire carried on ove
 sheets (page 4 to 5 to 6, a destination and a source on page 5) shows only the next or the
 previous hop: page 4's source shows page 5, page 6's destination shows page 5's source. A
 source carried to two sheets with no hop between them shows both. On a second line under it,
-the device the wire goes straight to at the other arrow (<b>VFD201</b>, or a terminal as
-<b>TB1-12</b>), so you see where the wire goes and to what without turning to that page. It
+the device the wire goes straight to at the other arrow (<b>VFD201</b>), so you see where the
+wire goes and to what without turning to that page. Terminals on the way are passed through to
+the device past them; a terminal with nothing past it, or a T past it, shows itself
+(<b>TB1-12</b>). It
 is set at three levels, each overriding the one before: <b>Source and destination arrows show
 the device at the other end</b> (Project properties, Schematic; on to start), <b>Arrows show
 the far device</b> in Sheet properties (<b>As the project</b>, <b>Shown</b> or <b>Off</b>, for
@@ -1222,7 +1253,9 @@ sheets, and <b>New sheets' scale</b> (Project properties, Schematic tab; Schemat
 for schematic, report and other sheets. Both start at 1:1. A new sheet takes the one for its
 kind (New sheet makes one of the kind of the sheet shown); after that its scale is its own:
 Sheet scale..., the status bar or Sheet properties change it for that sheet alone. Changing the
-project's setting changes no sheet already made, and changing a sheet's kind keeps its
+project's setting changes no sheet already made. Changing a sheet's kind in Sheet properties
+while nothing is drawn on it changes its scale to the project's for that kind (shown in the
+Scale box before you press OK, so you can pick another); a sheet with a drawing on it keeps its
 scale.</li>
 <li>When the drawing runs past the border or over the title block at the sheet's scale, the
 status bar says <b>doesn't fit</b> (in amber), and Export to PDF asks before printing it cut
@@ -1448,7 +1481,7 @@ it switches while KanzonasCAD is open.</li>
 <ul>
 <li><b>Undo</b> (Ctrl+Z) and <b>Redo</b> (Ctrl+Y or Ctrl+Shift+Z): every change, including
 sheet and layer changes, can be undone. Their arrows also sit right after the menus (File,
-Edit, View...), always a click away.</li>
+Edit, View...), always a click away, with <b>Save</b> (Ctrl+S) just before them.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
 insertion point (the copied objects' lower left corner lands there). Works between projects,
 and after KanzonasCAD is closed and started again. Their layers come with them: a layer the

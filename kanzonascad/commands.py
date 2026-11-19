@@ -705,6 +705,21 @@ class _TwoPoint(Command):
         return self.result(p) + [M.Line(self.from_pt, p)]
 
 
+def _cut_under(ctx, ed, sheet, placed, skip=()):
+    """Symbols copied, pasted or moved onto a wire cut it between their pins and land on both
+    sides, as one inserted there does (the owner, 0.19.10: "I just copied this cb902 into this
+    location from the line above and it didn't automatically break the wires and reattach on
+    both terminations")."""
+    from .wires import break_under
+    names = []
+    for e in placed:
+        if isinstance(e, M.Insert) and e.defn is not None and e.defn.kind == "symbol" and \
+                break_under(ed, sheet, e, skip):
+            names.append(e.attrs.get("TAG") or e.block)
+    if names:
+        ctx.message("Wire cut to fit %s" % ", ".join(names))
+
+
 class MoveCmd(_TwoPoint):
     name, title = "MOVE", "Move"
 
@@ -722,9 +737,19 @@ class MoveCmd(_TwoPoint):
 
     def apply(self, p):
         sheet = self.ctx.sheet()
+        # (the moved symbols' own wires, and those moved with them, follow them: never cut;
+        # a coil moved along its own wire took it for one it was dropped on, test_wires)
+        own = {e.id for e in self.ents}
+        for e in self.ents:
+            if isinstance(e, M.Insert):
+                for _n, q in e.pin_points():
+                    own.update(w.id for w in sheet.query_point(q, 1e-6)
+                               if isinstance(w, M.Wire) and w.touches(q, 1e-6))
         with self.ctx.edit("Move") as ed:
-            for e in self.result(p):
+            moved = self.result(p)
+            for e in moved:
                 ed.change(sheet, e)
+            _cut_under(self.ctx, ed, sheet, moved, own)
         self.finish()
 
 
@@ -749,8 +774,9 @@ class CopyCmd(_TwoPoint):
         from .tags import retag_copies
         sheet = self.ctx.sheet()
         with self.ctx.edit("Copy") as ed:
-            for e in retag_copies(self.ctx.project, sheet, self.result(p)):
-                ed.add(sheet, e)
+            made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet,
+                                                           self.result(p))]
+            _cut_under(self.ctx, ed, sheet, made)
         self.last = p
 
 
@@ -1225,8 +1251,9 @@ class PasteCmd(Command):
                     e.defn = project.blocks.get(e.block, e.defn)
                     e._world = None
                 placed.append(e)
-            for e in retag_copies(self.ctx.project, sheet, placed):
-                ids.add(ed.add(sheet, e).id)
+            made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet, placed)]
+            ids.update(e.id for e in made)
+            _cut_under(self.ctx, ed, sheet, made)
         self.ctx.set_selection(ids)
         self.finish()
 
@@ -1265,6 +1292,40 @@ def wire_layer(ctx):
     return "WIRES"
 
 
+def joined_layers(sheet, ends):
+    """The layers of the wires the given points (a new wire's two ends) land on: on another
+    wire's end or along its middle (a tap), in the order found, each once."""
+    from .wires import TOL
+    out = []
+    for q in ends:
+        for o in sheet.query_point(q, TOL):
+            if getattr(o, "kind", "") == "wire" and o.touches(q, TOL) and o.layer not in out:
+                out.append(o.layer)
+    return out
+
+
+def new_wire_layer(ctx, sheet, pts, warn=False):
+    """The layer a new wire goes on: that of the wire it starts or ends on (one conductor: the
+    same voltage and color; the owner, 0.19.7, "when connecting a wire to another wire... the
+    new wire should automatically become the same layer"), else the current wire layer. Joining
+    wires of two layers, it stays on the current one and, with warn, says so (two conductors
+    tied together are rarely meant)."""
+    got = joined_layers(sheet, [pts[0], pts[-1]]) if len(pts) >= 2 else []
+    if len(got) == 1:
+        return got[0]
+    cur = wire_layer(ctx)
+    if len(got) > 1 and warn:
+        ctx.message("That wire joins wires on two layers (%s): drawn on %s. Check it isn't two "
+                    "conductors tied together." % (", ".join(got), cur))
+    return cur
+
+
+def _beyond(pin, corner, out, q):
+    """Is q farther out from the pin than the lead's corner (along the way out of the pin)?"""
+    return (q[0] - pin[0]) * out[0] + (q[1] - pin[1]) * out[1] > \
+        (corner[0] - pin[0]) * out[0] + (corner[1] - pin[1]) * out[1] + 1e-9
+
+
 BACK_OVER = ("That goes straight back over the wire just drawn: click on past it or off to "
              "the side, U takes the last point back, Enter ends the wire here")
 
@@ -1290,20 +1351,30 @@ class WireCmd(Command):
         start = []
         leads = bool(self.ctx.project.settings.get("wire_lead", False))
         if len(self.points) == 1 and leads:
+            pin = a
             got = lead(sheet, a, p)
             if got is not None:
                 a, out = got
                 start = [a]
                 if self.hfirst is None:
-                    # (carry on the way the lead heads, unless the cursor is well off it)
+                    # (carry on the way the lead heads when going on farther out; going back
+                    # beside the pin, square off the lead at once, not past it and back: the
+                    # owner, 0.19.9, a jumper S11 to S52 "needs to look like" that)
                     h = abs(out[0]) > 0
+                    if not _beyond(pin, a, out, p):
+                        h = not h
                     return start + route(a, p, h)
         end = lead(sheet, p, a) if leads else None
         if end is not None and G.dist(a, p) > 1e-9:
             c, out = end
             h = self.hfirst
             if h is None:
-                h = not (abs(out[0]) > 0)  # (arrive along the way out of the pin)
+                # (arriving from farther out: along the way out of the pin, then the lead;
+                # from beside the pin, square onto the lead's corner and down the lead, not
+                # past it and back)
+                h = not (abs(out[0]) > 0)
+                if not _beyond(p, c, out, a):
+                    h = not h
             return start + route(a, c, h) + [p]
         h = self.hfirst
         if h is None:
@@ -1383,7 +1454,8 @@ class WireCmd(Command):
             sheet = self.ctx.sheet()
             before = set(sheet.entities)
             with self.ctx.edit("Wire") as ed:
-                w = ed.add(sheet, M.Wire(pts, layer=wire_layer(self.ctx)))
+                w = ed.add(sheet, M.Wire(pts, layer=new_wire_layer(self.ctx, sheet, pts,
+                                                                    warn=True)))
                 if _cleanup_on(self.ctx):
                     from .wires import tidy_new
                     if tidy_new(ed, sheet, w) == "duplicate":
@@ -1465,7 +1537,8 @@ class WireCmd(Command):
     def preview(self, p):
         if not self.points:
             return []
-        return [M.Wire(self.points + self._route(p), layer=wire_layer(self.ctx))]
+        pts = self.points + self._route(p)
+        return [M.Wire(pts, layer=new_wire_layer(self.ctx, self.ctx.sheet(), pts))]
 
 
 def _strands_a_pin(sheet, got):
@@ -1884,6 +1957,7 @@ class BusCmd(Command):
         self.offset = (0.0, 0.0)        # started on a pin or end not the first: from it to
                                         # the first (later clicks are where the one clicked goes)
         self.points = []
+        self.picked = []                # Pick pins: (insert, pin name, point) clicked
         self.hfirst = None
         self._ask_start()
 
@@ -1892,7 +1966,80 @@ class BusCmd(Command):
                 ("Other side", "F")]
         if self.points:
             return opts + [("Undo", "U")]
-        return [("Wires", "N"), ("Spacing", "D")] + opts
+        return [("Pick pins", "P"), ("Wires", "N"), ("Spacing", "D")] + opts
+
+    def _ask_pick(self):
+        self.step = "pick"
+        n = len(self.picked)
+        self.ctx.prompt("Click the pins the bus starts from, one at a time (%d picked; a pin "
+                        "again leaves it out; Enter goes on)" % n if n else
+                        "Click the pins the bus starts from, one at a time (Enter goes on)")
+
+    def _pick(self, p):
+        """A pin clicked while picking: added, or left out again when picked already. They
+        must be one symbol's, in a line (the owner, 0.19.8: "I'd like to be able to specify
+        by clicking on the location of each wire start... tap off S52, S12, S21, and S22")."""
+        sheet = self.ctx.sheet()
+        got = None
+        for e in sheet.query_point(p, 1e-6):
+            if isinstance(e, M.Insert) and e.defn is not None:
+                for name, q in e.pin_points():
+                    if G.dist(q, p) <= 1e-6:
+                        got = (e, name, tuple(q))
+                        break
+            if got is not None:
+                break
+        if got is None:
+            self.ctx.message("That isn't a pin: click on a pin's end")
+            return
+        e, name, q = got
+        for i, (oe, _n, oq) in enumerate(self.picked):
+            if oe is e and G.dist(oq, q) <= 1e-6:
+                del self.picked[i]
+                self._ask_pick()
+                return
+        if self.picked:
+            first = self.picked[0]
+            if first[0] is not e:
+                self.ctx.message("The pins must all be on one symbol")
+                return
+            xs = {round(o[2][0], 6) for o in self.picked} | {round(q[0], 6)}
+            ys = {round(o[2][1], 6) for o in self.picked} | {round(q[1], 6)}
+            if len(xs) > 1 and len(ys) > 1:
+                self.ctx.message("The pins must be in one line, one side of the symbol")
+                return
+        self.picked.append((e, name, q))
+        self._ask_pick()
+
+    def _picked_done(self):
+        """Enter after picking: the bus starts from those pins, as from a side of them."""
+        if len(self.picked) < 2:
+            self.ctx.message("Pick two pins or more (or Esc)")
+            return
+        e = self.picked[0][0]
+        order = [pp["name"] for pp in e.defn.pins]
+        line = [q for _e, _n, q in sorted(self.picked, key=lambda t: order.index(t[1]))]
+        along = 0 if len({round(q[1], 6) for q in line}) == 1 else 1   # (a row: along x)
+        pos = sorted(q[along] for q in line)
+        gaps = [b - a for a, b in zip(pos, pos[1:])]
+        if min(gaps) <= 1e-9 or max(gaps) - min(gaps) > 1e-6:
+            self.ctx.message("Those pins aren't evenly spaced: a bus keeps its wires the same "
+                             "distance apart. Pick pins evenly spaced (draw an odd one as a "
+                             "wire).")
+            return
+        # (in the block's pin order, as a side picked by one click is: the first wire from the
+        # first of them)
+        a, z = line[0], line[-1]
+        L = G.dist(a, z)
+        self.count, self.spacing = len(line), gaps[0]
+        self.toward = ((z[0] - a[0]) / L, (z[1] - a[1]) / L)
+        self.side_pins = list(line)
+        self.offset = (0.0, 0.0)
+        self.points = [a]
+        self.base = self.last = a
+        self.ctx.message("%d wires, %s apart, from the pins picked" % (
+            self.count, _fmt(self.spacing)))
+        self._ask_start()
 
     def _ask_start(self):
         self.step = "path"
@@ -1929,6 +2076,8 @@ class BusCmd(Command):
     def enter(self):
         if self.step in ("count", "spacing"):
             self._ask_start()
+        elif self.step == "pick":
+            self._picked_done()
         else:
             self._make()
 
@@ -1999,6 +2148,9 @@ class BusCmd(Command):
         return self.flip
 
     def point(self, p):
+        if self.step == "pick":
+            self._pick(p)
+            return
         if self.step != "path":
             return
         if not self.points:
@@ -2110,6 +2262,10 @@ class BusCmd(Command):
         k = s.strip().upper()
         if self.step != "path":
             return False
+        if k == "P" and not self.points:
+            self.picked = []
+            self._ask_pick()
+            return True
         if k == "F":
             self.flip = not self.flip
             return True
@@ -2540,8 +2696,13 @@ class BusCmd(Command):
             sheet = self.ctx.sheet()
             project = self.ctx.project
             # (left at the WIRES layer: the current wire layer, as a wire's)
-            chosen = self.layers if self.layers != ["WIRES"] else [wire_layer(self.ctx)]
+            default = self.layers == ["WIRES"]
+            chosen = self.layers if not default else [wire_layer(self.ctx)]
             layers = bus_layer_list(chosen, len(paths))
+            if default:
+                # (left at the default: each wire that taps or carries on another takes its
+                # layer, as a wire does, 0.19.7; a layer picked for the bus is kept)
+                layers = [new_wire_layer(self.ctx, sheet, q, warn=True) for q in paths]
             with self.ctx.edit("Bus") as ed:
                 for pts, layer in zip(paths, layers):
                     if layer not in project.layers:
@@ -2559,6 +2720,19 @@ class BusCmd(Command):
         self.finish()
 
     def preview(self, p):
+        if self.step == "pick":
+            # (each pin picked so far shown by a short stub leaving it, out of the symbol)
+            out = []
+            for e, _n, q in self.picked:
+                bb = e.bbox()
+                cx, cy = (bb[0] + bb[2]) / 2.0, (bb[1] + bb[3]) / 2.0
+                dx, dy = q[0] - cx, q[1] - cy
+                if abs(dx) >= abs(dy):
+                    end = (q[0] + (0.25 if dx >= 0 else -0.25), q[1])
+                else:
+                    end = (q[0], q[1] + (0.25 if dy >= 0 else -0.25))
+                out.append(M.Wire([q, end]))
+            return out
         if self.step != "path":
             return []
         if not self.points:
