@@ -658,6 +658,19 @@ def random_editing(log, out, ops, seed, drawing=None):
                 assert new[0].layer == want, "a wire drawn on %s went on %s" % (want,
                                                                               new[0].layer)
                 BC.CHECKED["wire on the current layer"] += 1
+        if len(new) == 1:
+            # (0.19.7: a wire starting or ending on wires of one layer takes that layer,
+            # whatever the current one; worked out from the wires touching its ends now)
+            w = new[0]
+            touched = set()
+            for q in (w.points[0], w.points[-1]):
+                for o in s.wires():
+                    if o.id != w.id and o.touches(q, wires.TOL):
+                        touched.add(o.layer)
+            if len(touched) == 1:
+                assert w.layer in touched, "a wire joined to %s went on %s" % (
+                    touched.pop(), w.layer)
+                BC.CHECKED["wire joined takes its layer"] += 1
 
     def clear_of_drawing(k):
         # a spot off on its own: just past the right of what is drawn (not hundreds of times

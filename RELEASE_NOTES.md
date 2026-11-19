@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.7
+
+**New**
+- A wire you draw from or onto another wire (a tap, or carrying it on) now goes on that wire's
+  layer, so it has the same voltage, color and gauge, whatever layer is current. A wire that
+  joins wires of two different layers stays on the current layer, and the command line warns
+  you that it may tie two conductors together.
+
 ## 0.19.6
 
 **New**

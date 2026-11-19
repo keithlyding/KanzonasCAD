@@ -1265,6 +1265,34 @@ def wire_layer(ctx):
     return "WIRES"
 
 
+def joined_layers(sheet, ends):
+    """The layers of the wires the given points (a new wire's two ends) land on: on another
+    wire's end or along its middle (a tap), in the order found, each once."""
+    from .wires import TOL
+    out = []
+    for q in ends:
+        for o in sheet.query_point(q, TOL):
+            if getattr(o, "kind", "") == "wire" and o.touches(q, TOL) and o.layer not in out:
+                out.append(o.layer)
+    return out
+
+
+def new_wire_layer(ctx, sheet, pts, warn=False):
+    """The layer a new wire goes on: that of the wire it starts or ends on (one conductor: the
+    same voltage and color; the owner, 0.19.7, "when connecting a wire to another wire... the
+    new wire should automatically become the same layer"), else the current wire layer. Joining
+    wires of two layers, it stays on the current one and, with warn, says so (two conductors
+    tied together are rarely meant)."""
+    got = joined_layers(sheet, [pts[0], pts[-1]]) if len(pts) >= 2 else []
+    if len(got) == 1:
+        return got[0]
+    cur = wire_layer(ctx)
+    if len(got) > 1 and warn:
+        ctx.message("That wire joins wires on two layers (%s): drawn on %s. Check it isn't two "
+                    "conductors tied together." % (", ".join(got), cur))
+    return cur
+
+
 BACK_OVER = ("That goes straight back over the wire just drawn: click on past it or off to "
              "the side, U takes the last point back, Enter ends the wire here")
 
@@ -1383,7 +1411,8 @@ class WireCmd(Command):
             sheet = self.ctx.sheet()
             before = set(sheet.entities)
             with self.ctx.edit("Wire") as ed:
-                w = ed.add(sheet, M.Wire(pts, layer=wire_layer(self.ctx)))
+                w = ed.add(sheet, M.Wire(pts, layer=new_wire_layer(self.ctx, sheet, pts,
+                                                                    warn=True)))
                 if _cleanup_on(self.ctx):
                     from .wires import tidy_new
                     if tidy_new(ed, sheet, w) == "duplicate":
@@ -1465,7 +1494,8 @@ class WireCmd(Command):
     def preview(self, p):
         if not self.points:
             return []
-        return [M.Wire(self.points + self._route(p), layer=wire_layer(self.ctx))]
+        pts = self.points + self._route(p)
+        return [M.Wire(pts, layer=new_wire_layer(self.ctx, self.ctx.sheet(), pts))]
 
 
 def _strands_a_pin(sheet, got):
@@ -2540,8 +2570,13 @@ class BusCmd(Command):
             sheet = self.ctx.sheet()
             project = self.ctx.project
             # (left at the WIRES layer: the current wire layer, as a wire's)
-            chosen = self.layers if self.layers != ["WIRES"] else [wire_layer(self.ctx)]
+            default = self.layers == ["WIRES"]
+            chosen = self.layers if not default else [wire_layer(self.ctx)]
             layers = bus_layer_list(chosen, len(paths))
+            if default:
+                # (left at the default: each wire that taps or carries on another takes its
+                # layer, as a wire does, 0.19.7; a layer picked for the bus is kept)
+                layers = [new_wire_layer(self.ctx, sheet, q, warn=True) for q in paths]
             with self.ctx.edit("Bus") as ed:
                 for pts, layer in zip(paths, layers):
                     if layer not in project.layers:

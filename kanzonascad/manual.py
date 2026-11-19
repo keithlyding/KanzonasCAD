@@ -103,7 +103,12 @@ own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel 
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
 layer it sits on, or its own color if you gave it one. Wires go on the current layer when it
 is a wire layer (WIRES, one named WIRE..., one with a gauge or wire color, or one Add wire
-layers made), else on layer WIRES; symbols on
+layers made), else on layer WIRES. A wire (or a bus wire, with the Bus layers left at Wires)
+that starts or ends on another wire, a tap off it or carrying it on, takes that wire's layer
+instead: it is the same conductor, so the same voltage, color and gauge (a size typed on the
+new wire is still its own), and the rubber band shows it in that color as you draw. A wire
+joining wires of two different layers stays on the current layer, and the command line warns
+that two conductors may be tied together. Symbols go on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them. On the black drawing,
 black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
