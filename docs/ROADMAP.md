@@ -210,10 +210,17 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     - **macOS**: the same program as a `.app` in a `.dmg`, built by a macOS job in the same
       workflow (PySide6 and ezdxf run on macOS; the work is packaging, menus where macOS puts
       them, Cmd for Ctrl, its own settings and data folders through `paths.py`, and the
-      self-test run in the build). Open: Apple Silicon only or Intel too; whether to pay for
-      Apple's developer program to sign and notarize it (unsigned, macOS refuses it until it
-      is allowed in System Settings, Privacy & Security). Update now on macOS: replace the app
-      in place as the AppImage does.
+      self-test run in the build). Update now on macOS: replace the app in place as the
+      AppImage does. The owner's decisions (Nov 2026):
+      - **Apple Silicon and Intel both** ("3 year old Mac actively in use is probably very
+        common. We probably need both"): two downloads, one per kind of Mac, each built and
+        self-tested on its own kind of runner, unless every library (PySide6, ezdxf, ezdwg,
+        pdfminer.six) has universal2 builds, then one universal app. Check that GitHub still
+        offers Intel macOS runners when this starts; if not, the Intel app is built on an
+        Apple Silicon runner under Rosetta and tested there.
+      - **Unsigned first**: no Apple developer program yet; the download page says how to
+        allow it (System Settings, Privacy & Security, Open Anyway). Signing and notarizing
+        later, once Mac users show up.
     - **Linux, more at home**: the app offers to add itself to the applications menu and to
       open `.kzcad` files on a double-click (as KanzonasPDF's linux_desktop.py does); listed on
       Flathub and AppImageHub (the AppStream metadata exists already: packaging/linux).
