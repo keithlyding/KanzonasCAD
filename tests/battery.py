@@ -2497,6 +2497,54 @@ def random_editing(log, out, ops, seed, drawing=None):
                                {"name": "GND", "pos": (1.0, -0.5)}],
                          prefix="VFD", tag_pos=(0.5, 0.9), role="device")
 
+    # (0.19.8: a safety relay's column of pins, some of them picked one at a time for a bus)
+    relay = M.BlockDef("Battery safety relay", "symbol",
+                       [M.Polyline([(0.0, 1.0), (3.0, 1.0), (3.0, 4.5), (0.0, 4.5)], True)],
+                       pins=[{"name": n, "pos": (0.0, 4.0 - 0.5 * i)} for i, n in enumerate(
+                           ["S11", "S52", "S12", "S21", "S22", "13"])] +
+                       [{"name": "A2", "pos": (3.0, 4.0)}],
+                       prefix="SR", tag_pos=(1.5, 4.7), role="device")
+
+    def op_bus_pick():
+        # Bus, Pick pins: an evenly spaced few of a symbol's column clicked in any order; a
+        # wire leaves each of them and none leaves the others (worked out from the pins)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        before = set(s.entities)
+        v.run(C.InsertCmd, relay, {})
+        v.input_text(fmt((o[0] + 4.0 * k, o[1])))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) != 1:
+            return
+        e = new[0]
+        col = [(n, q) for n, q in e.pin_points() if n != "A2"]
+        step = rnd.choice([1, 2])
+        start = rnd.randrange(0, len(col) - step)
+        chosen = col[start::step][:rnd.randint(2, 4)]
+        if len(chosen) < 2:
+            return
+        clicks = [q for _n, q in chosen]
+        rnd.shuffle(clicks)
+        far = min(q[0] for _n, q in col) - 2.0 * k
+        v.run(C.BusCmd)
+        type_in(v, "P", *(fmt(q) for q in clicks))
+        type_in(v, "")
+        if v.cmd is None or getattr(v.cmd, "step", "") != "path" or len(v.cmd.points) != 1:
+            finish()
+            return
+        type_in(v, fmt((far, v.cmd.points[0][1])))
+        finish()
+        made = [w for i, w in s.entities.items() if i not in before and isinstance(w, M.Wire)]
+        ends = {tuple(q) for w in made for q in (w.points[0], w.points[-1])}
+        for n, q in col:
+            want = any(G.dist(q, c) <= 1e-9 for c in clicks)
+            assert (tuple(q) in ends) == want, "Bus from picked pins: %s %s a wire" % (
+                n, "has no" if want else "got")
+        BC.CHECKED["bus from picked pins"] += 1
+
     def op_same_name_pins():
         # a symbol with two pins of one name, a wire on each pin, off on its own; moved,
         # scooted or turned through the commands: every pin keeps its wire
@@ -2962,7 +3010,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

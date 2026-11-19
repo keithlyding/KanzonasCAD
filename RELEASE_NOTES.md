@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.8
+
+**New**
+- Bus can start from pins you pick one at a time: type P (Pick pins), click each pin (a safety
+  relay's S52, S12, S21 and S22, say, skipping S11), and press Enter. The pins must be on one
+  side of one symbol and evenly spaced.
+
 ## 0.19.7
 
 **New**

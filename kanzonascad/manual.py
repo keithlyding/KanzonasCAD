@@ -638,7 +638,13 @@ phases say. <b>Start it on a symbol's pin</b> (a disconnect's L1, L2 or L3, a br
 and it takes that side of the symbol: as many wires as it has pins there, as far apart as they
 are, the first from its first pin and the others from the others, whichever way you head off
 (the first leg leaves the pins square); whichever pin you start on, the next clicks are where
-that pin's wire goes. Click a pin of a symbol with as many pins as far apart (any of a fuse
+that pin's wire goes. To start from only some of a side's pins (a safety relay's S52, S12,
+S21 and S22, not S11 above them), type <b>P</b> (<b>Pick pins</b>) first and click each pin, in
+any order: each one picked shows a short stub, a pin clicked again is left out, and Enter goes
+on, the bus with a wire from each of them, the first from the first in the symbol's order. They
+must be one symbol's pins, in one line and evenly spaced (every other pin is fine; a bus keeps
+its wires the same distance apart, so draw an odd one as a wire). Click a pin of a symbol with
+as many pins as far apart (any of a fuse
 block's L1, L2, L3) and the bus lands wire for wire (T1 on L1, T2 on L2...) and is done,
 arriving square onto its pins: when it can't with the corners you have, it takes one more (a
 Z: across, up or down, across again), each wire on its own pin and none crossing another.
