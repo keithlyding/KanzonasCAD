@@ -87,6 +87,19 @@ class ArrowFollowTest(unittest.TestCase):
         self.assertEqual(self.s2.entities[self.b.id].num, num)
         self.assertEqual(self.tags(), [("Destination arrow", num), ("Source arrow", num)])
 
+    def test_two_pairs_on_one_wire_both_follow(self):
+        # (two source arrows that end up on one wire: both pairs take its number, they join
+        # nothing that isn't joined already, the battery, 0.18.7, seed 2804)
+        self.pair()
+        with self.p.edit("w2") as ed:
+            ed.add(self.s1, M.Wire([(6.0, 5.0), (6.0, 2.0)]))       # (on wire a's end)
+        self.place(self.s1, "Source arrow", (6.0, 2.0), answer="ZZ")
+        self.v.cancel()
+        names = {e.attrs["TAG"] for s in self.p.sheets for e in s.inserts()
+                 if e.block in wirenums.ARROWS}
+        num = self.s1.entities[self.a.id].num
+        self.assertEqual(names, {num})
+
     def saved(self):
         path = os.path.join(tempfile.mkdtemp(), "x.kzcad")
         self.p.save(path)
