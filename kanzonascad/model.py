@@ -387,10 +387,11 @@ class Wire(Polyline):
     wires. What it connects is worked out from where its ends are (wires.py), never stored, so
     it can't go stale; moving a symbol drags the ends that sat on its pins."""
     kind = "wire"
-    __slots__ = ("num", "num_lock", "own_num", "labels", "awg", "same_num", "show_color")
+    __slots__ = ("num", "num_lock", "own_num", "labels", "awg", "same_num", "show_color",
+                 "pin_tap")
 
     def __init__(self, points, closed=False, num=None, num_lock=False, own_num=False,
-                 labels=(), awg="", same_num=False, show_color=False, **kw):
+                 labels=(), awg="", same_num=False, show_color=False, pin_tap=False, **kw):
         kw.setdefault("layer", "WIRES")
         super().__init__(points, False, **kw)
         # its wire number (every wire of a connected group has the same: wirenums.py) and
@@ -414,6 +415,10 @@ class Wire(Polyline):
         # 0.18.4, "I don't think we need to include the wire color. Maybe that can be a
         # toggle-able option on a per-wire basis?")
         self.show_color = bool(show_color)
+        # a second wire on a pin (a double landing) numbered as a tap off the wire already
+        # there: as the project numbers taps, or its own same_num / own_num (the owner, 0.18.5:
+        # "Give me the option each time, and changeable")
+        self.pin_tap = bool(pin_tap)
 
     def _data(self):
         d = super()._data()
@@ -431,6 +436,8 @@ class Wire(Polyline):
             d["awg"] = self.awg
         if self.show_color:
             d["show_color"] = True
+        if self.pin_tap:
+            d["pin_tap"] = True
         return d
 
     @classmethod
@@ -438,6 +445,7 @@ class Wire(Polyline):
         return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
                    d.get("own_num", False), d.get("labels") or (), d.get("awg", ""),
                    d.get("same_num", False), d.get("show_color", False),
+                   d.get("pin_tap", False),
                    layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
 
     def length(self):
@@ -2568,7 +2576,7 @@ def gauge_text(g):
 
 class Layer:
     def __init__(self, name, color=ADAPTIVE, visible=True, locked=False, awg="",
-                 wire_color=""):
+                 wire_color="", gauge_shown=True):
         self.name = name
         self.color = color
         self.visible = bool(visible)
@@ -2577,6 +2585,9 @@ class Layer:
         # shown beside its wires (the owner, 0.16: "set the awg and color of wire layers")
         self.awg = str(awg or "").strip()
         self.wire_color = str(wire_color or "").strip()
+        # its gauge label shown beside its wires (Layers: Gauge shown; the owner, 0.18.5:
+        # control power, all 16 AWG blue, "I don't need to announce this all over the place")
+        self.gauge_shown = bool(gauge_shown)
 
     def wire_label(self):
         """What its wires show: "14 AWG BLK", "14 AWG", "BLK", or ""."""
@@ -2591,12 +2602,15 @@ class Layer:
             d["awg"] = self.awg
         if self.wire_color:
             d["wire_color"] = self.wire_color
+        if not self.gauge_shown:
+            d["gauge_shown"] = False
         return d
 
     @classmethod
     def from_dict(cls, d):
         return cls(d["name"], d.get("color", ADAPTIVE), d.get("visible", True),
-                   d.get("locked", False), d.get("awg", ""), d.get("wire_color", ""))
+                   d.get("locked", False), d.get("awg", ""), d.get("wire_color", ""),
+                   d.get("gauge_shown", True))
 
 
 def row_letters(n, start=0):

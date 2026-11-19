@@ -114,12 +114,17 @@ AWG</b>), when the wire's straight piece has room and nothing is in the way, els
 side of the wire from its number (under it, or right of it on an upright wire), slid along the
 wire off any other wire's number or label; smaller (Project properties, Schematic: <b>Gauge label
 height</b>, 0.06" to start); <b>Show a wire layer's gauge beside its wires</b> there turns it
-off. <b>Wire color label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) writes the
+off for the whole project, and a layer's <b>Gauge shown</b> in <b>Layers...</b> (click it: Yes
+or No) for that layer's wires only: control power all of one gauge and color (24VDC BLU,
+BLU-WHT), say, where the label would only crowd a breaker. A wire given a gauge of its own still
+shows it. <b>Wire color label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) writes the
 color too, on the wires you select or click (<b>10 AWG BRN</b>); again, and it stops. Wires
 side by side of one gauge (within 3/4" of each other on paper, running along each other: a
-starter's conductors to its drive, a bus) show it <b>once</b>, beside the outside one (the
-rightmost of upright wires, the lowest of those across), with the colors shown of them listed
-once each in order across them (<b>12 AWG BRN, ORG, YEL</b>). <b>Gauge and color shown</b>, On
+starter's conductors to its drive, a bus) show it <b>once</b>: a thin oval drawn across them
+where they run side by side, with a leader out at 45 degrees to the label, level; where there
+is no clear spot for that, beside the outside one (the rightmost of upright wires, the lowest
+of those across). The colors shown of them are listed once each in order across them (<b>12
+AWG BRN, ORG, YEL</b>). <b>Gauge and color shown</b>, On
 every wire, puts it back on each. The layers a bus adds (WIRE BROWN,
 WIRE ORANGE...) come with their color's name; give them a gauge once and every wire on them
 shows it. A wire color of two names, <b>BLU/WHT</b> say, draws the layer's wires striped: the
@@ -433,7 +438,10 @@ drag a row, or <b>Move up</b> and <b>Move down</b>, to change the order (the ord
 on them wire for wire, and the order Properties... lists them); <b>Delete</b> takes a pin out;
 <b>Find</b> selects it on the drawing and puts it in the middle of the view. OK makes all of it
 one step (Undo takes it back); two pins with the same name are refused. The blue text on BLOCK TAG is where the tag goes, and texts on
-BLOCK ATTRIBUTES are where a terminal's number or a PLC address shows. A footprint has a pink
+BLOCK ATTRIBUTES are where a terminal's number, a PLC address or a rating shows; their
+alignment and angle (Edit text: middle center, say, so a rating sits in the middle of a fuse
+whichever way it is turned) are kept with the block. Leaving the block's tab, the ribbon goes
+back to the tab it was on. A footprint has a pink
 <b>DIN RAIL</b> text on layer BLOCK DIN RAIL: its insertion point (a ring, with a dashed line
 across the part where the rail's centerline runs) is the middle of the part's rail clip. Move
 it to where the rail's center crosses the part (its height on the part is what counts on a
@@ -672,7 +680,10 @@ one, or end it there, and the new wire runs straight onto the pin like the first
 settings, <b>A second wire on a pin leaves it on a 45-degree lead</b>, makes it leave the pin on
 a short 45-degree lead (1/8 inch on paper) and then run beside the first, as drawn by hand (to
 the side the cursor is on; a third wire takes the other side; the lead keeps its angle when the
-symbol moves); it is off to start. A <b>Bus</b> started or ended on pins that already have
+symbol moves); it is off to start. Drawing a second wire on a pin asks how it is numbered, as
+a tap does: <b>Enter</b> as the project numbers taps (with -1, -2: the wire on the pin's
+number -1), <b>S</b> the same number, <b>N</b> a number of its own; double-click it to change
+it later (Wire number window, <b>Tapped off</b>). A <b>Bus</b> started or ended on pins that already have
 wires does the same, each of its wires on its own lead, all bending the way the bus turns.
 Several wires on a pin get no dot: the pin is the connection.</li>
 <li><b>Junction dots</b>: a dot goes only where a wire taps off another: where <b>three or more

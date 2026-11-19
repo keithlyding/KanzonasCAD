@@ -34,6 +34,21 @@ class GaugeBundleTest(unittest.TestCase):
         (across), just after it, touching no wire (0.18.4: side by side)."""
         from kanzonascad import geometry as G
         g = wirenums.gauge_labels(self.p, self.s)[0]
+        marks = wirenums.gauge_marks(self.p, self.s)
+        if marks:
+            # (0.18.5: an oval round the group, the label after its leader)
+            (cx, cy), half, _thin, up, leader = marks[0]
+            if x is not None:
+                self.assertTrue(up)
+                self.assertGreaterEqual(cx + half, x)
+            else:
+                self.assertFalse(up)
+                self.assertLessEqual(cy - half, y)
+            end = leader[-1]
+            gb = g.bbox()
+            self.assertLess(abs((gb[1] + gb[3]) / 2 - end[1]), g.height)
+            self.assertTrue(gb[0] > end[0] or gb[2] < end[0])
+            return
         nums = [t for t in wirenums.labels(self.p, self.s)
                 if (x is not None and abs(t.angle - 90) < 1e-6 and abs(t.pos[0] - x) < 0.2) or
                 (y is not None and abs(t.angle) < 1e-6 and abs(t.pos[1] - y) < 0.2)]

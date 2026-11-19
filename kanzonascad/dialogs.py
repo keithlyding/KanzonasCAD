@@ -666,7 +666,7 @@ def _swatch(color):
 
 class LayersDialog(QDialog):
     """Add, rename, recolor, hide and lock layers (each change is one undoable step)."""
-    COLS = ["Name", "Color", "On", "Locked", "AWG", "Wire color"]
+    COLS = ["Name", "Color", "On", "Locked", "AWG", "Wire color", "Gauge shown"]
     GAUGES = ["22", "20", "18", "16", "14", "12", "10", "8", "6", "4", "3", "2", "1", "1/0",
               "2/0", "3/0", "4/0", "250 kcmil", "350 kcmil", "500 kcmil"]
     WIRE_COLORS = ["BLK", "WHT", "RED", "BLU", "GRN", "GRN/YEL", "BRN", "ORG", "YEL", "GRY",
@@ -704,7 +704,8 @@ class LayersDialog(QDialog):
         note = QLabel("Click On or Locked to switch it. Double-click a name to make it the "
                       "current layer (new objects go on it). Double-click AWG or Wire color to "
                       "give a wire layer its wire's gauge and color: its wires show them (a "
-                      "color of two, BLU/WHT, draws them striped). Wire layers adds the "
+                      "color of two, BLU/WHT, draws them striped); click Gauge shown to show it beside "
+                      "the layer's wires or not (control power, say). Wire layers adds the "
                       "480 V, 120 V, 24 VDC and Ethernet ones. "
                       "Select several (Ctrl or Shift) to delete them together; Select unused "
                       "picks the empty ones.")
@@ -732,6 +733,8 @@ class LayersDialog(QDialog):
             t.setItem(r, 3, QTableWidgetItem("Yes" if lay.locked else "No"))
             t.setItem(r, 4, QTableWidgetItem(lay.awg))
             t.setItem(r, 5, QTableWidgetItem(lay.wire_color))
+            t.setItem(r, 6, QTableWidgetItem(("Yes" if lay.gauge_shown else "No")
+                                             if (lay.awg or lay.wire_color) else ""))
 
     def _name(self):
         r = self.table.currentRow()
@@ -757,6 +760,8 @@ class LayersDialog(QDialog):
             self._change(name, visible=not lay.visible)
         elif c == 3:
             self._change(name, locked=not lay.locked)
+        elif c == 6 and (lay.awg or lay.wire_color):
+            self._change(name, gauge_shown=not lay.gauge_shown)
 
     def _double(self, r, c):
         if c == 0:

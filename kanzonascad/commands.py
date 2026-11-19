@@ -1340,6 +1340,10 @@ class WireCmd(Command):
     def text(self, s):
         k = s.strip().upper()
         if self.tapped is not None:
+            if k in ("N", "S") and self.tapped_pin:
+                self._pin_choice("own" if k == "N" else "same")
+                self.finish()
+                return True
             if k in ("N", "S"):
                 from . import wirenums
                 sheet = self.ctx.sheet()
@@ -1377,6 +1381,7 @@ class WireCmd(Command):
         pts = M._tidy(self.points)
         if len(pts) >= 2:
             sheet = self.ctx.sheet()
+            before = set(sheet.entities)
             with self.ctx.edit("Wire") as ed:
                 w = ed.add(sheet, M.Wire(pts, layer=wire_layer(self.ctx)))
                 if _cleanup_on(self.ctx):
@@ -1384,11 +1389,11 @@ class WireCmd(Command):
                     if tidy_new(ed, sheet, w) == "duplicate":
                         self.ctx.message("That wire is already there: not drawn twice")
             _flag_misses(self.ctx, [pts[0], pts[-1]])
-            if self._ask_tap(sheet, pts):
+            if self._ask_tap(sheet, pts, set(sheet.entities) - before):
                 return
         self.finish()
 
-    def _ask_tap(self, sheet, pts):
+    def _ask_tap(self, sheet, pts, new=()):
         """Drawn off the middle of another wire (a tap) with wire numbers on: ask whether it
         keeps that wire's number (Enter) or takes a new one (N) (the owner, 0.17.2: "when I tap
         off a wire, I can either change the wire number or leave as is"). True when asking."""
@@ -1406,7 +1411,31 @@ class WireCmd(Command):
                                                               self._tap_choices()),
                                     [("Same number", "S"), ("New number", "N")])
                     return True
+        for e in sheet.wires():
+            # (a second wire on a pin, a double landing: asked as a tap is, 0.18.5)
+            if e.id not in new:
+                continue
+            other = wirenums.pin_partner(sheet, e)
+            if other is not None:
+                self.tapped, self.tapped_pin = e.id, True
+                self.points = []
+                self.ctx.prompt("Second wire on the pin with wire %s: %s" % (
+                    other.num or "?", self._tap_choices()),
+                    [("Same number", "S"), ("New number", "N")])
+                return True
         return False
+
+    tapped_pin = False      # (asking about a second wire on a pin, not a tap off a middle)
+
+    def _pin_choice(self, how):
+        """A double landing answered: numbered as a tap of the wire already on the pin, as the
+        project says ("") or with the wire's number ("same") or a number of its own."""
+        sheet = self.ctx.sheet()
+        w = sheet.entities.get(self.tapped)
+        if w is not None:
+            with self.ctx.edit("Second wire on a pin") as ed:
+                ed.change(sheet, w.copy(pin_tap=True, same_num=how == "same",
+                                        own_num=how == "own"))
 
     def _tap_choices(self):
         """What Enter, S and N do at a tap: Enter, the project's tap numbers (0.18.3)."""
@@ -1420,6 +1449,8 @@ class WireCmd(Command):
 
     def enter(self):
         if self.tapped is not None:
+            if self.tapped_pin:
+                self._pin_choice("")
             self.finish()
             return
         self._make()

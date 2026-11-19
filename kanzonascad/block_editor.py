@@ -146,7 +146,10 @@ def open_block(defn):
         put(M.Text(at(defn.label_point()), LABEL_TEXT, PIN_HEIGHT * n, 0.0, "center", "middle",
                    layer=LAYER_TAG), ("tag", 0))
     for i, a in enumerate(defn.attr_texts):
-        put(M.Text(at(a["pos"]), a["attr"], a["height"], 0.0, "center", layer=LAYER_ATTRS),
+        # (shown as it is set: its alignment and angle, so changing them sticks; the owner,
+        # 0.18.5, a rating set to middle center went back to baseline)
+        put(M.Text(at(a["pos"]), a["attr"], a["height"], float(a.get("angle", 0.0) or 0.0),
+                   a.get("align", "center"), a.get("valign", "baseline"), layer=LAYER_ATTRS),
             ("attr", i))
     if defn.kind == "footprint":
         put(M.Text(at(defn.rail_point()), RAIL_TEXT, PIN_HEIGHT * n, 0.0, "left", "middle",
@@ -220,10 +223,21 @@ def to_block(project, sess):
             i = what[1] if what and what[0] == "attr" else None
             if same and i is not None:
                 a = dict(old.attr_texts[i])
-            elif stays and i is not None:
-                a = dict(old.attr_texts[i], attr=e.text.strip().upper(), height=e.height)
             else:
-                a = {"attr": e.text.strip().upper(), "pos": back(e.pos), "height": e.height}
+                a = dict(old.attr_texts[i]) if stays and i is not None else \
+                    {"pos": back(e.pos)}
+                a.update(attr=e.text.strip().upper(), height=e.height)
+                # (its alignment and angle as set on the marker: center and baseline left
+                # out, as the block keeps them)
+                a.pop("align", None)
+                a.pop("valign", None)
+                a.pop("angle", None)
+                if e.align in ("left", "right"):
+                    a["align"] = e.align
+                if e.valign in ("bottom", "middle", "top"):
+                    a["valign"] = e.valign
+                if e.angle % 360.0:
+                    a["angle"] = e.angle % 360.0
             if not a["attr"]:
                 warnings.append("an attribute marker with no name was left out")
                 continue

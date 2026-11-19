@@ -427,6 +427,21 @@ class SheetRenderer:
                 (0, 0), "", 0.1, layer="XREFS" if lay is not None else "SYMBOLS")), outlines)
         num_color = self.pal.color(self.project, M.Text((0, 0), "", 0.1, layer="SYMBOLS"))
         draw_texts(painter, items, num_color, outlines)
+        rings = wirenums.gauge_marks(self.project, self.sheet)
+        if rings:
+            # (a group's gauge: an oval round its wires and a leader out to the label)
+            path = QPainterPath()
+            for (cx, cy), half, thin, up, leader in rings:
+                rx, ry = (half, thin) if up else (thin, half)
+                path.addEllipse(QPointF(cx, cy), rx, ry)
+                path.moveTo(QPointF(*leader[0]))
+                for q in leader[1:]:
+                    path.lineTo(QPointF(*q))
+            pen = QPen(num_color, 0.0)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(path)
         lead = wirenums.label_leaders(self.project, self.sheet)
         if lead:
             # (a number set off to the side of its wire: the little line back to it)

@@ -201,7 +201,7 @@ def break_under(ed, sheet, ins):
         # (both pieces keep its number to start: numbering gives the second its own)
         keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
                     own_num=w.own_num, same_num=w.same_num, awg=w.awg,
-                    show_color=w.show_color)
+                    show_color=w.show_color, pin_tap=w.pin_tap)
         ed.remove(sheet, w.id)
         if lo > TOL:
             ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, lo),
@@ -628,7 +628,7 @@ def trim_wire(sheet, w, click):
     hi = min([s for s in cuts if s0 + TOL < s < total - TOL], default=total)
     keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
                 own_num=w.own_num, same_num=w.same_num, awg=w.awg,
-                    show_color=w.show_color)
+                    show_color=w.show_color, pin_tap=w.pin_tap)
     out, ends = [], []
     if lo > TOL:
         piece = _poly_piece(pts, cum, 0.0, lo)

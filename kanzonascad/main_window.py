@@ -2921,6 +2921,15 @@ class MainWindow(BlockEditing, QMainWindow):
         cur = v.sheet().entities.get(wire.id, wire)
         other = wirenums.taps(v.sheet(), cur)
         was = "own" if cur.own_num else "same" if cur.same_num else ""
+        on_pin = False
+        if other is None:
+            # (a second wire on a pin: its numbering changeable as a tap's, 0.18.5; not the
+            # wire the other one taps)
+            partner = wirenums.pin_partner(v.sheet(), cur)
+            if partner is not None and not partner.pin_tap:
+                other, on_pin = partner, True
+                if not cur.pin_tap:
+                    was = "same"            # (joined to it so far: one number)
         got = self.ask_wire_number(cur.num, other.num if other is not None else None,
                                    was, locked=cur.num_lock) \
             if other is not None or cur.own_num or cur.same_num else \
@@ -2952,7 +2961,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 # (its own number where it taps another, or back to that wire's: numbering
                 # gives it one first, then a number typed takes over)
                 cur = cur.copy(own_num=own == "own", same_num=own == "same", num=None,
-                               num_lock=False)
+                               num_lock=False, pin_tap=cur.pin_tap or on_pin)
                 ed.change(v.sheet(), cur)
                 wirenums.sync(ed, v.project)
                 cur = v.sheet().entities[cur.id]
