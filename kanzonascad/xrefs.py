@@ -139,6 +139,11 @@ def live_all(project):
         hh = hk[s.id]
         got = index.get(c.attrs.get("PARENT")) if c.attrs.get("PARENT") else None
         text = _where(project, got[0], got[1]) if got is not None else "?"
+        if c.attr_at.get("@XREF"):
+            # (dragged to a place of its own by its grip: centered there)
+            q = c.xref_point()
+            out[s.id].append((round(q[0], 6), round(q[1] - 0.35 * hh, 6), text, hh))
+            continue
         bb = c.bbox()
         out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - hh, 6), text, hh))
     # beside a dashed box's tag: where its device is ("PDB1  1-B2")

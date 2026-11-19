@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.2
+
+**New**
+- A contact's cross-reference (where its device is, 2-E6) can be moved: select the contact and
+  drag the grip under it, inside a big block if you like. It stays there when the block
+  moves or turns.
+
+**Fixed**
+- Picking the device a contact belongs to on the drawing (P), or the arrow a destination pairs
+  with (Pick on drawing), now uses the pick box, and the device under the cursor lights up as
+  you go over it. Before, the cursor was the drawing crosshair and nothing lit up.
+
 ## 0.19.1
 
 **New**

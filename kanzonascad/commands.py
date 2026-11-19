@@ -3125,13 +3125,29 @@ class PickDeviceCmd(Command):
         self.got = got
         self.kind = kind                # "device", or "connector" (an arrow, off-sheet)
 
+    # (clicks pick an object, with the pick box, and only what it can take lights up under
+    # the cursor: the owner, 0.19.2, "the cursor looks more like I'm drawing a line somewhere
+    # and doesn't highlight the parent when I browse over it")
+    hover_only = M.Insert
+
+    def hover_ok(self, e):
+        """Whether e is what a click here would take (the view lights only that)."""
+        from . import tags
+        if self.kind == "connector":
+            return e.defn is not None and e.defn.wiring == "link"
+        return tags.is_device(e) and bool(e.attrs.get("DEV"))
+
     def begin(self):
+        self.picking = True
         if self.kind == "connector":
             self.ctx.prompt("Click the arrow or off-sheet connector to pair it with (go to any "
                             "sheet first if it's on another; Esc stops)")
         else:
             self.ctx.prompt("Click the device it belongs to (go to any sheet first if it's on "
                             "another; Esc stops)")
+
+    def pick(self, p):
+        self.point(p)
 
     def point(self, p):
         from . import tags
