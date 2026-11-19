@@ -697,9 +697,12 @@ it; select and Erase it to take it away.</li>
 <li><b>Two wires on one terminal</b> (double landing): start a wire on a pin that already has
 one, or end it there, and the new wire runs straight onto the pin like the first. Schematic
 settings, <b>A second wire on a pin leaves it on a 45-degree lead</b>, makes it leave the pin on
-a short 45-degree lead (1/8 inch on paper) and then run beside the first, as drawn by hand (to
+a short 45-degree lead (1/4 inch on paper) and then run beside the first, as drawn by hand (to
 the side the cursor is on; a third wire takes the other side; the lead keeps its angle when the
-symbol moves); it is off to start. Drawing a second wire on a pin asks how it is numbered, as
+symbol moves); it is off to start. A wire coming from farther out arrives along the lead's way;
+one coming from beside the pin (a jumper from the pin just above it, S11 to S52) comes straight
+out of its own pin, straight down onto the lead's corner and down the lead, never past the
+corner and back; leaving such a pin to go back beside it does the same the other way. Drawing a second wire on a pin asks how it is numbered, as
 a tap does: <b>Enter</b> as the project numbers taps (with -1, -2: the wire on the pin's
 number -1), <b>S</b> the same number, <b>N</b> a number of its own; double-click it to change
 it later (Wire number window, <b>Tapped off</b>). A <b>Bus</b> started or ended on pins that already have
@@ -720,7 +723,9 @@ Mirror, Scale, dragging it or its grip), staying straight across and up or down 
 where needed), on every pin, two pins with the same name too (a drive's two GND). Select the
 wires too and they move with it instead.</li>
 <li><b>Placing a symbol on a wire</b> cuts the wire between the symbol's pins, as AutoCAD
-Electrical does: drop a contact onto a rung and it is wired in.</li>
+Electrical does: drop a contact onto a rung and it is wired in. The same goes for a symbol
+copied (Copy), moved (Move) or pasted (Ctrl+V) onto a wire: the wire is cut between its pins and
+lands on both of them, in the same step (Undo puts the wire back whole).</li>
 <li><b>Scoot</b> (SCOOT, AESCOOT; Modify menu, Schematic tab): select devices (a motor, a
 drive, a contact...), a base point, then where to. They move <b>with everything attached to
 them</b>: the symbols wired to them, and theirs (a motor brings its drive and its contactor;

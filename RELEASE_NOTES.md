@@ -6,6 +6,19 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.9
+
+**Fixed**
+- Copying, moving or pasting a symbol (a breaker, say) onto a wire now cuts the wire and lands
+  it on both of the symbol's terminals, as inserting it there does.
+- With A second wire on a pin leaves it on a 45-degree lead on, a jumper between two pins one
+  above the other (S11 to S52) now goes straight out, straight down and down the lead, instead
+  of running past the lead and back.
+
+**New**
+- That lead is now 1/4 inch on paper (it was 1/8). On pins closer together it keeps off the
+  next pin's wire, going the other side or getting shorter.
+
 ## 0.19.8
 
 **New**

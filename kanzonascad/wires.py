@@ -7,6 +7,8 @@
 - Placing a symbol on a wire cuts the wire between the symbol's pins (break_under).
 """
 
+import math
+
 from . import geometry as G
 from .model import Wire, Insert
 from .trim import _poly_cum, _poly_param, _poly_piece
@@ -181,16 +183,17 @@ def junctions(sheet):
 
 
 
-def break_under(ed, sheet, ins):
+def break_under(ed, sheet, ins, skip=()):
     """Cut the wires the symbol was placed on, between its pins (as AutoCAD Electrical does):
-    a wire with two or more of the pins on it loses the part between the outermost two."""
+    a wire with two or more of the pins on it loses the part between the outermost two. skip:
+    ids of wires left alone (a moved symbol's own wires, which follow it)."""
     pins = [q for _n, q in ins.pin_points()]
     if len(pins) < 2:
         return 0
     cut = 0
     bb = ins.bbox()
     for w in sheet.query(bb):
-        if not isinstance(w, Wire):
+        if not isinstance(w, Wire) or w.id in skip:
             continue
         pts, cum = _poly_cum(w.points, False)
         on = [_poly_param(pts, cum, q) for q in pins if w.distance(q) <= TOL]
@@ -213,7 +216,8 @@ def break_under(ed, sheet, ins):
     return cut
 
 
-LEAD = 0.125        # the angled lead of a second wire on a pin: 1/8 inch along, on paper
+LEAD = 0.25         # the angled lead of a second wire on a pin: 1/4 inch along, on paper
+                    # (the owner, 0.19.9: "Let's do 1/4 inch and see how it does"; was 1/8)
 
 
 def _sign(v):
@@ -251,11 +255,75 @@ def lead(sheet, pin, toward, exclude=None):
             used[_sign(s)] = used.get(_sign(s), 0) + 1
     if used.get(side, 0) > used.get(-side, 0):
         side = -side                    # (the side the cursor is on is taken: the other one)
-    k = used.get(side, 0) + 1
     L = LEAD * sheet.k()
-    corner = (pin[0] + out[0] * L * k + n[0] * side * L * k,
-              pin[1] + out[1] * L * k + n[1] * side * L * k)
-    return corner, out
+
+    def at(sd, length):
+        m = used.get(sd, 0) + 1
+        return (pin[0] + out[0] * length * m + n[0] * sd * length * m,
+                pin[1] + out[1] * length * m + n[1] * sd * length * m)
+
+    # (the lead's corner, and the diagonal to it, clear of every other wire and pin: on pins
+    # 1/4 inch apart a 1/4 inch lead's corner would sit on the next pin's wire and tie the two
+    # together; the other side then, else a shorter lead)
+    for length in (L, L / 2.0, L / 4.0):
+        for sd in (side, -side):
+            corner = at(sd, length)
+            if _lead_clear(sheet, pin, corner, exclude):
+                return corner, out
+    return at(side, L / 4.0), out
+
+
+def _lead_clear(sheet, pin, corner, exclude=None):
+    """Does a lead from pin to corner touch nothing but the pin's own wires at the pin?"""
+    bb = (min(pin[0], corner[0]) - TOL, min(pin[1], corner[1]) - TOL,
+          max(pin[0], corner[0]) + TOL, max(pin[1], corner[1]) + TOL)
+    for e in sheet.query(bb):
+        if isinstance(e, Wire):
+            if e.id == exclude:
+                continue
+            if e.touches(corner, TOL):
+                return False
+            for a, b in zip(e.points, e.points[1:]):
+                hit = _segment_meet(pin, corner, a, b)
+                if hit is not None and not _same(hit, pin):
+                    return False
+        elif isinstance(e, Insert):
+            for _n, q in e.pin_points():
+                if not _same(q, pin) and _on_segment(q, pin, corner):
+                    return False
+    return True
+
+
+def _on_segment(q, a, b):
+    """Is q on the segment a-b (within TOL)?"""
+    L = math.hypot(b[0] - a[0], b[1] - a[1])
+    if L <= TOL:
+        return math.hypot(q[0] - a[0], q[1] - a[1]) <= TOL
+    t = ((q[0] - a[0]) * (b[0] - a[0]) + (q[1] - a[1]) * (b[1] - a[1])) / (L * L)
+    if t < -TOL / L or t > 1 + TOL / L:
+        return False
+    px, py = a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])
+    return math.hypot(q[0] - px, q[1] - py) <= TOL
+
+
+def _segment_meet(a, b, c, d):
+    """Where segments a-b and c-d meet (a point; one of the ends of an overlap), or None."""
+    for q in (c, d):
+        if _on_segment(q, a, b):
+            return q
+    for q in (a, b):
+        if _on_segment(q, c, d):
+            return q
+    r = (b[0] - a[0], b[1] - a[1])
+    s_ = (d[0] - c[0], d[1] - c[1])
+    den = r[0] * s_[1] - r[1] * s_[0]
+    if abs(den) <= 1e-12:
+        return None
+    t = ((c[0] - a[0]) * s_[1] - (c[1] - a[1]) * s_[0]) / den
+    u = ((c[0] - a[0]) * r[1] - (c[1] - a[1]) * r[0]) / den
+    if -1e-9 <= t <= 1 + 1e-9 and -1e-9 <= u <= 1 + 1e-9:
+        return (a[0] + t * r[0], a[1] + t * r[1])
+    return None
 
 
 def route(a, b, horizontal_first=True):

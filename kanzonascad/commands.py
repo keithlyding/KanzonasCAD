@@ -705,6 +705,21 @@ class _TwoPoint(Command):
         return self.result(p) + [M.Line(self.from_pt, p)]
 
 
+def _cut_under(ctx, ed, sheet, placed, skip=()):
+    """Symbols copied, pasted or moved onto a wire cut it between their pins and land on both
+    sides, as one inserted there does (the owner, 0.19.10: "I just copied this cb902 into this
+    location from the line above and it didn't automatically break the wires and reattach on
+    both terminations")."""
+    from .wires import break_under
+    names = []
+    for e in placed:
+        if isinstance(e, M.Insert) and e.defn is not None and e.defn.kind == "symbol" and \
+                break_under(ed, sheet, e, skip):
+            names.append(e.attrs.get("TAG") or e.block)
+    if names:
+        ctx.message("Wire cut to fit %s" % ", ".join(names))
+
+
 class MoveCmd(_TwoPoint):
     name, title = "MOVE", "Move"
 
@@ -722,9 +737,19 @@ class MoveCmd(_TwoPoint):
 
     def apply(self, p):
         sheet = self.ctx.sheet()
+        # (the moved symbols' own wires, and those moved with them, follow them: never cut;
+        # a coil moved along its own wire took it for one it was dropped on, test_wires)
+        own = {e.id for e in self.ents}
+        for e in self.ents:
+            if isinstance(e, M.Insert):
+                for _n, q in e.pin_points():
+                    own.update(w.id for w in sheet.query_point(q, 1e-6)
+                               if isinstance(w, M.Wire) and w.touches(q, 1e-6))
         with self.ctx.edit("Move") as ed:
-            for e in self.result(p):
+            moved = self.result(p)
+            for e in moved:
                 ed.change(sheet, e)
+            _cut_under(self.ctx, ed, sheet, moved, own)
         self.finish()
 
 
@@ -749,8 +774,9 @@ class CopyCmd(_TwoPoint):
         from .tags import retag_copies
         sheet = self.ctx.sheet()
         with self.ctx.edit("Copy") as ed:
-            for e in retag_copies(self.ctx.project, sheet, self.result(p)):
-                ed.add(sheet, e)
+            made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet,
+                                                           self.result(p))]
+            _cut_under(self.ctx, ed, sheet, made)
         self.last = p
 
 
@@ -1225,8 +1251,9 @@ class PasteCmd(Command):
                     e.defn = project.blocks.get(e.block, e.defn)
                     e._world = None
                 placed.append(e)
-            for e in retag_copies(self.ctx.project, sheet, placed):
-                ids.add(ed.add(sheet, e).id)
+            made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet, placed)]
+            ids.update(e.id for e in made)
+            _cut_under(self.ctx, ed, sheet, made)
         self.ctx.set_selection(ids)
         self.finish()
 
@@ -1293,6 +1320,12 @@ def new_wire_layer(ctx, sheet, pts, warn=False):
     return cur
 
 
+def _beyond(pin, corner, out, q):
+    """Is q farther out from the pin than the lead's corner (along the way out of the pin)?"""
+    return (q[0] - pin[0]) * out[0] + (q[1] - pin[1]) * out[1] > \
+        (corner[0] - pin[0]) * out[0] + (corner[1] - pin[1]) * out[1] + 1e-9
+
+
 BACK_OVER = ("That goes straight back over the wire just drawn: click on past it or off to "
              "the side, U takes the last point back, Enter ends the wire here")
 
@@ -1318,20 +1351,30 @@ class WireCmd(Command):
         start = []
         leads = bool(self.ctx.project.settings.get("wire_lead", False))
         if len(self.points) == 1 and leads:
+            pin = a
             got = lead(sheet, a, p)
             if got is not None:
                 a, out = got
                 start = [a]
                 if self.hfirst is None:
-                    # (carry on the way the lead heads, unless the cursor is well off it)
+                    # (carry on the way the lead heads when going on farther out; going back
+                    # beside the pin, square off the lead at once, not past it and back: the
+                    # owner, 0.19.9, a jumper S11 to S52 "needs to look like" that)
                     h = abs(out[0]) > 0
+                    if not _beyond(pin, a, out, p):
+                        h = not h
                     return start + route(a, p, h)
         end = lead(sheet, p, a) if leads else None
         if end is not None and G.dist(a, p) > 1e-9:
             c, out = end
             h = self.hfirst
             if h is None:
-                h = not (abs(out[0]) > 0)  # (arrive along the way out of the pin)
+                # (arriving from farther out: along the way out of the pin, then the lead;
+                # from beside the pin, square onto the lead's corner and down the lead, not
+                # past it and back)
+                h = not (abs(out[0]) > 0)
+                if not _beyond(p, c, out, a):
+                    h = not h
             return start + route(a, c, h) + [p]
         h = self.hfirst
         if h is None:
