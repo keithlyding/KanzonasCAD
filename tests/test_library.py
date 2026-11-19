@@ -152,12 +152,24 @@ class BlockWorkflowTest(unittest.TestCase):
         q = M.Project.load(path)
         qi = list(q.sheets[0].entities.values())[0]
         self.assertIs(qi.defn, q.blocks["Relay coil"])
-        # DXF out: the block goes out as its lines and its tag text
+        # DXF out (0.20): the block as a block, its tag an attribute; it reads back as the
+        # same symbol with its tag
         dxf = os.path.join(tempfile.mkdtemp(), "p.dxf")
         fileio.export_dxf(q, q.sheets[0], dxf, include_frame=False)
+        import ezdxf
+        doc = ezdxf.readfile(dxf)
+        refs = [r for r in doc.modelspace().query("INSERT") if r.dxf.name == "Relay coil"]
+        self.assertEqual(len(refs), 1)
+        # (pasted onto page 1 of the new project, the device's tag took that page: CR101)
+        self.assertEqual({a.dxf.tag: a.dxf.text for a in refs[0].attribs}.get("TAG"), "CR101")
+        self.assertIn("CIRCLE", [x.dxftype() for x in doc.blocks.get("Relay coil")])
+        ents, _rep = fileio.read_dxf(dxf)
+        got = [e for e in ents if e.kind == "insert"]
+        self.assertEqual([(e.block, e.attrs.get("TAG")) for e in got], [("Relay coil", "CR101")])
+        # (and with blocks off, as up to 0.19: its lines and its tag text)
+        fileio.export_dxf(q, q.sheets[0], dxf, include_frame=False, blocks=False)
         ents, _rep = fileio.read_dxf(dxf)
         self.assertIn("circle", [e.kind for e in ents])
-        # pasted onto page 1 of the new project, the device's tag took that page: CR101
         self.assertIn("CR101", [e.text for e in ents if e.kind == "text"])
         # explode
         w.tabs.setCurrentIndex(0)

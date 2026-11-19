@@ -3554,7 +3554,24 @@ def files(log, out):
         fileio.export_dxf(p, s, dxf)
         ents, rep = fileio.read_dxf(dxf)
         assert len(ents) >= len(s.entities), (s.title, len(ents), len(s.entities))
-    notes.append("DXF out and in (%d sheets)" % len(p.sheets))
+        # (0.20: every symbol and footprint out as a block and back as the same one, its tag
+        # and its pins where they were; worked out from the sheet, not the export)
+        mine = sorted((e for e in s.inserts() if e.defn is not None),
+                      key=lambda e: (e.pos[0], e.pos[1], e.block))
+        back = sorted((e for e in ents if isinstance(e, M.Insert)),
+                      key=lambda e: (e.pos[0], e.pos[1], e.block))
+        assert len(mine) == len(back), "DXF blocks: %d out, %d back" % (len(mine), len(back))
+        for a, b in zip(mine, back):
+            assert fileio._block_name(a.block, {}) == b.block, \
+                "DXF block %r came back as %r" % (a.block, b.block)
+            assert G.dist(a.pos, b.pos) < 1e-6 and (a.attrs.get("TAG") or "") == \
+                (b.attrs.get("TAG") or ""), "a block came back from DXF changed: %s %s" % (
+                    a.block, a.attrs.get("TAG"))
+            if a.defn.kind == "symbol":
+                pa, pb = dict(a.pin_points()), dict(b.pin_points())
+                assert set(pa) == set(pb) and all(G.dist(pa[n], pb[n]) < 1e-6 for n in pa), \
+                    "a symbol's pins came back from DXF elsewhere: %s" % a.block
+    notes.append("DXF out and in (%d sheets, blocks as blocks)" % len(p.sheets))
     pdf = os.path.join(out, "mixed.pdf")
     n = fileio.export_pdf(p, pdf)
     assert n == len(p.sheets) and open(pdf, "rb").read(4) == b"%PDF"

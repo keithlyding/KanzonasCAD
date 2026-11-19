@@ -23,9 +23,11 @@ def _true_color(hexcolor):
 # ============================================================================================
 # DXF export
 # ============================================================================================
-def export_dxf(project, sheet, path, include_frame=True):
+def export_dxf(project, sheet, path, include_frame=True, blocks=True):
     """Write one sheet as a DXF in inches (AutoCAD 2013 format). The border, zones and title
-    block go on layer BORDER."""
+    block go on layer BORDER. blocks: each symbol and footprint as a BLOCK definition placed by
+    an INSERT, its attributes as ATTDEF/ATTRIB (the owner's "blocks stay as blocks", 0.20);
+    False, every block reference broken into its lines and texts, as up to 0.19."""
     import ezdxf
     doc = ezdxf.new("R2013", setup=True)
     doc.header["$INSUNITS"] = 1
@@ -50,6 +52,7 @@ def export_dxf(project, sheet, path, include_frame=True):
     _layer_color(l0, project.layer_color("0"))
     msp = doc.modelspace()
     ents = []
+    placed = []                         # (block references written as INSERTs, blocks True)
     from . import crossings
     jumps = crossings.jumps(project, sheet)
     r = crossings.size(sheet)
@@ -60,6 +63,9 @@ def export_dxf(project, sheet, path, include_frame=True):
             # wires with gaps or loops: cut where they jump
             for pts in crossings.cut_wire(e, jumps, r):
                 ents.append(e.copy(points=[list(q) for q in pts]))
+            continue
+        if blocks and isinstance(e, M.Insert) and e.defn is not None:
+            placed.append(e)
             continue
         # block references go out as their lines and texts, on the reference's layer
         ents.extend(e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e])
@@ -107,7 +113,147 @@ def export_dxf(project, sheet, path, include_frame=True):
         ents.append(M.Polyline(leader, layer=lay))
     for e in ents:
         _write(msp, e)
+    names = {}
+    for ins in placed:
+        _write_insert(doc, msp, ins, names)
     doc.saveas(path)
+
+
+PIN_TAG = "KZPIN"                   # (a block's pins, as hidden constant ATTDEFs: KZPIN1...)
+
+# what a block's attributes carry out to AutoCAD (KanzonasCAD's own, internal ones stay home)
+_INTERNAL = {"DEV", "PARENT", "TAG_LOCK", "XREF", "XDEV", "FROM", "TAGLINK", "PART", "SLOT"}
+
+
+def _block_name(name, names):
+    """A DXF block name for a KanzonasCAD block: the characters AutoCAD refuses replaced
+    (< > / \\ " : ; ? * | , = `), and one of its own when two names come out alike."""
+    if name in names:
+        return names[name]
+    clean = "".join("_" if ch in '<>/\\":;?*|,=`' else ch for ch in name).strip() or "BLOCK"
+    out, n = clean, 1
+    used = set(names.values())
+    while out.upper() in {u.upper() for u in used}:
+        n += 1
+        out = "%s_%d" % (clean, n)
+    names[name] = out
+    return out
+
+
+def _attr_names(ins):
+    """The attributes an INSERT carries out, in order: its tag, the block's own attribute
+    spots, then the others with a value (description, maker, catalog number, location...)."""
+    d = ins.defn
+    out = []
+    if d.kind == "symbol" and d.tag_pos is not None:
+        out.append("TAG")
+    for a in d.attr_texts:
+        if a["attr"] not in out:
+            out.append(a["attr"])
+    for k in list(M.ATTR_NAMES) + ["LOC"] + sorted(ins.attrs):
+        if k not in out and k not in _INTERNAL and not k.startswith("@") and \
+                (ins.attrs.get(k) or "").strip():
+            out.append(k)
+    if d.kind == "footprint":
+        for k in M.label_keys(ins.label):
+            if k.upper() not in out:
+                out.append(k.upper())
+    return out
+
+
+def _define_block(doc, d, bname):
+    """The BLOCK definition of a KanzonasCAD block: its drawing at its own size, upright and
+    unflipped (the INSERT places, turns, scales and flips it), on layer 0 by block so it takes
+    the INSERT's layer and color, unless the block keeps its own colors; an ATTDEF where each
+    of its attributes shows."""
+    blk = doc.blocks.new(name=bname)
+    # (what KanzonasCAD needs to read it back as the same kind of block, with its pins; AutoCAD
+    # leaves both alone: the block's description, and a hidden constant ATTDEF on each pin)
+    meta = ["KanzonasCAD %s" % d.kind]
+    for key in ("prefix", "role", "contact", "wiring"):
+        val = getattr(d, key, "") or ""
+        if val:
+            meta.append("%s=%s" % (key, val))
+    blk.block.dxf.description = "; ".join(meta)
+    for i, pin in enumerate(d.pins or ()):
+        a = blk.add_attdef("%s%d" % (PIN_TAG, i + 1), insert=pin["pos"],
+                           dxfattribs={"height": d.tag_height, "layer": "0", "color": 0})
+        a.dxf.text = str(pin["name"])
+        a.is_invisible = True
+        a.is_const = True
+    for e in d.entities:
+        parts = e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e]
+        for x in parts:
+            c = x.copy()
+            c.layer = "0"
+            if not (d.own_colors and c.color not in (None, M.ADAPTIVE)):
+                c.color = None
+            ent = _write(blk, c)
+            if ent is not None and c.color is None:
+                ent.dxf.color = 0                       # (BYBLOCK)
+    spots = {}
+    if d.kind == "symbol" and d.tag_pos is not None:
+        spots["TAG"] = (d.tag_pos, d.tag_height, 0.0)
+    for a in d.attr_texts:
+        spots.setdefault(a["attr"], (a["pos"], a.get("height", d.tag_height),
+                                     a.get("angle", 0.0)))
+    for name, (pos, h, ang) in spots.items():
+        blk.add_attdef(name, insert=(pos[0], pos[1]),
+                       dxfattribs={"height": h, "rotation": ang, "layer": "0", "color": 0})
+    return blk
+
+
+def _write_insert(doc, msp, ins, names):
+    """A KanzonasCAD block reference as an INSERT of its block (defined once per drawing), its
+    attributes as ATTRIBs: those shown where and as the program draws them, the others there
+    too but invisible, so AutoCAD's attribute editor and data extraction see all of them; the
+    pin names (Show pin names) as texts beside it, on its layer."""
+    from ezdxf.enums import TextEntityAlignment
+    d = ins.defn
+    first = d.name not in names
+    bname = _block_name(d.name, names)
+    if first:
+        _define_block(doc, d, bname)
+    attribs = {"layer": ins.layer or "0", "xscale": ins.scale,
+               "yscale": -ins.scale if ins.mirror else ins.scale, "rotation": ins.angle}
+    ref = msp.add_blockref(bname, ins.pos, dxfattribs=attribs)
+    if ins.color not in (None, M.ADAPTIVE):
+        try:
+            ref.rgb = _true_color(ins.color)
+        except (ValueError, IndexError):
+            pass
+    shown = {}
+    t = ins.tag_text()
+    if t is not None and d.kind == "symbol":
+        shown["TAG"] = t
+    for name, q, ang, a in ins.attr_spots():
+        shown[name] = M.Text(q, M.attr_display(name, ins.attrs[name]),
+                             a["height"] * ins.scale, ang, a.get("align", "center"),
+                             a.get("valign", "baseline"))
+    for k, lt in ins.label_texts():
+        shown.setdefault(k.upper(), lt)
+    h0 = (ins.tag_h or d.tag_height) * ins.scale
+    for name in _attr_names(ins):
+        if name in shown:
+            st = shown[name]
+            # (the tag's real value: a contact not linked yet shows "CR?" on the sheet, but
+            # has no tag, and AutoCAD's attribute holds none)
+            value = (ins.attrs.get("TAG", "") or "") if name == "TAG" and \
+                d.kind == "symbol" else st.text
+            ent = ref.add_attrib(name, value, insert=st.pos,
+                                 dxfattribs={"height": st.height, "rotation": st.angle,
+                                             "layer": ins.layer or "0"})
+            h = {"left": "LEFT", "center": "CENTER", "right": "RIGHT"}[st.align]
+            v = {"baseline": "", "bottom": "BOTTOM_", "middle": "MIDDLE_",
+                 "top": "TOP_"}[st.valign]
+            ent.set_placement(st.pos, align=TextEntityAlignment[v + h])
+        else:
+            value = ins.attrs.get(name, "") or ""
+            ent = ref.add_attrib(name, value, insert=ins.pos,
+                                 dxfattribs={"height": h0, "layer": ins.layer or "0"})
+            ent.is_invisible = True
+    for pt in ins.pin_texts():
+        _write(msp, pt.copy(layer=ins.layer or "0"))
 
 
 def _layer_color(dl, color):
@@ -170,6 +316,7 @@ def _write(msp, e):
             ent.rgb = _true_color(e.color)
         except (ValueError, IndexError):
             pass
+    return ent
 
 
 # ============================================================================================
@@ -451,8 +598,15 @@ def _block_defn(de, k, skipped, depth, blocks):
     bx, by = blk.block.dxf.base_point[0] * k, blk.block.dxf.base_point[1] * k
     attrs, seen = [], set()
     tags = set()
+    pins = []
     for sub in blk:
         if sub.dxftype() != "ATTDEF":
+            continue
+        if str(sub.dxf.tag).upper().startswith(PIN_TAG):
+            # (a pin of a block KanzonasCAD wrote: its name, where it is)
+            q = sub.dxf.insert
+            pins.append({"name": str(sub.dxf.get("text", "") or ""),
+                         "pos": (q[0] * k - bx, q[1] * k - by)})
             continue
         name = _shown_name(sub.dxf.tag)
         tags.add(str(sub.dxf.tag).upper())
@@ -466,8 +620,12 @@ def _block_defn(de, k, skipped, depth, blocks):
     if not parts and not attrs:
         blocks[key] = None
         return None
-    # a schematic symbol (AutoCAD Electrical's carry TAG1) or anything else: a footprint
+    # a schematic symbol (AutoCAD Electrical's carry TAG1) or anything else: a footprint;
+    # one KanzonasCAD wrote says which it was (its block's description, 0.20)
     kind = "symbol" if "TAG1" in tags else "footprint"
+    own = _kz_block(blk)
+    if own is not None:
+        kind = own.get("kind", kind)
     # (its pieces keep their color, or their layer's: as AutoCAD shows the block; white or
     # black ones, the drawing's ink, follow the copy)
     lay = blocks.get("__layers__", {})
@@ -477,10 +635,39 @@ def _block_defn(de, k, skipped, depth, blocks):
         if c is not None and str(c).lower() in ("#ffffff", "#000000", M.ADAPTIVE):
             c = None
         pieces.append(e.copy(layer="0", color=c))
+    extra = {}
+    if own is not None:
+        # (its tag where its TAG field is, not a field of its own; its pins, prefix, role)
+        tag = next((a for a in attrs if a["attr"] == "TAG"), None)
+        if tag is not None and kind == "symbol":
+            attrs = [a for a in attrs if a is not tag]
+            extra.update(tag_pos=tag["pos"], tag_height=tag["height"])
+        extra.update(pins=pins, prefix=own.get("prefix", ""), role=own.get("role", "device"),
+                     contact=own.get("contact", ""), wiring=own.get("wiring", ""))
     defn = M.BlockDef(str(de.dxf.name), kind, pieces, attr_texts=attrs, category="Imported",
-                      own_colors=True)
+                      own_colors=True, **extra)
     blocks[key] = defn
     return defn
+
+
+def _kz_block(blk):
+    """A block KanzonasCAD wrote (its description "KanzonasCAD symbol; prefix=CR; ..."): its
+    kind and the rest as a dict, or None for anyone else's."""
+    try:
+        text = str(blk.block.dxf.get("description", "") or "")
+    except AttributeError:
+        return None
+    if not text.startswith("KanzonasCAD "):
+        return None
+    parts = [t.strip() for t in text.split(";")]
+    out = {"kind": parts[0].split(" ", 1)[1].strip()}
+    for t in parts[1:]:
+        if "=" in t:
+            k, v = t.split("=", 1)
+            out[k.strip()] = v.strip()
+    if out["kind"] not in ("symbol", "footprint"):
+        return None
+    return out
 
 
 def _fast_insert(de):

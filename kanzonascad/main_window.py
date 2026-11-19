@@ -997,7 +997,8 @@ class MainWindow(BlockEditing, QMainWindow):
                "library_folder": self.library.folder,
                "template_path": self.settings.value("template_path", "") or "",
                "backups_keep": self.backups_keep(),
-               "autosave_minutes": self.autosave_minutes()}
+               "autosave_minutes": self.autosave_minutes(),
+               "dxf_blocks": self.dxf_blocks()}
         got = dialogs.options_dialog(self, cur, self.view())
         if got is None:
             return False
@@ -1016,6 +1017,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self.settings.setValue("template_path", got["template_path"])
         self.settings.setValue("backups_keep", int(got["backups_keep"]))
         self.settings.setValue("autosave_minutes", int(got["autosave_minutes"]))
+        self.settings.setValue("dxf_blocks", bool(got.get("dxf_blocks", True)))
         self._set_autosave_timer()
         if got.get("drafting"):
             self._store_drafting(self.view())
@@ -1689,6 +1691,11 @@ class MainWindow(BlockEditing, QMainWindow):
                 "in." % (rep["count"], ", ".join("%s (%d)" % (_kind_name(t), n)
                                                   for t, n in sorted(left.items()))))
 
+    def dxf_blocks(self):
+        """Export DXF with symbols and footprints as blocks (Options; on to start, 0.20)."""
+        v = self.settings.value("dxf_blocks", True)
+        return v not in (False, "false", "0", 0)
+
     def export_dxf(self):
         d = self.doc()
         if d is None:
@@ -1700,7 +1707,7 @@ class MainWindow(BlockEditing, QMainWindow):
         if not path:
             return
         try:
-            fileio.export_dxf(d.project, s, path)
+            fileio.export_dxf(d.project, s, path, blocks=self.dxf_blocks())
         except Exception as ex:
             QMessageBox.warning(self, APP, "Couldn't write %s:\n%s" % (path, ex))
             return
@@ -1718,7 +1725,8 @@ class MainWindow(BlockEditing, QMainWindow):
         try:
             for s in d.project.sheets:
                 fileio.export_dxf(d.project, s, os.path.join(
-                    folder, "%s-%s.dxf" % (d.name(), d.project.sheet_number(s))))
+                    folder, "%s-%s.dxf" % (d.name(), d.project.sheet_number(s))),
+                    blocks=self.dxf_blocks())
                 n += 1
         except Exception as ex:
             QMessageBox.warning(self, APP, "Export stopped:\n%s" % ex)
