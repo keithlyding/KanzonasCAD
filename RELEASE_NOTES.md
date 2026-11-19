@@ -17,6 +17,14 @@ build fails without them.
   or 16 points (Edit block renames their terminals). They go on the Bill of materials with
   their catalog number.
 
+**Fixed**
+- A bus started on a symbol's pins and taken back through that same symbol (from a
+  disconnect's L side toward another to its right, say) no longer claims to land with its
+  wires cut under the symbol: it says why, and how to start it from the other side.
+- A wide bus (11 wires off a 16-point PLC module, say) turned closer than it is wide no longer
+  sends its inner wires back over the ones already drawn: the turn is refused with the reason
+  ("go on farther before turning").
+
 ## 0.18.7
 
 **New**

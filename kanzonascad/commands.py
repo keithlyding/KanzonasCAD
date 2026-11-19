@@ -1610,6 +1610,24 @@ def _paths_cross(paths):
     return False
 
 
+def _into_symbol(sheet, p, pin, way):
+    """Whether going way from pin (a pin at p of a symbol on sheet) heads into that symbol's
+    body: the side faces away from that way."""
+    for e in sheet.query_point(p, 1e-6):
+        if isinstance(e, M.Insert) and e.defn is not None and \
+                any(G.dist(q, p) <= 1e-6 for _n, q in e.pin_points()):
+            bb = None
+            for x in e.defn.entities:
+                bb = G.bbox_union(bb, x._map(e.to_world, rot=e.angle, factor=e.scale,
+                                             mirror=None).bbox())
+            if bb is None:
+                return False
+            c = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
+            inward = (c[0] - pin[0], c[1] - pin[1])
+            return inward[0] * way[0] + inward[1] * way[1] > 1e-9
+    return False
+
+
 def pin_side(sheet, p, tol=1e-6):
     """The pins of a symbol on one side of it, in a line through the pin at p and evenly
     spaced (a 3-pole device's L1, L2, L3; a VFD's T1-T3): ([world points] in the block's pin
@@ -2080,6 +2098,14 @@ class BusCmd(Command):
         if new and doubles_back(self.points[-2:] + list(new)):
             self.ctx.message(BACK_OVER)
             return
+        if new and self._turns_back(self.points + list(new), len(self.points) - 1):
+            # (a turn closer than the bus is wide sends its inner wires backward, over the
+            # wires already there: the battery, 0.19, seed 2203, an 11-wire bus carried on from
+            # a 16-point PLC module's wires and turned 2" out)
+            self.ctx.message("The bus turns too close for its width (%d wires, %s across): go "
+                             "on farther before turning (U takes the last point back)" % (
+                                 self.count, _fmt(max(0, self.count - 1) * self.spacing)))
+            return
         if not new:
             if self.toward is not None and len(self.points) == 1:
                 self.ctx.message("Click off the line of the symbol's pins: the bus leaves them "
@@ -2443,23 +2469,44 @@ class BusCmd(Command):
                     return "the bus turns too close to the pins for its spacing: click a " \
                         "point farther out first"
         a, b = main[-2], main[-1]
-        travel = (b[0] - a[0], b[1] - a[1])
-        for e in sheet.query_point(p, 1e-6):
-            if isinstance(e, M.Insert) and e.defn is not None and \
-                    any(G.dist(q, p) <= 1e-6 for _n, q in e.pin_points()):
-                bb = None
-                for x in e.defn.entities:
-                    bb = G.bbox_union(bb, x._map(e.to_world, rot=e.angle, factor=e.scale,
-                                                 mirror=None).bbox())
-                if bb is None:
-                    break
-                c = ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
-                inward = (c[0] - pins[0][0], c[1] - pins[0][1])
-                if inward[0] * travel[0] + inward[1] * travel[1] < -1e-9:
-                    return "that side of it faces away from the bus (the wires would run " \
-                        "through it): come at it from the other side"
-                break
+        if _into_symbol(sheet, p, pins[0], (a[0] - b[0], a[1] - b[1])):
+            return "that side of it faces away from the bus (the wires would run " \
+                "through it): come at it from the other side"
+        # (and at its start: a bus leaving a symbol's pins into the symbol ran its wires
+        # through it, cut under it, and left its pins bare though it said it had landed, the
+        # long battery, 0.19, seed 3542)
+        if _into_symbol(sheet, main[0], main[0], (main[1][0] - main[0][0],
+                                                  main[1][1] - main[0][1])):
+            return "it leaves its first pins through their own symbol (that side faces away " \
+                "from where it goes): start from the symbol's other side, or click a point " \
+                "out from the pins first"
         return None
+
+    def _turns_back(self, main, first=0):
+        """Whether any of the bus's wires along main runs backward on a leg from first on (a
+        turn closer than the wires beside it are apart)."""
+        # (points in line with their neighbors are no turn: left out, as the wires have none)
+        keep = [main[0]]
+        for i in range(1, len(main) - 1):
+            a, b, c = keep[-1], main[i], main[i + 1]
+            cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+            dot = (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1])
+            if abs(cross) > 1e-9 or dot <= 0:
+                keep.append(b)
+            elif i < first:
+                first -= 1
+        main = keep + [main[-1]]
+        # (the bus's own offsets: leads at pins and landings add points of their own)
+        paths = bus_paths(main, self.count, self.spacing, self._flip_for(main))
+        for q in paths:
+            if len(q) != len(main):
+                return True
+            for j in range(max(0, first - 1), len(q) - 1):
+                u = (q[j + 1][0] - q[j][0], q[j + 1][1] - q[j][1])
+                w = (main[j + 1][0] - main[j][0], main[j + 1][1] - main[j][1])
+                if u[0] * w[0] + u[1] * w[1] <= 1e-9:
+                    return True
+        return False
 
     def _why_not_landed(self, sheet, p):
         """A click on a symbol's side of pins that the bus can't land on wire for wire: why
