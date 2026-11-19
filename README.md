@@ -2,8 +2,16 @@
 
 ![KanzonasCAD](assets/kanzonascad-logo.png)
 
-A free, open-source electrical CAD program for Windows and Linux, for people who know
-AutoCAD but want fewer commands, fewer settings and fewer surprises.
+A free, open-source electrical CAD program for Windows and Linux (macOS planned), for people
+who know AutoCAD but want fewer commands, fewer settings and fewer surprises.
+
+**Made for Linux as much as Windows.** The big electrical CAD programs run on Windows only.
+KanzonasCAD runs natively on Linux: the same program, the same features and the same project
+files as on Windows (a `.kzcad` saved on one opens on the other), built and tested on Linux on
+every change, as a single AppImage that needs no installing and updates itself. Draw the
+schematic on a Linux workstation and open it on a Windows laptop in the shop, or the other way
+round. DXF in and out and DWG in work the same on both, so drawings still go to and from
+people on AutoCAD.
 
 - AutoCAD-style drawing: command line, object snaps, ortho, polar tracking, grips (corners
   and the middles of sides), window/crossing/lasso selection, Array, Offset, and Number texts
@@ -77,6 +85,8 @@ A PortableApps.com package (KanzonasCAD Portable) is made by every build too; se
 
 ## Install on Linux (the easy way)
 
+Runs on 64-bit PC Linux from Ubuntu 22.04, Debian 12 or Fedora 36 on, and the systems built
+on them (Linux Mint 21, Pop!_OS 22.04, Zorin OS 17 or newer...): it needs glibc 2.35 or newer.
 Download **`KanzonasCAD-x86_64.AppImage`** from the
 **[Releases page](https://github.com/keithlyding/KanzonasCAD/releases)** (64-bit PC; Ubuntu
 22.04, Debian 12, Fedora 36 or newer), make it executable (`chmod +x
@@ -88,6 +98,17 @@ libfuse2t64` (Ubuntu 24.04 and later), `sudo dnf install fuse-libs` (Fedora), or
 and place) and starts it again. The same program is also a plain folder,
 `KanzonasCAD-v<version>-linux.tar.gz` (unpack it and run `KanzonasCAD/KanzonasCAD`; it
 doesn't update itself).
+
+**In your applications menu:** a tool such as Gear Lever or AppImageLauncher adds the AppImage
+to the menu (with its icon) and keeps it in one place. By hand, save this as
+`~/.local/share/applications/kanzonascad.desktop`, with the path to your AppImage:
+
+    [Desktop Entry]
+    Type=Application
+    Name=KanzonasCAD
+    Comment=Electrical CAD: schematics and panel layouts
+    Exec=/home/you/Applications/KanzonasCAD-x86_64.AppImage %f
+    Categories=Graphics;Engineering;
 
 **Checking a download:** every release is built from this repository's source code by
 GitHub's own build servers, and lists the SHA-256 checksum of each download (`SHA256SUMS.txt`,

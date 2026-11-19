@@ -204,7 +204,20 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     (11 wires off a 16-point module) turned closer than it is wide runs its inner wires back
     over the ones drawn (the battery, seed 2203); a first try at refusing such turns also
     refused Bus's own routes around symbols, so it was taken back out of 0.19.
-13. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
+13. **Platforms** (the owner, Nov 2026: "one thing that this program really has going for it is
+    that I don't think there are a lot of cad programs, especially electrical in the Linux
+    space. Same with Mac. I think we need to add Mac to the roadmap"):
+    - **macOS**: the same program as a `.app` in a `.dmg`, built by a macOS job in the same
+      workflow (PySide6 and ezdxf run on macOS; the work is packaging, menus where macOS puts
+      them, Cmd for Ctrl, its own settings and data folders through `paths.py`, and the
+      self-test run in the build). Open: Apple Silicon only or Intel too; whether to pay for
+      Apple's developer program to sign and notarize it (unsigned, macOS refuses it until it
+      is allowed in System Settings, Privacy & Security). Update now on macOS: replace the app
+      in place as the AppImage does.
+    - **Linux, more at home**: the app offers to add itself to the applications menu and to
+      open `.kzcad` files on a double-click (as KanzonasPDF's linux_desktop.py does); listed on
+      Flathub and AppImageHub (the AppStream metadata exists already: packaging/linux).
+14. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
