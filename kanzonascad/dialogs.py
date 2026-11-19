@@ -397,6 +397,15 @@ def project_properties(parent, project, tab=0):
                     "off a bus. With -1, -2..., in the numbering order; a tap off a tap takes "
                     "a, b... (2007-1a). A number typed on a wire stays.")
     form.addRow("Wires tapped off a wire are numbered", taps)
+    n_own = sum(1 for sh in project.sheets for w in sh.wires() if w.own_num or w.same_num)
+    taps_all = QCheckBox("Apply to taps set one by one too (%d)" % n_own)
+    taps_all.setObjectName("tap_numbers_all")
+    taps_all.setToolTip("Taps given a number of their own (N, or the Wire number window) or the "
+                        "wire's number (S) keep that choice whatever the project says; ticked, "
+                        "they follow the project again. Ticks itself when you change the setting.")
+    taps_all.setEnabled(n_own > 0)
+    taps.currentIndexChanged.connect(lambda _i: taps_all.setChecked(n_own > 0))
+    form.addRow("", taps_all)
     cross = QComboBox()
     for key, label in (("plain", "Plain: the wires just cross"),
                        ("gap", "Gap: one wire is broken where it crosses"),
@@ -597,7 +606,7 @@ def project_properties(parent, project, tab=0):
     changed_colors = {n: c for n, c in colors.items() if c != project.layer_color(n)
                       or n not in project.layers}
     if fields == project.fields and fmt == project.zone_format and settings == st \
-            and not changed_colors and not swap.isChecked():
+            and not changed_colors and not swap.isChecked() and not taps_all.isChecked():
         return False
     with project.edit("Project properties") as ed:
         if fields != project.fields or fmt != project.zone_format:
@@ -613,6 +622,16 @@ def project_properties(parent, project, tab=0):
                 ed.add(tb, e)
         if settings != st:
             ed.project_settings(settings)
+        if taps_all.isChecked():
+            # (every tap follows the project's tap numbers again: its own choice cleared, its
+            # number given again; the owner, 0.18.4: "I had already changed all these wires
+            # manually to be a number of their own ... it left that setting, even though I
+            # changed it for the whole project")
+            for sh in project.sheets:
+                for w in list(sh.wires()):
+                    if w.own_num or w.same_num:
+                        ed.change(sh, w.copy(own_num=False, same_num=False,
+                                             num=None if not w.num_lock else w.num))
         if bool(settings.get("duct_hatch")) != bool(st.get("duct_hatch", False)):
             # (every duct in the project takes it: kept on each, HATCH)
             on = bool(settings.get("duct_hatch"))

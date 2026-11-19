@@ -810,7 +810,11 @@ A drop is a tap too where a bus wire ends at it and another wire carries straigh
 (the bus going on to another row). A wire that ends on another's bend and carries straight on
 along it is the same wire, not a tap: to number a drop drawn as one wire with the run that goes
 on, draw the drop as a wire of its own.
-Changing it renumbers the taps in one step (Undo puts them back). A number you typed stays.</li>
+Changing it renumbers the taps in one step (Undo puts them back). A number you typed stays.
+A tap you set by itself (<b>N</b>, <b>S</b>, or the Wire number window's <b>Tapped off</b>)
+keeps its own choice whatever the project says; <b>Apply to taps set one by one too</b> under
+the setting (it ticks itself when you change the setting) makes them follow the project
+again.</li>
 <li><b>Tapping off a wire</b>: draw a wire from (or to) the middle of another and the command line
 asks: <b>Enter</b> numbers the tap as the project says, <b>S</b> gives it the same number as that
 wire whatever the project says (a branch of a ladder rung, say: a seal-in contact), <b>N</b>
