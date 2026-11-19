@@ -452,7 +452,10 @@ def _arrow_lines(sheet, c, lines, hh):
     tw = max(widths)
     bb = c.bbox()
     step = hh * LINE
-    got = _along(sheet, c, wide, hh)
+    # (the whole block clear of the wire, not its first line alone: a second line over the
+    # arrow grew up onto a wire looping round it, the battery, 0.19.11, seed 152)
+    extra = step * (len(lines) - 1)
+    got = _along(sheet, c, wide, hh, extra)
     if got is not None:
         # (turned 90 degrees: a line under another is to its right, a line's length runs up)
         x0, y0 = got
@@ -468,7 +471,7 @@ def _arrow_lines(sheet, c, lines, hh):
                 dy = (tw - w) / 2.0              # (past the tip downward: from its top end)
             out.append((round(x0 + i * step, 6), round(y0 + dy, 6), t, hh, 90.0))
         return out
-    got = _outside(sheet, c, wide, hh)
+    got = _outside(sheet, c, wide, hh, extra)
     if got is None:
         got = ((bb[0] + bb[2]) / 2.0, bb[1] - GAP - hh)
     x0, y0 = got
@@ -491,7 +494,7 @@ def text_item(item):
                 "center")
 
 
-def _along(sheet, c, text, hh):
+def _along(sheet, c, text, hh, extra=0.0):
     """Where an arrow's text turned 90 degrees is centered (its insertion point) when its
     wire runs up and down: past the arrow's tip, in line with the wire, reading up as a
     wire number does on such a wire; beside the arrow, turned, when its own wire is in the
@@ -516,14 +519,27 @@ def _along(sheet, c, text, hh):
     for step in (0.0, 1.5, 3.0, 4.5, 6.0):
         for (x, y), (ux, uy) in (tip, right, left):
             q = (x + ux * step * hh - off[0], y + uy * step * hh - off[1])
-            tb = Text(q, text, hh, 90.0, "center").bbox()
+            tb = _grown(Text(q, text, hh, 90.0, "center").bbox(), extra, 0,
+                        q[0] + off[0] < (bb[0] + bb[2]) / 2.0)
             if not any(segment_hits_rect(a, b, tb)
                        for a, b in zip(wire.points, wire.points[1:])):
                 return q
     return (tip[0][0] - off[0], tip[0][1] - off[1])
 
 
-def _outside(sheet, c, text, hh):
+def _grown(tb, extra, axis, back):
+    """A text's box grown by extra (the lines under its first: a block of lines) the way the
+    block grows: along x (turned text) or y; back: toward smaller x (left of the arrow) or,
+    level, upward is the other way (over the arrow the block grows up)."""
+    if extra <= 0:
+        return tb
+    x0, y0, x1, y1 = tb
+    if axis == 0:
+        return (x0 - extra, y0, x1, y1) if back else (x0, y0, x1 + extra, y1)
+    return (x0, y0, x1, y1 + extra) if back else (x0, y0 - extra, x1, y1)
+
+
+def _outside(sheet, c, text, hh, extra=0.0):
     """Where a connector's (or arrow's) text is centered: past the connector's far side from
     its wire, the way the wire comes into its pin and on out (beside it when the wire runs
     across, under or over it when the wire runs up and down); None when no wire ends on it."""
@@ -553,7 +569,7 @@ def _outside(sheet, c, text, hh):
     for step in (0.0, 1.5, 3.0, 4.5, 6.0):
         for (x, y), (ux, uy) in spots:
             q = (x + ux * step * hh, y + uy * step * hh)
-            tb = Text(q, text, hh, 0.0, "center").bbox()
+            tb = _grown(Text(q, text, hh, 0.0, "center").bbox(), extra, 1, q[1] > bb[3] - 1e-9)
             if not any(segment_hits_rect(a, b, tb)
                        for a, b in zip(wire.points, wire.points[1:])):
                 return q

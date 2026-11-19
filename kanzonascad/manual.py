@@ -647,7 +647,10 @@ point picked with the snaps off), a <b>red ring</b> marks it and the command lin
 and from what ("A wire end stops 0.01" short of pin 2 of CR101 without joining it"); the ring
 goes with the next change. Move the end onto the pin (its grip, with the snap) to join it.</p>
 <p><b>Bus</b> (BU; Draw menu and the Schematic tab) draws several wires side by side, three
-phases say. <b>Start it on a symbol's pin</b> (a disconnect's L1, L2 or L3, a breaker's T1...)
+phases say. A bus never runs through a symbol's pin on the way (that would wire the pin to it):
+a click that would take one of its wires through a pin (leaving its pins back through the same
+symbol's other pins, or across another symbol) isn't taken, and the command line says which
+pin is in the way; click somewhere else, or U takes the last point back. <b>Start it on a symbol's pin</b> (a disconnect's L1, L2 or L3, a breaker's T1...)
 and it takes that side of the symbol: as many wires as it has pins there, as far apart as they
 are, the first from its first pin and the others from the others, whichever way you head off
 (the first leg leaves the pins square); whichever pin you start on, the next clicks are where

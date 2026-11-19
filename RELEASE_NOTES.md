@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.12
+
+**Fixed**
+- A bus no longer runs its wires through a symbol's pins: leaving its pins back through the
+  same symbol's other pins, or carried on across another symbol it couldn't land on. That click
+  isn't taken, and the command line says which pin is in the way.
+- A source or destination arrow's reference with the device on a second line now keeps both
+  lines clear of its wire, also where the wire loops round the arrow.
+
 ## 0.19.11
 
 **Fixed**
