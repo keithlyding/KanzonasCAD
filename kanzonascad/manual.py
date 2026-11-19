@@ -810,6 +810,15 @@ points: <b>Edit block...</b> renames their terminals to match the module, and Sa
 keeps it in your library under its own name. Each carries its manufacturer and catalog
 number, so the Bill of materials lists it; PLC input and output points can belong to it as to
 a PLC I/O card. To put the terminals on the right, Mirror it.</li>
+<li><b>Two terminals a channel</b>: <b>PLC analog input module, 4, 8 or 16 channels IN/RTN</b>,
+each channel's input above its return, numbered as a 1756-IF16 is drawn (IN-0 on terminal 2,
+RTN-0 on 1, IN-1 on 4...).</li>
+<li><b>A module over two sheets</b> ("SLOT 7 CONTINUED"): place <b>PLC ... module, 16
+points, points 0-7</b> (or <b>16 channels IN/RTN, channels 0-7</b>) on the first sheet, with
+its tag and slot, and <b>PLC ... module, points 8-15 continued</b> (or <b>channels 8-15
+IN/RTN continued</b>) on the next: it asks which module it belongs to (type its tag, L lists
+them, P picks it on the drawing), shows that module's tag and CONTINUED at the top, and
+follows it when the module is renumbered or retagged.</li>
 </ul>
 
 <h2>Wire numbers</h2>
@@ -924,6 +933,16 @@ refused with a message.</li>
 numbers and cross-references.</li>
 <li>Wire numbers go into PDF and DXF exports as text.</li>
 </ul>
+
+<h2>Wire list and terminal strip list</h2>
+<p><b>Wire list...</b> (Sheets menu, Output tab: Reports) lists every numbered wire in number
+order: its size and color (its layer's, or its own), what it lands on, each with where
+(<b>CR1:A1 (6-B3), TB1-4 (6-C1)</b>: terminals by strip and number, anything else by tag and
+pin), and the sheets it is on. Off-sheet connectors and source and destination arrows carry a
+wire on, so they are not landings. <b>Terminal strip list...</b> lists every terminal, strip
+by strip in number order, with the wire numbers on its left and right pins and where it is.
+Both are worked out from the drawing each time they open; <b>Save as CSV...</b> writes them
+for Excel or a label printer.</p>
 
 <h2>Cables between panels</h2>
 <p><b>Cables between locations...</b> (Sheets menu, Output tab: Reports) lists what has to be

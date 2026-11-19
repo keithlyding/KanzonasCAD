@@ -6,6 +6,22 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.1
+
+**New**
+- Wire list... and Terminal strip list... (Sheets menu, Output tab: Reports): every wire by
+  number with its size and color and what it lands on (CR1:A1 (6-B3), TB1-4 (6-C1)), and every
+  terminal with the wires on its left and right. Save as CSV for Excel or a label printer.
+- PLC analog input modules with two terminals a channel (IN/RTN: IN-0 on terminal 2 above
+  RTN-0 on 1), of 4, 8 or 16 channels.
+- A PLC module over two sheets: "points 0-7" on the first (its tag and slot) and "points 8-15
+  continued" on the next, which belongs to the module, shows its tag and CONTINUED, and
+  follows it when it's retagged.
+
+**Fixed**
+- The tag of a symbol turned sideways, dragged onto the symbol's own line, could jump from one
+  side to the other when the symbol was moved. It now stays centered on its spot.
+
 ## 0.19
 
 **New**
