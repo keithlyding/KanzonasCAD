@@ -26,7 +26,8 @@ people on AutoCAD.
   in their way (how far is a setting); drag a run of wire sideways and the wires on it follow.
 - Device tags by page number (`CR601`), contacts linked to their coil, and cross-references
   that update themselves.
-- Three-phase power symbols, terminal strips that number their terminals, PLC I/O points.
+- Three-phase power symbols, terminal strips that number their terminals, PLC I/O points and
+  whole PLC I/O modules (Rockwell POINT I/O and generic ones, continued across sheets).
 - Wire numbers (`6001`) that number themselves, with distribution blocks (`6001A`) and
   off-sheet connectors.
 - Wire tools: Trim wire, Delete wire, Clean up wires, double landing on a terminal, Delete
@@ -38,7 +39,8 @@ people on AutoCAD.
   to a device), hatch and solid fill, multi-line text.
 - Reports: a bill of materials (parts by manufacturer and catalog number), and Cables between
   locations: what to pull between panels and where every wire lands on both sides (TB1-12),
-  with the cable, its type and the conductors' colors or numbers (CSV and PDF).
+  with the cable, its type and the conductors' colors or numbers (CSV and PDF); a wire list and
+  a terminal strip list (CSV).
 - Project templates, title block position (corner, right-hand or bottom strip), Options, and
   reopening the files you had open last.
 - DXF in and out, DWG in (AutoCAD R13-2018), PDF out, and the lines and text of a PDF in. Imported blocks stay blocks, AutoCAD
@@ -53,7 +55,7 @@ people on AutoCAD.
 
 ![Cables between locations: what to pull and where each wire lands](docs/screenshot-cables.png)
 
-Coming next: wire lists and terminal strip reports, check-out and check-in of sheets, shared
+Coming next: macOS (Apple Silicon and Intel), check-out and check-in of sheets, shared
 libraries. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Press **F1** in the app for the user manual (chapters on the left, and a search box).
