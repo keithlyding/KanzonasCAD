@@ -642,9 +642,7 @@ together or farther apart than its wires (a drive's control terminals, 1/4" apar
 wires and the pins in the same order across (a symbol turned round: wire 1 lands on the pin
 across from it, not L1). When no way there lands (a side with fewer pins than the bus has
 wires, or no way round what's in between, or a bus started on a symbol's pins heading back
-through that symbol), it goes on drawing and the command line says why. A turn closer than
-the bus is wide (11 wires 1/2" apart are 5" across) is refused the same way: go on farther
-before turning.
+through that symbol), it goes on drawing and the command line says why.
 <b>Start it on a bus's open end</b> (the free ends of wires side by side, as far apart) and it
 carries that bus on: each wire joins its own, keeping its layer. <b>Start it on wires side by
 side</b> (on the middle of one of three phases running across the sheet) and it drops one wire

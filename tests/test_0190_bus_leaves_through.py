@@ -54,32 +54,3 @@ class BusLeavesThroughTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-
-class BusTightTurnTest(unittest.TestCase):
-    """A bus turned closer than it is wide is refused with the reason, as a landing is (the
-    battery, 0.19, seed 2203: 11 wires turned 2" out ran their inner wires backward over the
-    ones already drawn)."""
-
-    def test_too_tight_then_far_enough(self):
-        win, v = window()
-        try:
-            v.osnap_on = v.snap_on = v.ortho_on = v.polar_on = False
-            s = v.sheet()
-            said = []
-            v.message = lambda t, *a, **k: said.append(t)
-            v.run(C.BusCmd)
-            type_in(v, "N", "11", "0.5", "10,10")
-            cmd = v.cmd
-            if cmd.step != "path":
-                type_in(v, "")
-            type_in(v, "13,10")
-            type_in(v, "13,8")      # (a turn 3" out: the bus is 5" wide, its inner wires
-            self.assertEqual(len(cmd.points), 2, cmd.points)    # would turn behind its start)
-            self.assertTrue(any("too close for its width" in t for t in said), said)
-            type_in(v, "16,10", "16,3")             # (on 6" first: room to turn)
-            self.assertEqual(cmd.points[-2:], [(16.0, 10.0), (16.0, 3.0)])
-            v.cancel()
-            self.assertTrue(s is not None)
-        finally:
-            v.project.saved_at = len(v.project.undo_stack)
-            win.close()

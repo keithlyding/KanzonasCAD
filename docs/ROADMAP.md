@@ -200,7 +200,10 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     OE4C/VTM/CTM and generic 4/8/16-point modules; the owner asked for one box per module, as
     a 1756-IF16 "SLOT 7" with its terminals down one side, one a rung). Still to come: a
     module continued on the next sheet ("SLOT 7 CONTINUED"), modules with two terminals a
-    channel (IN/RTN), more catalogs as the owner sends their wiring diagrams.
+    channel (IN/RTN), more catalogs as the owner sends their wiring diagrams. Known: a wide bus
+    (11 wires off a 16-point module) turned closer than it is wide runs its inner wires back
+    over the ones drawn (the battery, seed 2203); a first try at refusing such turns also
+    refused Bus's own routes around symbols, so it was taken back out of 0.19.
 13. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
