@@ -2545,6 +2545,53 @@ def random_editing(log, out, ops, seed, drawing=None):
                 n, "has no" if want else "got")
         BC.CHECKED["bus from picked pins"] += 1
 
+    def op_contact_blocks():
+        # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
+        # line from it through the farthest, worked out from where they are; none of them
+        # listed under it nor showing a reference of their own)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        before = set(s.entities)
+        v.run(C.InsertCmd, lib.get("symbol", "Emergency stop NC"), {})
+        v.input_text(fmt((o[0] + 2.0 * k, o[1] + 3.0 * k)))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) != 1 or not new[0].attrs.get("DEV"):
+            return
+        es = new[0]
+        first_pin = es.pin_points()[0][1]
+        blocks = []
+        for i in range(rnd.randint(1, 3)):
+            name = rnd.choice(["Pushbutton contact NO", "Pushbutton contact NC"])
+            got = set(s.entities)
+            v.run(C.InsertCmd, lib.get("symbol", name), {})
+            v.input_text(fmt((first_pin[0], first_pin[1] - (i + 1) * k)))
+            while v.cmd is not None:
+                v.input_text("")
+            made = [e for j, e in s.entities.items() if j not in got and isinstance(e, M.Insert)]
+            if len(made) != 1:
+                return
+            with p.edit("belongs") as ed:
+                ed.change(s, made[0].copy(attrs=tags_mod.link_attrs(dict(made[0].attrs),
+                                                                     s.entities[es.id])))
+            blocks.append(made[0].id)
+        es = s.entities[es.id]
+        ys = [s.entities[b].pos[1] for b in blocks] + [es.pos[1]]
+        tol = 1e-6 * max(1.0, k)
+        mine = [(a, b) for a, b in XR.links(p, s) if abs(a[0] - es.pos[0]) <= tol and
+                abs(b[0] - es.pos[0]) <= tol]
+        assert mine and abs(min(a[1] for a, _b in mine) - min(ys)) <= tol and \
+            abs(max(b[1] for _a, b in mine) - max(ys)) <= tol, \
+            "contact blocks under %s not joined from it to the farthest: %r, blocks at %r" % (
+                es.attrs.get("TAG"), mine, ys)
+        boxes = [s.entities[b].bbox() for b in blocks]
+        for x, y, *_r in XR.live(p, s):
+            assert not any(bb[0] - k <= x <= bb[2] + k and bb[1] - 0.5 * k <= y <= bb[1]
+                           for bb in boxes), "a joined contact block shows a reference"
+        BC.CHECKED["contact blocks joined"] += 1
+
     def op_copy_onto_wire():
         # (a symbol copied, moved or pasted onto a wire cuts it between its pins, as one
         # inserted does: the owner, "it didn't automatically break the wires and reattach on
@@ -3056,7 +3103,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

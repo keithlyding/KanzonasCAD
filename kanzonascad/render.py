@@ -427,6 +427,20 @@ class SheetRenderer:
                 (0, 0), "", 0.1, layer="XREFS" if lay is not None else "SYMBOLS")), outlines)
         num_color = self.pal.color(self.project, M.Text((0, 0), "", 0.1, layer="SYMBOLS"))
         draw_texts(painter, items, num_color, outlines)
+        joined = xrefs.links(self.project, self.sheet)
+        if joined:
+            # (a pushbutton's contact blocks in its column: the dashed line joining them, in
+            # the symbols' color, as drawn in the symbols' own dashed links)
+            path = QPainterPath()
+            for a, b in joined:
+                for q, r in xrefs.dashes(a, b, self.sheet.k()):
+                    path.moveTo(QPointF(*q))
+                    path.lineTo(QPointF(*r))
+            pen = QPen(num_color, 0.0)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(path)
         rings = wirenums.gauge_marks(self.project, self.sheet)
         if rings:
             # (a group's gauge: an oval round its wires and a leader out to the label)

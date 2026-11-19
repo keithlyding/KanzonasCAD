@@ -558,6 +558,17 @@ to the device that gets that tag. <b>Enter</b> places it on its own, linked to n
 (its reference shows <b>?</b>; double-click it to link it later), and so does a contact with
 no device in the project to offer. A Starter 3-pole is a device of its own with its own tag
 (M), not a contact of a coil: its auxiliary and overload contacts belong to it.</li>
+<li><b>Contact blocks</b> (Library, JIC/Pushbuttons and switches: <b>Pushbutton contact NO</b>,
+<b>Pushbutton contact NC</b>, <b>Selector switch contact NO</b>, <b>Selector switch contact
+NC</b>): more contacts of one pushbutton, emergency stop or selector switch, on other rungs (an
+E-stop's second NC for another circuit, an NO to a PLC input). They belong to it as any contact
+does (PB or SS: the nearest pushbutton or switch is offered). Placed in its column on its sheet
+(straight above or below it), they are joined to it by a <b>dashed line</b> drawn by itself, from
+the operator through the farthest block, as one operator works them all; it follows them when
+they move, and a block moved out of the column leaves it. Blocks joined by the line show no
+reference of their own and aren't listed under the operator (the line shows where they belong);
+one on another sheet, or out of the column, has its reference and is listed as usual. Relay
+contacts are never joined this way.</li>
 <li><b>Changing it later</b>: double-click the contact. "Belongs to" lists the project's
 devices; pick one or type a tag. Deleting a coil leaves its contacts unlinked (showing
 <b>?</b>) until a device takes that tag again.</li>
