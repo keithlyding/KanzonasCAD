@@ -2144,8 +2144,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 for sh, c in ends:
                     if c.block not in WN.ARROWS or not on(sh, c):
                         continue
-                    pair = pairs.get(id(c)) or [(os_, oc) for os_, oc in ends
-                                                if oc.block in WN.ARROWS and oc.block != c.block]
+                    pair = pairs.get(id(c), [])
                     if any(XR.far_device(os_, oc) for os_, oc in pair):
                         n += 1
             return n

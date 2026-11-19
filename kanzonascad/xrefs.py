@@ -116,17 +116,32 @@ def arrow_pairs(project, ends):
     0.19.5: "the exact previous or next wire"; a wire carried page 4 -> 5 -> 6 has a
     destination and a source on page 5, on one wire). Each source takes the first
     destination after it in the project's order (sheets, then across and down) that isn't on
-    its own wire, else the last one before it; a destination left over (one source carried to
-    two sheets) takes the source just before it, else the first one after."""
+    its own wire (none: it waits, "?"); a destination left over (one source carried to two
+    sheets, or a destination drawn before its source) takes the source just before it, else
+    the first one after. A destination and a source on one wire on a sheet are one run,
+    ordered where it starts."""
     from .wirenums import ARROWS
     pos = {s.id: i for i, s in enumerate(project.sheets)}
+    arrows = [(s, e) for s, e in ends if e.block in ARROWS]
+    group = {id(e): (s.id, _group_of(s, e)) for s, e in arrows}
+    # (a destination and a source on one wire on a sheet are one run of it, a ladder's rail
+    # down the sheet: ordered where the run starts, not each where it is, or a source at a
+    # ladder's foot came after the next ladder's head and skipped it; the owner, 0.19.11, page
+    # 8: "I want the source of the left ladder to feed the right ladder, then move on to
+    # another sheet from the right ladder. But cross references are all jacked up")
+    run_at = {}
+    for s, e in arrows:
+        k = tags.order_key(s, "across")(e.pos)
+        g = group[id(e)]
+        if g[1] is not None and (g not in run_at or k < run_at[g]):
+            run_at[g] = k
 
     def key(item):
         s, e = item
-        return (pos.get(s.id, 0), tags.order_key(s, "across")(e.pos))
-    srcs = sorted(((s, e) for s, e in ends if e.block == ARROWS[0]), key=key)
-    dsts = sorted(((s, e) for s, e in ends if e.block == ARROWS[1]), key=key)
-    group = {id(e): (s.id, _group_of(s, e)) for s, e in srcs + dsts}
+        own = tags.order_key(s, "across")(e.pos)
+        return (pos.get(s.id, 0), run_at.get(group[id(e)], own), own)
+    srcs = sorted(((s, e) for s, e in arrows if e.block == ARROWS[0]), key=key)
+    dsts = sorted(((s, e) for s, e in arrows if e.block == ARROWS[1]), key=key)
 
     def apart(a, b):
         ga, gb = group[id(a[1])], group[id(b[1])]
@@ -136,7 +151,10 @@ def arrow_pairs(project, ends):
     for sv in srcs:
         free = [d for d in dsts if id(d[1]) not in taken and apart(sv, d)]
         after = [d for d in free if key(d) > key(sv)]
-        got = after[0] if after else (free[-1] if free else None)
+        # (only forward: a source with none after it waits ("?") rather than taking one
+        # before it that its own source feeds; a destination before its only source is
+        # paired with it below, by the destination)
+        got = after[0] if after else None
         if got is not None:
             taken.add(id(got[1]))
             out[id(sv[1])].append(got)
@@ -150,6 +168,15 @@ def arrow_pairs(project, ends):
         if got is not None:
             out[id(d[1])].append(got)
             out[id(got[1])].append(d)
+    # (an arrow left with none: when every arrow of its name is on its one wire, a pair drawn
+    # on one wire, the other half there; else none, "?": a source still waiting for its
+    # destination, at the end of a run carried over several sheets)
+    for _s, e in arrows:
+        if out[id(e)] or group[id(e)][1] is None or \
+                any(group[id(oc)] != group[id(e)] for _os, oc in arrows):
+            continue
+        out[id(e)] = [(os_, oc) for os_, oc in arrows
+                      if oc.block != e.block and group[id(oc)] == group[id(e)]]
     for k in out:
         out[k].sort(key=key)
     return out
@@ -228,8 +255,7 @@ def live_all(project):
                 # a destination its source, not the others of that name; the owner, 0.18.4:
                 # "just the source and destination for that specific wire location", and
                 # 0.19.5: "the exact previous or next wire")
-                pair = pairs.get(id(c)) or [(os_, oc) for os_, oc in pair
-                                            if oc.block in ARROWS and oc.block != c.block]
+                pair = pairs.get(id(c), [])
             others = [_where(project, os_, oc) for os_, oc in pair]
             text = ", ".join(others) if others else "?"
             if c.block not in ARROWS:

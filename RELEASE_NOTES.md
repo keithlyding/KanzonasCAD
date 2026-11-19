@@ -12,6 +12,9 @@ build fails without them.
 - Wires feeding a column of devices (each drive's S1 drawn on from the corner of the wire
   above) now number each drop as a tap (9005-1, 9005-2...) instead of all sharing the run's
   number. For a drawing made before this version, run Clean up wires on the sheet once.
+- Source and destination arrows carried down one ladder, across to the next ladder on the same
+  sheet, and on to another sheet now show the right places: the left ladder's foot shows the
+  right ladder's head, and so on. A source with nothing after it yet shows "?".
 
 ## 0.19.10
 

@@ -960,7 +960,11 @@ and its layer (480V BRN, with its color and gauge). Each arrow shows only its ot
 place: a destination its source, a source its destination. A wire carried on over several
 sheets (page 4 to 5 to 6, a destination and a source on page 5) shows only the next or the
 previous hop: page 4's source shows page 5, page 6's destination shows page 5's source. A
-source carried to two sheets with no hop between them shows both. On a second line under it,
+source carried to two sheets with no hop between them shows both. Hops on one sheet work the
+same way: a ladder's rail with a destination at its head and a source at its foot is one run,
+in the order the runs start across the sheet, so the left ladder's foot feeds the right ladder's
+head and the right ladder's foot goes on to the next sheet. A source with nothing after it yet
+shows <b>?</b>. On a second line under it,
 the device the wire goes straight to at the other arrow (<b>VFD201</b>), so you see where the
 wire goes and to what without turning to that page. Terminals on the way are passed through to
 the device past them; a terminal with nothing past it, or a T past it, shows itself
