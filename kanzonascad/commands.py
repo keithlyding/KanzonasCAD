@@ -1683,6 +1683,33 @@ def _paths_cross(paths):
     return False
 
 
+def _through_pins(sheet, paths):
+    """The first symbol pin a bus's wires would run through (on a wire anywhere but its two
+    ends: there it would be wired to that pin, unasked): (insert, pin name), or None. A bus
+    leaving its pins through the symbol's other pins, or carried on through a symbol whose
+    side it couldn't land on, joined circuits nobody drew (the battery, 0.19.11, seed 152)."""
+    for pts in paths:
+        ends = (tuple(pts[0]), tuple(pts[-1]))
+        for a, b in zip(pts, pts[1:]):
+            bb = (min(a[0], b[0]) - 1e-6, min(a[1], b[1]) - 1e-6,
+                  max(a[0], b[0]) + 1e-6, max(a[1], b[1]) + 1e-6)
+            for e in sheet.query(bb):
+                if not isinstance(e, M.Insert) or e.defn is None:
+                    continue
+                for name, q in e.pin_points():
+                    if any(G.dist(q, x) <= 1e-6 for x in ends):
+                        continue
+                    if G.dist_to_segment(q, a, b) <= 1e-6:
+                        return e, name
+    return None
+
+
+def _through_message(hit):
+    e, name = hit
+    return ("The bus would run through %s's pin %s (wired to it on the way): click elsewhere, "
+            "or U takes the last point back" % (e.attrs.get("TAG") or e.block, name))
+
+
 def _into_symbol(sheet, p, pin, way):
     """Whether going way from pin (a pin at p of a symbol on sheet) heads into that symbol's
     body: the side faces away from that way."""
@@ -2079,10 +2106,11 @@ class BusCmd(Command):
         elif self.step == "pick":
             self._picked_done()
         else:
+            self._kept = None                   # (refused: the points stay, for U)
             self._make()
 
     def cancel(self):
-        self._make()
+        self._make(closing=True)
 
     def _route(self, p):
         """The points the next click at p adds (none repeating the one before)."""
@@ -2189,6 +2217,7 @@ class BusCmd(Command):
         sheet = self.ctx.sheet()
         land = self._landing(sheet, p)
         clicked = p
+        self._kept = (list(self.points), self.tap_end)     # (put back if _make refuses)
         if land is None:
             # (on or near a device: its nearest pins, wire for wire, jogging in when they are
             # spaced otherwise; the owner, 0.17.1)
@@ -2254,6 +2283,10 @@ class BusCmd(Command):
             if self.toward is not None and len(self.points) == 1:
                 self.ctx.message("Click off the line of the symbol's pins: the bus leaves them "
                                  "square")
+            return
+        hit = _through_pins(sheet, self._paths(self.points + list(new)))
+        if hit is not None:
+            self.ctx.message(_through_message(hit))
             return
         self.points += new
         self.base = self.last = self.points[-1]
@@ -2628,6 +2661,11 @@ class BusCmd(Command):
             return "it leaves its first pins through their own symbol (that side faces away " \
                 "from where it goes): start from the symbol's other side, or click a point " \
                 "out from the pins first"
+        # (nor through another symbol's pins on the way: wired to them, 0.19.11)
+        hit = _through_pins(sheet, paths)
+        if hit is not None:
+            return "it would run through %s's pin %s on the way: click a point that goes " \
+                "round it first" % (hit[0].attrs.get("TAG") or hit[0].block, hit[1])
         return None
 
     def _why_not_landed(self, sheet, p):
@@ -2689,12 +2727,25 @@ class BusCmd(Command):
             paths = [bus_leads(self.ctx.sheet(), q) for q in paths]
         return paths
 
-    def _make(self, fan=None):
+    def _make(self, fan=None, closing=False):
         made = 0
         if self.step == "path" and (len(self.points) >= 2 or fan):
             paths = fan if fan else self._paths(self.points)
             sheet = self.ctx.sheet()
             project = self.ctx.project
+            hit = _through_pins(sheet, paths)
+            if hit is not None:
+                self.ctx.message(_through_message(hit))
+                if closing:
+                    self.finish()               # (Esc: nothing drawn)
+                    return
+                kept = getattr(self, "_kept", None)
+                if kept is not None:
+                    self.points, self.tap_end = list(kept[0]), kept[1]
+                    self.base = self.last = self.points[-1]
+                    self._kept = None
+                self._ask_start()
+                return
             # (left at the WIRES layer: the current wire layer, as a wire's)
             default = self.layers == ["WIRES"]
             chosen = self.layers if not default else [wire_layer(self.ctx)]

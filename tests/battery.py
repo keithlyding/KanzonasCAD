@@ -912,6 +912,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             if len(ends) > 8 and len(taps) > 8:
                 break
         before = set(s.entities)
+        old_wires = [list(w.points) for w in s.wires()]
         before_dots = set(wires.junctions(s))
         cmd = v.run(C.BusCmd)
         side = None
@@ -968,6 +969,33 @@ def random_editing(log, out, ops, seed, drawing=None):
                 missing = [q for q in side[0] if tuple(q) not in starts]
                 assert not missing, "bus from a symbol's pins missed %s" % missing
                 BC.CHECKED["bus from pins"] += 1
+        bus_clear_of_pins([e for i, e in s.entities.items()
+                           if i not in before and isinstance(e, M.Wire)], old_wires)
+
+    def bus_clear_of_pins(new, old=()):
+        # (0.19.11: no wire of a bus runs through a symbol's pin, only ends on it; worked out
+        # from every pin near the wires, the battery's seed 152; a piece of a wire that was
+        # there before, cut by the bus's cleanup and so a new id, is not the bus's: seed 163)
+        def was_there(a, b):
+            m = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+            return any(all(any(G.dist_to_segment(q, *seg) <= 1e-6
+                               for seg in zip(o, o[1:])) for q in (a, b, m)) for o in old)
+        for w in new:
+            ends = (w.points[0], w.points[-1])
+            for a, b in zip(w.points, w.points[1:]):
+                if was_there(a, b):
+                    continue
+                bb = (min(a[0], b[0]) - 1e-6, min(a[1], b[1]) - 1e-6,
+                      max(a[0], b[0]) + 1e-6, max(a[1], b[1]) + 1e-6)
+                for e in s.query(bb):
+                    if isinstance(e, M.Insert):
+                        for n, q in e.pin_points():
+                            assert any(G.dist(q, x) <= 1e-6 for x in ends) or \
+                                G.dist_to_segment(q, a, b) > 1e-6, \
+                                "a bus wire runs through %s's pin %s: %r" % (e.block, n,
+                                                                              w.points)
+        if new:
+            BC.CHECKED["bus clear of pins"] += 1
 
     def op_bus_land():
         # (0.16.3: a bus from one symbol's pins ended on another's lands wire for wire, each
@@ -985,6 +1013,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         if ia == ib:
             return
         before = set(s.entities)
+        old_wires = [list(w.points) for w in s.wires()]
         cmd = v.run(C.BusCmd)
         start = rnd.choice(a)
         # (symbols overlapping can share a pin: the side the start takes is the one the bus
@@ -1004,6 +1033,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         done = v.cmd is None
         finish()
         new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+        bus_clear_of_pins(new, old_wires)
         if landed:
             assert done, "a bus that lands on a symbol's pins didn't end there"
             # (cleanup may join a new wire to an old one: the pins are checked on every wire)

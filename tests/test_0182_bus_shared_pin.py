@@ -35,20 +35,28 @@ class BusSharedPinTest(unittest.TestCase):
         self.assertTrue(APP)
 
     def test_lands_where_it_said(self):
+        # (a bus coming up to the starter's row runs along the disconnect's T1, T2, T3 column
+        # at x = 1: landing there would wire all three to its first wire. Since 0.19.11 it
+        # says so instead, and it never says it lands and then doesn't: what it says is what it
+        # does)
         start, click = (1.0, 3.0), (1.5, 8.0)
         self.assertIsNotNone(C.pin_side(self.s, start))
         cmd = self.v.run(C.BusCmd)
         self.v.input_text("%r,%r" % start)
         self.assertIsNotNone(self.v.cmd)
         landing = cmd._landing(self.s, click)
+        why = cmd._why_not_landed(self.s, click)
+        before = {w.id for w in self.s.wires()}
         self.v.input_text("%r,%r" % click)
-        self.assertIsNotNone(landing)                   # (it says it lands there)
-        self.assertIsNone(self.v.cmd, "the bus said it lands there but went on")
-        side = C.pin_side(self.s, click)[0]
-        ends = [q for w in self.s.wires() for q in (w.points[0], w.points[-1])]
-        for q in side:                                  # (a wire on each pin of that side)
-            self.assertTrue(any(G.dist(q, e) < 1e-6 for e in ends), q)
-
+        self.assertIsNone(landing)                      # (it says it doesn't land there)
+        self.assertIn("pin T", why)                     # (and why: the disconnect's pins)
+        self.assertIsNotNone(self.v.cmd)                # (so it goes on: nothing drawn yet)
+        self.assertEqual({w.id for w in self.s.wires()}, before)
+        self.v.cancel()
+        for _n, q in [(n, q) for e in self.s.inserts() if e.block == "Disconnect 3-pole"
+                      for n, q in e.pin_points() if n.startswith("T")]:
+            self.assertFalse(any(w.touches(q) and not any(G.dist(q, e) < 1e-6 for e in (
+                w.points[0], w.points[-1])) for w in self.s.wires()), q)
 
 if __name__ == "__main__":
     unittest.main()

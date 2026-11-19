@@ -247,7 +247,9 @@ class WireLandingTest(unittest.TestCase):
                if sum(1 for i in new if on(s.entities[i], x[0])) >= 2]
         self.assertEqual(own, [])
         if not landed:
-            self.assertIn("too close", self.said[-1])
+            # (why it didn't land is said; since 0.19.11 a click that would also run a wire
+            # through a pin says that after it)
+            self.assertTrue(any("too close" in t for t in self.said[-2:]), self.said[-2:])
         if self.v.cmd is not None:
             self.v.cancel()
 
