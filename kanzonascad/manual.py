@@ -923,7 +923,15 @@ arrows is numbered where its source is (page 6: 6012), whatever sheets its desti
 on. A name another pair already goes by is left alone, so two pairs never join. A destination arrow
 offers the name of a source still waiting for it (or <b>List...</b> on the command line picks the one it continues from a list of them, wire number and place, waiting ones first; <b>Pick on drawing</b> lets you go to its sheet and click it, and comes back); placed, its wire takes the source's number
 and its layer (480V BRN, with its color and gauge). Each arrow shows only its other half's
-place: a destination its source, a source its destinations.</li>
+place: a destination its source, a source its destinations. On a second line under it, the
+device the wire lands on at the other arrow (<b>VFD201</b>; several joined with commas,
+terminals as <b>TB1-12</b> after the devices), so you see where the wire goes and to what. It
+is set at three levels, each overriding the one before: <b>Source and destination arrows show
+the device at the other end</b> (Project properties, Schematic; on to start), <b>Arrows show
+the far device</b> in Sheet properties (<b>As the project</b>, <b>Shown</b> or <b>Off</b>, for
+that sheet), and <b>Show the far device</b> in an arrow's attributes (double-click it:
+<b>As the sheet</b>, <b>Shown</b> or <b>Off</b>, for that arrow alone). Nothing shows when that
+wire lands on nothing there.</li>
 <li><b>Source/destination arrows</b> (SIGARROW, SDA; Draw menu, Schematic tab:
 Cross-references), as AutoCAD Electrical's signal arrows: click near the open end of the wire
 where it leaves (an end on nothing: a Source arrow goes there), then near the open end where it

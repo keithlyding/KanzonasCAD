@@ -764,6 +764,21 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
     if listed is not None:
         listed.setChecked(ins.attrs.get("XREF") != "0")
         form.addRow("", listed)
+    far = None
+    from .wirenums import ARROWS
+    if ins.block in ARROWS:
+        # (whether this arrow shows the device at its wire's other end: as its sheet says,
+        # or its own choice; the owner, 0.19.3)
+        far = QComboBox()
+        far.setObjectName("xref_device")
+        far.addItem("As the sheet", None)
+        far.addItem("Shown", "1")
+        far.addItem("Off", "0")
+        far.setCurrentIndex(max(far.findData(ins.attrs.get("XDEV")), 0))
+        far.setToolTip("Under this arrow's reference, the device its wire lands on at the other "
+                       "arrow: as Sheet properties (or Project properties) says, or this "
+                       "arrow's own choice")
+        form.addRow("Show the far device", far)
     v.addLayout(form)
     # which of them show on the drawing, on this copy (the owner: "add the ability to hide and
     # show attributes"); the values are kept either way
@@ -908,6 +923,11 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
             out.pop("XREF", None)
         else:
             out["XREF"] = "0"
+    if far is not None:
+        if far.currentData() is None:
+            out.pop("XDEV", None)
+        else:
+            out["XDEV"] = far.currentData()
     if part_id[0]:
         out["PART"] = part_id[0]
     if lock.isChecked():

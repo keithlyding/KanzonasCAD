@@ -83,6 +83,9 @@ DEFAULT_SETTINGS = {
     # "1/8", "1/16", "1/32", "1/64"; each dimension keeps its own (Dimension units)
     "dim_units": "decimal",
     "show_title_block": True,
+    # source and destination arrows show the device at their wire's other end under their
+    # reference; a sheet (Sheet properties) or an arrow (its attributes) can say otherwise
+    "xref_device": True,
     "tb_position": "corner",    # the title block: in the lower right corner, or a strip down
                                 # the right ("right") or along the bottom ("bottom") that the
                                 # zone grid stops at
@@ -2814,6 +2817,8 @@ class Sheet:
         # says (None: Project properties, Schematic)
         self.show_border = None
         self.show_title_block = None
+        self.xref_device = None             # arrows show the device at the far end: None =
+                                            # as the project, True/False this sheet's own
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
                                             # drawing is real size, the border and paper-sized
                                             # text around it are drawn 1/scale larger
@@ -3043,6 +3048,7 @@ class Sheet:
              "wire_order_tags": self.wire_order_tags,
              "show_border": self.show_border,
              "show_title_block": self.show_title_block,
+             "xref_device": self.xref_device,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
              "rotation": self.rotation,
@@ -3078,6 +3084,7 @@ class Sheet:
         self.wire_order_tags = d.get("wire_order_tags")
         self.show_border = d.get("show_border")
         self.show_title_block = d.get("show_title_block")
+        self.xref_device = d.get("xref_device")
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         try:

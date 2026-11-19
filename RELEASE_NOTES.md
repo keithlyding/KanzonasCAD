@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.19.3
+
+**New**
+- Source and destination arrows now show, on a second line under their reference
+  (4001 / 9-D2), the device the wire goes to at the other arrow (VFD201). Turn it off for the
+  whole project (Project properties, Schematic), for one sheet (Sheet properties), or for one
+  arrow (double-click it); each of those can override the one before.
+
 ## 0.19.2
 
 **New**

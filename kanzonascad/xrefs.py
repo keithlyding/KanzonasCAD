@@ -35,7 +35,42 @@ _cache = {"sig": None, "by_sheet": {}}
 def _signature(project):
     return (tuple((s.id, s.version, project.sheet_number(s), s.size, s.scale, s.cols, s.rows,
                    s.col_start, s.row_start) for s in project.sheets),
-            project.zone_format, project.settings.get("xref_height"))
+            project.zone_format, project.settings.get("xref_height"),
+            project.settings.get("xref_device", True),
+            tuple(s.xref_device for s in project.sheets))
+
+
+def shows_device(project, sheet, ins):
+    """Whether an arrow shows the device at its wire's other end under its reference: the
+    arrow's own choice (XDEV "1" or "0"), else its sheet's (Sheet properties), else the
+    project's (Project properties; the owner, 0.19.3: a project setting, a sheet setting
+    that can override it, and one on each arrow that can override both)."""
+    own = ins.attrs.get("XDEV")
+    if own in ("1", "0"):
+        return own == "1"
+    if getattr(sheet, "xref_device", None) is not None:
+        return bool(sheet.xref_device)
+    return bool(project.settings.get("xref_device", True))
+
+
+def far_devices(sheet, c):
+    """The tags of the devices the wire on an arrow's pin lands on, on the arrow's sheet: a
+    terminal by its strip and number (TB1-12), anything else by its tag (VFD201), each once,
+    devices before terminals."""
+    from . import pull, wirenums
+    _d, wire = _wire_in(sheet, c)
+    if wire is None:
+        return []
+    root = wirenums._sheet_groups(sheet).get(wire.id)
+    devs, terms = [], []
+    for ins, pin in pull._sheet_landings(sheet).get(root, ()):
+        if pull.is_terminal(ins):
+            name, got = pull.landing_name(ins, pin), terms
+        else:
+            name, got = (ins.attrs.get("TAG", "") or "").strip() or ins.block, devs
+        if name not in got:
+            got.append(name)
+    return sorted(devs, key=pull._natural) + sorted(terms, key=pull._natural)
 
 
 def _where(project, sheet, e):
@@ -110,29 +145,35 @@ def live_all(project):
                 pair = [(os_, oc) for os_, oc in pair if oc.block == want] or pair
             others = [_where(project, os_, oc) for os_, oc in pair]
             text = ", ".join(others) if others else "?"
-            if c.block in ARROWS:
-                # a source or destination arrow: its wire's number and the other's place
-                # (2046 / 7-A2), past the arrow's far end, away from its wire (the owner,
-                # 0.17.5: arrows "connected" to the line, so nothing written over it)
-                num = number_at(s, c)
-                if num:
-                    text = "%s / %s" % (num, text)
-            # (outside the connector, away from its wire, whichever way it is turned: the
-            # owner, 0.18, "Wire cross references need to always be outside the connector,
-            # away from the wire")
-            if c.block in ARROWS:
-                # (an arrow on a wire running up and down: its text turned with it, as that
-                # wire's number reads; the owner, 0.18.3: "I need the verbiage to be the same
-                # orientation as I make the arrow")
-                got = _along(s, c, text, hh)
-                if got is not None:
-                    out[s.id].append((round(got[0], 6), round(got[1], 6), text, hh, 90.0))
-                    continue
-            got = _outside(s, c, text, hh)
-            if got is None:
-                bb = c.bbox()
-                got = ((bb[0] + bb[2]) / 2.0, bb[1] - GAP - hh)
-            out[s.id].append((round(got[0], 6), round(got[1], 6), text, hh))
+            if c.block not in ARROWS:
+                # (outside the connector, away from its wire, whichever way it is turned: the
+                # owner, 0.18, "Wire cross references need to always be outside the
+                # connector, away from the wire")
+                got = _outside(s, c, text, hh)
+                if got is None:
+                    bb = c.bbox()
+                    got = ((bb[0] + bb[2]) / 2.0, bb[1] - GAP - hh)
+                out[s.id].append((round(got[0], 6), round(got[1], 6), text, hh))
+                continue
+            # a source or destination arrow: its wire's number and the other's place
+            # (2046 / 7-A2), past the arrow's far end, away from its wire (the owner, 0.17.5:
+            # arrows "connected" to the line, so nothing written over it); and, on a second
+            # line, the device at the other end of that wire (the owner, 0.19.3: "I can see
+            # that the switch connection goes to page x but also that it goes to device x")
+            num = number_at(s, c)
+            if num:
+                text = "%s / %s" % (num, text)
+            lines = [text]
+            if shows_device(project, s, c):
+                far = []
+                for os_, oc in pair:
+                    for n in far_devices(os_, oc):
+                        if n not in far:
+                            far.append(n)
+                if far:
+                    lines.append(", ".join(far))
+            for item in _arrow_lines(s, c, lines, hh):
+                out[s.id].append(item)
     for s, c in contacts:
         if tags.numbered(c):
             continue                    # (a terminal shows its number, not where its strip is)
@@ -173,6 +214,50 @@ def _wire_in(sheet, c):
                 if L > TOL:
                     return ((q[0] - r[0]) / L, (q[1] - r[1]) / L), w
     return None, None
+
+
+def _arrow_lines(sheet, c, lines, hh):
+    """An arrow's reference as drawn, a line each: placed as one block (its widest line),
+    the second line on the side away from the arrow, each line starting at the arrow's side
+    of the block (a long second line doesn't push the first one away). On a wire running up
+    and down the text is turned with it (the owner, 0.18.3: "I need the verbiage to be the
+    same orientation as I make the arrow")."""
+    widths = [text_width(t, hh) for t in lines]
+    wide = lines[widths.index(max(widths))]
+    tw = max(widths)
+    bb = c.bbox()
+    step = hh * LINE
+    got = _along(sheet, c, wide, hh)
+    if got is not None:
+        # (turned 90 degrees: a line under another is to its right, a line's length runs up)
+        x0, y0 = got
+        if x0 < (bb[0] + bb[2]) / 2.0 - 1e-9:
+            x0 -= step * (len(lines) - 1)        # (left of the arrow: the block grows left)
+        tb = text_item((x0, y0, wide, hh, 90.0)).bbox()
+        out = []
+        for i, (t, w) in enumerate(zip(lines, widths)):
+            dy = 0.0
+            if tb[1] >= bb[3] - 1e-9:
+                dy = (w - tw) / 2.0              # (past the tip upward: from its bottom end)
+            elif tb[3] <= bb[1] + 1e-9:
+                dy = (tw - w) / 2.0              # (past the tip downward: from its top end)
+            out.append((round(x0 + i * step, 6), round(y0 + dy, 6), t, hh, 90.0))
+        return out
+    got = _outside(sheet, c, wide, hh)
+    if got is None:
+        got = ((bb[0] + bb[2]) / 2.0, bb[1] - GAP - hh)
+    x0, y0 = got
+    if y0 > bb[3] - 1e-9:
+        y0 += step * (len(lines) - 1)            # (over the arrow: the block grows up)
+    out = []
+    for i, (t, w) in enumerate(zip(lines, widths)):
+        dx = 0.0
+        if x0 - tw / 2.0 >= bb[2] - 1e-9:
+            dx = (w - tw) / 2.0                  # (right of the arrow: from its left end)
+        elif x0 + tw / 2.0 <= bb[0] + 1e-9:
+            dx = (tw - w) / 2.0                  # (left of it: from its right end)
+        out.append((round(x0 + dx, 6), round(y0 - i * step, 6), t, hh))
+    return out
 
 
 def text_item(item):
