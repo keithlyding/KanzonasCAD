@@ -716,6 +716,10 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
             form.addRow("Belongs to", owner)
             continue
         e = QLineEdit(ins.attrs.get(k, ""))
+        if k in tags.OWN_FIELDS and ins.defn is not None and ins.defn.kind == "footprint" \
+                and tags.own_default(ins.defn, k):
+            # (left empty, the footprint's own: shown greyed, 0.18.6)
+            e.setPlaceholderText("%s (the footprint's)" % tags.own_default(ins.defn, k))
         edits[k] = e
         form.addRow(labels[k], e)
     # what the symbol shows besides its tag (a terminal's number, a PLC point's address)

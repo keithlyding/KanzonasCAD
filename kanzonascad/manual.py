@@ -90,7 +90,7 @@ current layer. To clean up (after importing a DXF, say), select several layers (
 Shift+click) or click <b>Select unused</b> (the empty ones), then <b>Delete</b>: empty layers
 go at once; if some hold objects (on any sheet or in the title block), it lists them and asks
 whether to delete them too, with everything on them, or keep them. Layer 0 always stays, and
-one Undo brings it all back. The Layer box on the Home tab (and on the Panel tab) picks the current layer; with objects selected, picking
+one Undo brings it all back. The Layer box on the Home tab (and on the Schematic and Panel tabs) picks the current layer; with objects selected, picking
 a layer moves them to it.</li>
 </ul>
 
@@ -130,7 +130,7 @@ WIRE ORANGE...) come with their color's name; give them a gauge once and every w
 shows it. A wire color of two names, <b>BLU/WHT</b> say, draws the layer's wires striped: the
 layer's color with stripes of the second (a 24 VDC common), on the screen and printed (not when
 printing in black only).</p>
-<p><b>Add wire layers...</b> (Format menu, Schematic tab: Look; also the <b>Wire layers...</b>
+<p><b>Add wire layers...</b> (Format menu, Schematic tab: Layers; also the <b>Wire layers...</b>
 button in Layers...) adds a layer for each wire of the systems you tick, with its color, gauge
 and wire color, ready to draw on (pick one as the current layer, then draw wires):</p>
 <ul>
@@ -885,7 +885,11 @@ into it, where the wire arrives. Past each arrow's far end (not over the wire), 
 number and the other arrow's place (<b>2046 / 7-A2</b>), turned the way the arrow is: on a wire
 running up and down it reads up, in line with the wire (as that wire's number reads); across,
 it is level. A source arrow placed on the end of a numbered wire is named by the wire's number (2046):
-nothing to type (unless another source arrow has that name: then it asks). A destination arrow
+nothing to type (unless another source arrow has that name: then it asks). It keeps following
+it: when the wire is renumbered (a number typed, Renumber sheet, Update numbers), the source
+arrow takes the new number and its destination arrows follow their source. A wire carried on by
+arrows is numbered where its source is (page 6: 6012), whatever sheets its destinations are
+on. A name another pair already goes by is left alone, so two pairs never join. A destination arrow
 offers the name of a source still waiting for it (or <b>List...</b> on the command line picks the one it continues from a list of them, wire number and place, waiting ones first; <b>Pick on drawing</b> lets you go to its sheet and click it, and comes back); placed, its wire takes the source's number
 and its layer (480V BRN, with its color and gauge). Each arrow shows only its other half's
 place: a destination its source, a source its destinations.</li>
@@ -1226,7 +1230,9 @@ footprint) asks which schematic device it is, as a contact asks which coil: <b>E
 the one offered (the next device with no footprint yet, in page order; one with the
 footprint's catalog number first), a typed tag takes that device, <b>L</b> lists them, <b>N</b>
 leaves it a footprint of its own. It then carries the device's tag (and its manufacturer,
-catalog number and description where it has none), shows it, and follows it: renumber the
+catalog number and description where neither it nor its footprint block has one: a
+footprint's own, typed on it or set in its block's <b>Properties...</b> in the library, come
+first; its window shows the block's greyed where the copy has none), shows it, and follows it: renumber the
 schematic and the panel's labels change with it. It has the device's ratings too
 (horsepower, volts, amps, full-load amps, VA, primary and secondary volts, rating): its
 window (double-click it) lists them under <b>From its device</b>, and they are the same on

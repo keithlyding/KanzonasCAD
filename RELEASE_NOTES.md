@@ -6,6 +6,21 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.18.6
+
+**New**
+- Source arrows follow their wire's number: renumber the wire (or the sheet) and the source
+  arrow takes the new number; its destination arrows follow their source. A wire carried on
+  by arrows is numbered on its source's page.
+- The Schematic tab has the layer box and layer list too (its Layers group, with Wire
+  layers), as Home and Panel do: pick 24VDC BLU and draw, without going back to Home.
+
+**Fixed**
+- A footprint linked to a device keeps its own manufacturer, catalog number and description
+  (typed on it, or set in its block's Properties...) instead of taking the device's; the
+  device's fill in only what the footprint doesn't have. Its window shows the footprint's
+  greyed where the copy has none, and its label shows the block's description too.
+
 ## 0.18.5
 
 **New**

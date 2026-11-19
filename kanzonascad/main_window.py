@@ -695,6 +695,10 @@ class MainWindow(BlockEditing, QMainWindow):
                                    self.circle_button.setDefaultAction(act))
         self.panel_layer_box, self.panel_layer_states = self._layer_widgets()
         self.panel_layer_box.setMinimumWidth(100)       # (the Panel tab is a full one)
+        # (and on the Schematic tab: the owner, 0.18.6, "I need layer selection in both the
+        # schematic and the panel tabs as well as home")
+        self.sch_layer_box, self.sch_layer_states = self._layer_widgets()
+        self.sch_layer_box.setMinimumWidth(100)
         r = self.ribbon = Ribbon()
         r.add_tab("Home", [
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
@@ -733,7 +737,9 @@ class MainWindow(BlockEditing, QMainWindow):
                                     a["num_source"]]),
             ("Cross-references", "large", [a["sig_arrows"], a["xref_update"], a["xref_freeze"],
                                            a["xref_auto"]]),
-            ("Look", "small", [a["object_color"], a["layers"], a["wire_layers"]]),
+            ("Layers", "small", [self.sch_layer_box, self.sch_layer_states, a["layers"],
+                                 a["wire_layers"], a["object_color"], a["lay_off"],
+                                 a["lay_on"]]),
             ("Settings", "large", [a["schematic_settings"]]),
         ])
         r.add_tab("Panel", [
@@ -2615,7 +2621,7 @@ class MainWindow(BlockEditing, QMainWindow):
             # has it: linked to none), so its tag isn't put back by the old link
             from . import tags
             got = tags.find_tag(v.project, attrs.get("TAG", ""))
-            attrs = tags.link_footprint(attrs, got[1]) if got is not None else \
+            attrs = tags.link_footprint(attrs, got[1], ins.defn) if got is not None else \
                 {k: x for k, x in attrs.items() if k != "PARENT"}
         if attrs is None:
             return

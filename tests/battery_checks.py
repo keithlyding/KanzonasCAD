@@ -695,3 +695,35 @@ def footprints_follow(project):
                     "footprint shows %s, its device is %s" % (e.attrs.get("TAG"),
                                                               dev.attrs.get("TAG"))
                 CHECKED["footprint follows its device"] += 1
+
+
+def arrows_follow(project):
+    """Every source arrow (and its destinations) goes by the number of the wire it sits on
+    (0.18.6), worked out from the wires at its pin: unless that number is the name of other
+    connectors already, or two pairs' wires have the same number (renaming would join them)."""
+    from kanzonascad import wirenums
+    if not wirenums.enabled(project):
+        return
+    names = {}
+    srcs = []
+    for s in project.sheets:
+        for e in s.inserts():
+            if e.defn is None or e.defn.wiring != "link":
+                continue
+            name = e.attrs.get("TAG", "").strip().upper()
+            if name:
+                names.setdefault(name, []).append(e)
+            if e.block == wirenums.ARROWS[0]:
+                nums = {w.num.upper() for _n, q in e.pin_points()
+                        for w in s.query_point(q, 1e-6)
+                        if getattr(w, "kind", "") == "wire" and w.num and w.touches(q, 1e-6)}
+                if len(nums) == 1 and name:
+                    srcs.append((name, nums.pop()))
+    wanted = {}
+    for name, num in srcs:
+        wanted.setdefault(num, set()).add(name)
+    for name, num in srcs:
+        if num == name or len(wanted[num]) > 1 or num in names:
+            continue
+        raise AssertionError("source arrow %s sits on wire %s" % (name, num))
+    CHECKED["source arrows follow their wire's number"] += len(srcs)

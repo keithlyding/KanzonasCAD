@@ -1474,6 +1474,10 @@ def random_editing(log, out, ops, seed, drawing=None):
         if wirenums.group_of(p, s, a)[0] == wirenums.group_of(p, s, b)[0]:
             return
         num = rnd.choice([b.num, b.num, "9%03d" % rnd.randint(0, 999)])
+        if num != b.num and any(w.num == num for sh in p.sheets for w in sh.wires()):
+            # (a "new" number some wire has already: it is another wire's number, and is asked
+            # about as one, seed 2509 step 1138)
+            return
         lock = rnd.random() < 0.7
         if num == a.num:
             # (it has that number already: two groups kept with one number on purpose, "just
@@ -2056,9 +2060,12 @@ def random_editing(log, out, ops, seed, drawing=None):
                G.dist(c.pin_points()[0][1], o) < 1e-6]
         if not got:
             return                      # (not placed there: another pin took it, say)
-        assert got[0].attrs.get("TAG") == want[1].attrs["TAG"], (
-            "a destination paired from the list took %r, not %r" % (
-                got[0].attrs.get("TAG"), want[1].attrs["TAG"]))
+        # (the source as it is now: it follows its wire's number, 0.18.6, and pairing can
+        # renumber that wire)
+        now = want[0].entities.get(want[1].id)
+        assert now is not None and got[0].attrs.get("TAG") == now.attrs["TAG"], (
+            "a destination paired from the list took %r, not %r (was %r)" % (
+                got[0].attrs.get("TAG"), now and now.attrs["TAG"], want[1].attrs["TAG"]))
         BC.CHECKED["arrow paired as chosen"] += 1
 
     def op_wire_color():
@@ -2863,6 +2870,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 for other in p.sheets:
                     check_sheet(other)
                 BC.footprints_follow(p)
+                BC.arrows_follow(p)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()

@@ -2385,8 +2385,9 @@ class Insert(Entity):
             return d.name
         if key in LABELS:
             v = self.attrs.get(LABELS[key], "")
-            if not v and key == "cat":
-                v = d.catalog
+            if not v:
+                # (the footprint block's own, as the bill of materials takes it)
+                v = {"cat": d.catalog, "desc": d.description}.get(key, "")
             return v or "?"
         v = self.attrs.get(key, "")
         return attr_display(key, v) if v.strip() else None
