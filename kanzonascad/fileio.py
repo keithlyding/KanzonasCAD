@@ -112,6 +112,14 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=
         ents.append(M.Polyline(oval, closed=True, layer=lay))
         ents.append(M.Polyline(leader, layer=lay))
     for e in ents:
+        if ace_names and isinstance(e, M.Wire):
+            # (AutoCAD Electrical takes a LINE on a wire layer for a wire, never a polyline:
+            # the owner, Nov 2026, "the wires are registering as poly lines and not wires";
+            # one LINE a straight run, as its own wires are drawn)
+            for a, b in zip(e.points, e.points[1:]):
+                if a != b:
+                    _write(msp, M.Line(a, b, layer=e.layer, color=e.color))
+            continue
         _write(msp, e)
     names = {}
     for ins in placed:

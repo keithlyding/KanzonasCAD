@@ -10,7 +10,8 @@ build fails without them.
 
 **New**
 - DXF export can use AutoCAD Electrical's attribute names (TAG1, MFG, CAT, DESC1; a
-  footprint's tag as P_TAG1): Edit > Options..., General.
+  footprint's tag as P_TAG1, wires as lines AutoCAD Electrical takes for wires): Edit >
+  Options..., General.
 
 ## 0.20
 

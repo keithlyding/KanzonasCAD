@@ -1619,7 +1619,9 @@ attributes. To have everything broken into plain lines and texts instead, as bef
 General. Tick <b>Use AutoCAD Electrical attribute names in DXF</b> there to have the attributes
 go out under the names AutoCAD Electrical looks for: a symbol's tag as TAG1, its maker as MFG,
 its catalog number as CAT, its description as DESC1, its location as LOC, a footprint's tag as
-P_TAG1 (it is off to start; KanzonasCAD reads either back as the same symbols). AutoCAD
+P_TAG1, and each wire as one LINE a straight run on its layer, as AutoCAD Electrical draws
+its wires (it takes a polyline for a drawing, not a wire, so Scoot and its wire commands
+skipped them); it is off to start; KanzonasCAD reads either back as the same symbols. AutoCAD
 Electrical's own project data (its WD_M block, wire-number blocks, the .wdp project) is not
 written, so its project-wide commands may not see the drawing as theirs.</li>
 <li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,

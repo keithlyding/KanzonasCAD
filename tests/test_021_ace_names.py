@@ -53,6 +53,23 @@ class AceNamesTest(unittest.TestCase):
         self.assertEqual(back[0].defn.kind, "symbol")
         self.assertIsNotNone(back[0].defn.tag_pos)          # (its tag spot, from TAG1's)
 
+    def test_wires_as_lines(self):
+        # (the owner, in AutoCAD Electrical: "the wires are registering as poly lines and not
+        # wires", so Scoot didn't move them: a wire is one LINE a straight run, on its layer)
+        with self.p.edit("wire") as ed:
+            ed.add(self.s, M.Wire([(1.0, 1.0), (4.0, 1.0), (4.0, 3.0)], layer="WIRES"))
+        fileio.export_dxf(self.p, self.s, self.path, include_frame=False, ace_names=True)
+        msp = ezdxf.readfile(self.path).modelspace()
+        lines = [e for e in msp.query("LINE") if e.dxf.layer == "WIRES"]
+        self.assertEqual(sorted((tuple(e.dxf.start)[:2], tuple(e.dxf.end)[:2]) for e in lines),
+                         [((1.0, 1.0), (4.0, 1.0)), ((4.0, 1.0), (4.0, 3.0))])
+        self.assertEqual([e for e in msp.query("LWPOLYLINE") if e.dxf.layer == "WIRES"], [])
+        # (KanzonasCAD's own names: a wire stays one polyline, as before)
+        fileio.export_dxf(self.p, self.s, self.path, include_frame=False)
+        msp = ezdxf.readfile(self.path).modelspace()
+        self.assertEqual(len([e for e in msp.query("LWPOLYLINE") if e.dxf.layer == "WIRES"]),
+                         1)
+
     def test_own_names_by_default(self):
         coil, fp = self.attribs(False)
         self.assertEqual((coil.get("TAG"), coil.get("MFR")), ("CR1", "AB"))
