@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**Changed**
+- Double-click a text or a note to edit it right on the drawing: Enter keeps it (Ctrl+Enter
+  in a note), Esc cancels. Its height and angle are under right-click, Text properties....
+
 ## 0.20
 
 **New**
