@@ -287,6 +287,12 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   an emptied text is left as it was (not erased); the text's window moved to right-click Text
   properties...; leaders and dashed boxes still open their windows.
 
+## Decided while the owner was away (Nov 2026; to confirm)
+- **I/O list import** (0.20.1): one module a sheet (as the owner's one box per module); the
+  columns read by name (Slot, Catalog, Point, Address, Tag, Description); a point's text is
+  "address  tag  description" beside its terminal (no wire drawn to it, no PLC input symbol);
+  a module or point the library hasn't got is left out and named, never guessed.
+
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a

@@ -2896,6 +2896,36 @@ def random_editing(log, out, ops, seed, drawing=None):
         v.show_sheet(s.id)                  # (back to the sheet the steps are on)
         BC.CHECKED["report sheets hold their report"] += 1
 
+    def op_io_list():
+        # (0.20.1: an I/O list brought in as the owner would, with Import I/O list...: every
+        # point of the list written beside its module's terminal, worked out from the module's
+        # pins, nothing past its frame)
+        from kanzonascad.scalefit import outside
+        pts = sorted(rnd.sample(range(8), rnd.randint(1, 8)))
+        path = os.path.join(out, "battery-io.csv")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("Slot,Catalog,Point,Tag,Description\n")
+            for n in pts:
+                f.write("%d,1734-IB8,%d,BAT%d,POINT %d\n" % (rnd.randint(1, 9), n, n, n))
+        made = win.import_io_list(path)
+        v.show_sheet(s.id)                  # (back to the sheet the steps are on)
+        assert made, "Import I/O list made no sheet"
+        texts = {}
+        for sh in made:
+            assert outside(p, sh) is None, "an I/O sheet is drawn past its frame"
+            for e in sh.entities.values():
+                if isinstance(e, M.Text):
+                    texts[e.text] = (sh, e)
+        for n in pts:
+            got = texts.get("BAT%d  POINT %d" % (n, n))
+            assert got is not None, "point %d of the I/O list is missing" % n
+            sh, t = got
+            mod = next(e for e in sh.inserts() if e.block == "1734-IB8 module")
+            pin = dict(mod.pin_points())[str(n)]
+            assert G.dist((t.pos[0] + 0.15, t.pos[1] - 0.03), pin) < 1e-9, \
+                "point %d's text isn't beside its terminal" % n
+        BC.CHECKED["I/O list points beside their terminals"] += 1
+
     def op_contact_blocks():
         # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
         # line from it through the farthest, worked out from where they are; none of them
@@ -3454,7 +3484,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

@@ -877,6 +877,16 @@ points: <b>Edit block...</b> renames their terminals to match the module, and Sa
 keeps it in your library under its own name. Each carries its manufacturer and catalog
 number, so the Bill of materials lists it; PLC input and output points can belong to it as to
 a PLC I/O card. To put the terminals on the right, Mirror it.</li>
+<li><b>Import I/O list...</b> (Sheets menu) brings in an I/O list as its modules: a CSV file or
+an Excel workbook (its first sheet) whose first row names the columns, in any order:
+<b>Slot</b> (or Rack), <b>Catalog</b> (or Catalog number, Module, Part), <b>Point</b> (or
+Channel), <b>Address</b>, <b>Tag</b> and <b>Description</b>. The rows of one slot are one
+module, the library's symbol of that catalog number (1734-IB8...) or a generic module by its
+name; each goes on a sheet of its own ("Slot 2 - 1734-IB8") after the sheet shown, its slot
+shown, its tag of that page, and each point's address, tag and description written beside its
+terminal on the left, where the field wire comes in (layer PLC I/O). A module the library
+hasn't got, or a point a module hasn't got, is left out and named on the command line. One
+Undo takes it all back.</li>
 <li><b>Two terminals a channel</b>: <b>PLC analog input module, 4, 8 or 16 channels IN/RTN</b>,
 each channel's input above its return, numbered as a 1756-IF16 is drawn (IN-0 on terminal 2,
 RTN-0 on 1, IN-1 on 4...).</li>

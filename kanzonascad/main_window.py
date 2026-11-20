@@ -470,6 +470,11 @@ class MainWindow(BlockEditing, QMainWindow):
         A("report_update", "Update report sheets", lambda: self.update_report_sheets(),
           icon="bom", label="Update reports",
           tip="Every report sheet drawn again from the drawing as it is now")
+        A("io_list", "Import I/O &list...", lambda: self.import_io_list(), icon="pdf_in",
+          label="I/O list",
+          tip="An I/O list (CSV or Excel: Slot, Catalog, Point, Address, Tag, Description) "
+              "brought in as its PLC modules, each on a sheet, every point's tag and "
+              "description beside its terminal")
         A("materials", "Panel &materials...", self.show_materials, icon="materials",
           label="Materials",
           tip="The DIN rail and wire duct this project takes: lengths, stock pieces and cuts "
@@ -698,7 +703,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
                   "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "materials",
-                  "report_sheet", "report_update", None,
+                  "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
                   "layers", "wire_layers",
@@ -2912,6 +2917,36 @@ class MainWindow(BlockEditing, QMainWindow):
         self._fill_sheets()
         self._say("%d report(s) drawn again" % n)
         return n
+
+    def import_io_list(self, path=None):
+        """Import I/O list...: an I/O list's modules on sheets after the sheet shown, one step
+        (io_list.py). The sheets made."""
+        from . import io_list
+        v = self.view()
+        if v is None:
+            return []
+        if path is None:
+            path, _f = QFileDialog.getOpenFileName(
+                self, "Import I/O list", self._import_dir(),
+                "I/O lists (*.csv *.xlsx);;CSV (*.csv);;Excel workbook (*.xlsx)")
+            if not path:
+                return []
+        p = v.project
+        try:
+            with p.edit("Import I/O list") as ed:
+                made, problems = io_list.import_list(ed, p, self.library, path, v.sheet())
+        except (OSError, ValueError) as ex:
+            QMessageBox.warning(self, APP, "Couldn't read %s:\n%s" % (path, ex))
+            return []
+        self._fill_sheets()
+        if made:
+            v.show_sheet(made[0].id)
+        msg = "%d module(s) brought in on %d sheet(s)" % (len(made), len(made))
+        if problems:
+            msg += "; left out: " + "; ".join(problems[:6]) + (
+                " and %d more" % (len(problems) - 6) if len(problems) > 6 else "")
+        self._say(msg, 12000)
+        return made
 
     def show_wire_list(self):
         v = self.view()
