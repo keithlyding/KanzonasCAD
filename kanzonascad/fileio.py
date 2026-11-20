@@ -55,13 +55,15 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=
     ents = []
     placed = []                         # (block references written as INSERTs, blocks True)
     from . import crossings
-    # (for AutoCAD Electrical a wire goes out whole, not cut where it jumps another with a
-    # loop: it draws its own crossings, and pieces would be wires of their own there)
-    jumps = [] if ace_names else crossings.jumps(project, sheet)
+    jumps = crossings.jumps(project, sheet)
     r = crossings.size(sheet)
+    wires = []                          # (for AutoCAD Electrical: written by acedxf, below)
     for e in sheet.entities.values():
         if isinstance(e, M.WireCross):
             continue                    # (drawn through the jump it makes, below)
+        if ace_names and isinstance(e, M.Wire):
+            wires.append(e)
+            continue
         if isinstance(e, M.Wire) and jumps:
             # wires with gaps or loops: cut where they jump
             for pts in crossings.cut_wire(e, jumps, r):
@@ -73,7 +75,7 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=
         # block references go out as their lines and texts, on the reference's layer
         ents.extend(e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e])
     for (p, u, _cu, st), (jid, _cid) in zip(jumps, crossings.jump_wires(project, sheet)):
-        if st == "loop":
+        if st == "loop" and not ace_names:
             # (on the jumping wire's layer, in its color: the loop is a piece of it)
             w = sheet.entities.get(jid) if jid is not None else None
             lay = w.layer if w is not None else ("WIRES" if "WIRES" in project.layers
@@ -97,22 +99,27 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=
     for a, b in links(project, sheet):
         for q, r in dashes(a, b, sheet.k()):
             ents.append(M.Line(q, r, layer="SYMBOLS" if "SYMBOLS" in project.layers else "0"))
-    # the wire numbers, on layer WIRES
-    from .wirenums import labels, label_leaders
-    for t in labels(project, sheet):
-        ents.append(t.copy(layer="WIRES" if "WIRES" in project.layers else "0"))
-    for a, b in label_leaders(project, sheet):
-        ents.append(M.Line(a, b, layer="WIRES" if "WIRES" in project.layers else "0"))
-    # (the gauge labels, and the ovals round groups of wires with their leaders, 0.18.5)
-    from .wirenums import gauge_labels, gauge_marks
+    # the wire numbers, on layer WIRES (for AutoCAD Electrical: its wire number blocks, below,
+    # and the lines out to numbers set off to the side on its layer WIRENO, off the wire
+    # layers: there a line is a wire, and a symbol with three of them on a pin was "a
+    # component with >2 wires", the owner, Nov 2026)
+    from .wirenums import labels, label_leaders, label_spots
+    from . import acedxf
     lay = "WIRES" if "WIRES" in project.layers else "0"
-    for t in gauge_labels(project, sheet):
-        ents.append(t.copy(layer=lay))
-    # (for AutoCAD Electrical the ovals and their leaders on a layer of their own: on a wire
-    # layer, a mark might be taken for a wire)
+    if not ace_names:
+        for t in labels(project, sheet):
+            ents.append(t.copy(layer=lay))
+    for a, b in label_leaders(project, sheet):
+        ents.append(M.Line(a, b, layer=acedxf.WIRENO_LAY if ace_names else lay))
+    # (the gauge labels, and the ovals round groups of wires with their leaders, 0.18.5;
+    # for AutoCAD Electrical on a layer of their own, WIRE MARKS: on a wire layer, a mark
+    # might be taken for a wire)
+    from .wirenums import gauge_labels, gauge_marks
     mark_lay = "WIRE MARKS" if ace_names else lay
     if ace_names and not doc.layers.has_entry(mark_lay):
         doc.layers.add(mark_lay)
+    for t in gauge_labels(project, sheet):
+        ents.append(t.copy(layer=mark_lay))
     for (cx, cy), half, thin, up, leader in gauge_marks(project, sheet):
         # (a true ELLIPSE, as AutoCAD draws one: an oval of 48 straight pieces came in as a
         # polyline with a grip at every corner, the owner, Nov 2026)
@@ -121,22 +128,34 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=
         msp.add_ellipse((cx, cy), major, min(rx, ry) / max(rx, ry),
                         dxfattribs={"layer": mark_lay})
         ents.append(M.Polyline(leader, layer=mark_lay))
+    wire_lays = acedxf.prepare(doc, project) if ace_names else set()
     for e in ents:
-        if ace_names and isinstance(e, M.Wire):
-            # (AutoCAD Electrical takes a LINE on a wire layer for a wire, never a polyline:
-            # the owner, Nov 2026, "the wires are registering as poly lines and not wires";
-            # one LINE a straight run, as its own wires are drawn)
-            for a, b in zip(e.points, e.points[1:]):
-                if a != b:
-                    _write(msp, M.Line(a, b, layer=e.layer, color=e.color))
-            continue
+        if (e.layer or "0").upper() in wire_lays:
+            # (for AutoCAD Electrical nothing but wires on a wire layer)
+            e = e.copy(layer=acedxf.MISC_LAY)
         _write(msp, e)
     names = {}
     for ins in placed:
+        if (ins.layer or "0").upper() in wire_lays:
+            ins = ins.copy(layer=acedxf.MISC_LAY)
         _write_insert(doc, msp, ins, names, ace_names)
+    if ace_names:
+        # (AutoCAD Electrical takes a LINE on a wire layer for a wire, never a polyline: the
+        # owner, Nov 2026, "the wires are registering as poly lines and not wires"; and
+        # its own data on them, as an AutoCAD Electrical 2027 drawing holds it: acedxf)
+        k = sheet.k()
+        lines, gaps = acedxf.write_wires(msp, sheet, wires, jumps,
+                                         crossings.jump_wires(project, sheet), k)
+        for t in acedxf.write_numbers(doc, msp, label_spots(project, sheet), lines, k):
+            _write(msp, t)
+        acedxf.link_gaps(gaps)
+        from .wires import junctions
+        acedxf.write_dots(doc, msp, junctions(sheet), k)
+        acedxf.write_settings(doc, msp, acedxf.wire_layers(project), k)
     doc.saveas(path)
 
 
+ACE_OWN = ("WD_M", "WDDOT", "WD_WNH")    # (AutoCAD Electrical's own blocks: acedxf)
 ACE_PIN = re.compile(r"^(X[1248]?)?TERM(\d\d)$")     # (AutoCAD Electrical's: X4TERM01, TERM01)
 PIN_TAG = "KZPIN"                   # (a block's pins, as hidden constant ATTDEFs: KZPIN1...)
 
@@ -969,7 +988,10 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             for one in de.multi_insert():
                 _read(one, k, out, skipped, depth + 1, blocks)
         elif t == "INSERT" and keep and depth == 0 and blocks is not None and \
+                str(de.dxf.name).upper() not in ACE_OWN and \
                 _keepable(de) and _block_defn(de, k, skipped, depth, blocks) is not None:
+            # (AutoCAD Electrical's own blocks, its junction dots and wire numbers, come in as
+            # their circles and number: not symbols; its hidden WD_M as nothing)
             # kept a block: one object per copy, its attributes as KanzonasCAD's (TAG, DESC,
             # MFR, CAT; AutoCAD Electrical's P_TAG1, DESC1... mapped)
             s, r, mirror = _keepable(de)

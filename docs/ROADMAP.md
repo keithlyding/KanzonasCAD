@@ -194,9 +194,10 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
       opens it and saves it as DWG); writing DWG would need the ODA File Converter.
     - An option, **AutoCAD Electrical attribute names**: TAG1, MFG, CAT, DESC1-3, LOC, INST and
       the terminal attributes, as KanzonasCAD's DWG/DXF import already reads them, so AutoCAD
-      Electrical can find tags and parts. Not promised: full AutoCAD Electrical intelligence
-      (its WD_M block, wire-number blocks, xdata, the .wdp project) - to be checked against
-      the owner's AutoCAD Electrical before going further.
+      Electrical can find tags and parts. 0.20.1, from a drawing the owner saved from AutoCAD
+      Electrical 2027: its WD_M block (the wire layers), WD_WNH wire-number blocks with the
+      wires' VIA_WD_WNPTR xdata, WDDOT dots and its crossings (gap pieces with VIA_WD_GAP10/11,
+      a loop ARC): kanzonascad/acedxf.py. Not written: the .wdp project.
     - Tested by reading the export back (ezdxf: blocks, inserts, attributes match the
       drawing) and by the owner opening it in AutoCAD.
 12. PLC I/O (0.19 started it: whole-module boxes, Rockwell POINT I/O 1734-IB8/OB8/OB8E/IE8C/

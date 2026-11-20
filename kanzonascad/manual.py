@@ -993,7 +993,8 @@ next pair; Enter or Esc ends it. An end connected to something, or the same wire
 refused with a message.</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
 numbers and cross-references.</li>
-<li>Wire numbers go into PDF and DXF exports as text.</li>
+<li>Wire numbers go into PDF and DXF exports as text (with AutoCAD Electrical's names, as its
+wire number blocks: see DXF export).</li>
 </ul>
 
 <h2>Wire list and terminal strip list</h2>
@@ -1622,12 +1623,25 @@ go out under the names AutoCAD Electrical looks for: a symbol's tag as TAG1, its
 its catalog number as CAT, its description as DESC1, its location as LOC, a footprint's tag as
 P_TAG1, and each wire as one LINE a straight run on its layer, as AutoCAD Electrical draws
 its wires (it takes a polyline for a drawing, not a wire, so Scoot and its wire commands
-skipped them), whole where wires cross (AutoCAD Electrical draws its own crossings), and the
-wire gauge ovals on a layer of their own, WIRE MARKS, and each symbol's pins as AutoCAD
-Electrical's wire connections (X4TERM01 and TERM01 for a pin on the left, X1 right, X2 top, X8
-bottom; KanzonasCAD's own KZPIN otherwise); it is off to start; KanzonasCAD reads either back as the same symbols. AutoCAD
-Electrical's own project data (its WD_M block, wire-number blocks, the .wdp project) is not
-written, so its project-wide commands may not see the drawing as theirs.</li>
+skipped them), and each symbol's pins as AutoCAD Electrical's wire connections (X4TERM01 and
+TERM01 for a pin on the left, X1 right, X2 top, X8 bottom; KanzonasCAD's own KZPIN otherwise).
+The drawing then carries what AutoCAD Electrical keeps in its own drawings, so it takes the
+wires for its own (Scoot, wire numbers, gaps): its settings block <b>WD_M</b> at 0,0, listing
+the layers your wires are on as its wire layers (and WIRES), loops at crossings; at each
+crossing that shows a loop or a gap here, the jumping wire in two lines with a 0.1" gap (at
+the sheet's scale), each knowing the other, and for a loop a half circle over it on the wire's
+layer; at each junction dot its dot block <b>WDDOT</b> on layer SYMS; each wire number as its
+wire number block <b>WD_WNH</b> on layer WIRENO, on the wire, with the number where
+KanzonasCAD shows it and every line of its wires pointing at it (a number shown again on the
+same wires, as near both ends of a long run, goes on layer WIRECOPY as a text). Nothing but
+wires stays on a wire layer: the short lines out to numbers set off to the side go on WIRENO,
+the wire gauge ovals and labels on WIRE MARKS, and anything else of yours on a wire layer on
+MISC (on a wire layer AutoCAD Electrical takes a line for a wire, and said it "found a
+component with >2 wires"). It is off to start; KanzonasCAD reads either back as the same
+symbols (AutoCAD Electrical's dots and wire numbers as plain circles and texts, its WD_M as
+nothing; the wires as lines, cut where they jumped, with their loops). The .wdp project file is
+not written, so AutoCAD Electrical's project-wide commands need the drawing added to one of
+its projects.</li>
 <li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,
 "<i>name</i> backups", stamped with the date and time (the newest 10 are kept, or as many as
 Edit &gt; Options..., Files, says; none turns backups off). <b>Open backups

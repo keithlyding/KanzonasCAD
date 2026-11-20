@@ -19,6 +19,11 @@ build fails without them.
 - With AutoCAD Electrical's names, a symbol's pin attributes no longer sit on top of each other
   in AutoCAD's block editor, and a tall symbol's corner pins (a drive's L1 and PE) are marked
   as wired from the side they're on, not from the top or bottom.
+- With AutoCAD Electrical's names, AutoCAD Electrical now takes the wires for its own: the DXF
+  carries its drawing settings (which layers are wire layers), its wire number blocks with the
+  wires pointing at them, its junction dots, and crossings cut with a gap or loop as it draws
+  them. Nothing but wires is left on a wire layer, so it no longer reports "a component with
+  >2 wires" where a wire number's leader touched a symbol.
 
 ## 0.20
 

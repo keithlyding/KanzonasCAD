@@ -822,6 +822,7 @@ def labels(project, sheet):
     wire's own."""
     if not enabled(project) or sheet is project.title_block:
         sheet._num_leaders = (None, [])
+        sheet._num_spots = (None, [])
         return []
     got = getattr(sheet, "_num_labels", None)
     ends_at = float(project.settings.get("wire_label_ends", 6.0) or 0.0)
@@ -838,8 +839,10 @@ def labels(project, sheet):
             parts.setdefault((roots[w.id], w.num), []).append(w)
     out = []
     leaders = []
+    spots = []                          # (each number's point on its wire, its part's wires)
     taken = []                          # (the numbers placed so far: boxes)
     busy = _busy_points(sheet)
+    part = [()]                         # (the wire ids of the part being numbered)
 
     def text_at(num, q, a, b, side=1.0, off=0.4):
         """The number beside the piece a-b at q: over it (side 1) or under it (-1), left of
@@ -849,10 +852,13 @@ def labels(project, sheet):
         return Text((q[0], q[1] + side * h * off - (h if side < 0 else 0.0)), num, h, 0.0,
                     "center")
 
-    def put(num, q, a, b):
-        t = text_at(num, q, a, b)
+    def keep(t, q):
         out.append(t)
         taken.append(t.bbox())
+        spots.append((t, tuple(q), part[0]))
+
+    def put(num, q, a, b):
+        keep(text_at(num, q, a, b), q)
 
     def clear(box, skip=()):
         """Does nothing on the sheet (another wire, a symbol and its texts, a line) or a number
@@ -894,10 +900,9 @@ def labels(project, sheet):
                 for side in (1.0, -1.0):
                     t = text_at(num, q, a, b, side)
                     if first is None:
-                        first = t
+                        first = (t, q)
                     if clear(t.bbox(), own):
-                        out.append(t)
-                        taken.append(t.bbox())
+                        keep(t, q)
                         return
         # no room beside it: off to the side, a little line back to the wire
         a, b = pieces[0]
@@ -906,8 +911,7 @@ def labels(project, sheet):
             for side in (1.0, -1.0):
                 t = text_at(num, q, a, b, side, off)
                 if clear(t.bbox(), own):
-                    out.append(t)
-                    taken.append(t.bbox())
+                    keep(t, q)
                     tb = t.bbox()
                     # (from the wire to the number's near edge)
                     if abs(a[1] - b[1]) > abs(a[0] - b[0]):
@@ -916,9 +920,9 @@ def labels(project, sheet):
                         end = (q[0], tb[1]) if side > 0 else (q[0], tb[3])
                     leaders.append((tuple(q), end))
                     return
-        out.append(first)
-        taken.append(first.bbox())
+        keep(*first)
     for (_r, num), ws in parts.items():
+        part[0] = tuple(w.id for w in ws)
         ended = False
         if ends_at > 0:
             for w in ws:
@@ -941,7 +945,17 @@ def labels(project, sheet):
         place(num, ws)
     sheet._num_labels = (sig, out)
     sheet._num_leaders = (sig, leaders)
+    sheet._num_spots = (sig, spots)
     return out
+
+
+def label_spots(project, sheet):
+    """[(text, point on its wire, ids of the wires its number is on)] for each of labels():
+    the point it was placed beside (DXF export for AutoCAD Electrical puts the wire number's
+    block there, on the wire)."""
+    labels(project, sheet)
+    got = getattr(sheet, "_num_spots", None)
+    return got[1] if got is not None else []
 
 
 def label_leaders(project, sheet):
