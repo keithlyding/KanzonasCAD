@@ -54,7 +54,9 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=
     ents = []
     placed = []                         # (block references written as INSERTs, blocks True)
     from . import crossings
-    jumps = crossings.jumps(project, sheet)
+    # (for AutoCAD Electrical a wire goes out whole, not cut where it jumps another with a
+    # loop: it draws its own crossings, and pieces would be wires of their own there)
+    jumps = [] if ace_names else crossings.jumps(project, sheet)
     r = crossings.size(sheet)
     for e in sheet.entities.values():
         if isinstance(e, M.WireCross):
@@ -105,12 +107,17 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=
     lay = "WIRES" if "WIRES" in project.layers else "0"
     for t in gauge_labels(project, sheet):
         ents.append(t.copy(layer=lay))
+    # (for AutoCAD Electrical the ovals and their leaders on a layer of their own: on a wire
+    # layer, a mark might be taken for a wire)
+    mark_lay = "WIRE MARKS" if ace_names else lay
+    if ace_names and not doc.layers.has_entry(mark_lay):
+        doc.layers.add(mark_lay)
     for (cx, cy), half, thin, up, leader in gauge_marks(project, sheet):
         rx, ry = (half, thin) if up else (thin, half)
         oval = [(cx + rx * math.cos(i * math.pi / 24), cy + ry * math.sin(i * math.pi / 24))
                 for i in range(48)]
-        ents.append(M.Polyline(oval, closed=True, layer=lay))
-        ents.append(M.Polyline(leader, layer=lay))
+        ents.append(M.Polyline(oval, closed=True, layer=mark_lay))
+        ents.append(M.Polyline(leader, layer=mark_lay))
     for e in ents:
         if ace_names and isinstance(e, M.Wire):
             # (AutoCAD Electrical takes a LINE on a wire layer for a wire, never a polyline:

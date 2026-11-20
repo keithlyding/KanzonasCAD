@@ -64,11 +64,22 @@ class AceNamesTest(unittest.TestCase):
         self.assertEqual(sorted((tuple(e.dxf.start)[:2], tuple(e.dxf.end)[:2]) for e in lines),
                          [((1.0, 1.0), (4.0, 1.0)), ((4.0, 1.0), (4.0, 3.0))])
         self.assertEqual([e for e in msp.query("LWPOLYLINE") if e.dxf.layer == "WIRES"], [])
+        # (crossing wires: whole, not cut at a jump, with no loop drawn on their layer)
+        with self.p.edit("cross") as ed:
+            ed.project_settings({"wire_crossing": "loop"})
+            ed.add(self.s, M.Wire([(2.0, 0.0), (2.0, 2.0)], layer="WIRES"))
+        fileio.export_dxf(self.p, self.s, self.path, include_frame=False, ace_names=True)
+        msp = ezdxf.readfile(self.path).modelspace()
+        down = [e for e in msp.query("LINE") if e.dxf.layer == "WIRES" and
+                abs(e.dxf.start[0] - 2.0) < 1e-9 and abs(e.dxf.end[0] - 2.0) < 1e-9]
+        self.assertEqual(len(down), 1)
+        self.assertAlmostEqual(abs(down[0].dxf.end[1] - down[0].dxf.start[1]), 2.0)
+        self.assertEqual([e for e in msp.query("LWPOLYLINE") if e.dxf.layer == "WIRES"], [])
         # (KanzonasCAD's own names: a wire stays one polyline, as before)
         fileio.export_dxf(self.p, self.s, self.path, include_frame=False)
         msp = ezdxf.readfile(self.path).modelspace()
-        self.assertEqual(len([e for e in msp.query("LWPOLYLINE") if e.dxf.layer == "WIRES"]),
-                         1)
+        self.assertGreaterEqual(len([e for e in msp.query("LWPOLYLINE")
+                                     if e.dxf.layer == "WIRES"]), 2)   # (cut where it jumps)
 
     def test_own_names_by_default(self):
         coil, fp = self.attribs(False)
