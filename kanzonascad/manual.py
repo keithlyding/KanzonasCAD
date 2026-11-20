@@ -1531,8 +1531,11 @@ window more on every side) is made ready too, so panning and zooming out show it
 about a quarter of the window, on a sheet with a scale too (at 1:24 the sheet is 24 times its
 paper size).</li>
 <li><b>Black drawing background</b> (on to start, as in AutoCAD): the sheet is drawn black with
-white lines. Turn it off for a white sheet. <b>Export to PDF...</b> always prints black on
-white either way.</li>
+white lines. Turn it off for a white sheet. <b>Export to PDF...</b> prints black on white
+either way, unless <b>Export to PDF in the layers' colors</b> is ticked.</li>
+<li><b>Export to PDF in the layers' colors</b> (off to start): Export to PDF... draws each layer
+in its color on white paper (a white or black layer in black), as Print does with "the layers'
+colors".</li>
 <li><b>Theme</b>: Light, Dark or Same as system: the menus, ribbon and panels. Light stays
 light and Dark stays dark whatever Windows is set to; Same as system follows Windows, also when
 it switches while KanzonasCAD is open.</li>
@@ -1691,7 +1694,8 @@ folder (never over your own file; in the portable version, <code>data\\recovery<
 the program). If KanzonasCAD doesn't close normally (a crash, a power
 cut), it offers to recover them the next time it starts.</li>
 <li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
-black on white (layer colors are for the screen).</li>
+black on white, or in the layers' colors with Export to PDF in the layers' colors ticked in Edit
+&gt; Options..., General.</li>
 </ul>
 
 <h2>Printing</h2>
