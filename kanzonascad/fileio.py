@@ -114,12 +114,16 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True):
     for e in ents:
         _write(msp, e)
     names = {}
+    # (a block placed flipped somewhere: AutoCAD flips the texts of its drawing with it, so
+    # they go out as attributes, each placed readable on every copy, as the program draws them)
+    flipped = {ins.defn.name for ins in placed if ins.mirror}
     for ins in placed:
-        _write_insert(doc, msp, ins, names)
+        _write_insert(doc, msp, ins, names, flipped)
     doc.saveas(path)
 
 
 PIN_TAG = "KZPIN"                   # (a block's pins, as hidden constant ATTDEFs: KZPIN1...)
+TEXT_TAG = "KZTEXT"                 # (a flipped block's own texts, as locked ATTDEFs: KZTEXT1...)
 
 # what a block's attributes carry out to AutoCAD (KanzonasCAD's own, internal ones stay home)
 _INTERNAL = {"DEV", "PARENT", "TAG_LOCK", "XREF", "XDEV", "FROM", "TAGLINK", "PART", "SLOT"}
@@ -161,11 +165,43 @@ def _attr_names(ins):
     return out
 
 
-def _define_block(doc, d, bname):
+def _block_texts(d):
+    """A block's own texts (not its attributes), in the order its drawing has them."""
+    out = []
+    for e in d.entities:
+        parts = e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e]
+        out.extend(x for x in parts if isinstance(x, M.Text))
+    return out
+
+
+def _placed_texts(ins):
+    """Those texts as a block reference draws them on the sheet (a flipped one's kept
+    readable), in the same order as _block_texts."""
+    d = ins.defn
+    out = []
+    for e, w in zip(d.entities, ins.world_entities()):
+        if isinstance(e, (M.Insert, M.Composite)):
+            out.extend(x for x in w.exploded() if isinstance(x, M.Text))
+        elif isinstance(e, M.Text):
+            out.append(w)
+    return out
+
+
+def _text_attrib(ent, t):
+    """An ATTDEF or ATTRIB placed and aligned as the text t."""
+    from ezdxf.enums import TextEntityAlignment
+    h = {"left": "LEFT", "center": "CENTER", "right": "RIGHT"}[t.align]
+    v = {"baseline": "", "bottom": "BOTTOM_", "middle": "MIDDLE_", "top": "TOP_"}[t.valign]
+    ent.set_placement(t.pos, align=TextEntityAlignment[v + h])
+
+
+def _define_block(doc, d, bname, texts_as_attrs=False):
     """The BLOCK definition of a KanzonasCAD block: its drawing at its own size, upright and
     unflipped (the INSERT places, turns, scales and flips it), on layer 0 by block so it takes
     the INSERT's layer and color, unless the block keeps its own colors; an ATTDEF where each
-    of its attributes shows."""
+    of its attributes shows. texts_as_attrs: its own texts as locked ATTDEFs (KZTEXT1...), for
+    a block placed flipped: AutoCAD draws a flipped block's texts flipped, but its attributes
+    where each copy places them."""
     blk = doc.blocks.new(name=bname)
     # (what KanzonasCAD needs to read it back as the same kind of block, with its pins; AutoCAD
     # leaves both alone: the block's description, and a hidden constant ATTDEF on each pin)
@@ -181,9 +217,20 @@ def _define_block(doc, d, bname):
         a.dxf.text = str(pin["name"])
         a.is_invisible = True
         a.is_const = True
+    n_text = 0
     for e in d.entities:
         parts = e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e]
         for x in parts:
+            if texts_as_attrs and isinstance(x, M.Text):
+                n_text += 1
+                a = blk.add_attdef("%s%d" % (TEXT_TAG, n_text), insert=x.pos,
+                                   dxfattribs={"height": x.height, "rotation": x.angle,
+                                               "layer": "0", "color": 0})
+                a.dxf.text = x.text
+                a.dxf.lock_position = 1
+                a.is_const = False
+                _text_attrib(a, x)
+                continue
             c = x.copy()
             c.layer = "0"
             if not (d.own_colors and c.color not in (None, M.ADAPTIVE)):
@@ -203,17 +250,18 @@ def _define_block(doc, d, bname):
     return blk
 
 
-def _write_insert(doc, msp, ins, names):
+def _write_insert(doc, msp, ins, names, flipped=()):
     """A KanzonasCAD block reference as an INSERT of its block (defined once per drawing), its
     attributes as ATTRIBs: those shown where and as the program draws them, the others there
     too but invisible, so AutoCAD's attribute editor and data extraction see all of them; the
-    pin names (Show pin names) as texts beside it, on its layer."""
+    pin names (Show pin names) as texts beside it, on its layer. flipped: the blocks placed
+    flipped somewhere, whose own texts are attributes (KZTEXT1...) placed on each copy."""
     from ezdxf.enums import TextEntityAlignment
     d = ins.defn
     first = d.name not in names
     bname = _block_name(d.name, names)
     if first:
-        _define_block(doc, d, bname)
+        _define_block(doc, d, bname, texts_as_attrs=d.name in flipped)
     attribs = {"layer": ins.layer or "0", "xscale": ins.scale,
                "yscale": -ins.scale if ins.mirror else ins.scale, "rotation": ins.angle}
     ref = msp.add_blockref(bname, ins.pos, dxfattribs=attribs)
@@ -252,6 +300,13 @@ def _write_insert(doc, msp, ins, names):
             ent = ref.add_attrib(name, value, insert=ins.pos,
                                  dxfattribs={"height": h0, "layer": ins.layer or "0"})
             ent.is_invisible = True
+    if d.name in flipped:
+        for i, t in enumerate(_placed_texts(ins)):
+            ent = ref.add_attrib("%s%d" % (TEXT_TAG, i + 1), t.text, insert=t.pos,
+                                 dxfattribs={"height": t.height, "rotation": t.angle,
+                                             "layer": ins.layer or "0"})
+            ent.dxf.lock_position = 1
+            _text_attrib(ent, t)
     for pt in ins.pin_texts():
         _write(msp, pt.copy(layer=ins.layer or "0"))
 
@@ -599,8 +654,17 @@ def _block_defn(de, k, skipped, depth, blocks):
     attrs, seen = [], set()
     tags = set()
     pins = []
+    own_texts = []
     for sub in blk:
         if sub.dxftype() != "ATTDEF":
+            continue
+        if str(sub.dxf.tag).upper().startswith(TEXT_TAG) and _kz_block(blk) is not None:
+            # (a text of a flipped block KanzonasCAD wrote: a text of its drawing again)
+            p, align, valign, rot = _text_place(sub)
+            own_texts.append(M.Text((p[0] * k - bx, p[1] * k - by),
+                                    str(sub.dxf.get("text", "") or ""),
+                                    sub.dxf.get("height", 0.125) * k, rot, align, valign,
+                                    layer="0"))
             continue
         if str(sub.dxf.tag).upper().startswith(PIN_TAG):
             # (a pin of a block KanzonasCAD wrote: its name, where it is)
@@ -617,6 +681,7 @@ def _block_defn(de, k, skipped, depth, blocks):
         attrs.append({"attr": name, "pos": (p[0] * k - bx, p[1] * k - by),
                       "height": sub.dxf.get("height", 0.125) * k, "align": align,
                       "valign": valign, "angle": rot})
+    parts = parts + own_texts
     if not parts and not attrs:
         blocks[key] = None
         return None
@@ -861,8 +926,12 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             # MFR, CAT; AutoCAD Electrical's P_TAG1, DESC1... mapped)
             s, r, mirror = _keepable(de)
             defn = _block_defn(de, k, skipped, depth, blocks)
+            # (a flipped block KanzonasCAD wrote: its texts' attributes are its drawing's texts)
+            own = _kz_block(de.block()) is not None
+            atts = [a for a in de.attribs
+                    if not (own and str(a.dxf.tag).upper().startswith(TEXT_TAG))]
             vals = {}
-            for att in de.attribs:
+            for att in atts:
                 name = _attr_name(att.dxf.tag)
                 v = att.dxf.get("text", "")
                 if name and v and v.strip("-"):
@@ -877,7 +946,7 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             # ones were drawn back on their block's spot): hidden here, or placed elsewhere
             spots = {a["attr"]: a for a in defn.attr_texts}
             hide, seen_on, at = set(), set(), {}
-            for att in de.attribs:
+            for att in atts:
                 name = _shown_name(att.dxf.tag)
                 a = spots.get(name)
                 if a is None:
@@ -898,7 +967,7 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             out.append(ins)
             # a value its block has no field for (no ATTDEF) still shows where it stands
             shown = {a["attr"] for a in defn.attr_texts}
-            for att in de.attribs:
+            for att in atts:
                 if _shown_name(att.dxf.tag) not in shown:
                     _read(att, k, out, skipped, depth + 1, blocks)
         elif t == "INSERT" and depth < 12 and blocks is not None and _fast_insert(de):

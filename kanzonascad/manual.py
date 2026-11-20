@@ -459,10 +459,11 @@ changes); erased, it goes back to that. The blue <b>LABEL</b> text on layer BLOC
 where its <b>Footprint label</b> goes, the same way: left where it opened, the middle of the
 drawing; moved, that spot. <b>Save block</b>
 (Library menu, the ribbon's Block tab, or Save, Ctrl+S, in that tab) puts it back in your library: the
-pins keep their order (or the one set in Pins...), new ones come after. Closing the tab with changes not saved asks
+pins keep their order (or the one set in Pins...), new ones come after, and the block's tab
+closes, back to the drawing it was opened from. Closing the tab with changes not saved asks
 first. <b>Save block as...</b> (Library menu and the Block tab, in that tab) saves it under a new
 name instead, with its catalog number left blank: the block it was opened from stays as it
-was in your library, and the tab goes on editing the new one.</li>
+was in your library, and the tab closes too.</li>
 <li><b>Duplicate...</b> (a button in the Library popup, its right-click menu, or
 <b>Duplicate block...</b> in the Library menu and the Block tab, for a block selected in the
 drawing): to make a block that is almost like one you have (a footprint of
@@ -619,7 +620,9 @@ starts (a symbol's pin, another wire, or anywhere), then where it goes: it runs 
 and up or down, with one corner per click; the corner follows the cursor, and F flips it the
 other way. The wire <b>ends by itself</b> when you click a pin or another wire; Enter ends it
 anywhere; so does Esc or starting another command (what is drawn is kept). U takes back
-the last click.</p>
+the last click. A wire never runs <b>through a symbol's pin</b> on the way (that would wire
+the pin to it): a click whose leg would pass through one isn't taken, the command line says
+which pin, and you click on the pin to end there, or elsewhere.</p>
 <p>A wire <b>goes around the symbols in its way</b>: when the leg to your click would run
 through a symbol's drawing, it goes round it instead (straight across and up or down, the
 fewest corners, 1/8 inch clear of it on paper), and it leaves a pin, and arrives at one,
@@ -1613,8 +1616,11 @@ and flipped as it is), with its tag, description, maker, catalog number, locatio
 as <b>attributes</b>: those shown on the sheet where KanzonasCAD shows them, the others hidden,
 so AutoCAD's attribute editor and data extraction find all of them. Layers keep their names and
 colors; wires go out as polylines on their layers. AutoCAD opens the DXF and can save it as a
-DWG. A DXF exported this way opens again in KanzonasCAD with the same symbols, pins and
-attributes. To have everything broken into plain lines and texts instead, as before version
+DWG. A flipped symbol's own texts (the TR of a timer coil, a module's point names) stay
+readable in AutoCAD: AutoCAD would draw the texts inside a flipped block backwards, so in a
+block placed flipped they go out as locked attributes (KZTEXT1...) placed on each copy as
+KanzonasCAD draws them. A DXF exported this way opens again in KanzonasCAD with the same
+symbols, pins and attributes. To have everything broken into plain lines and texts instead, as before version
 0.20, untick <b>Export DXF with symbols and footprints as blocks</b> in Edit &gt; Options...,
 General.</li>
 <li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,

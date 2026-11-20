@@ -109,7 +109,7 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    Converter, when installed, is only a fallback for a file ezdwg can't read. DXF stays the
    export format. Fixes go in our import code first, upstream to ezdwg second; fork only if
    urgent (its core is Rust).
-5. **Panel sheets and dimensions**:
+5. **Panel sheets and dimensions** (done by 0.12.6):
    - Panel geometry is always real-world inches, 1:1: a 3" contactor footprint is 3" in the
      data on every sheet, forever.
    - Each panel sheet has ONE visible scale (e.g. 1:4), a lens on the real-size layout. Named
@@ -139,7 +139,7 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
        footprint locks onto a rail's centerline by its rail point and slides along; near a
        neighbor on the rail it butts against it. Each footprint block may set its rail point
        (the middle of its clip) in Edit block; else the middle of its drawing.
-6. **Part assignment**: projects keep their own copies of the parts they use (as they do of
+6. **Part assignment** (wanted: the owner, Nov 2026): projects keep their own copies of the parts they use (as they do of
    blocks), so a part leaving the library never breaks a drawing.
    - Symbol, footprint and part stay three separate things; the symbol never knows the brand.
    - Draw with the generic symbol; assign a part now or later. The part picker is filtered to
@@ -149,7 +149,7 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
      from the schematic's devices, so tag and cross-reference come along; the schematic side
      flags devices not yet placed on a panel.
 7. **Library management**:
-   - Right-click a placed symbol with a part -> "Save to library as part" (name defaults to
+   - (wanted: the owner, Nov 2026) Right-click a placed symbol with a part -> "Save to library as part" (name defaults to
      the catalog number): writes symbol + footprint + part into the library.
    - Library browser: right-click Edit or Delete. Single delete asks once. Bulk delete asks
      once with the count ("Delete 14 parts?"); if some are used in the open project, ask
@@ -177,8 +177,9 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    device and its footprint once, rail and duct as stock lengths, CSV), wire list and terminal
    strip list (done in 0.19.1, CSV). Still to come: Excel export (openpyxl, MIT, imported only
    when exporting) and report sheets drawn in the project.
-9. **PDF export opening in KanzonasPDF** when it is installed (export exists).
-10. **Check out / check in** sheets: export chosen sheets (with their blocks, parts and
+9. ~~PDF export opening in KanzonasPDF~~: dropped (the owner, Nov 2026: low value; opening a
+   .kzcad in KanzonasPDF would be KanzonasPDF's feature, not this one's).
+10. **Check out / check in** sheets (can wait: the owner, Nov 2026): export chosen sheets (with their blocks, parts and
    settings) for someone else, lock them while out, check them back in matched by sheet id
    with a summary of changes; references and numbers recalculate.
 11. **AutoCAD export with real blocks** (phase 1 done in 0.20: blocks, attributes, read back
@@ -229,8 +230,15 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     - **Linux, more at home**: the app offers to add itself to the applications menu and to
       open `.kzcad` files on a double-click (as KanzonasPDF's linux_desktop.py does); listed on
       Flathub and AppImageHub (the AppStream metadata exists already: packaging/linux).
-14. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
-    in-place text editing, Sheets panel as a popup.
+14. Later (all wanted: the owner, Nov 2026): terminal strips, PLC I/O from a spreadsheet, DWG
+    export, color PDF option, in-place text editing, Sheets panel as a popup.
+15. **Editing an array** (the owner, Nov 2026; Array today makes independent copies): the
+    copies stay linked as one array until exploded; clicking any copy edits the array, its
+    spacing first (also rows and columns, and a polar array's count and angle), by a
+    properties box and grips. Copies added take tags of their own, copies kept keep theirs;
+    wires on copies taken away stay where they are, unconnected (flagged by the near-miss
+    marker). Still to decide: whether editing one copy takes it out of the array or changes
+    them all.
 
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally

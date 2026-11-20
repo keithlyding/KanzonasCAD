@@ -346,7 +346,7 @@ class BlockWindowTest(unittest.TestCase):
             ed.remove(s, pins["A1"].id)
             ed.add(s, pins["A2"].copy(id=None, text="X1", pos=[ox, oy - 0.25]))
         self.assertTrue(bp.is_modified())
-        self.assertTrue(self.win.save_block())
+        self.assertTrue(self.win.save_block(close=False))
         saved = self.lib.get("symbol", "Test coil")
         self.assertEqual([(q["name"], q["pos"]) for q in saved.pins],
                          [("A2", (0.5, 0.0)), ("X1", (0.0, -0.25))])
@@ -407,3 +407,33 @@ class BlockWindowTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SaveClosesTabTest(unittest.TestCase):
+    """Save block closes the block's tab and goes back to the drawing it was opened from (the
+    owner, 0.20.1: "After a block is edited, the tab should auto-close after saving"); the
+    menu's Save block (triggered with checked=False) closes it too."""
+
+    def setUp(self):
+        from kanzonascad import block_window as BW
+        self.win, self.v = window()
+        self.win.library = Library(tempfile.mkdtemp())
+        self.BW = BW
+
+    def tearDown(self):
+        for i in range(self.win.tabs.count()):
+            d = self.win.tabs.widget(i)
+            d.project.saved_at = len(d.project.undo_stack)
+        self.win.close()
+        self.assertTrue(APP)
+
+    def test_save_closes_the_tab(self):
+        src = self.win.doc()
+        d = self.win.edit_block("symbol", "Contact NO")
+        self.assertTrue(self.BW.is_block_doc(self.win.doc()))
+        with d.project.edit("a line") as ed:
+            ed.add(d.view.sheet(), M.Line((0, 0), (0.1, 0.1)))
+        self.win.acts["save_block"].trigger()
+        self.assertEqual(self.win.tabs.indexOf(d), -1)
+        self.assertIs(self.win.doc(), src)
+        self.assertIsNotNone(self.win.library.get("symbol", "Contact NO"))

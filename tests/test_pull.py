@@ -125,9 +125,18 @@ class PullTest(unittest.TestCase):
         cr = b.place("Relay coil", (8, 7), {"LOC": "FIELD"})
         lt = b.place("Pilot light", (8, 5))
         b.wire(b.pins(t)[1], b.pins(cr)[0])
-        b.wire(b.pins(t)[1], b.pins(lt)[0])
-        # one location only (the coil's) and a sheet without one: no run, one wire to locate
-        self.assertEqual(pull.runs(b.p), ([], 1))
+        # (the light's wire down and across, clear of the coil's pin: drawn across first, it
+        # ran over the coil's wire and through its pin A1, joined into it, before 0.20.1
+        # refused wires through pins)
+        v = b.v
+        q, r = b.pins(t)[1], b.pins(lt)[0]
+        v.run(C.WireCmd)
+        type_in(v, "%g,%g" % q, "%g,%g" % (q[0], r[1]), "%g,%g" % r)
+        if v.cmd is not None:
+            v.cmd.enter()
+        # one location only (the coil's) and a sheet without one: no run; two wires (to the
+        # coil, to the light) land on the located coil's net and on places with none
+        self.assertEqual(pull.runs(b.p), ([], 2))
 
     def test_three_locations(self):
         b = self.b
