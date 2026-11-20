@@ -61,8 +61,9 @@ it. When they pull against each other, say so and ask; don't trade one away quie
   (`-t .` loads `tests/__init__.py`, which tears Qt down in order at exit).
 - `QT_QPA_PLATFORM=offscreen python -m kanzonascad --selftest selftest.log` must exit 0.
 - New dependencies: add the minimum to `requirements.txt` and the exact version and license
-  to `constraints.txt`. Keep the license of every dependency compatible with MIT (no GPL or
-  AGPL libraries: KanzonasCAD does not use PyMuPDF).
+  to `constraints.txt`. Keep the license of every dependency compatible with KanzonasCAD's
+  (LICENSE): a permissive license such as MIT, BSD or Apache, or the LGPL for a library used
+  as it is; no GPL or AGPL libraries (KanzonasCAD does not use PyMuPDF).
 
 ## The battery
 `tests/battery.py` is the exhaustive battery (with `tests/battery_checks.py`):
@@ -225,8 +226,7 @@ must change that key (an edit does).
 The order of work and the owner's decisions are in docs/ROADMAP.md: read it before starting a
 feature, and update it when a decision changes.
 
-## Credits
-KanzonasCAD's electrical features (cross-references, device tags, terminals, reports) will
-draw on ideas and, where it fits, code from KatieCAD (https://github.com/Merecete/KatieCAD,
-MIT License, Copyright (c) 2026 Merecete). Any code taken from it keeps its copyright notice
-in the file it lands in and is listed in NOTICE.md.
+## Our own code
+KanzonasCAD's code is written here (the owner's decision, Nov 2026). Other programs,
+KatieCAD included, may inspire a feature, but no code is copied from them. The libraries it is built on
+(constraints.txt) and their notices are listed in NOTICE.md.

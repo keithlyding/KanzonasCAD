@@ -41,9 +41,11 @@ builds green. Merging a new version into `main` publishes it as a release automa
 
 ## License
 
-KanzonasCAD is licensed under the MIT License (see [LICENSE](LICENSE)). Its dependencies must
-stay compatible with that: no GPL or AGPL libraries. By contributing, you agree that your
-contribution is licensed under the same terms. Code taken from elsewhere keeps its notice and
+KanzonasCAD is licensed under the PolyForm Shield License 1.0.0 (see [LICENSE](LICENSE));
+versions 0.20 and earlier were released under the MIT License. Its dependencies must allow
+that: permissive licenses (MIT, BSD, Apache) or the LGPL for a library used as it is; no GPL
+or AGPL libraries. By contributing, you agree that your contribution is licensed under the
+same terms, and that the project's owner may also license it under other terms. Code taken from elsewhere keeps its notice and
 is listed in [NOTICE.md](NOTICE.md).
 
 ## Conduct

@@ -3783,7 +3783,7 @@ class MainWindow(BlockEditing, QMainWindow):
         lay.addWidget(logo)
         from . import paths
         text = QLabel("Version %s%s. Free electrical CAD for Windows and Linux.<br><br>"
-                      "Free software under the MIT License.<br>"
+                      "Free to use under the PolyForm Shield License 1.0.0 (LICENSE.txt beside the program).<br>"
                       "Source code and downloads: "
                       "<a href='https://github.com/keithlyding/KanzonasCAD'>"
                       "github.com/keithlyding/KanzonasCAD</a>"

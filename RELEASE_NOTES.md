@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**Changed**
+- KanzonasCAD's license is now the PolyForm Shield License 1.0.0 (LICENSE.txt beside the
+  program). It stays free to use, at home and at work, including for paid projects, and its
+  source code stays public. The license doesn't allow using KanzonasCAD's code to make a
+  competing product. Versions 0.20 and earlier remain under the MIT License.
+
 ## 0.20
 
 **New**
