@@ -538,7 +538,8 @@ changes it. Untick "Lock this tag" there to give it back.</li>
 <li><b>Renumber sheet</b> (Schematic tab, Sheets menu) numbers the sheet's unlocked devices
 01, 02... per prefix in the sheet's <b>numbering order</b> (Sheet properties): across then
 down, or down then across, or <b>along the wires</b>. Locked tags stay and their numbers are
-skipped.</li>
+skipped. Only devices hold numbers: a footprint, contact or power section carrying a device's
+tag takes the device's new tag, and never makes it skip one.</li>
 <li><b>Along the wires</b> follows a bus however it winds round the sheet (right along the top
 row, down the side and back left along the next, say). <b>Numbering source</b> (NUMSOURCE;
 Schematic tab: Numbering, Sheets menu): click the symbol the wires start from (the disconnect)

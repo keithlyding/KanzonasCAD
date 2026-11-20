@@ -1751,6 +1751,52 @@ def random_editing(log, out, ops, seed, drawing=None):
                         assert k not in seen, "%s twice after Update numbers" % k
                         seen[k] = 1
             BC.CHECKED["Update numbers: tags of their page, none twice"] += 1
+        if o["tags"] and o["renumber"]:
+            # renumbered, each page's unlocked devices of a prefix hold the lowest counts no
+            # other device has (worked out here from the devices alone: a footprint or a
+            # power section carrying a device's tag holds no number)
+            for sh in o["sheets"]:
+                if sh is p.title_block:
+                    continue
+                page = p.sheet_number(sh)
+                mine = [e for e in sh.entities.values()
+                        if tags_mod.is_device(e) and not tags_mod.locked(e)]
+                for prefix in {e.defn.prefix for e in mine}:
+                    held = set()
+                    for sx in p.sheets:
+                        for e in sx.entities.values():
+                            if not tags_mod.is_device(e) or e.defn.prefix != prefix or \
+                                    (sx is sh and not tags_mod.locked(e)):
+                                continue
+                            got = tags_mod.split(e.attrs.get("TAG", ""), prefix)
+                            if got and got[0] == page:
+                                held.add(got[1])
+                    group = [e for e in mine if e.defn.prefix == prefix]
+                    want, n = [], 0
+                    while len(want) < len(group):
+                        n += 1
+                        if n not in held:
+                            want.append(n)
+                    got = sorted(tags_mod.split(e.attrs["TAG"], prefix)[1] for e in group)
+                    assert got == want, "renumbered %s on sheet %s: %s, not %s" % (
+                        prefix, page, got, want)
+            BC.CHECKED["renumbered: the lowest free numbers"] += 1
+            # renumbered again, the same tags: a footprint carrying its device's tag held the
+            # number as if a device of its own, so a page went 204, 205, then back to 201
+            # (the owner, Nov 2026, "I never know what they're going to do")
+            def device_tags():
+                return {(sh.id, e.id): e.attrs.get("TAG") for sh in o["sheets"]
+                        for e in sh.entities.values() if tags_mod.is_device(e)}
+            before = device_tags()
+            win.ask_update_numbers = lambda project, sheet: o
+            try:
+                win.update_numbers()
+            finally:
+                win.__dict__.pop("ask_update_numbers", None)
+            after = device_tags()
+            moved = {k: (before[k], after.get(k)) for k in before if before[k] != after.get(k)}
+            assert not moved, "renumbered again, tags changed: %r" % sorted(moved.values())[:6]
+            BC.CHECKED["renumbered again, the same tags"] += 1
 
     def op_stretch():
         # (0.18) STRETCH through the command: a crossing window over some wire ends, moved;
