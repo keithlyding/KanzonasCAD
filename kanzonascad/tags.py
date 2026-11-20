@@ -51,14 +51,17 @@ def make(prefix, page, count):
 
 def used_counts(project, prefix, page, skip=(), on=None):
     """Counts already taken for prefix on page, over the whole project (a tag typed by hand on
-    another sheet still takes its number). Contacts don't count: their tag is their device's.
-    skip: ids of devices on sheet on (or on every sheet when on is None) not to count: ids are
-    a sheet's own, so another sheet's device with the same id still counts (the long battery,
-    0.18, seed 3152: two DS404 after Update numbers)."""
+    another sheet still takes its number). Only devices count: a contact's tag is its device's,
+    and so is a footprint's (counted, a drive's footprint and its power section on another
+    sheet, still tagged VFD201, made Renumber sheet skip 201: VFD204 one time, back to VFD201
+    the next once they had followed; the owner, Nov 2026, "I never know what they're going to
+    do"). skip: ids of devices on sheet on (or on every sheet when on is None) not to count:
+    ids are a sheet's own, so another sheet's device with the same id still counts (the long
+    battery, 0.18, seed 3152: two DS404 after Update numbers)."""
     out = set()
     for s in project.sheets:
         for e in s.inserts():
-            if (e.id in skip and (on is None or s is on)) or is_child(e):
+            if (e.id in skip and (on is None or s is on)) or not is_device(e):
                 continue
             got = split(e.attrs.get("TAG", ""), prefix)
             if got and got[0] == page:

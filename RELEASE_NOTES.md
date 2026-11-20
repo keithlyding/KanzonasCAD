@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**Fixed**
+- Renumber sheet and Update numbers now give a page's devices 01, 02, 03... every time. A
+  footprint or a drive's power section carrying a device's tag held its number, so a page
+  could come out 204, 205, 206 one time and 201, 202, 203 the next.
+
 ## 0.20
 
 **New**
