@@ -199,16 +199,18 @@ def _attr_names(ins):
 
 def pin_side(defn, pos):
     """The side a wire comes to a pin from, as AutoCAD Electrical numbers it: 1 right, 2 top,
-    4 left, 8 bottom (the way the pin points out from the middle of the symbol's drawing)."""
+    4 left, 8 bottom (the edge of the symbol's drawing the pin is on)."""
     bb = None
     for e in defn.entities:
         bb = G.bbox_union(bb, e.bbox())
     if bb is None:
         return 4
-    dx, dy = pos[0] - (bb[0] + bb[2]) / 2.0, pos[1] - (bb[1] + bb[3]) / 2.0
-    if abs(dx) >= abs(dy):
-        return 1 if dx > 0 else 4
-    return 2 if dy > 0 else 8
+    # (the edge of its drawing the pin is nearest; on a corner, the left or right one. Measured
+    # from the middle, a tall VFD's corner pins came out as top and bottom ones: X2TERM01 on a
+    # pin wired from the left)
+    gaps = [(pos[0] - bb[0], 0, 4), (bb[2] - pos[0], 0, 1),
+            (bb[3] - pos[1], 1, 2), (pos[1] - bb[1], 1, 8)]
+    return min(gaps)[2]
 
 
 def ace_pin_tags(defn, pin, n):

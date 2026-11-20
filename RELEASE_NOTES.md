@@ -17,7 +17,8 @@ build fails without them.
 - In a DXF, the oval round a group of wires that share a gauge is now a true ellipse, not a
   polyline with a grip at every corner.
 - With AutoCAD Electrical's names, a symbol's pin attributes no longer sit on top of each other
-  in AutoCAD's block editor.
+  in AutoCAD's block editor, and a tall symbol's corner pins (a drive's L1 and PE) are marked
+  as wired from the side they're on, not from the top or bottom.
 
 ## 0.20
 

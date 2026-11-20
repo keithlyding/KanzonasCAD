@@ -127,6 +127,17 @@ class AceNamesTest(unittest.TestCase):
         self.assertEqual(sorted(back.pin_points()), sorted(mine.pin_points()))
         self.assertFalse([k for k in back.attrs if "TERM" in k])
 
+    def test_corner_pins_take_their_side(self):
+        # (the owner's VFD in AutoCAD Electrical's block editor: its top-left pin, wired from
+        # the left, was X2TERM01, as if wired from the top; a tall symbol's corner pins are on
+        # its left and right edges)
+        d = self.win.library.get("symbol", "Variable frequency drive")
+        xs = [q["pos"][0] for q in d.pins]
+        mid = (min(xs) + max(xs)) / 2.0
+        for q in d.pins:
+            self.assertEqual(fileio.pin_side(d, q["pos"]), 4 if q["pos"][0] < mid else 1,
+                             q["name"])
+
     @staticmethod
     def box(a):
         """The box an attribute's text takes (its text's width as the program measures it)."""
