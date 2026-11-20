@@ -13,6 +13,10 @@ build fails without them.
   footprint's tag as P_TAG1, wires as lines AutoCAD Electrical takes for wires): Edit >
   Options..., General.
 
+**Fixed**
+- In a DXF, the oval round a group of wires that share a gauge is now a true ellipse, not a
+  polyline with a grip at every corner.
+
 ## 0.20
 
 **New**

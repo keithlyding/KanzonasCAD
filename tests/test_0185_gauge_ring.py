@@ -57,8 +57,18 @@ class GaugeRingTest(unittest.TestCase):
         doc = ezdxf.readfile(path)
         texts = [e.dxf.text for e in doc.modelspace() if e.dxftype() == "TEXT"]
         self.assertIn("12 AWG", texts)
-        closed = [e for e in doc.modelspace() if e.dxftype() == "LWPOLYLINE" and e.closed]
-        self.assertTrue(closed)
+        # (the oval a true ELLIPSE, not a polyline of 48 corners: the owner, Nov 2026)
+        self.assertFalse([e for e in doc.modelspace()
+                          if e.dxftype() == "LWPOLYLINE" and e.closed])
+        (cx, cy), half, thin, _up, _leader = wirenums.gauge_marks(self.p, self.s)[0]
+        ovals = [e for e in doc.modelspace() if e.dxftype() == "ELLIPSE"]
+        self.assertEqual(len(ovals), 1)
+        o = ovals[0]
+        self.assertAlmostEqual(o.dxf.center[0], cx)
+        self.assertAlmostEqual(o.dxf.center[1], cy)
+        self.assertAlmostEqual(abs(o.dxf.major_axis[0]), half)     # (across the wires)
+        self.assertAlmostEqual(o.dxf.ratio, thin / half)
+        self.assertAlmostEqual(o.dxf.end_param - o.dxf.start_param, 2 * 3.141592653589793)
 
 
 if __name__ == "__main__":

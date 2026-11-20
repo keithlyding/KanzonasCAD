@@ -114,10 +114,12 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=
     if ace_names and not doc.layers.has_entry(mark_lay):
         doc.layers.add(mark_lay)
     for (cx, cy), half, thin, up, leader in gauge_marks(project, sheet):
+        # (a true ELLIPSE, as AutoCAD draws one: an oval of 48 straight pieces came in as a
+        # polyline with a grip at every corner, the owner, Nov 2026)
         rx, ry = (half, thin) if up else (thin, half)
-        oval = [(cx + rx * math.cos(i * math.pi / 24), cy + ry * math.sin(i * math.pi / 24))
-                for i in range(48)]
-        ents.append(M.Polyline(oval, closed=True, layer=mark_lay))
+        major = (rx, 0.0, 0.0) if rx >= ry else (0.0, ry, 0.0)
+        msp.add_ellipse((cx, cy), major, min(rx, ry) / max(rx, ry),
+                        dxfattribs={"layer": mark_lay})
         ents.append(M.Polyline(leader, layer=mark_lay))
     for e in ents:
         if ace_names and isinstance(e, M.Wire):
