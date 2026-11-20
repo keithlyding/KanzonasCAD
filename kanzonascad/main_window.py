@@ -2081,6 +2081,28 @@ class MainWindow(BlockEditing, QMainWindow):
         return dialogs.mtext_text(self, text)
 
     def edit_text(self, ent):
+        """A double-click on a text or a multi-line note: edited where it is (text_edit.py);
+        leaders and dashed boxes open their windows."""
+        v = self.view()
+        if v is None:
+            return
+        if isinstance(ent, (M.Text, M.MText)):
+            from . import text_edit
+            sheet = v.sheet()
+
+            def done(text, ent=ent, sheet=sheet):
+                now = sheet.entities.get(ent.id)
+                new = text_edit.changed(now, text) if now is not None else None
+                if new is not None:
+                    with v.project.edit("Edit text") as ed:
+                        ed.change(sheet, new)
+            v.in_place = text_edit.InPlace(v, ent, done)
+            return
+        self.text_properties(ent)
+
+    def text_properties(self, ent):
+        """Text properties...: a text's wording, height, angle and justification in its
+        window (a multi-line note's, a leader's, a dashed box's)."""
         v = self.view()
         if v is None:
             return
@@ -2124,6 +2146,10 @@ class MainWindow(BlockEditing, QMainWindow):
                 lm = m.addMenu("Footprint label")
                 for k in self.LABEL_KEYS:
                     lm.addAction(a[k])
+            texts = [v.sheet().entities[i] for i in v.sel if i in v.sheet().entities and
+                     isinstance(v.sheet().entities[i], (M.Text, M.MText, M.Leader, M.DashBox))]
+            if len(texts) == 1:
+                m.addAction("Text properties...", lambda t=texts[0]: self.text_properties(t))
             m.addAction("Deselect all", lambda: v.set_selection(set()))
         m.addSeparator()
         m.addAction(a["select_all"])

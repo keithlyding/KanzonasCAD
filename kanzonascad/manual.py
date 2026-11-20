@@ -1107,16 +1107,20 @@ doesn't set the height. Before the click, type <b>H</b> for the height (inches o
 to start), <b>R</b> for the rotation (degrees), or <b>J</b> (Justify) for where the point sits
 on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR (bottom), or L,
 C, R (on the baseline). All three are kept for the next texts.
-<b>Double-click a text</b> to change its wording, height, angle and justification afterward
-(a new justification moves the text around its insertion point; tick "Keep the text where it
-is", unticked to start, to move only the insertion point instead, which is where it snaps and
-turns around).</td></tr>
+<b>Double-click a text</b> to change its wording where it is: an edit box opens over it,
+Enter keeps what you typed (one Undo), Esc leaves it as it was, and clicking elsewhere keeps it
+too. Right-click it and pick <b>Text properties...</b> for its wording, height, angle and
+justification (a new justification moves the text around its insertion point; tick "Keep the
+text where it is", unticked to start, to move only the insertion point instead, which is where
+it snaps and turns around).</td></tr>
 <tr><td>Multiline text</td><td>MTEXT, MT, NOTE</td><td>One text of several lines (a note): click a
 corner of its box, then the opposite corner (its lines wrap at the box's width), or press
 Enter after the first corner for no wrapping; type the text in the box that opens (Enter starts
 a new line) and click OK. Before the first click, <b>H</b> sets its height (paper inches). It
-is one object: it moves and copies whole. <b>Double-click</b> it to change its text, height,
-wrap width and the point it hangs from (top left ... bottom right). A DXF's or DWG's MTEXT
+is one object: it moves and copies whole. <b>Double-click</b> it to change its text where it
+is (Enter starts a new line there, <b>Ctrl+Enter</b> keeps it, Esc drops it); right-click
+<b>Text properties...</b> changes its text, height, wrap width and the point it hangs from (top
+left ... bottom right). A DXF's or DWG's MTEXT
 comes in as one, and DXF export writes it as MTEXT.</td></tr>
 <tr><td>Move</td><td>MOVE, M</td><td>Select, base point, second point.</td></tr>
 <tr><td>Copy objects</td><td>COPY, CO, CP</td><td>Select, base point, then as many copies as

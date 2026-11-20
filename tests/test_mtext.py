@@ -94,7 +94,9 @@ class MTextCommandTest(unittest.TestCase):
             type_in(self.v, "1,9", "2,8")
         self.assertEqual(len(self.s.entities), n)
 
-    def test_double_click_edits(self):
+    def test_properties_window_edits(self):
+        # (its window, from right-click Text properties...: a double-click edits it in place
+        # since 0.20.1, tests/test_021_text_in_place.py)
         with self.p.edit("add") as ed:
             m = ed.add(self.s, M.MText((1, 1), "OLD", 0.1))
 
@@ -103,7 +105,7 @@ class MTextCommandTest(unittest.TestCase):
             dlg.findChild(QPlainTextEdit).setPlainText("NEW\nTWO")
             return QDialog.Accepted
         with mock.patch.object(QDialog, "exec", run):
-            self.win.edit_text(m)
+            self.win.text_properties(m)
         self.assertEqual(self.s.entities[m.id].text, "NEW\nTWO")
 
     def test_menu(self):

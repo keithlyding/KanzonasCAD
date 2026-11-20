@@ -282,6 +282,11 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   Update report sheets rather than at every change (keeps edits fast), placed after the sheet
   shown; a cell too long for its column is cut with an ellipsis.
 
+## Decided while the owner was away (Nov 2026; to confirm)
+- **In-place text editing** (0.20.1): clicking elsewhere keeps what was typed (as AutoCAD);
+  an emptied text is left as it was (not erased); the text's window moved to right-click Text
+  properties...; leaders and dashed boxes still open their windows.
+
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a
