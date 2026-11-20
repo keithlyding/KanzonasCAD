@@ -212,10 +212,24 @@ def pin_side(defn, pos):
 
 
 def ace_pin_tags(defn, pin, n):
-    """[(tag, value)] of a pin for AutoCAD Electrical: X?TERMnn (no value) and TERMnn (its
-    label)."""
-    return [("X%dTERM%02d" % (pin_side(defn, pin["pos"]), n), ""),
-            ("TERM%02d" % n, str(pin["name"]))]
+    """[(tag, value, point in the block, height, right-aligned)] of a pin for AutoCAD
+    Electrical: X?TERMnn (no value) at the pin, where the wire connects, and TERMnn (its label)
+    beside it, small, clear of each other and of the wire. In the block editor every
+    attribute shows its tag, and the two written at the same spot and size over the
+    symbol's own pin labels were unreadable (the owner, Nov 2026, the VFD's X4TERM02 over
+    TERM02 over PE): X?TERMnn's text runs from the pin to the right, so TERMnn goes left of
+    the pin, or above that text on the right side."""
+    side = pin_side(defn, pin["pos"])
+    x, y = pin["pos"]
+    hx = 0.4 * defn.tag_height              # (X?TERMnn: only its point matters)
+    ht = 0.5 * defn.tag_height
+    g = 0.5 * ht
+    if side == 1:
+        term = ((x + g, y + hx + g), False)
+    else:
+        term = ((x - g, y + g), True)
+    return [("X%dTERM%02d" % (side, n), "", (x, y), hx, False),
+            ("TERM%02d" % n, str(pin["name"]), term[0], ht, term[1])]
 
 
 def _define_block(doc, d, bname, ace=False):
@@ -237,10 +251,12 @@ def _define_block(doc, d, bname, ace=False):
             # (AutoCAD Electrical's wire connections: X?TERMnn at the pin, ? the side a wire
             # comes from, and TERMnn its label: the owner saw KZPIN in its block editor, and its
             # wire commands know only these)
-            for tag, val in ace_pin_tags(d, pin, i + 1):
-                a = blk.add_attdef(tag, insert=pin["pos"],
-                                   dxfattribs={"height": d.tag_height, "layer": "0",
-                                               "color": 0})
+            from ezdxf.enums import TextEntityAlignment
+            for tag, val, at, h, right in ace_pin_tags(d, pin, i + 1):
+                a = blk.add_attdef(tag, insert=at,
+                                   dxfattribs={"height": h, "layer": "0", "color": 0})
+                if right:
+                    a.set_placement(at, align=TextEntityAlignment.RIGHT)
                 a.dxf.text = val
                 a.is_invisible = True
             continue
@@ -321,12 +337,15 @@ def _write_insert(doc, msp, ins, names, ace=False):
                                  dxfattribs={"height": h0, "layer": ins.layer or "0"})
             ent.is_invisible = True
     if ace and d.pins:
-        at = dict(ins.pin_points())
+        # (each copy's as its block's, turned, scaled and flipped with it)
         for i, pin in enumerate(d.pins[:99]):
-            q = at.get(pin["name"], ins.pos)
-            for tag, val in ace_pin_tags(d, pin, i + 1):
+            for tag, val, at, h, right in ace_pin_tags(d, pin, i + 1):
+                q = ins.to_world(at)
                 ent = ref.add_attrib(tag, val, insert=q,
-                                     dxfattribs={"height": h0, "layer": ins.layer or "0"})
+                                     dxfattribs={"height": h * ins.scale, "rotation": ins.angle,
+                                                 "layer": ins.layer or "0"})
+                if right:
+                    ent.set_placement(q, align=TextEntityAlignment.RIGHT)
                 ent.is_invisible = True
     for pt in ins.pin_texts():
         _write(msp, pt.copy(layer=ins.layer or "0"))

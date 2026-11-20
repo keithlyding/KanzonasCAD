@@ -16,6 +16,8 @@ build fails without them.
 **Fixed**
 - In a DXF, the oval round a group of wires that share a gauge is now a true ellipse, not a
   polyline with a grip at every corner.
+- With AutoCAD Electrical's names, a symbol's pin attributes no longer sit on top of each other
+  in AutoCAD's block editor.
 
 ## 0.20
 

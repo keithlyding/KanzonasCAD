@@ -97,14 +97,46 @@ class AceNamesTest(unittest.TestCase):
             self.assertEqual(tags["TERM%02d" % (i + 1)], pin["name"])
         sides = sorted(fileio.pin_side(d, q["pos"]) for q in d.pins)
         self.assertEqual(sides, [1, 4])     # (a coil: A1 on the left, A2 on the right)
+        # (X?TERMnn exactly at its pin, where AutoCAD Electrical connects a wire; TERMnn beside
+        # it, not on top: the owner saw X4TERM02 written over TERM02 over the VFD's pin label)
+        by_tag = {a.dxf.tag: a for a in coil.query("ATTDEF")}
+        for i, pin in enumerate(d.pins):
+            x = by_tag["X%dTERM%02d" % (fileio.pin_side(d, pin["pos"]), i + 1)]
+            t = by_tag["TERM%02d" % (i + 1)]
+            self.assertAlmostEqual(x.dxf.insert[0], pin["pos"][0])
+            self.assertAlmostEqual(x.dxf.insert[1], pin["pos"][1])
+            self.assertLess(x.dxf.height, d.tag_height)
+            bx, bt = self.box(x), self.box(t)
+            self.assertFalse(bx[0] < bt[2] and bt[0] < bx[2] and bx[1] < bt[3] and
+                             bt[1] < bx[3], "%s over %s" % (x.dxf.tag, t.dxf.tag))
         ref = next(r for r in doc.modelspace().query("INSERT") if r.dxf.name == "Relay coil")
         self.assertIn("TERM01", {a.dxf.tag for a in ref.attribs})
+        # (each copy's X?TERMnn at its pin on the sheet)
+        mine = next(e for e in self.s.inserts() if e.block == "Relay coil")
+        at = dict(mine.pin_points())
+        for a in ref.attribs:
+            if a.dxf.tag.startswith("X"):
+                n = int(a.dxf.tag[-2:])
+                q = at[d.pins[n - 1]["name"]]
+                self.assertAlmostEqual(a.dxf.insert[0], q[0])
+                self.assertAlmostEqual(a.dxf.insert[1], q[1])
         # (read back: the same pins, where they were, and no TERM attributes on it)
         ents, _rep = fileio.read_dxf(self.path)
         back = next(e for e in ents if isinstance(e, M.Insert) and e.block == "Relay coil")
         mine = next(e for e in self.s.inserts() if e.block == "Relay coil")
         self.assertEqual(sorted(back.pin_points()), sorted(mine.pin_points()))
         self.assertFalse([k for k in back.attrs if "TERM" in k])
+
+    @staticmethod
+    def box(a):
+        """The box an attribute's text takes (its text's width as the program measures it)."""
+        w = M.text_width(a.dxf.tag, a.dxf.height)
+        h = a.dxf.height
+        if a.dxf.halign == 2:                   # (right-aligned: it ends at its point)
+            x1, y = a.dxf.align_point[0], a.dxf.align_point[1]
+            return (x1 - w, y, x1, y + h)
+        x, y = a.dxf.insert[0], a.dxf.insert[1]
+        return (x, y, x + w, y + h)
 
     def test_own_names_by_default(self):
         coil, fp = self.attribs(False)
