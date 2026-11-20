@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**New**
+- Report sheets (Sheets > Report sheet...): the bill of materials, wire list, terminal strip
+  list, pull list or panel materials drawn as a table on sheets of the project, so they print
+  with the drawings. Update report sheets draws them again after changes.
+
 ## 0.20
 
 **New**

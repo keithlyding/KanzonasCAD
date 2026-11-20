@@ -2843,6 +2843,7 @@ class Sheet:
         self.xref_shown = None              # the cross-references shown while frozen (or while
                                             # the project's aren't automatic): xrefs.py
         self.no_dots = []                   # junction dots deleted (Delete dot): [(x, y)]
+        self.report = ""                    # (a report sheet: which report, report_sheets.py)
         self.pin_order = []                 # a block editor's sheet: its pin markers' ids in
                                             # the order set in Pins... (block_editor.to_block)
         self.col_start = int(col_start)     # the first column's number (1 to start)
@@ -3063,6 +3064,8 @@ class Sheet:
              "xref_shown": [list(t) for t in self.xref_shown]
              if self.xref_shown is not None else None,
              "no_dots": [list(q) for q in self.no_dots]}
+        if self.report:
+            d["report"] = self.report
         if self.pin_order:
             d["pin_order"] = list(self.pin_order)
         return d
@@ -3111,6 +3114,7 @@ class Sheet:
         self.no_dots = [(round(float(q[0]), 6), round(float(q[1]), 6))
                         for q in (d.get("no_dots") or [])]
         self.pin_order = [int(i) for i in (d.get("pin_order") or [])]
+        self.report = str(d.get("report", "") or "")
         self.version += 1
 
     @classmethod

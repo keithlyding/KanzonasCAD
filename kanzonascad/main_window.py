@@ -454,6 +454,13 @@ class MainWindow(BlockEditing, QMainWindow):
           icon="terminal_list", label="Terminals",
           tip="Every terminal strip, terminal by terminal, with the wires on each side and "
               "where it is (save as CSV)")
+        A("report_sheet", "Report s&heet...", lambda: self.report_sheet(), icon="bom",
+          label="Report sheet",
+          tip="A report (bill of materials, wire list, terminals, pull list, panel materials) "
+              "drawn as a table on sheets of the project, so it prints with the drawings")
+        A("report_update", "Update report sheets", lambda: self.update_report_sheets(),
+          icon="bom", label="Update reports",
+          tip="Every report sheet drawn again from the drawing as it is now")
         A("materials", "Panel &materials...", self.show_materials, icon="materials",
           label="Materials",
           tip="The DIN rail and wire duct this project takes: lengths, stock pieces and cuts "
@@ -662,7 +669,8 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
-                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "materials", None,
+                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "materials",
+                  "report_sheet", "report_update", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
                   "layers", "wire_layers",
@@ -2625,6 +2633,52 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         if dialogs.cables_dialog(self, v.project, self._last_dir()):
             self._say("Cables between locations: kept with the project (Undo takes it back)")
+
+    def ask_report(self, titles):
+        """Which report to draw on sheets: its title, or None (a test replaces it)."""
+        from PySide6.QtWidgets import QInputDialog
+        got, ok = QInputDialog.getItem(self, "Report sheet", "Draw on sheets of the project:",
+                                       titles, 0, False)
+        return got if ok else None
+
+    def report_sheet(self, key=None):
+        """Report sheet...: a report drawn as a table on report sheets (after the sheet shown;
+        a report that has sheets already: drawn again there), one step. Its sheets."""
+        from . import report_sheets as RS
+        v = self.view()
+        if v is None:
+            return []
+        if key is None:
+            names = RS.kinds()
+            got = self.ask_report(list(names.values()))
+            key = next((k for k, t in names.items() if t == got), None)
+            if key is None:
+                return []
+        p = v.project
+        with p.edit("Report sheet") as ed:
+            made = RS.update(ed, p, key, v.sheet())
+        self._fill_sheets()
+        if made:
+            v.show_sheet(made[0].id)
+        self._say("%s on %d sheet(s): Update report sheets draws them again after changes"
+                  % (RS.kinds()[key], len(made)))
+        return made
+
+    def update_report_sheets(self):
+        """Update report sheets: every report sheet drawn again from the drawing, one step."""
+        from . import report_sheets as RS
+        v = self.view()
+        if v is None:
+            return 0
+        p = v.project
+        if not any(s.report for s in p.sheets):
+            self._say("No report sheets yet (Sheets > Report sheet...)")
+            return 0
+        with p.edit("Update report sheets") as ed:
+            n = RS.update_all(ed, p)
+        self._fill_sheets()
+        self._say("%d report(s) drawn again" % n)
+        return n
 
     def show_wire_list(self):
         v = self.view()

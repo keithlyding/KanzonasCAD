@@ -232,6 +232,11 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 14. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
+## Decided while the owner was away (Nov 2026; to confirm)
+- **Report sheets** (0.20.1): drawn as plain lines and texts (not a live table), drawn again by
+  Update report sheets rather than at every change (keeps edits fast), placed after the sheet
+  shown; a cell too long for its column is cut with an ellipsis.
+
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a
