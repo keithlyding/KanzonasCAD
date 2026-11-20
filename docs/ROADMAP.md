@@ -232,6 +232,11 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 14. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
+## Decided while the owner was away (Nov 2026; to confirm)
+- **AutoCAD Electrical names** (0.20.1): an option, off to start, with the names the import
+  already reads (TAG1, P_TAG1, MFG, CAT, DESC1, LOC); a long description goes whole into DESC1
+  (not split over DESC1-3); to be checked against the owner's AutoCAD Electrical.
+
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a

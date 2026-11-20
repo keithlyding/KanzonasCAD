@@ -1575,6 +1575,13 @@ def options_dialog(parent, cur, view, tab=None):
                           "tag, description, maker and catalog number as attributes. Off: as "
                           "plain lines and texts, as before version 0.20")
     form.addRow("", dxf_blocks)
+    dxf_ace = QCheckBox("Use AutoCAD Electrical attribute names in DXF (TAG1, MFG, CAT, DESC1)")
+    dxf_ace.setObjectName("dxf_ace")
+    dxf_ace.setChecked(bool(cur.get("dxf_ace", False)))
+    dxf_ace.setToolTip("On: the blocks' attributes go out under the names AutoCAD Electrical "
+                       "looks for (a tag as TAG1, a footprint's as P_TAG1, the maker as MFG, "
+                       "the description as DESC1). Off: KanzonasCAD's own names (TAG, MFR...)")
+    form.addRow("", dxf_ace)
     tabs.addTab(page, "General")
 
     # Files
@@ -1667,7 +1674,7 @@ def options_dialog(parent, cur, view, tab=None):
                 "library_folder": folder,
                 "template_path": path, "backups_keep": keep.value(),
                 "autosave_minutes": auto.value(), "drafting": apply_drafting is not None,
-                "dxf_blocks": dxf_blocks.isChecked()}
+                "dxf_blocks": dxf_blocks.isChecked(), "dxf_ace": dxf_ace.isChecked()}
 
 
 def cables_dialog(parent, project, folder):

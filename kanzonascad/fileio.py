@@ -23,7 +23,7 @@ def _true_color(hexcolor):
 # ============================================================================================
 # DXF export
 # ============================================================================================
-def export_dxf(project, sheet, path, include_frame=True, blocks=True):
+def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=False):
     """Write one sheet as a DXF in inches (AutoCAD 2013 format). The border, zones and title
     block go on layer BORDER. blocks: each symbol and footprint as a BLOCK definition placed by
     an INSERT, its attributes as ATTDEF/ATTRIB (the owner's "blocks stay as blocks", 0.20);
@@ -115,7 +115,7 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True):
         _write(msp, e)
     names = {}
     for ins in placed:
-        _write_insert(doc, msp, ins, names)
+        _write_insert(doc, msp, ins, names, ace_names)
     doc.saveas(path)
 
 
@@ -140,6 +140,23 @@ def _block_name(name, names):
     return out
 
 
+# KanzonasCAD's attributes by AutoCAD Electrical's names (Options: "Use AutoCAD Electrical
+# attribute names"; the roadmap's item 11, phase 2): what AutoCAD Electrical looks for on a
+# component (TAG1, MFG, CAT, DESC1, LOC) and on a panel footprint (P_TAG1). The import reads
+# them back the same (ACE_ATTRS).
+ACE_OUT = {"TAG": "TAG1", "DESC": "DESC1", "MFR": "MFG", "CAT": "CAT", "LOC": "LOC"}
+
+
+def out_name(defn, name, ace):
+    """The name an attribute goes out under: its own, or AutoCAD Electrical's (a footprint's
+    tag is P_TAG1)."""
+    if not ace:
+        return name
+    if name == "TAG" and defn.kind == "footprint":
+        return "P_TAG1"
+    return ACE_OUT.get(name, name)
+
+
 def _attr_names(ins):
     """The attributes an INSERT carries out, in order: its tag, the block's own attribute
     spots, then the others with a value (description, maker, catalog number, location...)."""
@@ -161,7 +178,7 @@ def _attr_names(ins):
     return out
 
 
-def _define_block(doc, d, bname):
+def _define_block(doc, d, bname, ace=False):
     """The BLOCK definition of a KanzonasCAD block: its drawing at its own size, upright and
     unflipped (the INSERT places, turns, scales and flips it), on layer 0 by block so it takes
     the INSERT's layer and color, unless the block keeps its own colors; an ATTDEF where each
@@ -198,12 +215,12 @@ def _define_block(doc, d, bname):
         spots.setdefault(a["attr"], (a["pos"], a.get("height", d.tag_height),
                                      a.get("angle", 0.0)))
     for name, (pos, h, ang) in spots.items():
-        blk.add_attdef(name, insert=(pos[0], pos[1]),
+        blk.add_attdef(out_name(d, name, ace), insert=(pos[0], pos[1]),
                        dxfattribs={"height": h, "rotation": ang, "layer": "0", "color": 0})
     return blk
 
 
-def _write_insert(doc, msp, ins, names):
+def _write_insert(doc, msp, ins, names, ace=False):
     """A KanzonasCAD block reference as an INSERT of its block (defined once per drawing), its
     attributes as ATTRIBs: those shown where and as the program draws them, the others there
     too but invisible, so AutoCAD's attribute editor and data extraction see all of them; the
@@ -213,7 +230,7 @@ def _write_insert(doc, msp, ins, names):
     first = d.name not in names
     bname = _block_name(d.name, names)
     if first:
-        _define_block(doc, d, bname)
+        _define_block(doc, d, bname, ace)
     attribs = {"layer": ins.layer or "0", "xscale": ins.scale,
                "yscale": -ins.scale if ins.mirror else ins.scale, "rotation": ins.angle}
     ref = msp.add_blockref(bname, ins.pos, dxfattribs=attribs)
@@ -240,7 +257,7 @@ def _write_insert(doc, msp, ins, names):
             # has no tag, and AutoCAD's attribute holds none)
             value = (ins.attrs.get("TAG", "") or "") if name == "TAG" and \
                 d.kind == "symbol" else st.text
-            ent = ref.add_attrib(name, value, insert=st.pos,
+            ent = ref.add_attrib(out_name(d, name, ace), value, insert=st.pos,
                                  dxfattribs={"height": st.height, "rotation": st.angle,
                                              "layer": ins.layer or "0"})
             h = {"left": "LEFT", "center": "CENTER", "right": "RIGHT"}[st.align]
@@ -249,7 +266,7 @@ def _write_insert(doc, msp, ins, names):
             ent.set_placement(st.pos, align=TextEntityAlignment[v + h])
         else:
             value = ins.attrs.get(name, "") or ""
-            ent = ref.add_attrib(name, value, insert=ins.pos,
+            ent = ref.add_attrib(out_name(d, name, ace), value, insert=ins.pos,
                                  dxfattribs={"height": h0, "layer": ins.layer or "0"})
             ent.is_invisible = True
     for pt in ins.pin_texts():
