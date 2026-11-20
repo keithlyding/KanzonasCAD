@@ -174,13 +174,10 @@ def table(project, cables=None):
 
 
 def write_csv(project, path, cables=None):
-    import csv
+    """The pull list as CSV, or Excel when the name ends .xlsx."""
+    from . import reports
     head, rows = table(project, cables)
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(head)
-        w.writerows(rows)
-    return len(rows)
+    return reports.write_csv(path, head, rows, "Pull list")
 
 
 def html(project, cables=None, title=""):

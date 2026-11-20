@@ -1003,8 +1003,9 @@ order: its size and color (its layer's, or its own), what it lands on, each with
 pin), and the sheets it is on. Off-sheet connectors and source and destination arrows carry a
 wire on, so they are not landings. <b>Terminal strip list...</b> lists every terminal, strip
 by strip in number order, with the wire numbers on its left and right pins and where it is.
-Both are worked out from the drawing each time they open; <b>Save as CSV...</b> writes them
-for Excel or a label printer.</p>
+Both are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
+writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workbook" as the
+file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 
 <h2>Cables between panels</h2>
 <p><b>Cables between locations...</b> (Sheets menu, Output tab: Reports) lists what has to be
@@ -1026,7 +1027,7 @@ and the terminal's number); where it lands on no terminal there, the devices' pi
 with the wire number on them: shown as BLK, #6001) or <b>Color coded</b>. Type any conductor's
 color or marking in its line (RED, WHT/BLK...); clear it to go back to the default. OK keeps
 it with the project in one step (Edit, Undo takes it back); Cancel keeps nothing.</li>
-<li><b>Save as CSV...</b>: a line per conductor (from, to, cable, type, wire, color or
+<li><b>Save as CSV or Excel...</b>: a line per conductor (from, to, cable, type, wire, color or
 marking, where it lands on each side) for a spreadsheet. <b>Save as PDF...</b>: a page per
 run, with empty <b>Pulled</b> and <b>Landed</b> columns to tick off on the job.</li>
 <li>Lengths are not part of it: they are worked out on the job. A wire landing in one
@@ -1381,12 +1382,12 @@ are listed by their block's name (a drawing brought in from AutoCAD: its termina
 and drives, counted), or left out with the box unticked. DIN rail and wire duct come last, as
 the stock lengths to buy (Panel materials has their cuts). The lines are numbered: a
 leader's balloon (Leader, B) can show a part's item number on the panel. <b>Save as
-CSV...</b> writes it for a spreadsheet or a purchase order. Give parts their manufacturer and
+CSV or Excel...</b> writes it for a spreadsheet or a purchase order. Give parts their manufacturer and
 catalog number by double-clicking them, or through a part from the library.</li>
 <li><b>Panel materials...</b> (Panel tab: Reports) lists the project's rail and duct per size and part:
 the pieces and their cut lengths, the total length, and how many stock lengths that takes
 (the cuts packed into stock lengths, longest first; saw cuts take no width). <b>Save as
-CSV...</b> writes it for a spreadsheet or a purchase order. The bill of materials takes it
+CSV or Excel...</b> writes it for a spreadsheet or a purchase order. The bill of materials takes it
 in.</li>
 <li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Home,
 Schematic and Panel tabs (Dimensions), measure the true distance, so they're right at any scale; they show inches with two

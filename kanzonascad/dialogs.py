@@ -1404,7 +1404,7 @@ def report_dialog(parent, title, head, rows, folder, filename, empty_text, note)
         lay.addWidget(QLabel(empty_text))
     lay.addWidget(_gray(note))
     box = QDialogButtonBox(QDialogButtonBox.Close)
-    save = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    save = box.addButton("Save as CSV or Excel...", QDialogButtonBox.ActionRole)
     save.setEnabled(bool(rows))
     box.rejected.connect(dlg.reject)
 
@@ -1413,11 +1413,12 @@ def report_dialog(parent, title, head, rows, folder, filename, empty_text, note)
         import os
         from . import reports
         path, _f = QFileDialog.getSaveFileName(dlg, "Save %s" % title.lower(),
-                                               os.path.join(folder, filename), "CSV (*.csv)")
+                                               os.path.join(folder, filename),
+                                               reports.SAVE_TYPES)
         if not path:
             return
         try:
-            n = reports.write_csv(path, head, rows)
+            n = reports.write_csv(path, head, rows, title)
         except OSError as ex:
             QMessageBox.warning(dlg, title, "Couldn't save %s:\n%s" % (path, ex))
             return
@@ -1464,15 +1465,16 @@ def bom_dialog(parent, project, folder):
                         "materials has their cuts). Item numbers follow this list: a leader's "
                         "balloon (LE, B) can show them."))
     box = QDialogButtonBox(QDialogButtonBox.Close)
-    save = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    save = box.addButton("Save as CSV or Excel...", QDialogButtonBox.ActionRole)
     box.rejected.connect(dlg.reject)
 
     def do_save():
         from PySide6.QtWidgets import QFileDialog
         import os
+        from . import reports
         path, _f = QFileDialog.getSaveFileName(dlg, "Save bill of materials",
                                                os.path.join(folder, "bill of materials.csv"),
-                                               "CSV (*.csv)")
+                                               reports.SAVE_TYPES)
         if not path:
             return
         try:
@@ -1514,16 +1516,17 @@ def materials_dialog(parent, project, folder):
                         "size by double-clicking it; the project's stock lengths are in Project "
                         "properties, Panel."))
     box = QDialogButtonBox(QDialogButtonBox.Close)
-    save = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    save = box.addButton("Save as CSV or Excel...", QDialogButtonBox.ActionRole)
     save.setEnabled(bool(body))
     box.rejected.connect(dlg.reject)
 
     def do_save():
         from PySide6.QtWidgets import QFileDialog
         import os
+        from . import reports
         path, _f = QFileDialog.getSaveFileName(dlg, "Save panel materials",
                                                os.path.join(folder, "panel materials.csv"),
-                                               "CSV (*.csv)")
+                                               reports.SAVE_TYPES)
         if not path:
             return
         try:
@@ -1783,7 +1786,7 @@ def cables_dialog(parent, project, folder):
     mark.currentIndexChanged.connect(marking_changed)
     lst.currentRowChanged.connect(show)
     box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    csv_b = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    csv_b = box.addButton("Save as CSV or Excel...", QDialogButtonBox.ActionRole)
     pdf_b = box.addButton("Save as PDF...", QDialogButtonBox.ActionRole)
     csv_b.setEnabled(bool(rs))
     pdf_b.setEnabled(bool(rs))
@@ -1794,7 +1797,8 @@ def cables_dialog(parent, project, folder):
         keep()
         from PySide6.QtWidgets import QFileDialog
         import os
-        ext = {"csv": "CSV (*.csv)", "pdf": "PDF (*.pdf)"}[kind]
+        from . import reports
+        ext = {"csv": reports.SAVE_TYPES, "pdf": "PDF (*.pdf)"}[kind]
         path, _f = QFileDialog.getSaveFileName(dlg, "Save the pull list",
                                                os.path.join(folder, "pull list." + kind), ext)
         if not path:

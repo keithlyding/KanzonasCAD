@@ -7,6 +7,8 @@ KanzonasCAD is MIT licensed (see LICENSE). It is built on:
 - QtAwesome, MIT, for its copy of the Material Design Icons font (Apache-2.0) -
   https://github.com/spyder-ide/qtawesome
 - ezdwg, MIT - DWG reading - https://pypi.org/project/ezdwg/
+- openpyxl, MIT - reports saved as Excel workbooks - https://foss.heptapod.net/openpyxl/openpyxl;
+  with et_xmlfile (MIT), which it asks for
 - pdfminer.six, MIT - Import PDF - https://github.com/pdfminer/pdfminer.six; with
   charset-normalizer (MIT), cryptography (Apache-2.0 or BSD-3-Clause), cffi (MIT) and
   pycparser (BSD-3-Clause), which it asks for

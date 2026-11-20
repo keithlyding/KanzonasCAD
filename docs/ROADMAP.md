@@ -175,8 +175,8 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    per sheet or device, runs with landings, cable tag/type/marking and colors editable, CSV and
    PDF; lengths left to the job), bill of materials (done in 0.14: parts by manufacturer and catalog number, a
    device and its footprint once, rail and duct as stock lengths, CSV), wire list and terminal
-   strip list (done in 0.19.1, CSV). Still to come: Excel export (openpyxl, MIT, imported only
-   when exporting) and report sheets drawn in the project.
+   strip list (done in 0.19.1, CSV). Excel export done in 0.20.1 (openpyxl, MIT, imported only
+   when exporting). Still to come: report sheets drawn in the project (wanted: the owner, Nov 2026).
 9. **PDF export opening in KanzonasPDF** when it is installed (export exists).
 10. **Check out / check in** sheets: export chosen sheets (with their blocks, parts and
    settings) for someone else, lock them while out, check them back in matched by sheet id

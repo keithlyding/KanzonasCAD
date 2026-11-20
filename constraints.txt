@@ -14,6 +14,8 @@ QtAwesome==1.4.2              # MIT (only its Material Design Icons font is used
 QtPy==2.4.3                   # MIT (QtAwesome asks for it)
 pdfminer.six==20260107        # MIT (Import PDF: a page's lines and text)
 charset-normalizer==3.5.1     # MIT (pdfminer.six asks for it)
+openpyxl==3.1.5               # MIT (reports saved as Excel workbooks; imported only then)
+et_xmlfile==2.0.0             # MIT (openpyxl asks for it)
 cryptography==50.0.1          # Apache-2.0 OR BSD-3-Clause (pdfminer.six: password-protected PDFs)
 cffi==2.1.1                   # MIT (cryptography asks for it)
 pycparser==3.0                # BSD-3-Clause (cffi asks for it)

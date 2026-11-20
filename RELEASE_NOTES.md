@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**New**
+- Reports save as Excel workbooks too: the wire list, terminal strip list, bill of materials,
+  panel materials and pull list (Save as CSV or Excel..., then Excel workbook as the type).
+
 ## 0.20
 
 **New**
