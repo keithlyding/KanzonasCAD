@@ -1043,6 +1043,15 @@ by strip in number order, with the wire numbers on its left and right pins and w
 Both are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
 writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workbook" as the
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
+<p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints
+and goes into the PDF with the drawings: pick the bill of materials, wire list, terminal strip
+list, pull list or panel materials, and it comes in as a table (lines and texts on layer
+REPORT) on report sheets just after the sheet shown, as many as it takes ("Bill of materials (1
+of 3)"), in the room the border and title block leave; a cell too long for its column ends in
+"…". A report sheet isn't kept up to date as you draw (that would slow every change on a big
+project): <b>Update report sheets</b> (Sheets menu) draws every report sheet again from the
+drawing as it is, and picking a report that has sheets already draws it again there. One Undo
+each.</p>
 
 <h2>Cables between panels</h2>
 <p><b>Cables between locations...</b> (Sheets menu, Output tab: Reports) lists what has to be

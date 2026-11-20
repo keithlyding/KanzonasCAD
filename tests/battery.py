@@ -2870,6 +2870,32 @@ def random_editing(log, out, ops, seed, drawing=None):
         assert p.settings["parts"][part.id]["catalog"] == part.catalog
         BC.CHECKED["part assigned to the devices of its symbol"] += 1
 
+    def op_report_sheet():
+        # (0.20.1: a report drawn on sheets of the project, as the owner would: every page in
+        # its frame and clear of the title block, and every row's first cell on one of them,
+        # worked out from the report itself)
+        from kanzonascad import report_sheets as RS
+        from kanzonascad.scalefit import outside
+        key = rnd.choice(list(RS.kinds()))
+        head, rows = RS.table(p, key)
+        if len(rows) > 400:
+            return                          # (a long report is many pages: kept quick)
+        made = win.report_sheet(key)
+        assert made and all(m.report == key for m in made), "Report sheet made no sheet"
+        texts = set()
+        for m in made:
+            why = outside(p, m)
+            assert why is None, "a %s sheet is drawn %s" % (key, why)
+            texts |= {e.text.rstrip("\u2026") for e in m.entities.values()
+                      if isinstance(e, M.Text)}
+        for r in rows:
+            first = str(r[0]) if r else ""
+            if first:
+                assert any(first.startswith(t) and t for t in texts), \
+                    "the %s sheets left out %r" % (key, first)
+        v.show_sheet(s.id)                  # (back to the sheet the steps are on)
+        BC.CHECKED["report sheets hold their report"] += 1
+
     def op_contact_blocks():
         # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
         # line from it through the farthest, worked out from where they are; none of them
@@ -3428,7 +3454,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

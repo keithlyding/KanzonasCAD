@@ -2964,6 +2964,7 @@ class Sheet:
         self.no_dots = []                   # junction dots deleted (Delete dot): [(x, y)]
         # arrays that stay arrays (arrays.py): {id: {mode, vals, center, source, items}}
         self.arrays = {}
+        self.report = ""                    # (a report sheet: which report, report_sheets.py)
         self.pin_order = []                 # a block editor's sheet: its pin markers' ids in
                                             # the order set in Pins... (block_editor.to_block)
         self.col_start = int(col_start)     # the first column's number (1 to start)
@@ -3190,6 +3191,8 @@ class Sheet:
                                "source": list(a["source"]),
                                "items": {i: list(ids) for i, ids in a["items"].items()}}
                            for k, a in self.arrays.items()}
+        if self.report:
+            d["report"] = self.report
         if self.pin_order:
             d["pin_order"] = list(self.pin_order)
         return d
@@ -3239,6 +3242,7 @@ class Sheet:
                         for q in (d.get("no_dots") or [])]
         self.pin_order = [int(i) for i in (d.get("pin_order") or [])]
         self.arrays = _arrays(d.get("arrays"))
+        self.report = str(d.get("report", "") or "")
         self.version += 1
 
     @classmethod
