@@ -43,7 +43,7 @@ Language=English
 
 [License]
 Shareable=true
-OpenSource=true
+OpenSource=false
 Freeware=true
 CommercialUse=true
 
@@ -92,8 +92,7 @@ recovery copies stay in the <b>Data</b> folder of this package. The user manual 
 Development</a></li></ul>
 <p><a href="{home}">Go to the KanzonasCAD Portable Homepage &gt;&gt;</a></p>
 <p><a href="https://portableapps.com/">Get more portable apps at PortableApps.com</a></p>
-<p>This software is OSI Certified Open Source Software (MIT License). OSI Certified is a
-certification mark of the Open Source Initiative.</p>
+<p>KanzonasCAD is free to use under the PolyForm Shield License 1.0.0 (see Other/Source/LICENSE).</p>
 <h2>Portable App Issues</h2>
 <ul>
 <li><a href="https://portableapps.com/support/portable_app#downloading">Downloading a Portable App</a></li>
@@ -116,7 +115,7 @@ Details of most other things are available there as well.
 LICENSE
 =======
 
-KanzonasCAD is released under the MIT License (LICENSE in this directory). This package's
+KanzonasCAD is released under the PolyForm Shield License 1.0.0 (LICENSE in this directory). This package's
 installer and launcher are released under the GPL. The launcher is the PortableApps.com
 Launcher, available with full source and documentation from
 https://portableapps.com/development. We request that developers using the PortableApps.com

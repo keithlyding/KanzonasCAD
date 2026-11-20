@@ -1756,7 +1756,10 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 there; a chapter's sections under it) and a <b>search</b> box over it. Type in it: the chapters
 narrow to those that mention it, with how many times, every match lights up, and
 <b>Next</b> and <b>Previous</b> (Enter and Shift+Enter) go from one to the next ("3 of 17").
-<b>About KanzonasCAD</b> shows the logo, the version and where the source code is.</p>
+<b>About KanzonasCAD</b> shows the logo, the version, the license and where the source code is.
+KanzonasCAD is free to use, at home or at work, under the PolyForm Shield License 1.0.0
+(LICENSE.txt in the program's folder). Versions 0.20 and earlier were released under the MIT
+License.</p>
 
 <h2>Installing</h2>
 <p>On Windows, <b>KanzonasCAD-v&lt;version&gt;-setup.exe</b> from the Releases page installs
