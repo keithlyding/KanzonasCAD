@@ -1569,6 +1569,21 @@ command line says so). Lines come in as plain lines, not wires, and symbols as t
 symbols. Drag a PDF from Explorer onto the drawing to bring it in where you let go (the same
 window asks for the page and size first). A PDF that asks for a password to open can't be
 read.</li>
+<li><b>Import picture or SVG into this sheet...</b> (File menu, Output tab), or a picture or
+SVG dragged onto the drawing. A <b>picture</b> (PNG, JPEG, BMP or GIF: a company logo, a drawing
+to trace over) is kept in the project itself, so the project carries it wherever it goes and the
+picture file isn't needed again. It comes in 2" wide on paper, in the middle of the view (or
+where it was dropped), selected; drag a corner grip to size it (it keeps its shape, from the
+corner across), or move, copy, rotate and scale it like anything else. It is drawn under the
+lines, printed and put in PDFs; mirrored, it lands where the mirror puts it but isn't flipped.
+To have a logo on every sheet, put it in the title block (Edit title block). Exported to DXF, a
+picture goes out as an AutoCAD image with its file beside the DXF (sheet-picture-1.png), as
+AutoCAD keeps them; a DXF with its pictures beside it brings them back in. An <b>SVG</b> comes
+in as real lines, polylines, circles and texts you can snap to and edit: its shapes, paths
+(curves and arcs as short straight pieces) and texts, at the size the SVG says (or 96 to the
+inch); colors, fills, gradients and fonts are left out. An SVG too detailed to be worth editing
+(more than 20,000 pieces or 5,000 elements, or over 5 MB) isn't brought in, and the message
+says why: save it as a PNG to bring it in as a picture.</li>
 <li><b>Blocks stay blocks.</b> Opening or importing a DXF or DWG keeps each named block as a
 block of the project: every copy (a terminal, an I/O module, a drive, the border) is one
 object you click, move, copy, label (Footprint label) and list, placed where the other program

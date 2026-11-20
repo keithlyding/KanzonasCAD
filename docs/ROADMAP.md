@@ -247,6 +247,13 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   ends (a bus going on past it isn't cut); outlets letter their wires by their own number
   (outlet 3: C, even when 2 isn't drawn); OUTLETS is typed as on the part (1:18 or 18).
 
+## Decided while the owner was away (Nov 2026; to confirm)
+- **Pictures and SVG** (0.20.1): a picture comes in 2" wide on paper (resized with its corner
+  grips, keeping its shape); it is drawn under everything and never flipped by Mirror; kept as
+  PNG or JPEG as it came (other kinds turned into PNG), up to 15 MB. An SVG too complex to edit:
+  over 20,000 straight pieces, 5,000 elements or 5 MB, refused whole (nothing half brought in);
+  its colors, fills and fonts are left out, its lines go on the sheet's current layer 0.
+
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a

@@ -655,6 +655,105 @@ def _tidy(pts):
 
 
 @_register
+class Picture(Entity):
+    """A picture kept in the project (a company logo, a drawing to trace over: the owner, Nov
+    2026), never linked to its file, so the project travels whole: data is the PNG or JPEG file
+    itself, base64. pos is its lower left corner as it stands upright, width and height its
+    size on the sheet, angle its turn round pos. It is drawn under the lines, kept readable
+    (a mirrored picture isn't flipped, as a text isn't)."""
+    kind = "picture"
+    __slots__ = ("pos", "width", "height", "angle", "data", "fmt")
+
+    def __init__(self, pos, width, height, data, fmt="png", angle=0.0, **kw):
+        super().__init__(**kw)
+        self.pos = _pt(pos)
+        self.width = max(1e-6, abs(float(width)))
+        self.height = max(1e-6, abs(float(height)))
+        self.angle = float(angle) % 360.0
+        self.data = str(data)
+        self.fmt = fmt if fmt in ("png", "jpeg") else "png"
+
+    def _data(self):
+        return {"pos": list(self.pos), "width": self.width, "height": self.height,
+                "angle": self.angle, "data": self.data, "fmt": self.fmt}
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["pos"], d["width"], d["height"], d["data"], d.get("fmt", "png"),
+                   d.get("angle", 0.0), layer=d.get("layer", "0"), color=d.get("color"),
+                   id=d.get("id"))
+
+    def corners(self):
+        """Its four corners: lower left (pos), lower right, upper right, upper left."""
+        x, y = self.pos
+        return [G.rotate_point((x + dx, y + dy), self.pos, self.angle)
+                for dx, dy in ((0.0, 0.0), (self.width, 0.0), (self.width, self.height),
+                               (0.0, self.height))]
+
+    def center(self):
+        c = self.corners()
+        return ((c[0][0] + c[2][0]) / 2.0, (c[0][1] + c[2][1]) / 2.0)
+
+    def _outline_entity(self):
+        return Polyline(self.corners(), closed=True)
+
+    def _compute_bbox(self):
+        c = self.corners()
+        xs, ys = [q[0] for q in c], [q[1] for q in c]
+        return (min(xs), min(ys), max(xs), max(ys))
+
+    def distance(self, p):
+        return self._outline_entity().distance(p)
+
+    def crosses(self, rect):
+        if not G.bbox_overlaps(self.bbox(), rect):
+            return False
+        return self._outline_entity().crosses(rect)
+
+    def pieces(self):
+        return self._outline_entity().pieces()
+
+    def outline(self):
+        c = self.corners()
+        return [c + [c[0]]]
+
+    def _compute_snaps(self):
+        return [("end", q) for q in self.corners()] + [("center", self.center())]
+
+    def grips(self):
+        return self.corners() + [self.center()]
+
+    def with_grip(self, i, p):
+        """A corner dragged: the picture grows or shrinks from the corner across from it,
+        keeping its shape; the middle grip moves it."""
+        if i == 4:
+            c = self.center()
+            return self.moved(p[0] - c[0], p[1] - c[1])
+        c = self.corners()
+        fixed = c[(i + 2) % 4]
+        diag = G.dist(fixed, c[i])
+        if diag < 1e-12:
+            return self.copy()
+        u = ((c[i][0] - fixed[0]) / diag, (c[i][1] - fixed[1]) / diag)
+        along = (p[0] - fixed[0]) * u[0] + (p[1] - fixed[1]) * u[1]
+        f = max(1e-3, along / diag)
+        return self.scaled(fixed, f)
+
+    def _map(self, fn, rot=0.0, factor=1.0, mirror=None):
+        w, h = self.width * abs(factor), self.height * abs(factor)
+        ang = self.angle + rot
+        if mirror is not None:
+            # (it lands where mirroring puts it but isn't flipped: a logo stays readable)
+            ang = G.mirror_angle(self.angle, *mirror) + 180.0
+            if 90.0 + 1e-6 < ang % 360.0 <= 270.0 + 1e-6:
+                ang += 180.0
+        nc = fn(self.center())
+        half = G.rotate_point((w / 2.0, h / 2.0), (0.0, 0.0), ang)
+        return self.copy(pos=[nc[0] - half[0], nc[1] - half[1]], width=w, height=h,
+                         angle=ang % 360.0)
+
+
+@_register
 class Circle(Entity):
     kind = "circle"
     __slots__ = ("center", "radius")

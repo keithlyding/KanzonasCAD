@@ -207,7 +207,7 @@ a command with the snaps on and the screen drawn < 30 ms (zoomed out and in), pe
 < 800 MB. Typical today: 0.6 s, 0.2 s, 0.4 s, 0.06 s, 0.5 ms, a few ms, 180 MB.
 
 On a sheet of notes ("speed budget (notes, hatches, leaders, imports)": 2,000 hatches with
-their outlines, 2,000 texts, 1,000 leaders, 1,000 multi-line notes): added and drawn < 2 s, ten
+their outlines, 2,000 texts, 1,000 leaders, 1,000 multi-line notes, 1,000 pictures): added and drawn < 2 s, ten
 zoomed repaints < 2 s, 1,000 of them moved < 1 s, undone < 1 s; a DXF of 1,000 block
 references with attributes, 200 dimensions and 500 hatches imported < 4 s (its blocks kept as
 blocks); the bill of materials of its parts < 0.5 s. Typical today: 0.7, 0.6, 0.2, 0.2, 0.7 s,
