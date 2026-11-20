@@ -118,10 +118,7 @@ def table(project, unnumbered=True):
 
 
 def write_csv(project, path, unnumbered=True):
-    import csv
+    """The bill of materials as CSV, or Excel when the name ends .xlsx."""
+    from . import reports
     head, body = table(project, unnumbered)
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(head)
-        w.writerows(body)
-    return len(body)
+    return reports.write_csv(path, head, body, "Bill of materials")
