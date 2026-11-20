@@ -83,7 +83,7 @@ class DwgFileTest(unittest.TestCase):
     def setUpClass(cls):
         cls.folder = tempfile.TemporaryDirectory()
         cls.path = os.path.join(cls.folder.name, "line.dwg")
-        W.write_dwg(cls.path, [((0, 0), (10, 5))])
+        W.write_dwg(cls.path, [dict(type="LINE", start=(0, 0), end=(10, 5))])
         with open(cls.path, "rb") as f:
             cls.data = f.read()
 
@@ -209,14 +209,14 @@ class DwgPiecesTest(unittest.TestCase):
         self.assertEqual(end, len(data))
 
     def test_many_lines_and_3d_points(self):
-        lines = [((i, 0, 0), (i, 1, 2.5)) for i in range(300)]
-        data = W.dwg_bytes(lines, WHEN, ["{A}", "{B}"])
+        lines = [dict(type="LINE", start=(i, 0, 0), end=(i, 1, 2.5)) for i in range(300)]
+        data = W.dwg_bytes(lines, when=WHEN, guids=["{A}", "{B}"])
         n = struct.unpack_from("<I", data, 0x15)[0]
         locs = [struct.unpack_from("<BII", data, 0x19 + 9 * i) for i in range(n)]
         entries, _end = read_map(data, locs[2][1], locs[2][2])
-        self.assertEqual(len(entries), W.FIRST_ENTITY - 2 + 300)    # (handle 4 isn't used)
+        self.assertEqual(len(entries), W.FIRST_FREE - 2 + 300)    # (handle 4 isn't used)
         # (the same drawing, written at the same time, is the same file)
-        self.assertEqual(data, W.dwg_bytes(lines, WHEN, ["{A}", "{B}"]))
+        self.assertEqual(data, W.dwg_bytes(lines, when=WHEN, guids=["{A}", "{B}"]))
 
 
 if __name__ == "__main__":

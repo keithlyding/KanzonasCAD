@@ -8,9 +8,14 @@ classes; the padding; the objects (the tables and dictionaries every drawing has
 drawing's own entities); the object map; the object free space and template sections; the
 second file header; an empty preview. Every object is written with absolute handle references.
 
-So far (milestone 1): lines on layer 0 in model space. No Qt."""
+What it writes (milestone 2): layers (color, on/off, frozen, locked; linetype Continuous) and,
+in model space, lines, lightweight polylines (open or closed, with bulges), circles, arcs and
+single-line texts (style Standard; left, centered or right), each on a layer, its color ByLayer
+or a color index. The drawing comes as a plain description (see dwg_bytes), not as
+KanzonasCAD's model objects. No Qt."""
 
 import datetime
+import math
 import struct
 import uuid
 
@@ -34,7 +39,8 @@ E_IMAGE = bytes.fromhex("E0DA92F82BC9D7D762A835C062BBEFD4")
 LOCATOR_XOR = {3: 0xA598, 4: 0x8101, 5: 0x3CC4, 6: 0x8461}
 
 # object types (fixed numbers; the classes' objects are numbered from 500, in CLASSES order)
-T_BLOCK, T_ENDBLK, T_LINE, T_DICTIONARY = 4, 5, 19, 42
+T_TEXT, T_BLOCK, T_ENDBLK, T_ARC, T_CIRCLE, T_LINE = 1, 4, 5, 17, 18, 19
+T_DICTIONARY, T_LWPLINE = 42, 77
 T_BLOCK_CONTROL, T_BLOCK_HEADER, T_LAYER_CONTROL, T_LAYER = 48, 49, 50, 51
 T_STYLE_CONTROL, T_STYLE, T_LTYPE_CONTROL, T_LTYPE = 52, 53, 56, 57
 T_VIEW_CONTROL, T_UCS_CONTROL, T_VPORT_CONTROL, T_VPORT = 60, 62, 64, 65
@@ -57,7 +63,7 @@ H = dict(BLOCK_CONTROL=0x1, LAYER_CONTROL=0x2, STYLE_CONTROL=0x3, LTYPE_CONTROL=
          CONTINUOUS=0x15, MLSTANDARD=0x16, PLOTSTYLES=0x17, LAYOUTS=0x18, PLOTSETTINGS=0x19,
          MSPACE=0x1A, PSPACE=0x1B, MS_BLOCK=0x1C, MS_ENDBLK=0x1D, PS_BLOCK=0x1E,
          PS_ENDBLK=0x1F, MODEL=0x20, LAYOUT1=0x21, DIMSTANDARD=0x22, ACTIVE=0x23)
-FIRST_ENTITY = 0x24
+FIRST_FREE = 0x24                      # (the first handle for the drawing's layers, then entities)
 
 LW_BYLAYER, LW_DEFAULT = 29, 31        # (lineweight indexes: ByLayer, Default)
 BIG = 1e20
@@ -94,9 +100,10 @@ def obj(type_code, handle, owner, data, refs=(), reactors=()):
 
 
 def entity(type_code, handle, data, layer, owner=0, refs=(), lineweight=LW_BYLAYER,
-           prev=0, nxt=0):
+           prev=0, nxt=0, color=256):
     """An entity: in model space when owner is 0 (no owner reference), else owned by it
-    (a block's BLOCK and ENDBLK). Color, linetype and plot style ByLayer."""
+    (a block's BLOCK and ENDBLK). Its color a color index (256 ByLayer); linetype and plot
+    style ByLayer."""
     w = BitWriter()
     w.BS(type_code)
     rl = w.bit_size()
@@ -107,7 +114,7 @@ def entity(type_code, handle, data, layer, owner=0, refs=(), lineweight=LW_BYLAY
     w.BB(0 if owner else 2)             # (entity mode: owner given, or model space)
     w.BL(0)                             # (no reactors)
     w.B(0)                              # (previous and next entity given below)
-    w.CMC(256)
+    w.CMC(color)
     w.BD(1.0)                           # (linetype scale)
     w.BB(0)                             # (linetype ByLayer)
     w.BB(0)                             # (plot style ByLayer)
@@ -173,11 +180,14 @@ def dictionary(handle, owner, items, reactors=(), default=None):
                reactors)
 
 
-def layer(handle, name, color=7):
+def layer(handle, name, color=7, on=True, frozen=False, locked=False):
+    """A layer. Off is kept twice, as AutoCAD reads it: the flags' 2 bit and a negative color
+    (the flags: 1 frozen, 2 off, 8 locked, 16 plotted, then the lineweight)."""
     def data(w):
         _entry(w, name)
-        w.BS(16 | (LW_DEFAULT << 5))    # (plotted, lineweight Default, on, thawed)
-        w.CMC(color)
+        w.BS((1 if frozen else 0) | (0 if on else 2) | (8 if locked else 0) | 16 |
+             (LW_DEFAULT << 5))
+        w.CMC(color if on else -color)
     return obj(T_LAYER, handle, H["LAYER_CONTROL"], data,
                [(HARD_PTR, 0), (HARD_PTR, H["NORMAL"]), (HARD_PTR, H["CONTINUOUS"]),
                 (HARD_PTR, 0)])
@@ -390,7 +400,9 @@ def layout(handle, owner, name, tab, flags, block, ext, plot_type):
                reactors=(owner,))
 
 
-def line(handle, start, end, layer_handle, prev=0, nxt=0):
+def line(handle, e, layer_handle, prev=0, nxt=0):
+    start, end = e["start"], e["end"]
+
     def data(w):
         z0 = start[2] == 0.0 and end[2] == 0.0
         w.B(1 if z0 else 0)
@@ -403,7 +415,82 @@ def line(handle, start, end, layer_handle, prev=0, nxt=0):
             w.DD(end[2], start[2])
         w.BT(0.0)
         w.BE(0.0, 0.0, 1.0)
-    return entity(T_LINE, handle, data, layer_handle, prev=prev, nxt=nxt)
+    return entity(T_LINE, handle, data, layer_handle, prev=prev, nxt=nxt, color=e["color"])
+
+
+def lwpolyline(handle, e, layer_handle, prev=0, nxt=0):
+    pts, bulges = e["points"], e["bulges"]
+    has_bulges = any(bulges)
+    # (flags: 16 bulges given, 512 closed; no width, elevation, thickness or extrusion)
+    flags = (16 if has_bulges else 0) | (512 if e["closed"] else 0)
+
+    def data(w):
+        w.BS(flags)
+        w.BL(len(pts))
+        if has_bulges:
+            w.BL(len(bulges))
+        _2rd(w, pts[0])
+        for a, b in zip(pts, pts[1:]):
+            w.DD(b[0], a[0])
+            w.DD(b[1], a[1])
+        if has_bulges:
+            for v in bulges:
+                w.BD(v)
+    return entity(T_LWPLINE, handle, data, layer_handle, prev=prev, nxt=nxt,
+                  color=e["color"])
+
+
+def circle(handle, e, layer_handle, prev=0, nxt=0):
+    def data(w):
+        _bds(w, e["center"])
+        w.BD(e["radius"])
+        w.BT(0.0)
+        w.BE(0.0, 0.0, 1.0)
+        if e["type"] == "ARC":
+            w.BD(e["start_angle"])
+            w.BD(e["end_angle"])
+    code = T_ARC if e["type"] == "ARC" else T_CIRCLE
+    return entity(code, handle, data, layer_handle, prev=prev, nxt=nxt, color=e["color"])
+
+
+HALIGN = {"left": 0, "center": 1, "right": 2}
+
+
+def text(handle, e, layer_handle, prev=0, nxt=0):
+    """A single-line text in the Standard style: baseline, its anchor point left, centered or
+    right; the insertion point (where AutoCAD starts it) worked out from an estimate of its
+    width, the anchor kept as its alignment point."""
+    ins, anchor, rot = _text_start(e), e["insert"], e["rotation"]
+    halign = HALIGN[e["align"]]
+    # (data flags: what is left out: 1 elevation 0, 2 no alignment point, 4 oblique 0,
+    # 8 rotation 0, 16 width factor 1, 32 generation 0, 64 left, 128 baseline)
+    flags = 0x04 | 0x10 | 0x20 | 0x80
+    flags |= 0x01 if anchor[2] == 0.0 else 0
+    flags |= 0x02 | 0x40 if halign == 0 else 0
+    flags |= 0x08 if rot == 0.0 else 0
+
+    def data(w):
+        w.RC(flags)
+        if not flags & 0x01:
+            w.RD(anchor[2])
+        _2rd(w, ins)
+        if not flags & 0x02:
+            w.DD(anchor[0], ins[0])
+            w.DD(anchor[1], ins[1])
+        w.BE(0.0, 0.0, 1.0)
+        w.BT(0.0)
+        if not flags & 0x08:
+            w.RD(rot)
+        w.RD(e["height"])
+        w.T(e["text"])
+        if not flags & 0x40:
+            w.BS(halign)
+    return entity(T_TEXT, handle, data, layer_handle, refs=[(HARD_PTR, H["STANDARD"])],
+                  prev=prev, nxt=nxt, color=e["color"])
+
+
+WRITERS = {"LINE": line, "LWPOLYLINE": lwpolyline, "CIRCLE": circle, "ARC": circle,
+           "TEXT": text}
 
 
 def _block_ends(block, endblk, owner, name):
@@ -591,30 +678,206 @@ def second_header(at, sections, seed):
 
 # ---- the drawing ---------------------------------------------------------------------------
 
-def _extents(lines):
-    pts = [p for ln in lines for p in ln]
+def nearest_aci(rgb):
+    """The color index (1-255) nearest a true color (r, g, b): AutoCAD 2000 drawings keep
+    only color indexes."""
+    from ezdxf.colors import aci2rgb
+    return min(range(1, 256),
+               key=lambda i: sum((a - b) ** 2 for a, b in zip(aci2rgb(i), rgb)))
+
+
+def _color(c, what, allow_logical=True):
+    """A color index from an index or an (r, g, b) (None: ByLayer)."""
+    if c is None:
+        c = 256
+    if isinstance(c, (tuple, list)):
+        return nearest_aci(tuple(int(v) for v in c))
+    lo = 0 if allow_logical else 1
+    hi = 256 if allow_logical else 255
+    if not isinstance(c, int) or not lo <= c <= hi:
+        raise ValueError("%s: color %r isn't a color index %d-%d or (r, g, b)"
+                         % (what, c, lo, hi))
+    return c
+
+
+def _point(p, n=3):
+    p = tuple(float(c) for c in p)
+    if len(p) == 2 and n == 3:
+        p += (0.0,)
+    if len(p) != n or not all(math.isfinite(c) for c in p):
+        raise ValueError("not a point: %r" % (p,))
+    return p
+
+
+def _positive(e, key):
+    v = float(e[key])
+    if not (math.isfinite(v) and v > 0.0):
+        raise ValueError("%s: %s must be above 0, not %r" % (e["type"], key, v))
+    return v
+
+
+BAD_NAME = set('<>/\\":;?*|,=`')
+
+
+def _layer(la):
+    name = str(la["name"])
+    if not name or name != name.strip() or BAD_NAME & set(name):
+        raise ValueError("layer name %r can't be used in AutoCAD" % name)
+    out = dict(name=name, color=_color(la.get("color", 7), "layer " + name, False),
+               on=bool(la.get("on", True)), frozen=bool(la.get("frozen", False)),
+               locked=bool(la.get("locked", False)))
+    if name == "0" and out["frozen"]:
+        raise ValueError("layer 0 is the current layer: it can't be frozen")
+    return out
+
+
+def _entity(e):
+    """An entity description checked and completed (see dwg_bytes)."""
+    kind = str(e.get("type", "")).upper()
+    if kind not in WRITERS:
+        raise ValueError("can't write a %r to DWG" % e.get("type"))
+    out = dict(type=kind, layer=str(e.get("layer", "0")),
+               color=_color(e.get("color"), kind))
+    if kind == "LINE":
+        out.update(start=_point(e["start"]), end=_point(e["end"]))
+    elif kind == "LWPOLYLINE":
+        pts = [_point(p, 2) for p in e["points"]]
+        if len(pts) < 2:
+            raise ValueError("LWPOLYLINE: two points at least")
+        bulges = [float(b) for b in e.get("bulges") or [0.0] * len(pts)]
+        if len(bulges) != len(pts) or not all(math.isfinite(b) for b in bulges):
+            raise ValueError("LWPOLYLINE: one bulge for each point")
+        out.update(points=pts, bulges=bulges, closed=bool(e.get("closed", False)))
+    elif kind in ("CIRCLE", "ARC"):
+        out.update(center=_point(e["center"]), radius=_positive(e, "radius"))
+        if kind == "ARC":
+            out.update(start_angle=float(e["start_angle"]) % math.tau,
+                       end_angle=float(e["end_angle"]) % math.tau)
+    else:
+        align = str(e.get("align", "left")).lower()
+        if align not in HALIGN:
+            raise ValueError("TEXT: align is left, center or right, not %r" % align)
+        txt = str(e["text"])
+        if not txt or "\n" in txt or "\r" in txt:
+            raise ValueError("TEXT: one line of text, not %r" % txt)
+        out.update(text=txt, insert=_point(e["insert"]), height=_positive(e, "height"),
+                   rotation=float(e.get("rotation", 0.0)) % math.tau, align=align)
+    return out
+
+
+def _drawing(entities, layers):
+    """The layers and entities checked: every layer an entity is on (and 0) in the layer
+    table, which comes first; a layer named twice (AutoCAD's names ignore case) refused."""
+    lays = [_layer(la) for la in layers]
+    ents = [_entity(e) for e in entities]
+    known = {la["name"].upper(): la["name"] for la in lays}
+    if len(known) != len(lays):
+        raise ValueError("a layer is named twice")
+    if "0" not in known:
+        lays.insert(0, _layer({"name": "0"}))
+        known["0"] = "0"
+    else:
+        lays.sort(key=lambda la: la["name"] != "0")
+    for e in ents:
+        name = known.get(e["layer"].upper())
+        if name is None:
+            la = _layer({"name": e["layer"]})
+            lays.append(la)
+            name = known[e["layer"].upper()] = la["name"]
+        e["layer"] = name
+    return ents, lays
+
+
+def _text_width(e):
+    """An estimate of a text's width (the Standard style's txt font: about one height per
+    character, less the space after the last)."""
+    return max(len(e["text"]) - 1.0 / 3.0, 0.0) * e["height"]
+
+
+def _text_start(e):
+    """Where a text starts (its insertion point) from its anchor and alignment."""
+    x, y, _z = e["insert"]
+    back = _text_width(e) * {0: 0.0, 1: 0.5, 2: 1.0}[HALIGN[e["align"]]]
+    return x - back * math.cos(e["rotation"]), y - back * math.sin(e["rotation"])
+
+
+def _arc_points(c, r, a0, a1):
+    """The points that bound an arc from a0 to a1 (counterclockwise): its ends and the
+    quadrant points it passes."""
+    sweep = (a1 - a0) % math.tau or math.tau
+    angles = [a0, a0 + sweep] + [k * math.pi / 2 for k in range(8)
+                                 if 0.0 < (k * math.pi / 2 - a0) % math.tau < sweep]
+    return [(c[0] + r * math.cos(a), c[1] + r * math.sin(a), c[2]) for a in angles]
+
+
+def _bulge_points(p, q, b):
+    """The points that bound a polyline segment from p to q with bulge b."""
+    if b == 0.0:
+        return [p + (0.0,), q + (0.0,)]
+    d = math.dist(p, q)
+    if d == 0.0:
+        return [p + (0.0,)]
+    angle = 4.0 * math.atan(b)
+    r = d / (2.0 * math.sin(angle / 2.0))
+    mx, my = (p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0
+    h = r * math.cos(angle / 2.0)               # (from the chord's middle to the center)
+    nx, ny = -(q[1] - p[1]) / d, (q[0] - p[0]) / d
+    c = (mx + h * nx, my + h * ny, 0.0)
+    a0 = math.atan2(p[1] - c[1], p[0] - c[0])
+    a1 = math.atan2(q[1] - c[1], q[0] - c[0])
+    if b < 0.0:
+        a0, a1 = a1, a0
+    return _arc_points(c, abs(r), a0, a1)
+
+
+def _entity_points(e):
+    kind = e["type"]
+    if kind == "LINE":
+        return [e["start"], e["end"]]
+    if kind == "LWPOLYLINE":
+        pts, bs = e["points"], e["bulges"]
+        segs = list(zip(pts, pts[1:], bs)) + ([(pts[-1], pts[0], bs[-1])]
+                                               if e["closed"] else [])
+        return [p for a, b, bulge in segs for p in _bulge_points(a, b, bulge)]
+    if kind == "CIRCLE":
+        return _arc_points(e["center"], e["radius"], 0.0, 0.0)
+    if kind == "ARC":
+        return _arc_points(e["center"], e["radius"], e["start_angle"], e["end_angle"])
+    (x, y), z = _text_start(e), e["insert"][2]
+    w, h, a = _text_width(e), e["height"], e["rotation"]
+    ux, uy = math.cos(a), math.sin(a)
+    return [(x + dx * ux - dy * uy, y + dx * uy + dy * ux, z)
+            for dx in (0.0, w) for dy in (0.0, h)]
+
+
+def _extents(entities):
+    pts = [p for e in entities for p in _entity_points(e)]
     if not pts:
         return (BIG,) * 3, (-BIG,) * 3
     return (tuple(min(p[i] for p in pts) for i in range(3)),
             tuple(max(p[i] for p in pts) for i in range(3)))
 
 
-def drawing_objects(lines, ext):
-    """[(handle, object bytes)]: the tables and dictionaries, model and paper space, and
-    the lines (in model space, layer 0)."""
-    lh = list(range(FIRST_ENTITY, FIRST_ENTITY + len(lines)))
+def drawing_objects(entities, layers, ext):
+    """[(handle, object bytes)]: the tables and dictionaries, model and paper space, the
+    layers and the entities (in model space), all checked by _drawing."""
+    lay_h = {"0": H["LAYER0"]}
+    for k, la in enumerate(la for la in layers if la["name"] != "0"):
+        lay_h[la["name"]] = FIRST_FREE + k
+    first = FIRST_FREE + len(lay_h) - 1
+    lh = list(range(first, first + len(entities)))
     nod_items = {"ACAD_GROUP": H["GROUPS"], "ACAD_LAYOUT": H["LAYOUTS"],
                  "ACAD_MLINESTYLE": H["MLINESTYLES"], "ACAD_PLOTSETTINGS": H["PLOTSETTINGS"],
                  "ACAD_PLOTSTYLENAME": H["PLOTSTYLES"]}
     nod = H["NOD"]
-    (x0, y0, _z0), (x1, y1, _z1) = ext if lines else ((0.0, 0.0, 0.0), (12.0, 9.0, 0.0))
+    (x0, y0, _z0), (x1, y1, _z1) = ext if entities else ((0.0, 0.0, 0.0), (12.0, 9.0, 0.0))
     aspect = 1.5
     height = max(y1 - y0, (x1 - x0) / aspect, 1e-6) * 1.1
     out = [
         (H["BLOCK_CONTROL"], table_control(T_BLOCK_CONTROL, H["BLOCK_CONTROL"], [],
                                            [H["MSPACE"], H["PSPACE"]])),
         (H["LAYER_CONTROL"], table_control(T_LAYER_CONTROL, H["LAYER_CONTROL"],
-                                           [H["LAYER0"]])),
+                                           list(lay_h.values()))),
         (H["STYLE_CONTROL"], table_control(T_STYLE_CONTROL, H["STYLE_CONTROL"],
                                            [H["STANDARD"]])),
         (H["LTYPE_CONTROL"], table_control(T_LTYPE_CONTROL, H["LTYPE_CONTROL"],
@@ -634,7 +897,6 @@ def drawing_objects(lines, ext):
                                       (nod,))),
         (H["NORMAL"], obj(T_PLACEHOLDER, H["NORMAL"], H["PLOTSTYLES"], lambda w: None,
                           reactors=(H["PLOTSTYLES"],))),
-        (H["LAYER0"], layer(H["LAYER0"], "0")),
         (H["STANDARD"], style(H["STANDARD"], "Standard")),
         (H["ACAD"], appid(H["ACAD"], "ACAD")),
         (H["BYBLOCK"], ltype(H["BYBLOCK"], "ByBlock", "")),
@@ -661,25 +923,34 @@ def drawing_objects(lines, ext):
         (H["DIMSTANDARD"], dimstyle(H["DIMSTANDARD"], "Standard")),
         (H["ACTIVE"], vport(H["ACTIVE"], ((x0 + x1) / 2, (y0 + y1) / 2), height, aspect)),
     ]
-    for i, (h, (a, b)) in enumerate(zip(lh, lines)):
-        out.append((h, line(h, a, b, H["LAYER0"], lh[i - 1] if i else 0,
-                            lh[i + 1] if i + 1 < len(lh) else 0)))
+    for la in layers:
+        h = lay_h[la["name"]]
+        out.append((h, layer(h, la["name"], la["color"], la["on"], la["frozen"],
+                             la["locked"])))
+    for i, (h, e) in enumerate(zip(lh, entities)):
+        out.append((h, WRITERS[e["type"]](h, e, lay_h[e["layer"]], lh[i - 1] if i else 0,
+                                          lh[i + 1] if i + 1 < len(lh) else 0)))
     return out
 
 
-def _point(p):
-    p = tuple(float(c) for c in p)
-    return p if len(p) == 3 else p + (0.0,)
+def dwg_bytes(entities, layers=(), when=None, guids=None):
+    """An AutoCAD 2000 DWG file of entities in model space, on layers (inches).
 
-
-def dwg_bytes(lines, when=None, guids=None):
-    """An AutoCAD 2000 DWG file holding lines [(start, end)] (points (x, y) or (x, y, z), in
-    inches) in model space on layer 0."""
-    lines = [(_point(a), _point(b)) for a, b in lines]
+    layers: [{"name", "color": a color index 1-255 or (r, g, b) (kept as the nearest index),
+    "on", "frozen", "locked"}]; layer 0 and any layer an entity names are added if missing
+    (white, on).
+    entities: dicts with "type", "layer" (default "0"), "color" (None or 256 ByLayer, 0
+    ByBlock, 1-255, or (r, g, b)), and by type: LINE "start", "end"; LWPOLYLINE "points"
+    [(x, y)], "closed", "bulges" (optional, one per point); CIRCLE "center", "radius"; ARC
+    "center", "radius", "start_angle", "end_angle" (radians, counterclockwise); TEXT "text"
+    (one line), "insert" (the point it is aligned on), "height", "rotation" (radians),
+    "align" ("left", "center" or "right"). Points are (x, y) or (x, y, z).
+    Raises ValueError for what AutoCAD couldn't take."""
+    entities, layers = _drawing(entities, layers)
     when = when or datetime.datetime.now()
     guids = guids or ["{%s}" % str(uuid.uuid4()).upper() for _k in range(2)]
-    ext = _extents(lines)
-    objects = drawing_objects(lines, ext)
+    ext = _extents(entities)
+    objects = drawing_objects(entities, layers, ext)
     seed = max(h for h, _o in objects) + 1
 
     n_loc = 5
@@ -720,8 +991,8 @@ def dwg_bytes(lines, when=None, guids=None):
             template + second + image)
 
 
-def write_dwg(path, lines):
-    """Write lines [(start, end)] to path as an AutoCAD 2000 DWG (see dwg_bytes)."""
-    data = dwg_bytes(lines)
+def write_dwg(path, entities, layers=()):
+    """Write entities on layers to path as an AutoCAD 2000 DWG (see dwg_bytes)."""
+    data = dwg_bytes(entities, layers)
     with open(path, "wb") as f:
         f.write(data)
