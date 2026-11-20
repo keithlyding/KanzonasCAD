@@ -235,8 +235,12 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 ## Decided while the owner was away (Nov 2026; to confirm)
 - **Library parts** (0.20.1): one file a part done first, on its own (the two folders' shared
   library needs it); parts.json moves to the files at the first save or delete, not at start-up
-  (opening a library never changes it). The second folder itself (searched together, each item
-  showing its library, saving asking which) is next.
+  (opening a library never changes it).
+- **Second library folder** (0.20.1): a name in both libraries shows the first's only (not both,
+  as the roadmap said: one name, one block when placing); saving doesn't ask each time which
+  library: a checkable "Save new blocks and parts to the second library" (Library menu) says, and
+  anything already in a library is saved back there. Not yet: watching the folders for others'
+  changes (the Library panel refreshes when it opens).
 
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally

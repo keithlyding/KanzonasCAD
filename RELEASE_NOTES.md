@@ -13,6 +13,11 @@ build fails without them.
   synced folder (OneDrive, Dropbox...) shared by several people doesn't get sync conflict
   copies. Your existing parts move there the first time you save or delete one.
 
+**New**
+- A second library folder (Library > Second library folder...), searched with the first: one
+  shared with your team, one of your own. Things save back where they are; new ones go to
+  the first, or to the second when you tick Save new blocks and parts to the second library.
+
 ## 0.20
 
 **New**
