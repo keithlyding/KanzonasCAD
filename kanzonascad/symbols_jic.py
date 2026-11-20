@@ -312,6 +312,41 @@ def io_modules():
     return out
 
 
+PDB_NAMES = ("Distribution block 3-pole", "Distribution block outlet 3-pole")
+
+
+def pdb_symbols(pole=POLE):
+    """A 3-pole power distribution block (PDB1: L1-L3 in on its left; OUTLETS, its outlets per
+    phase as on its part, 1:18 shown under it) and its outlet (PDB1-1, PDB1-2...: T1-T3 out on
+    its right, on any sheet, its wires numbered from their phase's with its letter). pole: the
+    spacing of its phases (a bus's; 1/2" to start: a block placed on a bus of another spacing
+    is drawn to fit, InsertCmd)."""
+    ys = (pole, 0.0, -pole)
+    top, bot = pole + 0.25, -pole - 0.25
+    suffix = "" if abs(pole - POLE) < 1e-9 else ' (%g" poles)' % pole
+    o = [_box(0.0, bot, 0.375, top)]
+    o += [Line((-PIN, y), (0.0, y)) for y in ys]
+    o += [Text((0.1875, y - 0.03), "L%d" % (i + 1), 0.07, align="center")
+          for i, y in enumerate(ys)]
+    parent = _sym(PDB_NAMES[0] + suffix, "JIC/Wiring", o, "parent", "", "PDB",
+                  [{"name": "L%d" % (i + 1), "pos": (-PIN, y)} for i, y in enumerate(ys)],
+                  tag=(0.1875, top + 0.08),
+                  description="Power distribution block, 3-pole: its outlets (PDB1-1...) "
+                              "take their phases' wire numbers with a letter",
+                  wiring="pdb",
+                  attr_texts=[{"attr": "OUTLETS", "pos": (0.1875, bot - 0.15),
+                               "height": 0.07}])
+    o = [_box(-0.25, bot, 0.0, top)]
+    o += [Line((0.0, y), (PIN, y)) for y in ys]
+    child = _sym(PDB_NAMES[1] + suffix, "JIC/Wiring", o, "child", "", "PDB",
+                 [{"name": "T%d" % (i + 1), "pos": (PIN, y)} for i, y in enumerate(ys)],
+                 tag=(-0.125, top + 0.08),
+                 description="An outlet of a power distribution block (PDB1-1, PDB1-2...): its "
+                             "wires take their phases' numbers with its letter",
+                 wiring="pdb")
+    return [parent, child]
+
+
 def builtin_symbols():
     S = []
     # ---- relays, contactors, timers ------------------------------------------------------
@@ -639,6 +674,7 @@ def builtin_symbols():
                   [{"name": "OUT%d" % (i + 1), "pos": (0.25, y)} for i, y in enumerate(outs)],
                   tag=(0.0, 0.58), description="Distribution block, one in, four out",
                   wiring="distribution"))
+    S += pdb_symbols()
     # an off-sheet connector: the wire goes on at the connector(s) of the same name elsewhere
     o = [Polyline([(0, 0.0625), (0.25, 0.0625), (0.3125, 0), (0.25, -0.0625), (0, -0.0625)],
                   True)]

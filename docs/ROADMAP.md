@@ -232,6 +232,13 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 14. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
+## Decided while the owner was away (Nov 2026; to confirm)
+- **Power distribution block** (0.20.1): two symbols, the block (L1-L3 in, tag PDB) and its
+  outlet (T1-T3 out, PDB101-1...), not one box with outlets drawn on it: an outlet can sit on
+  any sheet beside what it feeds, as a contact beside its load. The block is where the feeder
+  ends (a bus going on past it isn't cut); outlets letter their wires by their own number
+  (outlet 3: C, even when 2 isn't drawn); OUTLETS is typed as on the part (1:18 or 18).
+
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a

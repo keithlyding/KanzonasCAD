@@ -303,9 +303,10 @@ def retag_copies(project, sheet, ents):
                 planned[prefix].add(n)
                 attrs["TAG"] = make(prefix, page, n)
             e = e.copy(attrs=attrs)
-        elif numbered(e) and e.attrs.get("TERM"):
-            # a copied terminal takes the next free number on its strip
-            e = e.copy(attrs={k: v for k, v in e.attrs.items() if k != "TERM"})
+        elif numbered(e) and any(e.attrs.get(a) for a in NUMBER_ATTRS):
+            # a copied terminal takes the next free number on its strip (an outlet, on its
+            # distribution block)
+            e = e.copy(attrs={k: v for k, v in e.attrs.items() if k not in NUMBER_ATTRS})
         e.id = None                     # (a copy: a new object, whatever kind it is)
         out.append(e)
     return out
@@ -517,33 +518,49 @@ def device_choices(project):
     return [(s, e) for _k, s, e in out]
 
 
-def numbered(e):
-    """A contact-like symbol numbered on its device (a terminal on its strip: TERM)."""
+# (the attributes a child numbers itself by on its parent: a terminal's on its strip, an outlet's
+# on its power distribution block, PDB1-1, PDB1-2...)
+NUMBER_ATTRS = ("TERM", "OUTLET")
+
+
+def number_attr(e):
+    """The attribute a contact-like symbol is numbered by on its device (TERM, OUTLET), or
+    None."""
     d = getattr(e, "defn", None)
-    return d is not None and any(a["attr"] == "TERM" for a in d.attr_texts)
+    if d is None:
+        return None
+    if d.wiring == "pdb" and d.role == "child":
+        return "OUTLET"                 # (shown in its tag: PDB1-1)
+    return next((a["attr"] for a in d.attr_texts if a["attr"] in NUMBER_ATTRS), None)
+
+
+def numbered(e):
+    """A contact-like symbol numbered on its device (a terminal on its strip: TERM; an outlet
+    on its distribution block: OUTLET)."""
+    return number_attr(e) is not None
 
 
 def number_terminals(ed, project):
-    """Terminals on a strip without a number take the lowest free one on that strip (1, 2,
-    3...); a number typed stays."""
+    """Terminals on a strip (outlets on a distribution block) without a number take the
+    lowest free one there (1, 2, 3...); a number typed stays."""
     by_strip = {}
     for s in project.sheets:
         for e in s.inserts():
             if is_child(e) and numbered(e) and e.attrs.get("PARENT"):
-                by_strip.setdefault(e.attrs["PARENT"], []).append((s, e))
-    for items in by_strip.values():
+                by_strip.setdefault((e.attrs["PARENT"], number_attr(e)), []).append((s, e))
+    for (_parent, attr), items in by_strip.items():
         used = set()
         for _s, e in items:
-            v = e.attrs.get("TERM", "")
+            v = e.attrs.get(attr, "")
             if v.isdigit():
                 used.add(int(v))
         for s, e in sorted(items, key=lambda se: (project.sheets.index(se[0]),
                                                    order_key(se[0], se[0].number_order)(
                                                        se[1].pos))):
-            if e.attrs.get("TERM"):
+            if e.attrs.get(attr):
                 continue
             n = 1
             while n in used:
                 n += 1
             used.add(n)
-            ed.change(s, e.copy(attrs=dict(e.attrs, TERM=str(n))))
+            ed.change(s, e.copy(attrs=dict(e.attrs, **{attr: str(n)})))

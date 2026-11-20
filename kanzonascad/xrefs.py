@@ -303,8 +303,9 @@ def live_all(project):
             for item in _arrow_lines(s, c, lines, hh):
                 out[s.id].append(item)
     for s, c in contacts:
-        if tags.numbered(c):
-            continue                    # (a terminal shows its number, not where its strip is)
+        if tags.number_attr(c) == "TERM":
+            continue                    # (a terminal shows its number, not where its strip is;
+            #                              an outlet shows where its distribution block is)
         if c.id in joined[s.id]:
             continue                    # (joined to its device by the dashed line)
         hh = hk[s.id]

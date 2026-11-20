@@ -1040,16 +1040,21 @@ class MainWindow(BlockEditing, QMainWindow):
         if getattr(d, "block_session", None) is not None:
             return
         dup_tags, dup_nums = dupes.find(d.project)
-        now = {("tag", t) for t in dup_tags} | {("num", n) for n in dup_nums}
+        over = dupes.over_outlets(d.project)
+        now = {("tag", t) for t in dup_tags} | {("num", n) for n in dup_nums} | {
+            ("over", t, tuple(sorted(e.attrs["OUTLET"] for _s, e in g[1])))
+            for t, g in over.items()}
         before = getattr(d, "_dupes_seen", None)
         d._dupes_seen = now
         if before is None:
             before = set()              # (a project opened with some: said once)
         new = now - before
         if new:
+            newer = {k[1] for k in new if k[0] == "over"}
             text = dupes.describe(d.project,
                                   {t: g for t, g in dup_tags.items() if ("tag", t) in new},
-                                  {n: g for n, g in dup_nums.items() if ("num", n) in new})
+                                  {n: g for n, g in dup_nums.items() if ("num", n) in new},
+                                  {t: g for t, g in over.items() if t in newer})
             self._say(text + " (marked red on the drawing)", 10000)
 
     def _tab_changed(self, _i):

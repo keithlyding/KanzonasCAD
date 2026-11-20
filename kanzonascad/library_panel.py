@@ -540,6 +540,8 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
                    "distribution")
     wiring.addItem("Off-sheet connector: the wire continues at the connector of the same name",
                    "link")
+    wiring.addItem("Power distribution block: each phase's number (L1, L2... in) goes on to "
+                   "its outlets' T1, T2..., with A, B, C...", "pdb")
     if defn is not None:
         for box, val in ((role, defn.role), (contact, defn.contact), (wiring, defn.wiring)):
             box.setCurrentIndex(max(box.findData(val), 0))

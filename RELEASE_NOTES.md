@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**New**
+- Power distribution blocks (Library, JIC/Wiring): Distribution block 3-pole takes the three
+  phases, and its outlets (PDB101-1, PDB101-2...) go on any sheet. Each outlet's wires take
+  their phase's number with the outlet's letter (6001A, 6002A, 6003A), outlets past the
+  block's count (OUTLETS, 1:18) are marked red, and a block placed on a bus of another spacing
+  is drawn to fit it.
+
 ## 0.20
 
 **New**
