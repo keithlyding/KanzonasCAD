@@ -654,6 +654,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             v.current_layer = name
             want = name if name.startswith("WIRE") else "WIRES"
         before = set(s.entities)
+        old_wires = [list(map(tuple, w.points)) for w in s.wires()]
         v.run(C.WireCmd)
         a = pt()
         type_in(v, fmt(a))
@@ -667,6 +668,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         finish()
         v.current_layer = "0"
         new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+        # (0.20.1: a wire, as a bus, ends on pins but never runs through one)
+        bus_clear_of_pins(new, old_wires, "wire")
         if want != "WIRES" and len(new) == 1 and not wires.pins_on(s, new[0].points[0]):
             # (a wire joined to another keeps the older's layer: only a wire on its own)
             if not any(wires.connects_at(s, q, exclude=new[0].id)
@@ -973,7 +976,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         bus_clear_of_pins([e for i, e in s.entities.items()
                            if i not in before and isinstance(e, M.Wire)], old_wires)
 
-    def bus_clear_of_pins(new, old=()):
+    def bus_clear_of_pins(new, old=(), what="bus"):
         # (0.19.11: no wire of a bus runs through a symbol's pin, only ends on it; worked out
         # from every pin near the wires, the battery's seed 152; a piece of a wire that was
         # there before, cut by the bus's cleanup and so a new id, is not the bus's: seed 163)
@@ -993,10 +996,10 @@ def random_editing(log, out, ops, seed, drawing=None):
                         for n, q in e.pin_points():
                             assert any(G.dist(q, x) <= 1e-6 for x in ends) or \
                                 G.dist_to_segment(q, a, b) > 1e-6, \
-                                "a bus wire runs through %s's pin %s: %r" % (e.block, n,
-                                                                              w.points)
+                                "a %s wire runs through %s's pin %s: %r" % (what, e.block, n,
+                                                                             w.points)
         if new:
-            BC.CHECKED["bus clear of pins"] += 1
+            BC.CHECKED["%s clear of pins" % what] += 1
 
     def op_bus_land():
         # (0.16.3: a bus from one symbol's pins ended on another's lands wire for wire, each
@@ -1445,6 +1448,18 @@ def random_editing(log, out, ops, seed, drawing=None):
             now = s.entities.get(i)
             assert now is not None, "moving %d objects, %s %d went" % (
                 len(sel), type(e).__name__, i)
+            if isinstance(e, M.Insert):
+                # (a symbol by where it is: a contact block moved off its operator shows its
+                # tag again, and its box grows, the battery's seed 386, as the drag check's
+                # seed 379: its position moved as typed, not turned, flipped or scaled)
+                assert all(abs(now.pos[j] - e.pos[j] - d[j]) <= 1e-6 * max(1.0, abs(e.pos[j]))
+                           for j in range(2)), "%s %d (%s) moved %s, not %s" % (
+                    type(e).__name__, i, e.block, (now.pos[0] - e.pos[0],
+                                                   now.pos[1] - e.pos[1]), d)
+                assert (now.angle, now.mirror, now.scale, now.block) == \
+                    (e.angle, e.mirror, e.scale, e.block), "moving %s %d turned or changed it" % (
+                        e.block, i)
+                continue
             b0, b1 = e.bbox(), now.bbox()
             assert all(abs(b1[j] - b0[j] - d[j % 2]) <= 1e-6 * max(1.0, abs(b0[j]))
                        for j in range(4)), "%s %d moved %s, not %s" % (
@@ -3458,6 +3473,13 @@ def mixed_project(win):
     type_in(v, "20,8")
     while v.cmd is not None:
         v.cmd.enter()
+    # (0.20.1) a timer coil placed flipped: its "TR" read backwards in AutoCAD's copy
+    v.run(C.InsertCmd, lib.get("symbol", "Timer coil"), {"TAG": "TR1"})
+    type_in(v, "F")
+    type_in(v, "14,1")
+    while v.cmd is not None:
+        v.cmd.enter()
+    assert any(e.block == "Timer coil" and e.mirror for e in v.sheet().inserts())
     # (0.17.5) a motor with its ratings, one hidden, one and its tag turned
     v.run(C.InsertCmd, lib.get("symbol", "Motor 3-phase"), {"TAG": "MTR1"})
     type_in(v, "6,2")
@@ -3574,6 +3596,18 @@ def files(log, out):
                 pa, pb = dict(a.pin_points()), dict(b.pin_points())
                 assert set(pa) == set(pb) and all(G.dist(pa[n], pb[n]) < 1e-6 for n in pa), \
                     "a symbol's pins came back from DXF elsewhere: %s" % a.block
+        # (0.20.1: no text of a block reads mirror-written in AutoCAD: a flipped copy's own texts
+        # and attributes as the program draws them, readable; from the DXF, by its flags)
+        import ezdxf
+        for ref in ezdxf.readfile(dxf).modelspace().query("INSERT"):
+            for t in list(ref.virtual_entities()) + list(ref.attribs):
+                if t.dxftype() not in ("TEXT", "ATTRIB") or t.dxf.get("invisible", 0):
+                    continue
+                ext = t.dxf.get("extrusion", (0.0, 0.0, 1.0))
+                fl = t.dxf.get("text_generation_flag", 0)
+                assert not ((ext[2] < 0) ^ bool(fl & 2) ^ bool(fl & 4)), \
+                    "%r of %s reads mirrored in the DXF" % (t.dxf.text, ref.dxf.name)
+                BC.CHECKED["DXF block texts read right"] += 1
     notes.append("DXF out and in (%d sheets, blocks as blocks)" % len(p.sheets))
     pdf = os.path.join(out, "mixed.pdf")
     n = fileio.export_pdf(p, pdf)

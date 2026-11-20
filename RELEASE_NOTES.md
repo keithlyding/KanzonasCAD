@@ -6,6 +6,17 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**Fixed**
+- DXF export: the texts inside a flipped symbol (a timer coil's TR, a module's point names)
+  read backwards in AutoCAD. They now read as they do in KanzonasCAD.
+- A wire no longer runs through a symbol's pin on its way (it was wired to that pin without
+  being asked): the click isn't taken, and the command line says which pin.
+
+**Changed**
+- Save block closes the block's tab and goes back to your drawing.
+
 ## 0.20
 
 **New**

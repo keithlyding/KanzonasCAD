@@ -1403,6 +1403,25 @@ class WireCmd(Command):
         if doubles_back(self.points[-2:] + list(new)):
             self.ctx.message(BACK_OVER)
             return
+        # (a wire run through a symbol's pin is wired to it on the way: refused, as Bus's
+        # are since 0.19.12; the battery saw a wire run down a PLC module's column of pins)
+        hit = _through_pins(self.ctx.sheet(), [self.points + list(new)])
+        if hit is not None and self.hfirst is None:
+            # (the corner the other way, when that one keeps clear of the pins: a wire to a
+            # 3-pole symbol's middle pin from beyond it came down its column of pins, through
+            # L1 into L2, the battery's wire_around)
+            last = self.points[-1]
+            self.hfirst = not (abs(p[0] - last[0]) >= abs(p[1] - last[1]))
+            try:
+                other = self._route(p)
+            finally:
+                self.hfirst = None
+            if not doubles_back(self.points[-2:] + list(other)) and \
+                    _through_pins(self.ctx.sheet(), [self.points + list(other)]) is None:
+                new, hit = other, None
+        if hit is not None:
+            self.ctx.message(_through_message(hit, "wire"))
+            return
         self.points += new
         self.base = self.last = p
         if connects_at(self.ctx.sheet(), p):
@@ -1684,7 +1703,7 @@ def _paths_cross(paths):
 
 
 def _through_pins(sheet, paths):
-    """The first symbol pin a bus's wires would run through (on a wire anywhere but its two
+    """The first symbol pin a bus's (or a wire's) wires would run through (on a wire anywhere but its two
     ends: there it would be wired to that pin, unasked): (insert, pin name), or None. A bus
     leaving its pins through the symbol's other pins, or carried on through a symbol whose
     side it couldn't land on, joined circuits nobody drew (the battery, 0.19.11, seed 152)."""
@@ -1704,8 +1723,11 @@ def _through_pins(sheet, paths):
     return None
 
 
-def _through_message(hit):
+def _through_message(hit, what="bus"):
     e, name = hit
+    if what == "wire":
+        return ("The wire would run through %s's pin %s (wired to it on the way): click on "
+                "the pin to end there, or elsewhere" % (e.attrs.get("TAG") or e.block, name))
     return ("The bus would run through %s's pin %s (wired to it on the way): click elsewhere, "
             "or U takes the last point back" % (e.attrs.get("TAG") or e.block, name))
 
