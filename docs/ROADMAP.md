@@ -181,7 +181,9 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 10. **Check out / check in** sheets: export chosen sheets (with their blocks, parts and
    settings) for someone else, lock them while out, check them back in matched by sheet id
    with a summary of changes; references and numbers recalculate.
-11. **AutoCAD export with real blocks** (the owner, Nov 2026: "blocks stay as blocks and
+11. **AutoCAD export with real blocks** (phase 1 done in 0.20: blocks, attributes, read back
+    as the same symbols; next, the AutoCAD Electrical attribute names option, then the owner
+    trying it in AutoCAD Electrical) (the owner, Nov 2026: "blocks stay as blocks and
     doesn't come in as lines and text"; DXF export today explodes every block reference into
     lines and texts, fileio.export_dxf). The middle ground, the owner's choice:
     - Each symbol and footprint written as a BLOCK definition and placed as an INSERT (its

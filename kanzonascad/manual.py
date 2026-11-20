@@ -1607,7 +1607,16 @@ scale and attributes; the command line says so), then the free <b>ODA File Conve
 it is installed; otherwise it tells you why, and saving the drawing as DXF in the program that
 made it always works.</li>
 <li><b>Export this sheet to DXF...</b> and <b>Export all sheets to DXF...</b>: AutoCAD 2013 DXF
-in inches, one file per sheet, border and title block on layer BORDER.</li>
+in inches, one file per sheet, border and title block on layer BORDER. Each symbol and footprint
+goes out as an AutoCAD <b>block</b> (defined once, placed wherever it is used, turned, scaled
+and flipped as it is), with its tag, description, maker, catalog number, location and ratings
+as <b>attributes</b>: those shown on the sheet where KanzonasCAD shows them, the others hidden,
+so AutoCAD's attribute editor and data extraction find all of them. Layers keep their names and
+colors; wires go out as polylines on their layers. AutoCAD opens the DXF and can save it as a
+DWG. A DXF exported this way opens again in KanzonasCAD with the same symbols, pins and
+attributes. To have everything broken into plain lines and texts instead, as before version
+0.20, untick <b>Export DXF with symbols and footprints as blocks</b> in Edit &gt; Options...,
+General.</li>
 <li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,
 "<i>name</i> backups", stamped with the date and time (the newest 10 are kept, or as many as
 Edit &gt; Options..., Files, says; none turns backups off). <b>Open backups

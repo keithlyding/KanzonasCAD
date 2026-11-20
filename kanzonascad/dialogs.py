@@ -1568,6 +1568,13 @@ def options_dialog(parent, cur, view, tab=None):
     reopen = QCheckBox("Open the files that were open when KanzonasCAD last closed")
     reopen.setChecked(bool(cur.get("reopen", False)))
     form.addRow("", reopen)
+    dxf_blocks = QCheckBox("Export DXF with symbols and footprints as blocks (with attributes)")
+    dxf_blocks.setObjectName("dxf_blocks")
+    dxf_blocks.setChecked(bool(cur.get("dxf_blocks", True)))
+    dxf_blocks.setToolTip("On: each symbol and footprint goes out as an AutoCAD block with its "
+                          "tag, description, maker and catalog number as attributes. Off: as "
+                          "plain lines and texts, as before version 0.20")
+    form.addRow("", dxf_blocks)
     tabs.addTab(page, "General")
 
     # Files
@@ -1659,7 +1666,8 @@ def options_dialog(parent, cur, view, tab=None):
                 "update_check": upd.isChecked(), "reopen": reopen.isChecked(),
                 "library_folder": folder,
                 "template_path": path, "backups_keep": keep.value(),
-                "autosave_minutes": auto.value(), "drafting": apply_drafting is not None}
+                "autosave_minutes": auto.value(), "drafting": apply_drafting is not None,
+                "dxf_blocks": dxf_blocks.isChecked()}
 
 
 def cables_dialog(parent, project, folder):

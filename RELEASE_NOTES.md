@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20
+
+**New**
+- DXF export keeps symbols and footprints as AutoCAD blocks: each one defined once and placed
+  where it is used, with its tag, description, maker, catalog number, location and ratings as
+  attributes (the ones shown on the sheet shown in AutoCAD too, the others hidden), so AutoCAD's
+  attribute editor and data extraction work on them. The DXF opens again in KanzonasCAD with the
+  same symbols, pins and attributes. Edit > Options... turns it off for plain lines and texts.
+
 ## 0.19.12
 
 **Fixed**
