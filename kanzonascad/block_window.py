@@ -230,7 +230,7 @@ class BlockEditing:
     def save_block(self, *, close=True):
         """Save block: the block editor's drawing back into the library; then the copies in
         the project it was opened from updated if you say so, and the block's tab closed,
-        back to the drawing it was opened from (the owner, 0.20.1: "the tab should auto-close
+        back to the drawing it was opened from (the owner, 0.21: "the tab should auto-close
         after saving"). close=False: the tab stays (closing it asked to save). True when
         saved. (Keyword only: a menu action's triggered(checked) never sets it.)"""
         d = self.doc()

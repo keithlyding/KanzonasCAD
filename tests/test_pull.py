@@ -126,7 +126,7 @@ class PullTest(unittest.TestCase):
         lt = b.place("Pilot light", (8, 5))
         b.wire(b.pins(t)[1], b.pins(cr)[0])
         # (the light's wire down and across, clear of the coil's pin: drawn across first, it
-        # ran over the coil's wire and through its pin A1, joined into it, before 0.20.1
+        # ran over the coil's wire and through its pin A1, joined into it, before 0.21
         # refused wires through pins)
         v = b.v
         q, r = b.pins(t)[1], b.pins(lt)[0]

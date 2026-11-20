@@ -668,7 +668,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         finish()
         v.current_layer = "0"
         new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
-        # (0.20.1: a wire, as a bus, ends on pins but never runs through one)
+        # (0.21: a wire, as a bus, ends on pins but never runs through one)
         bus_clear_of_pins(new, old_wires, "wire")
         if want != "WIRES" and len(new) == 1 and not wires.pins_on(s, new[0].points[0]):
             # (a wire joined to another keeps the older's layer: only a wire on its own)
@@ -1269,7 +1269,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             BC.CHECKED["array where they go"] += 1
 
     def op_array_edit():
-        # (0.20.1: an array changed with Edit array as the owner would: a copy picked, a new
+        # (0.21: an array changed with Edit array as the owner would: a copy picked, a new
         # spacing typed, the rest kept with Enter: every copy still the array's lands where its
         # place in rows and columns puts it from the source as it is now, those that had left
         # the array stay where they were; worked out from the array's record and the sheet)
@@ -2783,7 +2783,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         BC.CHECKED["column of drops numbered apart"] += 1
 
     def op_pdb():
-        # (0.20.1: a power distribution block and its outlets: each outlet's wire on phase j
+        # (0.21: a power distribution block and its outlets: each outlet's wire on phase j
         # takes the block's phase j number with the outlet's letter; worked out from the block
         # and the outlets' numbers, not the numbering)
         k = s.k()
@@ -2847,7 +2847,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 BC.CHECKED["distribution block outlets numbered by phase"] += 1
 
     def op_picture():
-        # (0.20.1: a picture or a simple SVG brought in as the owner would, with Import picture
+        # (0.21: a picture or a simple SVG brought in as the owner would, with Import picture
         # or SVG (or dropped): the picture kept in the project, 2" wide on paper, its middle
         # where it was put; the SVG's lines there, as many as it has; then edited, saved and
         # undone with everything else)
@@ -2882,7 +2882,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             BC.CHECKED["SVG in as lines"] += 1
 
     def op_assign_part():
-        # (0.20.1: Assign part on a random handful of devices, as the owner would: every one
+        # (0.21: Assign part on a random handful of devices, as the owner would: every one
         # using the part's symbol takes its maker, catalog number and description, keeps its
         # tag, and the project keeps a copy of the part; worked out from the devices before)
         from kanzonascad import partsassign as PA
@@ -2917,7 +2917,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         BC.CHECKED["part assigned to the devices of its symbol"] += 1
 
     def op_report_sheet():
-        # (0.20.1: a report drawn on sheets of the project, as the owner would: every page in
+        # (0.21: a report drawn on sheets of the project, as the owner would: every page in
         # its frame and clear of the title block, and every row's first cell on one of them,
         # worked out from the report itself)
         from kanzonascad import report_sheets as RS
@@ -2943,7 +2943,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         BC.CHECKED["report sheets hold their report"] += 1
 
     def op_io_list():
-        # (0.20.1: an I/O list brought in as the owner would, with Import I/O list...: every
+        # (0.21: an I/O list brought in as the owner would, with Import I/O list...: every
         # point of the list written beside its module's terminal, worked out from the module's
         # pins, nothing past its frame)
         from kanzonascad.scalefit import outside
@@ -3806,7 +3806,7 @@ def mixed_project(win):
     type_in(v, "20,8")
     while v.cmd is not None:
         v.cmd.enter()
-    # (0.20.1) a timer coil placed flipped: its "TR" read backwards in AutoCAD's copy
+    # (0.21) a timer coil placed flipped: its "TR" read backwards in AutoCAD's copy
     v.run(C.InsertCmd, lib.get("symbol", "Timer coil"), {"TAG": "TR1"})
     type_in(v, "F")
     type_in(v, "14,1")
@@ -3894,7 +3894,7 @@ def mixed_project(win):
             {"tag": "W101", "type": "4C #14 SOOW", "marking": "colors",
              "colors": {rs[0]["conductors"][0]["num"]: "RED"}})}})
     v.show_sheet(p.sheets[0].id)
-    # (0.20.1) a picture kept in the project (a logo), on the first sheet
+    # (0.21) a picture kept in the project (a logo), on the first sheet
     fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))
     return p
 
@@ -3956,7 +3956,7 @@ def files(log, out):
                 pa, pb = dict(a.pin_points()), dict(b.pin_points())
                 assert set(pa) == set(pb) and all(G.dist(pa[n], pb[n]) < 1e-6 for n in pa), \
                     "a symbol's pins came back from DXF elsewhere: %s" % a.block
-        # (0.20.1: no text of a block reads mirror-written in AutoCAD: a flipped copy's own texts
+        # (0.21: no text of a block reads mirror-written in AutoCAD: a flipped copy's own texts
         # and attributes as the program draws them, readable; from the DXF, by its flags)
         import ezdxf
         for ref in ezdxf.readfile(dxf).modelspace().query("INSERT"):

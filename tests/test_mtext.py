@@ -96,7 +96,7 @@ class MTextCommandTest(unittest.TestCase):
 
     def test_properties_window_edits(self):
         # (its window, from right-click Text properties...: a double-click edits it in place
-        # since 0.20.1, tests/test_021_text_in_place.py)
+        # since 0.21, tests/test_021_text_in_place.py)
         with self.p.edit("add") as ed:
             m = ed.add(self.s, M.MText((1, 1), "OLD", 0.1))
 

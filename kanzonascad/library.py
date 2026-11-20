@@ -259,7 +259,7 @@ class Library:
     # One file a part, in the library's parts folder (the owner's two library folders, Nov
     # 2026: a shared library in a synced folder; two people adding parts at once each write a
     # file of their own, never one file both change, which a sync app turns into a conflict
-    # copy). A library from before 0.20.1 kept them all in parts.json: still read, and moved to
+    # copy). A library from before 0.21 kept them all in parts.json: still read, and moved to
     # files of their own the first time a part is saved or deleted.
     PARTS_DIR = "parts"
 

@@ -656,7 +656,7 @@ def run(log_path):
         rnd = random.Random(5)
         p = M.Project.new()
         s = p.sheets[0]
-        # (0.20.1: 1,000 pictures, as a new kind of object must be measured: two pictures,
+        # (0.21: 1,000 pictures, as a new kind of object must be measured: two pictures,
         # each many times, as a logo is on every sheet)
         import base64
         from PySide6.QtCore import QBuffer, QByteArray, QIODevice

@@ -411,7 +411,7 @@ if __name__ == "__main__":
 
 class SaveClosesTabTest(unittest.TestCase):
     """Save block closes the block's tab and goes back to the drawing it was opened from (the
-    owner, 0.20.1: "After a block is edited, the tab should auto-close after saving"); the
+    owner, 0.21: "After a block is edited, the tab should auto-close after saving"); the
     menu's Save block (triggered with checked=False) closes it too."""
 
     def setUp(self):

@@ -275,7 +275,7 @@ project also keeps its own copy of the blocks it uses, so it opens the same anyw
 happens to the library later. Each part is a file of its own in the library's <b>parts</b>
 folder, so two people adding parts to a library in a synced folder at the same time don't
 make the sync app keep a conflict copy; if it keeps one anyway ("... (Keith's PC).json"), the
-Library panel names it instead of listing the part twice. A library from before 0.20.1 keeps
+Library panel names it instead of listing the part twice. A library from before 0.21 keeps
 its parts in parts.json until a part is next saved or deleted, when they move to files of
 their own.</p>
 <ul>
