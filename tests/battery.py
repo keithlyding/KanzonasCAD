@@ -37,6 +37,7 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import tempfile
 import time
@@ -2180,7 +2181,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         now = [w for w in sh.wires() if w.touches(src.pin_points()[0][1])]
         if not now or not now[0].num or now[0].num_lock:
             return
-        got = WN.split(now[0].num)
+        # (a tap off the source's wire is numbered from it: 1006-1, 1006-1a; its page is the
+        # base number's)
+        got = WN.split(re.sub(r"-\d+[a-z]*$", "", now[0].num))
         assert got and got[0] == p.sheet_number(sh), \
             "a source arrow's wire on page %s took %s from a destination's page" % (
                 p.sheet_number(sh), now[0].num)
