@@ -261,10 +261,23 @@ with a scale the strip stays its size on paper.</p>
 <h2>Symbols, footprints and parts (the library)</h2>
 <p>Your <b>library</b> is a folder of its own (<code>Documents\\KanzonasCAD Library</code> to
 start, or <code>data\\Library</code> beside the program in the portable version; <b>Library
-folder...</b> picks another, a OneDrive folder say). It is kept apart from
+folder...</b> picks another, a OneDrive folder say). <b>Second library folder...</b> (Library
+menu) adds a second one, searched with the first: one shared with your team in a synced folder
+(OneDrive, SharePoint, Google Drive, Dropbox: their own apps sync it) and one of your own, say,
+or any two folders. Everything in the second shows "(second library)" in the Library panel; a
+name in both is the first library's. A block or part is always saved back to the library it is
+in; new ones go to the first, or to the second with <b>Save new blocks and parts to the second
+library</b> ticked (Library menu). A folder you can't write to (a read-only share) is used
+read-only: its blocks and parts are there to place, and saving one says why it can't. Cancel in
+the second folder's window offers to take it away (its files stay). It is kept apart from
 the program and from projects, so it lasts through updates and serves every project. Each
 project also keeps its own copy of the blocks it uses, so it opens the same anywhere, whatever
-happens to the library later.</p>
+happens to the library later. Each part is a file of its own in the library's <b>parts</b>
+folder, so two people adding parts to a library in a synced folder at the same time don't
+make the sync app keep a conflict copy; if it keeps one anyway ("... (Keith's PC).json"), the
+Library panel names it instead of listing the part twice. A library from before 0.20.1 keeps
+its parts in parts.json until a part is next saved or deleted, when they move to files of
+their own.</p>
 <ul>
 <li><b>Schematic symbols</b>: blocks with <b>pins</b> (where wires attach) and a <b>tag</b>.
 A starter set of JIC/NFPA symbols is built in (relay, contactor and timer coils, NO/NC and

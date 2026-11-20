@@ -219,7 +219,11 @@ class MainWindow(BlockEditing, QMainWindow):
         from .library_panel import LibraryPanel
         from .paths import follow_drive
         self.library = Library(follow_drive(self.settings.value("library_folder", "") or "")
+                               or None,
+                               follow_drive(self.settings.value("library_folder2", "") or "")
                                or None)
+        self.library.save_second = self.library.second is not None and \
+            self.settings.value("library_save_second", False) in (True, "true", "1", 1)
         self.library_panel = LibraryPanel(self.library)
         self.library_panel.insertRequested.connect(self.insert_block)
         self.library_panel.propertiesRequested.connect(self.block_properties)
@@ -560,6 +564,17 @@ class MainWindow(BlockEditing, QMainWindow):
               "footprint, saved to your library as a part to use again")
         A("library_folder", "Library &folder...", self.choose_library_folder, icon="open",
           label="Library folder")
+        A("library_folder2", "Second library fol&der...", self.choose_second_library,
+          icon="open", label="Second library",
+          tip="A second library folder, searched with the first (one shared in a synced "
+              "folder, one of your own, say): Cancel in the folder window takes it away")
+        A("library_save2", "Save new blocks and parts to the second library",
+          self.toggle_save_second, checkable=True, label="Save to second")
+        a2 = self.acts["library_save2"]
+        a2.blockSignals(True)
+        a2.setChecked(self.library.save_second)
+        a2.blockSignals(False)
+        a2.setEnabled(self.library.second is not None)
         A("block_props", "Block p&roperties...", lambda: self.block_properties(),
           icon="block_props", label="Block properties",
           tip="The selected block's name, category, description, manufacturer, family and "
@@ -685,7 +700,8 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
                   "save_block_as", "add_pin", "pins", "update_blocks", None,
-                  "new_part", "assign_part", "save_as_part", "library_folder"):
+                  "new_part", "assign_part", "save_as_part", "library_folder",
+                  "library_folder2", "library_save2"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Window")
         for k in ("new_window", "move_window", None, "close_window"):
@@ -2715,6 +2731,45 @@ class MainWindow(BlockEditing, QMainWindow):
         self.settings.setValue("library_folder", folder)
         self.library_panel.refresh()
         self.statusBar().showMessage("Library: %s" % folder, 5000)
+
+    def ask_second_library(self):
+        """The second library's folder, "" to take it away, or None (a test replaces it)."""
+        folder = QFileDialog.getExistingDirectory(
+            self, "Second library folder (Cancel: none)",
+            self.library.second.folder if self.library.second else self.library.folder)
+        if folder:
+            return folder
+        if self.library.second is None:
+            return None
+        r = QMessageBox.question(self, APP, "Take away the second library (%s)? Its files stay "
+                                 "where they are." % self.library.second.folder)
+        return "" if r == QMessageBox.Yes else None
+
+    def choose_second_library(self):
+        """Second library folder...: a second library searched with the first."""
+        folder = self.ask_second_library()
+        if folder is None:
+            return
+        if folder and os.path.normcase(os.path.abspath(folder)) == \
+                os.path.normcase(os.path.abspath(self.library.folder)):
+            self._say("That is the first library's folder already")
+            return
+        self.library.set_second(folder or None)
+        self.settings.setValue("library_folder2", folder)
+        if not folder:
+            self.settings.setValue("library_save_second", False)
+        self.acts["library_save2"].setChecked(self.library.save_second)
+        self.acts["library_save2"].setEnabled(self.library.second is not None)
+        self.library_panel.refresh()
+        self._say("Second library: %s" % folder if folder else "No second library")
+
+    def toggle_save_second(self, on):
+        """Save new blocks and parts to the second library (a block or part already in one
+        is always saved back where it is)."""
+        self.library.save_second = bool(on) and self.library.second is not None
+        self.settings.setValue("library_save_second", self.library.save_second)
+        self._say("New blocks and parts go to the %s library" % (
+            "second" if self.library.save_second else "first"))
 
     def insert_block(self, defn, attrs):
         v = self.view()

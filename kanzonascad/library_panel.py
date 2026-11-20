@@ -303,7 +303,10 @@ class LibraryPanel(QWidget):
                 if parent is None:
                     parent = cats[cat] = QTreeWidgetItem([cat])
                     tree.addTopLevelItem(parent)
-                it = QTreeWidgetItem([b.name + ("" if not b.builtin else "  (built in)")])
+                where = self.library.where(kind, b.name) if self.library.second else None
+                it = QTreeWidgetItem([b.name + ("  (built in)" if b.builtin else
+                                                "  (second library)" if where == "second"
+                                                else "")])
                 it.setIcon(0, QIcon(block_pixmap(b, ICON)))
                 it.setToolTip(0, maker_tooltip(b))
                 it.setData(0, Qt.UserRole, b.name)
@@ -312,6 +315,7 @@ class LibraryPanel(QWidget):
         self.parts.clear()
         try:
             parts = self.library.parts()
+            problems += self.library.part_problems
         except (OSError, ValueError) as ex:
             parts = []
             problems.append("parts.json (%s)" % ex)
@@ -321,7 +325,9 @@ class LibraryPanel(QWidget):
                 continue
             if mfr is not None and p.manufacturer.strip().lower() != mfr.lower():
                 continue
-            it = QTreeWidgetItem([p.label(), p.symbol or "-", p.footprint or "-"])
+            it = QTreeWidgetItem([p.label() + ("  (second library)" if p.id in
+                                                self.library.second_parts else ""),
+                                  p.symbol or "-", p.footprint or "-"])
             it.setData(0, Qt.UserRole, p.id)
             self.parts.addTopLevelItem(it)
         for i in range(3):
