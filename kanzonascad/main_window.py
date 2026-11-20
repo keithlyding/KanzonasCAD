@@ -329,6 +329,10 @@ class MainWindow(BlockEditing, QMainWindow):
           icon="pdf_in", label="Import PDF",
           tip="Bring in the lines and text of a PDF page (one made by a CAD program, or "
               "printed to PDF): drag a PDF onto the drawing to put it where you let go")
+        A("import_picture", "Import pict&ure or SVG into this sheet...",
+          lambda: self.import_picture(), icon="pdf_in", label="Picture or SVG",
+          tip="A picture (PNG, JPEG...: a logo, a drawing to trace over), kept in the project, "
+              "or a simple SVG's lines and texts; drag one onto the drawing to put it there")
         A("export_dxf", "Export this sheet to &DXF...", self.export_dxf, icon="dxf_out",
           label="Sheet to DXF")
         A("export_dxf_all", "Export all sheets to DX&F...", self.export_dxf_all, icon="dxf_out",
@@ -782,7 +786,7 @@ class MainWindow(BlockEditing, QMainWindow):
         r.add_tab("Output", [
             ("Print", "large", [a["print"]]),
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
-            ("Import", "large", [a["import_dxf"], a["import_pdf"]]),
+            ("Import", "large", [a["import_dxf"], a["import_pdf"], a["import_picture"]]),
             ("Reports", "large", [a["bom"], a["cables"], a["wire_list"], a["terminal_list"],
                                   a["materials"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
@@ -1515,6 +1519,48 @@ class MainWindow(BlockEditing, QMainWindow):
         self._dxf_report(rep)
         d.view.zoom("extents")
 
+    def import_picture(self, path=None, at=None):
+        """Import picture or SVG into this sheet...: a picture kept in the project, 2" wide on
+        paper, or an SVG's lines and texts (svg_import.py), in the middle of the view (or at
+        at: where it was dropped), selected; one undoable step. The ids added ([] when not)."""
+        d = self.doc()
+        if d is None:
+            return []
+        if path is None:
+            path, _f = QFileDialog.getOpenFileName(
+                self, "Import picture or SVG", self._import_dir(),
+                "Pictures and SVG (*.png *.jpg *.jpeg *.bmp *.gif *.svg);;SVG (*.svg)")
+            if not path:
+                return []
+        self.settings.setValue("import_dir", os.path.dirname(path))
+        v = d.view
+        if at is None:
+            at = v.to_world(v.rect().center())
+        from . import svg_import
+        try:
+            if path.lower().endswith(".svg"):
+                rep = fileio.import_dxf(d.project, v.sheet(), path, at)
+                what = "%d line(s) and shape(s) and text(s) from the SVG" % rep["count"]
+            else:
+                rep = fileio.import_picture(d.project, v.sheet(), path, at)
+                what = "the picture (kept in the project; drag a corner grip to size it)"
+        except svg_import.TooComplex as ex:
+            QMessageBox.information(self, APP, "%s is too complex to bring in as lines (%s). "
+                                    "Simple drawings (a logo, an outline) come in; save this "
+                                    "one as a PNG to bring it in as a picture."
+                                    % (os.path.basename(path), ex))
+            return []
+        except (OSError, ValueError) as ex:
+            QMessageBox.warning(self, APP, "Couldn't read %s:\n%s" % (path, ex))
+            return []
+        v.set_selection(set(rep["ids"]))
+        msg = "Imported %s" % what
+        if rep["skipped"]:
+            msg += "; left out: " + ", ".join("%d %s" % (n, k)
+                                              for k, n in sorted(rep["skipped"].items()))
+        self._say(msg)
+        return rep["ids"]
+
     def ask_pdf_import(self, path, pages, k):
         """The Import PDF window: {"page", "scale", "filled"} or None (a test replaces it)."""
         from .dialogs import pdf_import_dialog
@@ -1571,11 +1617,12 @@ class MainWindow(BlockEditing, QMainWindow):
         self.statusBar().showMessage(msg, 8000)
 
     # ---- files dragged in (Explorer, a file manager) ----------------------------------------
-    DROP_TYPES = (".dxf", ".dwg", ".pdf", M.FILE_SUFFIX)
+    DROP_TYPES = (".dxf", ".dwg", ".pdf", M.FILE_SUFFIX) + fileio.PICTURE_TYPES + (".svg",)
 
     @classmethod
     def _dropped_paths(cls, mime):
-        """The local files of a drag that KanzonasCAD takes (DXF, DWG, projects)."""
+        """The local files of a drag that KanzonasCAD takes (DXF, DWG, PDF, pictures, SVG,
+        projects)."""
         if mime is None or not mime.hasUrls():
             return []
         out = []
@@ -1626,6 +1673,13 @@ class MainWindow(BlockEditing, QMainWindow):
         d = self.doc()
         imported = []
         for path in paths:
+            if path.lower().endswith(fileio.PICTURE_TYPES + (".svg",)):
+                if d is not None:
+                    imported += self.import_picture(path, at)
+                else:
+                    QMessageBox.information(self, APP, "Open or start a project first: a "
+                                            "picture is brought into a sheet (%s)" % path)
+                continue
             if path.lower().endswith(".pdf"):
                 # (a PDF goes into the drawing shown: where it was let go, or as the page was)
                 if d is not None:

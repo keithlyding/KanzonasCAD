@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**New**
+- Pictures and SVG: File > Import picture or SVG into this sheet... (or drag one onto the
+  drawing). A picture (a logo, a drawing to trace over) is kept in the project itself, drawn
+  under the lines, printed and exported. A simple SVG comes in as real lines and text you can
+  edit; one too detailed for that is refused, with the reason.
+
 ## 0.20
 
 **New**

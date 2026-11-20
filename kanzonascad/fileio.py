@@ -111,7 +111,12 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True):
                 for i in range(48)]
         ents.append(M.Polyline(oval, closed=True, layer=lay))
         ents.append(M.Polyline(leader, layer=lay))
+    pictures = 0
     for e in ents:
+        if isinstance(e, M.Picture):
+            pictures += 1
+            _write_picture(doc, msp, e, path, pictures)
+            continue
         _write(msp, e)
     names = {}
     for ins in placed:
@@ -123,6 +128,24 @@ PIN_TAG = "KZPIN"                   # (a block's pins, as hidden constant ATTDEF
 
 # what a block's attributes carry out to AutoCAD (KanzonasCAD's own, internal ones stay home)
 _INTERNAL = {"DEV", "PARENT", "TAG_LOCK", "XREF", "XDEV", "FROM", "TAGLINK", "PART", "SLOT"}
+
+
+def _write_picture(doc, msp, e, path, n):
+    """A picture as an AutoCAD IMAGE: AutoCAD keeps a drawing's pictures in files of their own,
+    so it is written beside the DXF ("sheet-picture-1.png") and the IMAGE points to it there."""
+    import base64
+    raw = base64.b64decode(e.data.encode("ascii"))
+    from PySide6.QtGui import QImage
+    img = QImage.fromData(raw)
+    if img.isNull():
+        return
+    stem = os.path.splitext(os.path.basename(path))[0]
+    name = "%s-picture-%d.%s" % (stem, n, "jpg" if e.fmt == "jpeg" else "png")
+    with open(os.path.join(os.path.dirname(os.path.abspath(path)), name), "wb") as f:
+        f.write(raw)
+    idef = doc.add_image_def(filename=name, size_in_pixel=(img.width(), img.height()))
+    msp.add_image(idef, insert=(e.pos[0], e.pos[1]), size_in_units=(e.width, e.height),
+                  rotation=e.angle, dxfattribs={"layer": e.layer or "0"})
 
 
 def _block_name(name, names):
@@ -946,6 +969,8 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
                 p, align, valign, rot = _text_place(de)
                 out.append(M.Text(P(p), de.plain_text(), de.dxf.get("height", 0.125) * k, rot,
                                   align, valign, **kw))
+        elif t == "IMAGE" and _image(de, k, out, kw):
+            pass
         elif t == "POINT":
             skipped[t] = skipped.get(t, 0) + 1
         elif depth < 12 and _proxy_parts(de, k, out, skipped, depth, layer):
@@ -954,6 +979,37 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             skipped[t] = skipped.get(t, 0) + 1
     except Exception:                   # (reported to the user: "Skipped: X (unreadable)")
         skipped[t + " (unreadable)"] = skipped.get(t + " (unreadable)", 0) + 1
+
+
+def _image(de, k, out, kw):
+    """An IMAGE whose picture file is there (beside the drawing, or where it says): a Picture
+    kept in the project, placed, sized and turned as AutoCAD shows it (straight, not skewed).
+    False when its file is missing or it can't be read (then it is counted as skipped)."""
+    import base64
+    import ezdxf
+    try:
+        name = de.image_def.dxf.filename
+    except (AttributeError, ezdxf.DXFError):
+        return False
+    where = os.path.dirname(os.path.abspath(de.doc.filename or "")) if de.doc else ""
+    path = name if os.path.isabs(name) and os.path.isfile(name) else \
+        os.path.join(where, os.path.basename(name.replace("\\", "/")))
+    if not os.path.isfile(path) or os.path.getsize(path) > PICTURE_MAX_BYTES:
+        return False
+    u, v = de.dxf.u_pixel, de.dxf.v_pixel
+    px, py = de.dxf.image_size[0], de.dxf.image_size[1]
+    w, h = math.hypot(u[0], u[1]) * px * k, math.hypot(v[0], v[1]) * py * k
+    if w <= 0 or h <= 0 or abs(u[0] * v[0] + u[1] * v[1]) > 1e-9 * (w * h + 1):
+        return False                    # (skewed: not a picture it can place)
+    with open(path, "rb") as f:
+        raw = f.read()
+    fmt = "jpeg" if raw[:3] == b"\xff\xd8\xff" else "png" if raw[:4] == b"\x89PNG" else None
+    if fmt is None:
+        return False
+    ins = de.dxf.insert
+    out.append(M.Picture((ins[0] * k, ins[1] * k), w, h, base64.b64encode(raw).decode("ascii"),
+                         fmt, math.degrees(math.atan2(u[1], u[0])), layer=kw.get("layer", "0")))
+    return True
 
 
 def _ocs(de):
@@ -1087,10 +1143,55 @@ def read_dwg(path):
 
 
 def read_drawing(path):
-    """A DXF or DWG's model space (by its extension)."""
+    """A DXF or DWG's model space, or an SVG's lines (by its extension)."""
     if path.lower().endswith(".dwg"):
         return read_dwg(path)
+    if path.lower().endswith(".svg"):
+        from . import svg_import
+        return svg_import.read_svg(path)
     return read_dxf(path)
+
+
+PICTURE_TYPES = (".png", ".jpg", ".jpeg", ".bmp", ".gif")
+PICTURE_MAX_BYTES = 15 * 1024 * 1024
+
+
+def read_picture(path, width):
+    """A picture file as a Picture (kept in the project: the owner, "pics/svgs need to be
+    embedded"), width wide (its height as the picture's shape has it), its lower left at 0,0:
+    PNG and JPEG kept as they are, other kinds turned into PNG. ValueError when it can't be
+    read."""
+    import base64
+    if os.path.getsize(path) > PICTURE_MAX_BYTES:
+        raise ValueError("the picture is over %d MB" % (PICTURE_MAX_BYTES // (1024 * 1024)))
+    with open(path, "rb") as f:
+        raw = f.read()
+    from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+    from PySide6.QtGui import QImage
+    img = QImage.fromData(raw)
+    if img.isNull() or img.width() < 1 or img.height() < 1:
+        raise ValueError("not a picture it can read")
+    if raw[:8] == b"\x89PNG\r\n\x1a\n":
+        fmt = "png"
+    elif raw[:3] == b"\xff\xd8\xff":
+        fmt = "jpeg"
+    else:
+        data = QByteArray()
+        buf = QBuffer(data)
+        buf.open(QIODevice.WriteOnly)
+        img.save(buf, "PNG")
+        buf.close()
+        raw, fmt = bytes(data), "png"
+    height = width * img.height() / float(img.width())
+    return M.Picture((0.0, 0.0), width, height, base64.b64encode(raw).decode("ascii"), fmt)
+
+
+def import_picture(project, sheet, path, at=None, width=None):
+    """Add a picture to a sheet, one undoable step: width wide (2" on paper to start), its
+    middle at at (or at 0,0 by its lower left corner). The report as import_dxf's."""
+    pic = read_picture(path, width if width is not None else 2.0 * sheet.k())
+    rep = {"layers": {}, "skipped": {}, "units": "in"}
+    return add_drawing(project, sheet, [pic], rep, path, at)
 
 
 def import_dxf(project, sheet, path, at=None, anchor="center"):
@@ -1159,7 +1260,10 @@ def add_drawing(project, sheet, ents, rep, path, at=None, anchor="center"):
         bb = (bb[0] + dx, bb[1] + dy, bb[2] + dx, bb[3] + dy)
     ids = []
     kind = os.path.splitext(path)[1].lower()
-    with project.edit({".dwg": "Import DWG", ".pdf": "Import PDF"}.get(kind, "Import DXF")) as ed:
+    what = {".dwg": "Import DWG", ".pdf": "Import PDF", ".svg": "Import SVG"}.get(kind)
+    if kind in PICTURE_TYPES:
+        what = "Insert picture"
+    with project.edit(what or "Import DXF") as ed:
         for name, color in rep["layers"].items():
             if name not in project.layers:
                 ed.layer(name, None, M.Layer(name, color).to_dict())

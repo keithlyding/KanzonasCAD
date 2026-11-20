@@ -2678,6 +2678,41 @@ def random_editing(log, out, ops, seed, drawing=None):
             "a column of drops shares a number: %r" % drops
         BC.CHECKED["column of drops numbered apart"] += 1
 
+    def op_picture():
+        # (0.20.1: a picture or a simple SVG brought in as the owner would, with Import picture
+        # or SVG (or dropped): the picture kept in the project, 2" wide on paper, its middle
+        # where it was put; the SVG's lines there, as many as it has; then edited, saved and
+        # undone with everything else)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        at = (o[0] + 3.0 * k, o[1] + 3.0 * k)
+        before = set(s.entities)
+        if rnd.random() < 0.5:
+            got = win.import_picture(picture_file(out), at)
+            new = [e for i, e in s.entities.items() if i not in before]
+            assert len(new) == 1 and isinstance(new[0], M.Picture) and got == [new[0].id], \
+                "a picture didn't come in as one: %r" % new
+            e = new[0]
+            assert abs(e.width - 2.0 * k) <= 1e-9 * k and \
+                G.dist(e.center(), at) <= 1e-6 * max(1.0, k), \
+                "a picture came in %.4g wide at %r, not %.4g at %r" % (e.width, e.center(),
+                                                                       2.0 * k, at)
+            BC.CHECKED["picture in as put"] += 1
+        else:
+            got = win.import_picture(svg_file(out), at)
+            new = [e for i, e in s.entities.items() if i not in before]
+            assert len(new) == SVG_PIECES and sorted(got) == sorted(e.id for e in new), \
+                "an SVG brought in %d objects, not %d" % (len(new), SVG_PIECES)
+            bb = None
+            for e in new:
+                bb = G.bbox_union(bb, e.bbox())
+            mid = ((bb[0] + bb[2]) / 2.0, (bb[1] + bb[3]) / 2.0)
+            assert G.dist(mid, at) <= 1e-6 * max(1.0, k), "an SVG landed at %r, not %r" % (
+                mid, at)
+            BC.CHECKED["SVG in as lines"] += 1
+
     def op_contact_blocks():
         # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
         # line from it through the farthest, worked out from where they are; none of them
@@ -3236,7 +3271,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_picture, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -3539,7 +3574,34 @@ def mixed_project(win):
             {"tag": "W101", "type": "4C #14 SOOW", "marking": "colors",
              "colors": {rs[0]["conductors"][0]["num"]: "RED"}})}})
     v.show_sheet(p.sheets[0].id)
+    # (0.20.1) a picture kept in the project (a logo), on the first sheet
+    fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))
     return p
+
+
+SVG_PIECES = 4             # (svg_file's: a line, a rectangle, a circle and a text)
+
+
+def svg_file(out):
+    path = os.path.join(out, "battery.svg")
+    if not os.path.isfile(path):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="2in" height="1in" '
+                    'viewBox="0 0 200 100"><line x1="0" y1="0" x2="200" y2="0"/>'
+                    '<rect x="10" y="10" width="50" height="20"/>'
+                    '<circle cx="100" cy="50" r="25"/>'
+                    '<text x="10" y="90" font-size="20">PANEL</text></svg>')
+    return path
+
+
+def picture_file(out):
+    path = os.path.join(out, "battery-logo.png")
+    if not os.path.isfile(path):
+        from PySide6.QtGui import QColor, QImage
+        img = QImage(64, 32, QImage.Format_RGB32)
+        img.fill(QColor("#2060a0"))
+        img.save(path, "PNG")
+    return path
 
 
 def files(log, out):
