@@ -232,6 +232,12 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 14. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
+## Decided while the owner was away (Nov 2026; to confirm)
+- **Library parts** (0.20.1): one file a part done first, on its own (the two folders' shared
+  library needs it); parts.json moves to the files at the first save or delete, not at start-up
+  (opening a library never changes it). The second folder itself (searched together, each item
+  showing its library, saving asking which) is next.
+
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a

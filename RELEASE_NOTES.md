@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**Changed**
+- Your library keeps each part in a file of its own (the parts folder), so a library in a
+  synced folder (OneDrive, Dropbox...) shared by several people doesn't get sync conflict
+  copies. Your existing parts move there the first time you save or delete one.
+
 ## 0.20
 
 **New**

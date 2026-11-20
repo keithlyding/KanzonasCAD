@@ -82,6 +82,7 @@ class Library:
     def __init__(self, folder=None):
         self.folder = folder or default_folder()
         self._builtins = None
+        self.part_problems = []         # (part files it couldn't read: parts)
 
     # ---- folders ---------------------------------------------------------------------------
     def _dir(self, kind):
@@ -206,10 +207,23 @@ class Library:
         return sorted(seen.values(), key=str.lower)
 
     # ---- parts -----------------------------------------------------------------------------
+    # One file a part, in the library's parts folder (the owner's two library folders, Nov
+    # 2026: a shared library in a synced folder; two people adding parts at once each write a
+    # file of their own, never one file both change, which a sync app turns into a conflict
+    # copy). A library from before 0.20.1 kept them all in parts.json: still read, and moved to
+    # files of their own the first time a part is saved or deleted.
+    PARTS_DIR = "parts"
+
     def _parts_path(self):
         return os.path.join(self.folder, "parts.json")
 
-    def parts(self):
+    def _parts_dir(self):
+        return os.path.join(self.folder, self.PARTS_DIR)
+
+    def _part_file(self, part_id):
+        return os.path.join(self._parts_dir(), safe_name(part_id) + ".json")
+
+    def _legacy_parts(self):
         path = self._parts_path()
         if not os.path.exists(path):
             return []
@@ -217,19 +231,61 @@ class Library:
             data = json.load(f)
         return [Part.from_dict(d) for d in data.get("parts", [])]
 
+    def parts(self):
+        """Every part, by maker and catalog number. The files it couldn't read, and the
+        conflict copies a sync app left ("1a2b3c (Keith's PC).json": a file not named by the
+        part in it), are in part_problems, not among the parts."""
+        self.part_problems = []
+        got = {p.id: p for p in self._legacy_parts()}
+        d = self._parts_dir()
+        if os.path.isdir(d):
+            for fn in sorted(os.listdir(d)):
+                if not fn.endswith(".json"):
+                    continue
+                try:
+                    with open(os.path.join(d, fn), encoding="utf-8") as f:
+                        part = Part.from_dict(json.load(f))
+                except (OSError, ValueError, TypeError) as ex:
+                    self.part_problems.append("%s (%s)" % (fn, ex))
+                    continue
+                if fn[:-5] != safe_name(part.id):
+                    self.part_problems.append("%s (a copy a sync app left: %s is %s)" % (
+                        fn, part.label(), safe_name(part.id) + ".json"))
+                    continue
+                got[part.id] = part
+        return sorted(got.values(), key=lambda p: (p.manufacturer.lower(), p.catalog.lower()))
+
+    def _move_legacy(self):
+        """parts.json's parts into files of their own, then parts.json gone."""
+        legacy = self._legacy_parts()
+        if not legacy:
+            return
+        os.makedirs(self._parts_dir(), exist_ok=True)
+        for p in legacy:
+            if not os.path.exists(self._part_file(p.id)):
+                _write_json(self._part_file(p.id), p.to_dict())
+        os.remove(self._parts_path())
+
     def save_parts(self, parts):
-        os.makedirs(self.folder, exist_ok=True)
-        _write_json(self._parts_path(), {"format": "kanzonascad-parts", "version": 1,
-                                         "parts": [p.to_dict() for p in parts]})
+        """The library's parts made these (each written to its own file; the others deleted)."""
+        self._move_legacy()
+        keep = {p.id for p in parts}
+        for p in self.parts():
+            if p.id not in keep:
+                self.delete_part(p.id)
+        for p in parts:
+            self.save_part(p)
 
     def save_part(self, part):
-        parts = [p for p in self.parts() if p.id != part.id]
-        parts.append(part)
-        parts.sort(key=lambda p: (p.manufacturer.lower(), p.catalog.lower()))
-        self.save_parts(parts)
+        self._move_legacy()
+        os.makedirs(self._parts_dir(), exist_ok=True)
+        _write_json(self._part_file(part.id), part.to_dict())
 
     def delete_part(self, part_id):
-        self.save_parts([p for p in self.parts() if p.id != part_id])
+        self._move_legacy()
+        path = self._part_file(part_id)
+        if os.path.exists(path):
+            os.remove(path)
 
     def part(self, part_id):
         for p in self.parts():

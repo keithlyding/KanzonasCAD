@@ -312,6 +312,7 @@ class LibraryPanel(QWidget):
         self.parts.clear()
         try:
             parts = self.library.parts()
+            problems += self.library.part_problems
         except (OSError, ValueError) as ex:
             parts = []
             problems.append("parts.json (%s)" % ex)

@@ -264,7 +264,12 @@ start, or <code>data\\Library</code> beside the program in the portable version;
 folder...</b> picks another, a OneDrive folder say). It is kept apart from
 the program and from projects, so it lasts through updates and serves every project. Each
 project also keeps its own copy of the blocks it uses, so it opens the same anywhere, whatever
-happens to the library later.</p>
+happens to the library later. Each part is a file of its own in the library's <b>parts</b>
+folder, so two people adding parts to a library in a synced folder at the same time don't
+make the sync app keep a conflict copy; if it keeps one anyway ("... (Keith's PC).json"), the
+Library panel names it instead of listing the part twice. A library from before 0.20.1 keeps
+its parts in parts.json until a part is next saved or deleted, when they move to files of
+their own.</p>
 <ul>
 <li><b>Schematic symbols</b>: blocks with <b>pins</b> (where wires attach) and a <b>tag</b>.
 A starter set of JIC/NFPA symbols is built in (relay, contactor and timer coils, NO/NC and
