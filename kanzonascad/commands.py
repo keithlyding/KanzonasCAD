@@ -5372,6 +5372,82 @@ class AddPinCmd(Command):
         return [self.BE.pin_marker(self.sess, self.at, self._offered())]
 
 
+class AddAttrCmd(Command):
+    """ADDATTR (Add attribute, in a block's tab; AutoCAD's ATTDEF): an attribute's name (HP,
+    VOLTS, FLA...), then click where its value shows on the symbol, or S to put it under the
+    block's ratings, in their stack; again for the next, Enter or Esc ends. An attribute is a
+    text on BLOCK ATTRIBUTES; each copy of the block gets its own value in Properties... (the
+    owner, Nov 2026: "there is no way to add additional ones when creating or editing a
+    block")."""
+    name, title = "ADDATTR", "Add attribute"
+
+    def begin(self):
+        from . import block_editor as BE
+        self.BE = BE
+        self.sess = getattr(self.ctx, "block_session", None)
+        if self.sess is None:
+            self.ctx.message("Add attribute works in a block's tab (Edit block... opens one)")
+            self.finish()
+            return
+        self._ask_name()
+
+    def _ask_name(self):
+        self.step, self.attr = "name", None
+        self.ctx.prompt("Attribute name (HP, VOLTS, FLA...; Enter or Esc ends)", typing=True)
+
+    def wants_raw_text(self):
+        return self.step == "name"
+
+    def _stack(self):
+        return self.BE.stack_end(self.ctx.project, self.sess)
+
+    def text(self, s):
+        if self.step == "name":
+            name = s.strip().upper()
+            if not name:
+                self.finish()
+                return True
+            why = self.BE.attr_problem(self.ctx.project, self.sess, name)
+            if why:
+                self.ctx.message(why)
+                self._ask_name()
+                return True
+            self.attr = name
+            self.step = "pos"
+            self.ctx.prompt("Where %s shows%s" % (
+                name, " [Stack: under the ratings]" if self._stack() else ""))
+            return True
+        if self.step == "pos" and s.strip().upper() in ("S", "STACK"):
+            got = self._stack()
+            if got is None:
+                self.ctx.message("This block has no ratings to stack it under: click where it "
+                                 "shows")
+                return True
+            self._add(got[0], got[1], got[2])
+            return True
+        return False
+
+    def point(self, p):
+        if self.step == "pos":
+            self._add(p)
+
+    def _add(self, at, align="center", height=None):
+        h = height if height is not None else self.BE.ATTR_HEIGHT
+        with self.ctx.edit("Add attribute") as ed:
+            ed.add(self.ctx.sheet(), self.BE.attr_marker(self.sess, at, self.attr, align, h))
+        self.ctx.message("Attribute %s added: give it a value in a copy's Properties..."
+                         % self.attr)
+        self._ask_name()
+
+    def enter(self):
+        self.finish()
+
+    def preview(self, p):
+        if self.step == "pos":
+            return [self.BE.attr_marker(self.sess, p, self.attr)]
+        return []
+
+
 class LayerUnlockAllCmd(Command):
     """LAYULK: unlock every layer."""
     name, title = "LAYULK", "Unlock all layers"
@@ -5417,6 +5493,7 @@ COMMANDS = {
     "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)
     "SCOOT": (ScootCmd, ["AESCOOT"]),
     "ADDPIN": (AddPinCmd, ["PIN", "AP"]),
+    "ADDATTR": (AddAttrCmd, ["ATTDEF", "ATT", "AA"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
     "DISTRIBUTE": (DistributeCmd, ["DIST"]),
     "DELDOT": (DeleteDotCmd, ["DD"]),

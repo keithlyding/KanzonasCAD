@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**New**
+- **Add attribute**, in a block's tab (Library menu and the Block tab): give a symbol or
+  footprint attributes of your own (KW, FLA, a part's frame size...). Type the name, then
+  click where its value shows, or type S to put it under the block's ratings. Each copy then
+  has a box for it in its Properties... window.
+
 ## 0.20
 
 **New**

@@ -3218,6 +3218,60 @@ def random_editing(log, out, ops, seed, drawing=None):
             win.close_tab(win.tabs.indexOf(d))
             APP.processEvents()
 
+    def op_block_attrs():
+        # in a block's tab: attributes added with Add attribute, clicked or stacked under the
+        # ratings (S); what Save block would make has each one, where it went, a stacked one
+        # in the stack after the others; undone all the way, the tab is as it opened, and
+        # redone as it was (closed without saving)
+        name = rnd.choice(syms)
+        d = win.edit_block("symbol", name)
+        if d is None:
+            return
+        bp, sess, bs, bv = d.project, d.block_session, d.view.sheet(), d.view
+        opened = norm({"sheets": [bs.to_dict()]})
+        try:
+            ox, oy = sess.offset
+            had = [a["attr"] for a in BE.to_block(bp, sess).defn.attr_texts if a.get("stack")]
+            bv.run(C.AddAttrCmd)
+            added = []
+            for k in range(rnd.randint(1, 3)):
+                attr = "BAT%d" % k
+                assert bv.input_text(attr)
+                if had and rnd.random() < 0.5:
+                    assert bv.input_text("S")
+                    added.append((attr, None))
+                else:
+                    q = (ox + rnd.randint(-8, 8) * 0.0625, oy + rnd.randint(-8, 8) * 0.0625)
+                    type_in(bv, "%r,%r" % q)
+                    added.append((attr, (BE._round(q[0] - ox), BE._round(q[1] - oy))))
+            bv.input_text("")
+            assert bv.cmd is None, "Add attribute: Enter didn't end it"
+            got = {a["attr"]: a for a in BE.to_block(bp, sess).defn.attr_texts}
+            for attr, at in added:
+                assert attr in got, "Add attribute: %s not in the block" % attr
+                if at is not None:
+                    assert got[attr]["pos"] == at, "Add attribute: %s at %r, not %r" % (
+                        attr, got[attr]["pos"], at)
+            stack = [a["attr"] for a in BE.to_block(bp, sess).defn.attr_texts if a.get("stack")]
+            want = [a for a, at in added if at is None]
+            assert stack[:len(had)] == had and set(want) <= set(stack[len(had):]), \
+                "Add attribute: stack %r, had %r, stacked %r" % (stack, had, want)
+            BC.CHECKED["block attributes added"] += 1
+            after = norm({"sheets": [bs.to_dict()]})
+            steps = len(bp.undo_stack)
+            while bp.undo_stack:
+                bp.undo()
+            assert norm({"sheets": [bs.to_dict()]}) == opened, "block tab undone: not as it opened"
+            for _k in range(steps):
+                bp.redo()
+            assert norm({"sheets": [bs.to_dict()]}) == after, "block tab redone: not as it was"
+        finally:
+            if bv.cmd is not None:
+                bv.cancel()
+            bp.saved_at = len(bp.undo_stack)
+            win.close_tab(win.tabs.indexOf(d))
+            APP.processEvents()
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -3236,7 +3290,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
