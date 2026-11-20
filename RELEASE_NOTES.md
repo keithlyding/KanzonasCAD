@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**New**
+- Assign part... (Library menu): give every selected device a part from your library in one
+  go, your brand's parts listed first. The project keeps its own copy of each part.
+- Save to library as part (Library menu): a placed device with its catalog number, symbol and
+  footprint saved to your library as a part to use again.
+
 ## 0.20
 
 **New**

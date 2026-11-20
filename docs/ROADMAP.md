@@ -232,6 +232,13 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
 14. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
     in-place text editing, Sheets panel as a popup.
 
+## Decided while the owner was away (Nov 2026; to confirm)
+- **Parts** (0.20.1): Assign part works on the selection (not "every contactor on the sheet" by
+  itself: select them first); the brand is typed in the Assign part window and kept per project;
+  a device whose symbol isn't the part's is left alone and counted in the message; Save to
+  library as part needs a catalog number, and the same maker and catalog number updates that
+  part. Not yet: the footprint from the part on panel insert, devices not yet on a panel flagged.
+
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a
