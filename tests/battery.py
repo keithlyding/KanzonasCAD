@@ -2693,6 +2693,70 @@ def random_editing(log, out, ops, seed, drawing=None):
             "a column of drops shares a number: %r" % drops
         BC.CHECKED["column of drops numbered apart"] += 1
 
+    def op_pdb():
+        # (0.20.1: a power distribution block and its outlets: each outlet's wire on phase j
+        # takes the block's phase j number with the outlet's letter; worked out from the block
+        # and the outlets' numbers, not the numbering)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None or not wirenums.enabled(p):
+            return
+        before = set(s.entities)
+        v.run(C.InsertCmd, lib.get("symbol", "Distribution block 3-pole"), {})
+        v.input_text(fmt((o[0] + 3.0 * k, o[1] + 6.0 * k)))
+        finish()
+        pdb = [e for i, e in s.entities.items() if i not in before and
+               isinstance(e, M.Insert) and e.defn is not None and e.defn.wiring == "pdb"]
+        if len(pdb) != 1 or not pdb[0].attrs.get("TAG"):
+            return
+        pdb = pdb[0]
+        for _n, q in pdb.pin_points():
+            v.run(C.WireCmd)
+            type_in(v, fmt(q), fmt((q[0] - 2.0 * k, q[1])))
+            finish()
+        outs = []
+        for i in range(rnd.randint(1, 3)):
+            got = set(s.entities)
+            v.run(C.InsertCmd, lib.get("symbol", "Distribution block outlet 3-pole"), {})
+            v.input_text(fmt((o[0] + (1.0 + 3.0 * i) * k, o[1] + 2.0 * k)))
+            if v.cmd is not None:
+                v.input_text(pdb.attrs["TAG"])
+            finish()
+            new = [e for j, e in s.entities.items() if j not in got and isinstance(e, M.Insert)]
+            if len(new) == 1:
+                outs.append(new[0].id)
+                for _n, q in new[0].pin_points():
+                    v.run(C.WireCmd)
+                    type_in(v, fmt(q), fmt((q[0] + 1.0 * k, q[1])))
+                    finish()
+        tol = 1e-6 * max(1.0, k)
+
+        def num_at(q):
+            got = {w.num for w in s.wires() if w.num and w.touches(q, tol)}
+            return got.pop() if len(got) == 1 else None
+        pdb = s.entities.get(pdb.id)
+        if pdb is None:
+            return
+        base = {n: num_at(q) for n, q in pdb.pin_points()}
+        if None in base.values():
+            return
+        assert len(set(base.values())) == 3, "a distribution block's phases share a number: %r" \
+            % base
+        for oid in outs:
+            e = s.entities.get(oid)
+            if e is None or e.attrs.get("PARENT") != pdb.attrs.get("DEV") or \
+                    not (e.attrs.get("OUTLET") or "").isdigit():
+                continue
+            letter = wirenums.letters(int(e.attrs["OUTLET"]) - 1)
+            for n, q in e.pin_points():
+                got = num_at(q)
+                if got is None:
+                    continue
+                want = base["L" + n[1:]] + letter
+                assert got == want, "outlet %s's %s took %s, not %s" % (
+                    e.tag_text().text, n, got, want)
+                BC.CHECKED["distribution block outlets numbered by phase"] += 1
+
     def op_contact_blocks():
         # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
         # line from it through the farthest, worked out from where they are; none of them
@@ -3251,7 +3315,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

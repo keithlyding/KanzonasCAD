@@ -944,6 +944,17 @@ as device tags do.</li>
 order.</li>
 <li><b>Distribution block</b> (Library, JIC/Wiring): the wires on its outputs take the number
 of the wire on its input with A, B, C... added (6001A, 6001B; after Z come AA, AB...).</li>
+<li><b>Power distribution block</b> (Library, JIC/Wiring: <b>Distribution block 3-pole</b> and
+<b>Distribution block outlet 3-pole</b>): the block, tagged PDB101..., takes the three phases
+on its L1, L2 and L3, where the feeder ends; type how many outlets it has a phase in its
+<b>OUTLETS</b> attribute as on its part (1:18, or 18), shown under it. Each outlet belongs to a
+block (placing one asks which, as a contact asks for its coil) and numbers itself on it:
+<b>PDB101-1</b>, <b>PDB101-2</b>..., on any sheet, with a cross-reference to where its block
+is. The wires on an outlet's T1, T2 and T3 take their phase's number with the outlet's letter:
+outlet 1's are 6001A, 6002A, 6003A, outlet 2's 6001B... (each phase keeps its own number).
+More outlets than OUTLETS says are marked red and named on the command line. Placed on a bus
+whose phases are spaced other than 1/2" (its L1 clicked on the top wire), the block or outlet
+is drawn to fit them, as "Distribution block 3-pole (0.75" poles)".</li>
 <li><b>Off-sheet connector</b> (Library, JIC/Wiring): place one where a wire leaves the sheet
 and one where it comes back on another sheet, with the same name. Placing one asks its name:
 Enter takes the one offered (a connector still waiting for its other end, else the next free

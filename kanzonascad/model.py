@@ -1917,7 +1917,7 @@ CONTACTS = ("", "NO", "NC", "NOTC", "NCTO", "NOTO", "NCTC")
 # "distribution" (a distribution block: its first pin's number goes on, with A, B, C... added,
 # to the wires on its other pins), "link" (an off-sheet connector: wires at connectors with
 # the same name are one wire, whatever sheet they're on)
-WIRINGS = ("", "distribution", "link")
+WIRINGS = ("", "distribution", "link", "pdb")
 ATTR_NAMES = ["TAG", "DESC", "MFR", "CAT"]       # what every block reference can carry
 # a block's optional maker details: who makes it, and its catalog (part) number
 MAKER_FIELDS = ("manufacturer", "family", "series", "catalog")
@@ -2295,6 +2295,9 @@ class Insert(Entity):
         a = self.angle % 180.0
         h = (self.tag_h or d.tag_height) * self.scale
         text = tag or (d.prefix + "?" if d.prefix else "?")
+        if d.wiring == "pdb" and d.role == "child":
+            # (an outlet of a power distribution block: its block's tag and its own number)
+            text = "%s-%s" % (text, self.attrs.get("OUTLET") or "?")
         if "TAG" in self.attr_rot:
             return Text(self.to_world(spot), text, h, self._turned("TAG"), align, valign)
         if 45.0 <= a < 135.0:

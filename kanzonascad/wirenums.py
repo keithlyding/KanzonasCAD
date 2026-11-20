@@ -307,6 +307,18 @@ def _sheet_groups(sheet, split_taps=False):
     return out
 
 
+def _pole(pin):
+    """The phase a power distribution block's pin is on (L1, T1: 1), or 0."""
+    t = str(pin or "")
+    return int(t[1:]) if len(t) >= 2 and t[0] in "LT" and t[1:].isdigit() else 0
+
+
+def _outlet(ins):
+    """An outlet's number on its block (OUTLET 3: 3), or 0 while it has none."""
+    v = (ins.attrs.get("OUTLET", "") or "").strip()
+    return int(v) if v.isdigit() else 0
+
+
 def _pin_wires(sheet, ins, roots):
     """{pin name: sheet-local group root} of the wires ending on each of the symbol's pins."""
     out = {}
@@ -369,11 +381,22 @@ def _summary(sheet, how=None, taps_mode="same"):
                 g[3] = w.num
     local = {r: (g[0], g[1], sorted(g[2], key=_count), g[3]) for r, g in local.items()}
     links, dists, named = [], [], []
+    pdbs = []                   # (power distribution blocks: [(DEV or PARENT, outlet, {pole: root})])
     for ins in sheet.inserts():
         d = ins.defn
         if d is None or not d.wiring:
             continue
         at = _pin_wires(sheet, ins, roots)
+        if d.wiring == "pdb":
+            # (a 3-pole power distribution block, PDB1, its phases in, or one of its outlets,
+            # PDB1-1..., its phases out: each outlet's wires take their phase's number with a
+            # letter, the outlet's own: the owner, "append A-Z on each child wire")
+            poles = {_pole(n): r for n, r in at.items() if _pole(n)}
+            if d.role == "child":
+                pdbs.append((ins.attrs.get("PARENT", ""), _outlet(ins), poles))
+            else:
+                pdbs.append((ins.attrs.get("DEV", ""), None, poles))
+            continue
         if d.wiring == "link":
             name = ins.attrs.get("TAG", "").strip().upper()
             if name:
@@ -398,7 +421,7 @@ def _summary(sheet, how=None, taps_mode="same"):
             if k is None:
                 k = known[q] = key(q)
             tapl.append((roots[b], roots[a], k))
-    out = (local, links, dists, tapl, named)
+    out = (local, links, dists, tapl, named, pdbs)
     sheet._num_summary = (sig, out)
     return out
 
@@ -427,8 +450,8 @@ def _assemble(project):
     sums = []
     mode = tap_mode(project)
     for i, s in enumerate(project.sheets):
-        local, links, dists, tapl, ins_named = _summary(s, wire_order(project, s), mode)
-        sums.append((i, s, local, dists, tapl))
+        local, links, dists, tapl, ins_named, pdbs = _summary(s, wire_order(project, s), mode)
+        sums.append((i, s, local, dists, tapl, pdbs))
         for name, r in links:
             names.setdefault(name, []).append((s.id, r))
         for name, iid, block, rs in ins_named:
@@ -443,7 +466,7 @@ def _assemble(project):
     find = (lambda n: u.find(n) if n in u.up else n)
     gs, info = {}, {}
     locks = {}                                  # group -> [(sheet, its locked number)]
-    for i, s, local, _d, _t in sums:
+    for i, s, local, _d, _t, _p in sums:
         for r, (k, ws, nums, locked) in local.items():
             g = find((s.id, r))
             gs.setdefault(g, []).append((s, ws))
@@ -475,11 +498,27 @@ def _assemble(project):
         # source, so it should have defaulted to another number for page 2")
         info[g][3] = next((n for ls, n in locks.get(g, ()) if ls is s), None)
     dist, tapped = [], []
-    for i, s, _local, dists, tapl in sums:
+    feeds, outlets = {}, {}
+    for i, s, _local, dists, tapl, pdbs in sums:
         for a, bs in dists:
             dist.append((find((s.id, a)), [find((s.id, b)) for b in bs]))
         for a, b, k in tapl:
             tapped.append((find((s.id, a)), find((s.id, b)), (i, k)))
+        for dev, n, poles in pdbs:
+            if not dev:
+                continue
+            got = {j: find((s.id, r)) for j, r in poles.items()}
+            if n is None:
+                feeds.setdefault(dev, got)
+            elif n > 0:
+                outlets.setdefault(dev, {}).setdefault(n, got)
+    for dev, ins in feeds.items():
+        outs = outlets.get(dev, {})
+        top = max(outs) if outs else 0
+        for j, g in ins.items():
+            # (outlet n's wire on phase j: the phase's number and the n-th letter, whatever
+            # outlets are left out; None where outlet n has no wire there)
+            dist.append((g, [outs.get(n, {}).get(j) for n in range(1, top + 1)]))
     conns = {name: [find(names[name][0]) if name in names else None, ends]
              for name, ends in named.items()}
     return gs, info, dist, tapped, conns
@@ -551,7 +590,7 @@ def sync(ed, project, renumber=None):
     outputs = {}
     for src, outs in dist:
         for i, o in enumerate(outs):
-            if o != src:
+            if o is not None and o != src:
                 outputs.setdefault(o, (src, letters(i)))
     # taps (tap_numbers "suffix"): the tapped wire's number with -1, -2... in the numbering
     # order of where they tap; a tap off a tap, a, b...

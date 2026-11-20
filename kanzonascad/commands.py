@@ -3195,9 +3195,31 @@ class InsertCmd(Command):
         at, m = self._fit(p)
         return [self._make(self._on_rail(at), self.defn, m)]
 
+    def _sized_to_bus(self, p):
+        """A power distribution block (or its outlet) picked on a bus whose phases are spaced
+        other than the block's: the block drawn to fit them (the owner: "it would have to
+        automatically resize based on the spacing of the wires"); a "(0.75" poles)" variant."""
+        d = self.defn
+        if d.wiring != "pdb" or len(d.pins) < 2:
+            return
+        got = tap_lines(self.ctx.sheet(), p)
+        if got is None or len(got[1]) < len(d.pins):
+            return
+        pole = round(abs(d.pins[0]["pos"][1] - d.pins[1]["pos"][1]), 9)
+        if abs(got[2] - pole) < 1e-9:
+            return
+        from .symbols_jic import pdb_symbols
+        new = pdb_symbols(got[2])[1 if d.role == "child" else 0]
+        hold = self.holds[self.hold][0]
+        self.defn = new
+        self.holds = [(q["name"], q["pos"]) for q in new.pins] + [(None, (0.0, 0.0))]
+        self.hold = next((i for i, h in enumerate(self.holds) if h[0] == hold), 0)
+        self.ctx.message("%s drawn to fit the bus: its phases %g\" apart" % (new.name, got[2]))
+
     def point(self, p):
         if self.pending is not None:
             return                      # (waiting for the contact's device)
+        self._sized_to_bus(p)
         at, self.placed_mirror = self._fit(p)
         p = self._on_rail(at)
         d = self.defn
