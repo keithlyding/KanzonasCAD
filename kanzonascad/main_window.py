@@ -602,6 +602,11 @@ class MainWindow(BlockEditing, QMainWindow):
           label="Add pin",
           tip="Add a pin to the block open in this tab: click where it goes, then its name "
               "(ADDPIN, PIN, AP)")
+        A("add_attr", "Add a&ttribute", lambda: self._run(C.AddAttrCmd), icon="add_attr",
+          label="Add attribute",
+          tip="Add an attribute to the block open in this tab (HP, VOLTS, FLA...): its name, "
+              "then where its value shows; each copy gets its own value in Properties... "
+              "(ADDATTR, ATTDEF, ATT, AA)")
         A("pins", "P&ins...", self.pins_dialog, icon="pins", label="Pins",
           tip="The pins of the block open in this tab: their names, order and places; rename, "
               "reorder, move, delete or find one")
@@ -712,7 +717,7 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
-                  "save_block_as", "add_pin", "pins", "update_blocks", None,
+                  "save_block_as", "add_pin", "pins", "add_attr", "update_blocks", None,
                   "new_part", "assign_part", "save_as_part", "library_folder",
                   "library_folder2", "library_save2"):
             m.addSeparator() if k is None else m.addAction(a[k])
@@ -843,6 +848,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Block", "large", [a["save_block"], a["save_block_as"], a["block_props"],
                                 a["dup_block"]]),
             ("Pins", "large", [a["add_pin"], a["pins"]]),
+            ("Attributes", "large", [a["add_attr"]]),
             ("Library", "large", [a["edit_block"], a["update_blocks"]]),
         ])
         tb = self.ribbon_bar = QToolBar("Ribbon")
@@ -3601,7 +3607,7 @@ class MainWindow(BlockEditing, QMainWindow):
         in_block = is_block_doc(self.doc())
         a["save_block"].setEnabled(in_block)
         a["save_block"].setVisible(in_block)
-        for k in ("save_block_as", "add_pin", "pins"):
+        for k in ("save_block_as", "add_pin", "pins", "add_attr"):
             a[k].setEnabled(in_block)
             a[k].setVisible(in_block)
         a["undo"].setEnabled(bool(has and p.undo_stack))

@@ -31,7 +31,7 @@ buttons become small ones with their names beside them, then icons alone (the na
 when you hold the mouse over one); widen the window and they grow back. Only a tab that
 still doesn't fit as icons scrolls sideways (the mouse wheel over it).</li>
 <li><b>The Block tab</b> holds a block's own tools: <b>Save block</b>, <b>Save block as...</b>,
-<b>Block properties...</b>, <b>Duplicate block...</b>, <b>Add pin</b>, <b>Pins...</b>,
+<b>Block properties...</b>, <b>Duplicate block...</b>, <b>Add pin</b>, <b>Pins...</b>, <b>Add attribute</b>,
 <b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
 in a block's tab (Edit block..., on the Schematic tab's Symbols group and the Panel tab's
 Footprints group, opens one), and goes away when you leave it. To have it all the time, turn
@@ -471,7 +471,15 @@ on them wire for wire, and the order Properties... lists them); <b>Delete</b> ta
 one step (Undo takes it back); two pins with the same name are refused. The blue text on BLOCK TAG is where the tag goes, and texts on
 BLOCK ATTRIBUTES are where a terminal's number, a PLC address or a rating shows; their
 alignment and angle (Edit text: middle center, say, so a rating sits in the middle of a fuse
-whichever way it is turned) are kept with the block. Leaving the block's tab, the ribbon goes
+whichever way it is turned) are kept with the block. <b>Add attribute</b> (ADDATTR, ATTDEF,
+ATT, AA; Library menu and the Block tab, in that tab) gives the block one more: type its name
+(HP, VOLTS, FLA, KW... one word, no spaces; TAG has its own marker), then click where its
+value shows, or type <b>S</b> to put it under the block's ratings (RATING, HP, VOLTS...), in
+their stack, so it closes up with them when one above it is empty (a rating's text copied
+straight down under the stack joins it too); it goes on with the next name until Enter or Esc.
+Each copy of the block then has a box for it in <b>Properties...</b>: an empty one shows
+nothing. HP, VOLTS, AMPS, FLA, VA, PRI and SEC typed as a plain number show their unit (5 shows
+5HP); any other attribute shows as typed. Leaving the block's tab, the ribbon goes
 back to the tab it was on. A footprint has a pink
 <b>DIN RAIL</b> text on layer BLOCK DIN RAIL: its insertion point (a ring, with a dashed line
 across the part where the rail's centerline runs) is the middle of the part's rail clip. Move
