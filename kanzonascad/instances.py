@@ -188,10 +188,9 @@ class Instances(QObject):
         if got["line"] is None and alive:
             # (the wait ran out: its answer may be here already, behind other work in the queue
             # (in the unit tests, a slow event left by an earlier test made a copy that had
-            # answered "kept" count as gone); read what has come. Nothing come is a timeout,
-            # not the copy gone: no longer heard as one)
-            s.errorOccurred.disconnect()
-            s.waitForReadyRead(0)
+            # answered "kept" count as gone): what is waiting is handled, briefly, then read.
+            # Not waitForReadyRead: Qt warns it may fail on Windows)
+            loop.processEvents(QEventLoop.AllEvents, 50)
             read()
         line = got["line"]
         s.abort()
