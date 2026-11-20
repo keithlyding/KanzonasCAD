@@ -101,6 +101,19 @@ class BitCodesTest(unittest.TestCase):
         self.assertEqual((r.B(), r.BD(), r.BD(), r.BD(), r.DD(3.0), r.DD(3.0), r.T(), r.BS()),
                          (1, 0.0, 1.0, -2.5, 3.0, 3.25, "MOTOR 1", 300))
 
+    def test_texts_end_in_a_zero_byte(self):
+        # (as AutoCAD writes them in an AutoCAD 2000 file, its length counting it: a linetype
+        # named ByBlock is 8 bytes, B y B l o c k 0; an empty text is its length alone. Without
+        # it AutoCAD's AUDIT found ByBlock's and ByLayer's names "Special Name Incorrect")
+        w = D.BitWriter()
+        w.T("ByBlock")
+        w.T("")
+        r = D.BitReader(w.bytes())
+        self.assertEqual(r.BS(), 8)
+        self.assertEqual(r.raw(8), b"ByBlock\0")
+        self.assertEqual(r.BS(), 0)
+        self.assertEqual(D.BitReader(w.bytes()).T(), "ByBlock")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -147,7 +147,9 @@ def _2rd(w, p):
 def _entry(w, name):
     """A table entry's name and xref fields (not from an xref)."""
     w.T(name)
-    w.B(0)                              # (the 64 bit of its flags)
+    # (the 64 bit of its flags, "referenced": set on every table entry of an AutoCAD 2000 file;
+    # left clear, AUDIT found ByBlock's and ByLayer's names "Special Name Incorrect")
+    w.B(1)
     w.BS(0)                             # (xref index + 1)
     w.B(0)                              # (not xref dependent)
 
@@ -181,13 +183,14 @@ def dictionary(handle, owner, items, reactors=(), default=None):
 
 
 def layer(handle, name, color=7, on=True, frozen=False, locked=False):
-    """A layer. Off is kept twice, as AutoCAD reads it: the flags' 2 bit and a negative color
-    (the flags: 1 frozen, 2 off, 8 locked, 16 plotted, then the lineweight)."""
+    """A layer. Off is its flags' 2 bit (the flags: 1 frozen, 2 off, 8 locked, 16 plotted, then
+    the lineweight); its color stays positive: written negative as well, as a DXF has it,
+    AutoCAD's AUDIT found "Color Out of Range" (the owner's test, Nov 2026)."""
     def data(w):
         _entry(w, name)
         w.BS((1 if frozen else 0) | (0 if on else 2) | (8 if locked else 0) | 16 |
              (LW_DEFAULT << 5))
-        w.CMC(color if on else -color)
+        w.CMC(color)
     return obj(T_LAYER, handle, H["LAYER_CONTROL"], data,
                [(HARD_PTR, 0), (HARD_PTR, H["NORMAL"]), (HARD_PTR, H["CONTINUOUS"]),
                 (HARD_PTR, 0)])

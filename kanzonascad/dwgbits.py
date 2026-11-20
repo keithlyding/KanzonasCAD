@@ -120,8 +120,12 @@ class BitWriter:
 
     def T(self, text):
         """A text (R2000: its length as a bitshort, then its bytes, in the drawing's code
-        page: ANSI_1252; anything it can't hold as ?)."""
+        page: ANSI_1252, anything it can't hold as ?, ending in a zero byte that the length
+        counts, as AutoCAD writes every text of an AutoCAD 2000 file; an empty one is a length
+        of 0 alone)."""
         raw = str(text).encode("cp1252", "replace")
+        if raw:
+            raw += b"\0"
         self.BS(len(raw))
         self.raw(raw)
 
@@ -299,7 +303,7 @@ class BitReader:
 
     def T(self):
         n = self.BS()
-        return self.raw(n).decode("cp1252", "replace")
+        return self.raw(n).decode("cp1252", "replace").rstrip("\0")
 
     def H(self):
         code, n = self.bits(4), self.bits(4)

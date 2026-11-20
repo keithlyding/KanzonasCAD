@@ -155,8 +155,9 @@ class EntitiesTest(unittest.TestCase):
             self.assertEqual((frozen, off, locked, plotted),
                              (la.get("frozen", False), not la.get("on", True),
                               la.get("locked", False), True), la["name"])
-            # (an off layer's color is kept negative, read here as an unsigned short)
-            want = la["color"] if la.get("on", True) else 0x10000 - la["color"]
+            # (an off layer's color stays positive: negative, AutoCAD's AUDIT called it "Color
+            # Out of Range"; off is the flag alone)
+            want = la["color"]
             self.assertEqual(colors[la["name"]], want, la["name"])
         self.assertEqual((colors["0"], colors["NEW ONE"]), (7, 7))
 
@@ -172,7 +173,8 @@ class EntitiesTest(unittest.TestCase):
         t, r, _s = objs[layer[0]]
         r.BS()
         r.BL()
-        self.assertEqual((r.T(), r.B(), r.BS(), r.B()), ("L", 0, 0, 0))
+        # (its "referenced" bit set, as AutoCAD sets it on every table entry)
+        self.assertEqual((r.T(), r.B(), r.BS(), r.B()), ("L", 1, 0, 0))
         r.BS()
         self.assertEqual(r.BS(), 5)
         circle = [o for o in objs.values() if o[0] == W.T_CIRCLE][0]
