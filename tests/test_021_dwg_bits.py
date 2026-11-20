@@ -74,6 +74,19 @@ class BitCodesTest(unittest.TestCase):
         self.assertEqual(w.bit_size(), 3)
         self.assertEqual(D.BitReader(w.bytes(), 1).BS(), 256)
 
+    def test_raw_long_written_over_a_placeholder(self):
+        w = D.BitWriter()
+        w.BB(1)
+        pos = w.bit_size()
+        w.RL(0)
+        w.B(1)
+        w.put_RL(pos, 0x12345678)
+        r = D.BitReader(w.bytes())
+        self.assertEqual((r.BB(), r.RL(), r.B()), (1, 0x12345678, 1))
+        w.put_RL(pos, 0)
+        r = D.BitReader(w.bytes())
+        self.assertEqual((r.BB(), r.RL(), r.B()), (1, 0, 1))
+
     def test_round_trip(self):
         w = D.BitWriter()
         w.B(1)

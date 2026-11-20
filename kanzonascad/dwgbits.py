@@ -138,6 +138,18 @@ class BitWriter:
         """A color (R2000: its color index, a bitshort)."""
         self.BS(index)
 
+    def put_RL(self, pos, v):
+        """Write the raw long v over the 32 bits at bit pos (a size written before it was
+        known: an object's size in bits)."""
+        for i, byte in enumerate(struct.pack("<I", v)):
+            for k in range(8):
+                p = pos + 8 * i + k
+                mask = 0x80 >> (p & 7)
+                if (byte >> (7 - k)) & 1:
+                    self.data[p >> 3] |= mask
+                else:
+                    self.data[p >> 3] &= ~mask & 0xFF
+
     # ---- whole bytes -----------------------------------------------------------------------
     def bit_size(self):
         return len(self.data) * 8 - ((8 - self.bit) % 8)

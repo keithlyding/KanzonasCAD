@@ -191,7 +191,8 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
       part number, maker, ratings; hidden ones hidden), so AutoCAD's attribute editor and data
       extraction work on them. Layers with their names and colors; wires as polylines on
       their layers; dimensions, hatches and multi-line text as their own kinds. DXF (AutoCAD
-      opens it and saves it as DWG); writing DWG would need the ODA File Converter.
+      opens it and saves it as DWG); DWG itself is being written by our own code (see
+      "DWG export" under Standing decisions).
     - An option, **AutoCAD Electrical attribute names**: TAG1, MFG, CAT, DESC1-3, LOC, INST and
       the terminal attributes, as KanzonasCAD's DWG/DXF import already reads them, so AutoCAD
       Electrical can find tags and parts. Not promised: full AutoCAD Electrical intelligence
@@ -233,6 +234,11 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     in-place text editing, Sheets panel as a popup.
 
 ## Standing decisions
+- DWG export (owner, Nov 2026: "You write it. Don't rely on some third party tool"): our own
+  writer from the Open Design Specification for .dwg files, no ODA File Converter, LibreDWG
+  or Teigha. AutoCAD 2000 (AC1015) files. Steps: 1 the bit codes (dwgbits.py); 2 a drawing
+  of one line that ezdwg reads back and the owner opens in AutoCAD (dwgwrite.py); 3 the
+  tables and entities KanzonasCAD draws with, then the export command.
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a
   drawing or schematic"; both kinds wanted, no preference which first). Lines and text only:
