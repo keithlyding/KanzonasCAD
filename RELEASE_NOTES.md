@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**New**
+- Edit array (Modify menu, Home tab): change an array after making it, its spacing, rows and
+  columns, or count round its center. Copies keep their tags, new ones get their own, and a
+  copy you changed on its own stays as it is. U unlinks the array.
+
 ## 0.20
 
 **New**

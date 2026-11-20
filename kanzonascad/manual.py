@@ -1092,7 +1092,16 @@ end it leaves less than 0.01" from a pin or another wire is put on it. One step.
 (R, to start: how many rows, how many columns, the distance between rows (up; negative: down)
 and between columns (across; negative: left)) or round a center (P: the center, how many in
 all, the angle they fill: Enter for 360; each copy turned with it). Copied devices get tags of
-their own, as with Copy; one Undo takes the whole array back.</td></tr>
+their own, as with Copy; one Undo takes the whole array back. The copies stay an array, kept
+with the sheet: Edit array changes it later.</td></tr>
+<tr><td>Edit array</td><td>ARRAYEDIT, AE</td><td>Select any object of an array made with Array
+(Modify menu, Home tab), then type its numbers again, each offered as it is (Enter keeps it):
+rows, columns and the distances between them, or how many round its center and the angle they
+fill. Copies still the array's move to their new places and keep their tags, new ones get tags
+of their own, those past the new count are erased (a wire drawn to one stays where it is,
+unconnected). A copy you moved, turned or changed on its own has left the array and stays as
+it is. <b>U</b> (Unlink) at the first question ends the array: its copies stay, objects of their
+own. One Undo each.</td></tr>
 <tr><td>Offset</td><td>OFFSET, O</td><td>A copy of a line, polyline or rectangle, circle or
 arc, a set distance away: smaller or bigger, on the side you click. Type the distance (Enter:
 the last one), pick the object, click the side; it goes on with the same distance until

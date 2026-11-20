@@ -404,6 +404,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("scale", "&Scale", C.ScaleCmd, "Scale")
         self._cmd_act("mirror", "M&irror", C.MirrorCmd, "Mirror")
         self._cmd_act("array", "Arra&y", C.ArrayCmd, "Array")
+        self._cmd_act("array_edit", "Edit arra&y", C.ArrayEditCmd, "Edit array")
         self._cmd_act("offset", "O&ffset", C.OffsetCmd, "Offset")
         self._cmd_act("number", "&Number texts", C.NumberCmd, "Number texts")
         self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
@@ -646,8 +647,8 @@ class MainWindow(BlockEditing, QMainWindow):
             else:
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
-        for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "offset", "erase",
-                  "trim", "number", None,
+        for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "array_edit",
+                  "offset", "erase", "trim", "number", None,
                   "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "dim_units", "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
@@ -711,8 +712,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
                                a["arc"], a["text"], a["mtext"], a["hatch"], a["number"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
-                                 a["stretch"], a["array"], a["offset"], a["erase"],
-                                 a["trim"]]),
+                                 a["stretch"], a["array"], a["array_edit"], a["offset"],
+                                 a["erase"], a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
             # (the owner, 0.17.4: "I also need the measuring tool repeated in home and
             # schematic tabs")
@@ -3271,8 +3272,8 @@ class MainWindow(BlockEditing, QMainWindow):
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
-                  "scale", "mirror", "array", "offset", "dash_box", "number", "erase", "trim",
-                  "paste",
+                  "scale", "mirror", "array", "array_edit", "offset", "dash_box", "number",
+                  "erase", "trim", "paste",
                   "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot",
                   "clean_wires", "del_comp", "wire_layers"):
             a[k].setEnabled(has)
