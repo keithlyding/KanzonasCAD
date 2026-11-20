@@ -3,6 +3,7 @@ only when used) and PDF export (Qt's own PDF writer: vector lines and outlined t
 per sheet at its real size)."""
 
 import math
+import re
 import os
 import sys
 
@@ -134,6 +135,7 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True, ace_names=
     doc.saveas(path)
 
 
+ACE_PIN = re.compile(r"^(X[1248]?)?TERM(\d\d)$")     # (AutoCAD Electrical's: X4TERM01, TERM01)
 PIN_TAG = "KZPIN"                   # (a block's pins, as hidden constant ATTDEFs: KZPIN1...)
 
 # what a block's attributes carry out to AutoCAD (KanzonasCAD's own, internal ones stay home)
@@ -193,6 +195,27 @@ def _attr_names(ins):
     return out
 
 
+def pin_side(defn, pos):
+    """The side a wire comes to a pin from, as AutoCAD Electrical numbers it: 1 right, 2 top,
+    4 left, 8 bottom (the way the pin points out from the middle of the symbol's drawing)."""
+    bb = None
+    for e in defn.entities:
+        bb = G.bbox_union(bb, e.bbox())
+    if bb is None:
+        return 4
+    dx, dy = pos[0] - (bb[0] + bb[2]) / 2.0, pos[1] - (bb[1] + bb[3]) / 2.0
+    if abs(dx) >= abs(dy):
+        return 1 if dx > 0 else 4
+    return 2 if dy > 0 else 8
+
+
+def ace_pin_tags(defn, pin, n):
+    """[(tag, value)] of a pin for AutoCAD Electrical: X?TERMnn (no value) and TERMnn (its
+    label)."""
+    return [("X%dTERM%02d" % (pin_side(defn, pin["pos"]), n), ""),
+            ("TERM%02d" % n, str(pin["name"]))]
+
+
 def _define_block(doc, d, bname, ace=False):
     """The BLOCK definition of a KanzonasCAD block: its drawing at its own size, upright and
     unflipped (the INSERT places, turns, scales and flips it), on layer 0 by block so it takes
@@ -208,6 +231,17 @@ def _define_block(doc, d, bname, ace=False):
             meta.append("%s=%s" % (key, val))
     blk.block.dxf.description = "; ".join(meta)
     for i, pin in enumerate(d.pins or ()):
+        if ace and i < 99:
+            # (AutoCAD Electrical's wire connections: X?TERMnn at the pin, ? the side a wire
+            # comes from, and TERMnn its label: the owner saw KZPIN in its block editor, and its
+            # wire commands know only these)
+            for tag, val in ace_pin_tags(d, pin, i + 1):
+                a = blk.add_attdef(tag, insert=pin["pos"],
+                                   dxfattribs={"height": d.tag_height, "layer": "0",
+                                               "color": 0})
+                a.dxf.text = val
+                a.is_invisible = True
+            continue
         a = blk.add_attdef("%s%d" % (PIN_TAG, i + 1), insert=pin["pos"],
                            dxfattribs={"height": d.tag_height, "layer": "0", "color": 0})
         a.dxf.text = str(pin["name"])
@@ -284,6 +318,14 @@ def _write_insert(doc, msp, ins, names, ace=False):
             ent = ref.add_attrib(out_name(d, name, ace), value, insert=ins.pos,
                                  dxfattribs={"height": h0, "layer": ins.layer or "0"})
             ent.is_invisible = True
+    if ace and d.pins:
+        at = dict(ins.pin_points())
+        for i, pin in enumerate(d.pins[:99]):
+            q = at.get(pin["name"], ins.pos)
+            for tag, val in ace_pin_tags(d, pin, i + 1):
+                ent = ref.add_attrib(tag, val, insert=q,
+                                     dxfattribs={"height": h0, "layer": ins.layer or "0"})
+                ent.is_invisible = True
     for pt in ins.pin_texts():
         _write(msp, pt.copy(layer=ins.layer or "0"))
 
@@ -631,6 +673,7 @@ def _block_defn(de, k, skipped, depth, blocks):
     attrs, seen = [], set()
     tags = set()
     pins = []
+    ace_at, ace_names = {}, {}
     for sub in blk:
         if sub.dxftype() != "ATTDEF":
             continue
@@ -639,6 +682,16 @@ def _block_defn(de, k, skipped, depth, blocks):
             q = sub.dxf.insert
             pins.append({"name": str(sub.dxf.get("text", "") or ""),
                          "pos": (q[0] * k - bx, q[1] * k - by)})
+            continue
+        m = ACE_PIN.match(str(sub.dxf.tag).upper())
+        if m:
+            # (AutoCAD Electrical's wire connection, X?TERMnn, and its label, TERMnn: a pin,
+            # in a block it drew or one KanzonasCAD wrote with its names)
+            q = sub.dxf.insert
+            if m.group(1):
+                ace_at[m.group(2)] = (q[0] * k - bx, q[1] * k - by)
+            else:
+                ace_names[m.group(2)] = str(sub.dxf.get("text", "") or "")
             continue
         name = _shown_name(sub.dxf.tag)
         tags.add(str(sub.dxf.tag).upper())
@@ -649,6 +702,9 @@ def _block_defn(de, k, skipped, depth, blocks):
         attrs.append({"attr": name, "pos": (p[0] * k - bx, p[1] * k - by),
                       "height": sub.dxf.get("height", 0.125) * k, "align": align,
                       "valign": valign, "angle": rot})
+    if not pins and ace_at:
+        pins = [{"name": ace_names.get(nn) or str(int(nn)), "pos": q}
+                for nn, q in sorted(ace_at.items())]
     if not parts and not attrs:
         blocks[key] = None
         return None
@@ -676,6 +732,8 @@ def _block_defn(de, k, skipped, depth, blocks):
             extra.update(tag_pos=tag["pos"], tag_height=tag["height"])
         extra.update(pins=pins, prefix=own.get("prefix", ""), role=own.get("role", "device"),
                      contact=own.get("contact", ""), wiring=own.get("wiring", ""))
+    elif pins:
+        extra.update(pins=pins)         # (AutoCAD Electrical's: its wire connections)
     defn = M.BlockDef(str(de.dxf.name), kind, pieces, attr_texts=attrs, category="Imported",
                       own_colors=True, **extra)
     blocks[key] = defn
@@ -895,6 +953,8 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             defn = _block_defn(de, k, skipped, depth, blocks)
             vals = {}
             for att in de.attribs:
+                if ACE_PIN.match(str(att.dxf.tag).upper()):
+                    continue                # (a wire connection and its label: its pins)
                 name = _attr_name(att.dxf.tag)
                 v = att.dxf.get("text", "")
                 if name and v and v.strip("-"):

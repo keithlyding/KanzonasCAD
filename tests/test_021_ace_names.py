@@ -81,6 +81,31 @@ class AceNamesTest(unittest.TestCase):
         self.assertGreaterEqual(len([e for e in msp.query("LWPOLYLINE")
                                      if e.dxf.layer == "WIRES"]), 2)   # (cut where it jumps)
 
+    def test_pins_as_wire_connections(self):
+        # (the owner, in AutoCAD Electrical's block editor: "the pins have a pretext of kz on all
+        # of them"; its wire connections are X?TERMnn, ? the side a wire comes from: 1 right,
+        # 2 top, 4 left, 8 bottom, with TERMnn the pin's label)
+        fileio.export_dxf(self.p, self.s, self.path, include_frame=False, ace_names=True)
+        doc = ezdxf.readfile(self.path)
+        coil = doc.blocks.get("Relay coil")
+        tags = {a.dxf.tag: a.dxf.text for a in coil.query("ATTDEF")}
+        self.assertFalse(any(t.startswith("KZPIN") for t in tags))
+        d = self.win.library.get("symbol", "Relay coil")
+        for i, pin in enumerate(d.pins):
+            side = fileio.pin_side(d, pin["pos"])
+            self.assertIn("X%dTERM%02d" % (side, i + 1), tags)
+            self.assertEqual(tags["TERM%02d" % (i + 1)], pin["name"])
+        sides = sorted(fileio.pin_side(d, q["pos"]) for q in d.pins)
+        self.assertEqual(sides, [1, 4])     # (a coil: A1 on the left, A2 on the right)
+        ref = next(r for r in doc.modelspace().query("INSERT") if r.dxf.name == "Relay coil")
+        self.assertIn("TERM01", {a.dxf.tag for a in ref.attribs})
+        # (read back: the same pins, where they were, and no TERM attributes on it)
+        ents, _rep = fileio.read_dxf(self.path)
+        back = next(e for e in ents if isinstance(e, M.Insert) and e.block == "Relay coil")
+        mine = next(e for e in self.s.inserts() if e.block == "Relay coil")
+        self.assertEqual(sorted(back.pin_points()), sorted(mine.pin_points()))
+        self.assertFalse([k for k in back.attrs if "TERM" in k])
+
     def test_own_names_by_default(self):
         coil, fp = self.attribs(False)
         self.assertEqual((coil.get("TAG"), coil.get("MFR")), ("CR1", "AB"))

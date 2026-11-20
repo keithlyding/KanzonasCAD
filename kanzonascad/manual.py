@@ -1614,7 +1614,8 @@ as <b>attributes</b>: those shown on the sheet where KanzonasCAD shows them, the
 so AutoCAD's attribute editor and data extraction find all of them. Layers keep their names and
 colors; wires go out as polylines on their layers. AutoCAD opens the DXF and can save it as a
 DWG. A DXF exported this way opens again in KanzonasCAD with the same symbols, pins and
-attributes. To have everything broken into plain lines and texts instead, as before version
+attributes; a symbol AutoCAD Electrical drew comes in with its pins too (its X?TERMnn wire
+connections). To have everything broken into plain lines and texts instead, as before version
 0.20, untick <b>Export DXF with symbols and footprints as blocks</b> in Edit &gt; Options...,
 General. Tick <b>Use AutoCAD Electrical attribute names in DXF</b> there to have the attributes
 go out under the names AutoCAD Electrical looks for: a symbol's tag as TAG1, its maker as MFG,
@@ -1622,7 +1623,9 @@ its catalog number as CAT, its description as DESC1, its location as LOC, a foot
 P_TAG1, and each wire as one LINE a straight run on its layer, as AutoCAD Electrical draws
 its wires (it takes a polyline for a drawing, not a wire, so Scoot and its wire commands
 skipped them), whole where wires cross (AutoCAD Electrical draws its own crossings), and the
-wire gauge ovals on a layer of their own, WIRE MARKS; it is off to start; KanzonasCAD reads either back as the same symbols. AutoCAD
+wire gauge ovals on a layer of their own, WIRE MARKS, and each symbol's pins as AutoCAD
+Electrical's wire connections (X4TERM01 and TERM01 for a pin on the left, X1 right, X2 top, X8
+bottom; KanzonasCAD's own KZPIN otherwise); it is off to start; KanzonasCAD reads either back as the same symbols. AutoCAD
 Electrical's own project data (its WD_M block, wire-number blocks, the .wdp project) is not
 written, so its project-wide commands may not see the drawing as theirs.</li>
 <li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,
