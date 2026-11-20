@@ -6,6 +6,11 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.20.1
+
+**New**
+- Export to PDF can keep the layers' colors (Edit > Options..., General).
+
 ## 0.20
 
 **New**

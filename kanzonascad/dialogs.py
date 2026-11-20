@@ -1575,6 +1575,10 @@ def options_dialog(parent, cur, view, tab=None):
                           "tag, description, maker and catalog number as attributes. Off: as "
                           "plain lines and texts, as before version 0.20")
     form.addRow("", dxf_blocks)
+    pdf_colors = QCheckBox("Export to PDF in the layers' colors (off: black on white)")
+    pdf_colors.setObjectName("pdf_colors")
+    pdf_colors.setChecked(bool(cur.get("pdf_colors", False)))
+    form.addRow("", pdf_colors)
     tabs.addTab(page, "General")
 
     # Files
@@ -1667,7 +1671,7 @@ def options_dialog(parent, cur, view, tab=None):
                 "library_folder": folder,
                 "template_path": path, "backups_keep": keep.value(),
                 "autosave_minutes": auto.value(), "drafting": apply_drafting is not None,
-                "dxf_blocks": dxf_blocks.isChecked()}
+                "dxf_blocks": dxf_blocks.isChecked(), "pdf_colors": pdf_colors.isChecked()}
 
 
 def cables_dialog(parent, project, folder):

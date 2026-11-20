@@ -998,7 +998,7 @@ class MainWindow(BlockEditing, QMainWindow):
                "template_path": self.settings.value("template_path", "") or "",
                "backups_keep": self.backups_keep(),
                "autosave_minutes": self.autosave_minutes(),
-               "dxf_blocks": self.dxf_blocks()}
+               "dxf_blocks": self.dxf_blocks(), "pdf_colors": self.pdf_colors()}
         got = dialogs.options_dialog(self, cur, self.view())
         if got is None:
             return False
@@ -1018,6 +1018,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self.settings.setValue("backups_keep", int(got["backups_keep"]))
         self.settings.setValue("autosave_minutes", int(got["autosave_minutes"]))
         self.settings.setValue("dxf_blocks", bool(got.get("dxf_blocks", True)))
+        self.settings.setValue("pdf_colors", bool(got.get("pdf_colors", False)))
         self._set_autosave_timer()
         if got.get("drafting"):
             self._store_drafting(self.view())
@@ -1691,6 +1692,11 @@ class MainWindow(BlockEditing, QMainWindow):
                 "in." % (rep["count"], ", ".join("%s (%d)" % (_kind_name(t), n)
                                                   for t, n in sorted(left.items()))))
 
+    def pdf_colors(self):
+        """Export to PDF in the layers' colors (Options; off to start: black on white)."""
+        v = self.settings.value("pdf_colors", False)
+        return v not in (False, "false", "0", 0, None)
+
     def dxf_blocks(self):
         """Export DXF with symbols and footprints as blocks (Options; on to start, 0.20)."""
         v = self.settings.value("dxf_blocks", True)
@@ -1744,7 +1750,7 @@ class MainWindow(BlockEditing, QMainWindow):
         if not self._fits_or_go_on(d.project, d.project.sheets, "Export"):
             return
         try:
-            n = fileio.export_pdf(d.project, path)
+            n = fileio.export_pdf(d.project, path, mono=not self.pdf_colors())
         except Exception as ex:
             QMessageBox.warning(self, APP, "Couldn't write %s:\n%s" % (path, ex))
             return
