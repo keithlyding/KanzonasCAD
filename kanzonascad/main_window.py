@@ -756,7 +756,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                     a["num_source"]]),
             ("Cross-references", "large", [a["sig_arrows"], a["xref_update"], a["xref_freeze"],
                                            a["xref_auto"]]),
-            ("Parts", "small", [a["new_part"], a["assign_part"], a["save_as_part"]]),
+            ("Parts", "small", [a["new_part"]]),
             ("Layers", "small", [self.sch_layer_box, self.sch_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"],
                                  a["wire_layers"]]),

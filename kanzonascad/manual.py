@@ -347,7 +347,7 @@ attributes window's Shown on the drawing (or Show or hide attributes).</li>
 <p>It is saved to your library and, unless you untick it, the selected objects become the
 block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
 footprint.</p>
-<p><b>Assign part...</b> (Library menu, the Schematic and Panel tabs' Parts): select the devices
+<p><b>Assign part...</b> (Library menu, the Panel tab's Parts): select the devices
 (every contactor on the sheet, say), then pick one of your library's parts for them, from those
 made for their symbols, filtered as you type; every selected device using the part's symbol takes
 its manufacturer, catalog number and description, in one step, and keeps its tag. Type your
