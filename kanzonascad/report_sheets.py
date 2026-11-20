@@ -14,7 +14,7 @@ from . import model as M
 LAYER = "REPORT"
 ROW_H = 0.25                # (paper inches: a row, its text 0.1" high)
 TEXT_H = 0.1
-CHAR_W = 0.07               # (about how wide a letter of that text is)
+ELLIPSIS = chr(0x2026)      # (a cell cut short ends in it)
 PAD = 0.05
 
 
@@ -41,17 +41,27 @@ def table(project, key):
 
 
 def _fit(text, width):
-    """text cut to width (paper inches) with an ellipsis when it doesn't fit."""
-    n = max(1, int((width - 2 * PAD) / CHAR_W))
-    return text if len(text) <= n else text[:max(0, n - 1)] + "…"
+    """text cut to width (paper inches, as the program measures text: model.text_width)
+    with an ellipsis when it doesn't fit."""
+    room = width - 2 * PAD
+    if M.text_width(text, TEXT_H) <= room:
+        return text
+    lo, hi = 0, len(text)
+    while lo < hi:                      # (the longest start that fits with the ellipsis)
+        mid = (lo + hi + 1) // 2
+        if M.text_width(text[:mid] + ELLIPSIS, TEXT_H) <= room:
+            lo = mid
+        else:
+            hi = mid - 1
+    return text[:lo] + ELLIPSIS if lo else ""
 
 
 def _widths(head, rows, room):
     """Column widths (paper inches) in proportion to what they hold, fitting room."""
     want = []
     for i, h in enumerate(head):
-        n = max([len(str(h))] + [len(str(r[i])) for r in rows if i < len(r)])
-        want.append(min(n, 60) * CHAR_W + 2 * PAD)
+        cells = [str(h)] + [str(r[i]) for r in rows if i < len(r)]
+        want.append(max(M.text_width(c[:60], TEXT_H) for c in cells) + 2 * PAD)
     total = sum(want) or 1.0
     f = min(1.0, room / total)
     return [w * f for w in want]
@@ -99,6 +109,15 @@ def pages(project, sheet, head, rows):
     return out
 
 
+LAYOUT = ("size", "cols", "rows", "col_start", "row_start", "rotation", "scale", "scale_name",
+          "show_border", "show_title_block")
+
+
+def _layout(shape):
+    d = shape.meta_dict()
+    return {k: d[k] for k in LAYOUT if k in d}
+
+
 def update(ed, project, key, after=None):
     """A report's sheets drawn again from the drawing (made when it has none, after the sheet
     after or at the end): its old report sheets replaced by as many as it takes now. Returns
@@ -119,14 +138,19 @@ def update(ed, project, key, after=None):
     made = []
     for i, ents in enumerate(got):
         name = title if len(got) == 1 else "%s (%d of %d)" % (title, i + 1, len(got))
+        # (every page laid out as the first, the table drawn for it: a page whose scale was
+        # changed on its own drew the first page's table eight times too big, the battery's
+        # seed 409)
         if i < len(old):
             s = old[i]
             for eid in list(s.entities):
                 ed.remove(s, eid)
-            ed.sheet_meta(s, title=name)
+            ed.sheet_meta(s, title=name, **_layout(shape))
         else:
             s = project.make_sheet(name, "report")
-            s.size, s.rotation, s.scale = shape.size, shape.rotation, shape.scale
+            meta = s.meta_dict()
+            meta.update(_layout(shape))
+            s.set_meta(meta)
             s.report = key
             ed.add_sheet(s, at + i)
         for e in ents:

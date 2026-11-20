@@ -67,6 +67,39 @@ class ReportSheetsTest(unittest.TestCase):
         q = M.Project.load(path)
         self.assertEqual([s.report for s in q.sheets if s.report], ["bom"] * len(mine))
 
+    def test_long_cells_stay_in_their_column(self):
+        # (the battery's seed 409: a long description ran past the border; cells are measured
+        # as the program measures text)
+        from kanzonascad.scalefit import outside
+        d = self.win.library.get("symbol", "Relay coil")
+        with self.p.edit("long") as ed:
+            ed.add(self.s, M.Insert(d.name, (9.0, 3.0), 0.0, 1.0, False,
+                                    {"TAG": "CR9", "MFR": "W" * 80, "CAT": "M" * 90,
+                                     "DESC": "WIDE " * 40}, d, 0.1))
+        for s in self.win.report_sheet("bom"):
+            self.assertIsNone(outside(self.p, s))
+        self.assertTrue(any(t.endswith(RS.ELLIPSIS) for s in self.p.sheets if s.report
+                            for t in self.texts(s)))
+
+    def test_every_page_laid_out_as_the_first(self):
+        # (the battery's seed 409: one page's scale changed on its own; updated, its table was
+        # drawn for the first page's scale, eight times too big for it)
+        from kanzonascad.scalefit import outside
+        d = self.win.library.get("symbol", "Relay coil")
+        with self.p.edit("more") as ed:
+            for i in range(120):
+                ed.add(self.s, M.Insert(d.name, (1.0 + (i % 12), 6.0 + i // 12), 0.0, 1.0,
+                                        False, {"TAG": "CR%d" % (i + 10), "CAT": "X-%d" % i},
+                                        d, 0.1))
+        made = self.win.report_sheet("bom")
+        self.assertGreater(len(made), 1)
+        with self.p.edit("scale") as ed:
+            ed.sheet_meta(made[1], scale=0.125)
+        self.win.update_report_sheets()
+        for s in (s for s in self.p.sheets if s.report):
+            self.assertIsNone(outside(self.p, s), s.title)
+            self.assertEqual(s.scale, made[0].scale)
+
     def test_every_report(self):
         for key in RS.kinds():
             with self.p.edit("r") as ed:
