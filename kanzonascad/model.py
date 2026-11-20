@@ -2886,6 +2886,23 @@ SCALE_PRESETS = [
     ('3/4" = 1\'-0"', 1 / 16), ('1/2" = 1\'-0"', 1 / 24), ('1/4" = 1\'-0"', 1 / 48),
 ]
 
+def _arrays(got):
+    """A sheet's arrays as saved (arrays.py), those it can't read left out."""
+    out = {}
+    for k, a in (got or {}).items() if isinstance(got, dict) else ():
+        try:
+            out[str(k)] = {"mode": "P" if a.get("mode") == "P" else "R",
+                           "vals": [float(v) for v in a.get("vals") or []],
+                           "center": [float(a["center"][0]), float(a["center"][1])]
+                           if a.get("center") else None,
+                           "source": [int(i) for i in a.get("source") or []],
+                           "items": {str(i): [int(j) for j in ids]
+                                     for i, ids in (a.get("items") or {}).items()}}
+        except (TypeError, ValueError, KeyError, IndexError, AttributeError):
+            continue                    # (saved unreadably: its copies stay, on their own)
+    return out
+
+
 def _cabinet(v):
     """A stored cabinet size as [width, height, depth] (real inches), or None."""
     try:
@@ -2945,6 +2962,8 @@ class Sheet:
         self.xref_shown = None              # the cross-references shown while frozen (or while
                                             # the project's aren't automatic): xrefs.py
         self.no_dots = []                   # junction dots deleted (Delete dot): [(x, y)]
+        # arrays that stay arrays (arrays.py): {id: {mode, vals, center, source, items}}
+        self.arrays = {}
         self.pin_order = []                 # a block editor's sheet: its pin markers' ids in
                                             # the order set in Pins... (block_editor.to_block)
         self.col_start = int(col_start)     # the first column's number (1 to start)
@@ -3165,6 +3184,12 @@ class Sheet:
              "xref_shown": [list(t) for t in self.xref_shown]
              if self.xref_shown is not None else None,
              "no_dots": [list(q) for q in self.no_dots]}
+        if self.arrays:
+            d["arrays"] = {k: {"mode": a["mode"], "vals": list(a["vals"]),
+                               "center": list(a["center"]) if a.get("center") else None,
+                               "source": list(a["source"]),
+                               "items": {i: list(ids) for i, ids in a["items"].items()}}
+                           for k, a in self.arrays.items()}
         if self.pin_order:
             d["pin_order"] = list(self.pin_order)
         return d
@@ -3213,6 +3238,7 @@ class Sheet:
         self.no_dots = [(round(float(q[0]), 6), round(float(q[1]), 6))
                         for q in (d.get("no_dots") or [])]
         self.pin_order = [int(i) for i in (d.get("pin_order") or [])]
+        self.arrays = _arrays(d.get("arrays"))
         self.version += 1
 
     @classmethod

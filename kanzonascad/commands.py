@@ -3557,10 +3557,15 @@ class ArrayCmd(Command):
             self.finish()
             return
         sheet = self.ctx.sheet()
+        from . import arrays
+        n = len(self.ents)
         with self.ctx.edit("Array") as ed:
-            for e in retag_copies(self.ctx.project, sheet, made):
-                ed.add(sheet, e)
-        self.ctx.message("Array: %d copies" % (len(made) // max(1, len(self.ents))))
+            ids = [ed.add(sheet, e).id for e in retag_copies(self.ctx.project, sheet, made)]
+            # (kept as an array: Edit array changes its spacing or counts later)
+            arrays.record(ed, sheet, self.mode, self.vals, self.center,
+                          [e.id for e in self.ents],
+                          {i: ids[i * n:(i + 1) * n] for i in range(len(ids) // n)})
+        self.ctx.message("Array: %d copies (Edit array changes it later)" % (len(made) // max(1, n)))
         self.finish()
 
     def preview(self, p):
@@ -3580,6 +3585,76 @@ class ArrayCmd(Command):
         for e in self.ents:
             bb = G.bbox_union(bb, e.bbox())
         return (bb[0], bb[1]) if bb else (0.0, 0.0)
+
+
+class ArrayEditCmd(Command):
+    """ARRAYEDIT (Edit array): an array made with Array changed (the owner, Nov 2026): select
+    any object of it, then its numbers again, each offered as it is (Enter keeps it): rows,
+    columns and their spacing, or how many round its center and the angle they fill. Copies
+    that are still the array's move, new ones take tags of their own, those past the new count
+    go; a copy edited on its own has left the array and stays. U unlinks it: the copies stay
+    where they are, objects of their own."""
+    name, title = "ARRAYEDIT", "Edit array"
+    selects = True
+
+    def begin(self):
+        from . import arrays
+        sheet = self.ctx.sheet()
+        self.aid = None
+        for e in _selected(self.ctx):
+            self.aid = arrays.find(sheet, e.id)
+            if self.aid is not None:
+                break
+        if self.aid is None:
+            self.ctx.message("Edit array: select an object of an array made with Array")
+            self.finish()
+            return
+        a = sheet.arrays[self.aid]
+        self.mode, self.old, self.vals = a["mode"], list(a["vals"]), []
+        self._ask()
+
+    def _ask(self):
+        q = ArrayCmd.QUESTIONS[self.mode][len(self.vals)]
+        v = self.old[len(self.vals)] if len(self.vals) < len(self.old) else None
+        self.ctx.prompt("%s (Enter keeps %s)" % (q, "%g" % v if v is not None else "it"),
+                        [("Unlink", "U")] if not self.vals else [])
+
+    def text(self, s):
+        if s.strip().upper() == "U" and not self.vals:
+            from . import arrays
+            sheet = self.ctx.sheet()
+            with self.ctx.edit("Unlink array") as ed:
+                arrays.unlink(ed, sheet, self.aid)
+            self.ctx.message("The array is unlinked: its copies are objects of their own")
+            self.finish()
+            return True
+        return False
+
+    def enter(self):
+        i = len(self.vals)
+        if i < len(self.old):
+            self.number(self.old[i])
+
+    def number(self, v):
+        i = len(self.vals)
+        if i < 2 and self.mode == "R" or i == 0 and self.mode == "P":
+            if v < 1 or abs(v - round(v)) > 1e-9 or v > 1000:
+                self.ctx.message("A whole number from 1 to 1000")
+                return True
+            v = int(round(v))
+        self.vals.append(v)
+        if len(self.vals) >= len(ArrayCmd.QUESTIONS[self.mode]):
+            from . import arrays
+            sheet = self.ctx.sheet()
+            with self.ctx.edit("Edit array") as ed:
+                moved, added, erased = arrays.edit(ed, self.ctx.project, sheet, self.aid,
+                                                   self.vals)
+            self.ctx.message("Edit array: %d moved, %d added, %d erased" % (moved, added,
+                                                                            erased))
+            self.finish()
+        else:
+            self._ask()
+        return True
 
 
 def offset_entity(e, d, side):
@@ -5454,6 +5529,7 @@ COMMANDS = {
     "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
     "DASHBOX": (DashBoxCmd, ["DB", "DBOX", "BOX"]),
     "ARRAY": (ArrayCmd, ["AR", "ARRAYRECT", "ARRAYPOLAR"]),
+    "ARRAYEDIT": (ArrayEditCmd, ["AE"]),
     "OFFSET": (OffsetCmd, ["O"]),
     "NUMBER": (NumberCmd, ["NUM", "TCOUNT"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),

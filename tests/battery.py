@@ -1268,6 +1268,49 @@ def random_editing(log, out, ops, seed, drawing=None):
                 left.remove(hit)
             BC.CHECKED["array where they go"] += 1
 
+    def op_array_edit():
+        # (0.20.1: an array changed with Edit array as the owner would: a copy picked, a new
+        # spacing typed, the rest kept with Enter: every copy still the array's lands where its
+        # place in rows and columns puts it from the source as it is now, those that had left
+        # the array stay where they were; worked out from the array's record and the sheet)
+        from kanzonascad import arrays
+        live = [aid for aid in s.arrays if arrays.alive(s, aid) and
+                s.arrays[aid]["mode"] == "R" and arrays.members(s, aid)]
+        if not live:
+            return
+        aid = rnd.choice(live)
+        a = s.arrays[aid]
+        have = arrays.members(s, aid)
+        left = {j: s.entities[j].to_dict() for k, ids in a["items"].items()
+                if int(k) not in have for j in ids if j in s.entities}
+        pick = rnd.choice([j for ids in have.values() for j in ids])
+        rows, cols = int(a["vals"][0]), int(a["vals"][1])
+        dr = rnd.choice([-1, 1]) * rnd.randint(1, 8) * 0.25 * s.k()
+        dc = rnd.choice([-1, 1]) * rnd.randint(1, 8) * 0.25 * s.k()
+        v.set_selection({pick})
+        v.run(C.ArrayEditCmd)
+        if v.cmd is None:
+            return
+        v.enter()
+        v.enter()
+        v.input_text("%.12g" % dr)
+        if v.cmd is not None:
+            v.input_text("%.12g" % dc)
+        finish()
+        src = [s.entities[i] for i in a["source"]]
+        now = s.arrays.get(aid)
+        assert now is not None, "Edit array lost the array"
+        offs = arrays.offsets("R", [rows, cols, dr, dc])
+        for k, ids in now["items"].items():
+            for e, j in zip(src, ids):
+                want = arrays.place(e, offs[int(k)])
+                assert j in s.entities and arrays._same(s.entities[j], want), \
+                    "Edit array left copy %s of %s elsewhere" % (k, e.kind)
+        for j, d in left.items():
+            assert j in s.entities and s.entities[j].to_dict() == d, \
+                "Edit array moved a copy that had left the array"
+        BC.CHECKED["array edited where they go"] += 1
+
     def op_offset():
         # (0.16.5: a copy a set distance away, smaller or bigger)
         a = pt()
@@ -3350,7 +3393,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

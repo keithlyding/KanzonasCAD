@@ -254,6 +254,12 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   over 20,000 straight pieces, 5,000 elements or 5 MB, refused whole (nothing half brought in);
   its colors, fills and fonts are left out, its lines go on the sheet's current layer 0.
 
+## Decided while the owner was away (Nov 2026; to confirm)
+- **Editing an array** (0.20.1): editing one copy on its own takes it out of the array (rather
+  than changing every copy); Edit array asks the numbers again on the command line, as Array
+  does (no dialog, no array grips yet); an array whose original objects are erased or moved on
+  their own is no longer one. Arrays made before 0.20.1 can't be edited (they weren't kept).
+
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally
   only does lines and text. That way, I can pull in a picture, PDF, screenshot, whatever of a
