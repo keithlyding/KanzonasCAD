@@ -2495,3 +2495,42 @@ def wire_layers_question(parent):
     if dlg.exec() != QDialog.Accepted:
         return None
     return [g for g, b in boxes if b.isChecked()]
+
+
+def assign_part_dialog(parent, parts, brand):
+    """Assign part: the parts for the selected devices (the brand's first), a filter, and the
+    project's brand: (part id, brand) or None."""
+    from PySide6.QtWidgets import QListWidget, QListWidgetItem
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Assign part")
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel("The part for the selected devices (those using its symbol take it):"))
+    find = QLineEdit()
+    find.setPlaceholderText("Filter: maker, catalog number, description")
+    lay.addWidget(find)
+    lst = QListWidget()
+    lst.setObjectName("parts")
+    for p in parts:
+        it = QListWidgetItem("%s   (%s)" % (p.label(), p.symbol))
+        it.setData(Qt.UserRole, p.id)
+        lst.addItem(it)
+    lst.setCurrentRow(0)
+    lay.addWidget(lst)
+
+    def narrow(text):
+        t = text.strip().lower()
+        for i in range(lst.count()):
+            it = lst.item(i)
+            it.setHidden(bool(t) and t not in it.text().lower())
+    find.textChanged.connect(narrow)
+    form = QFormLayout()
+    brand_box = QLineEdit(brand)
+    brand_box.setObjectName("brand")
+    brand_box.setPlaceholderText("Allen-Bradley, Siemens...")
+    form.addRow("Brand listed first (this project):", brand_box)
+    lay.addLayout(form)
+    lay.addWidget(_buttons(dlg))
+    lst.itemDoubleClicked.connect(lambda _it: dlg.accept())
+    if dlg.exec() != QDialog.Accepted or lst.currentItem() is None:
+        return None
+    return lst.currentItem().data(Qt.UserRole), brand_box.text().strip()

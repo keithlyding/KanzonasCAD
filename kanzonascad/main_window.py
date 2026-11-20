@@ -550,6 +550,14 @@ class MainWindow(BlockEditing, QMainWindow):
           label="Library")
         A("new_part", "New &part...", lambda: self.library_panel.edit_part(new=True),
           icon="part", label="New part")
+        A("assign_part", "Assign pa&rt...", lambda: self.assign_part(), icon="part",
+          label="Assign part",
+          tip="Give every selected device a part from your library (maker, catalog number, "
+              "description) in one go: those using the part's symbol take it")
+        A("save_as_part", "Save to library as part", lambda: self.save_as_part(), icon="part",
+          label="Save as part",
+          tip="The selected device's maker, catalog number and description, its symbol and its "
+              "footprint, saved to your library as a part to use again")
         A("library_folder", "Library &folder...", self.choose_library_folder, icon="open",
           label="Library folder")
         A("block_props", "Block p&roperties...", lambda: self.block_properties(),
@@ -677,7 +685,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
                   "save_block_as", "add_pin", "pins", "update_blocks", None,
-                  "new_part", "library_folder"):
+                  "new_part", "assign_part", "save_as_part", "library_folder"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Window")
         for k in ("new_window", "move_window", None, "close_window"):
@@ -771,7 +779,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Arrange", "large", [a["align_obj"], a["distribute"]]),
             ("Reports", "large", [a["materials"]]),
-            ("Parts", "small", [a["new_part"]]),
+            ("Parts", "small", [a["new_part"], a["assign_part"], a["save_as_part"]]),
             ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
             ("Settings", "small", [a["panel_settings"]]),
@@ -1750,6 +1758,84 @@ class MainWindow(BlockEditing, QMainWindow):
                 "the program that made it (exploding what's left out first) usually brings it "
                 "in." % (rep["count"], ", ".join("%s (%d)" % (_kind_name(t), n)
                                                   for t, n in sorted(left.items()))))
+
+    # ---- parts on devices (partsassign.py) -------------------------------------------------
+    def ask_part(self, parts, brand):
+        """The Assign part window: (part id, brand) or None (a test replaces it)."""
+        from .dialogs import assign_part_dialog
+        return assign_part_dialog(self, parts, brand)
+
+    def assign_part(self):
+        """Assign part...: a part from the library on every selected device using its
+        symbol, one undoable step. How many took it."""
+        from . import partsassign as PA
+        d = self.doc()
+        if d is None:
+            return 0
+        s = d.view.sheet()
+        ents = PA.devices(s, d.view.sel)
+        if not ents:
+            self._say("Assign part: select the devices first (contactors, relays...)")
+            return 0
+        brand = d.project.settings.get("brand", "") or ""
+        parts = PA.candidates(self.library, ents, brand)
+        if not parts:
+            self._say("No part in your library uses %s yet (Library > New part..., or Save "
+                      "to library as part)" % ", ".join(sorted({e.block for e in ents})))
+            return 0
+        got = self.ask_part(parts, brand)
+        if got is None:
+            return 0
+        pid, brand = got
+        part = next((p for p in parts if p.id == pid), None)
+        if part is None:
+            return 0
+        with d.project.edit("Assign part") as ed:
+            if brand != (d.project.settings.get("brand", "") or ""):
+                ed.project_settings({"brand": brand})
+            n = PA.assign(ed, d.project, s, ents, part)
+        left = len(ents) - n
+        self._say("%s on %d device(s)%s" % (part.label(), n,
+                                             "; %d use another symbol and kept theirs" % left
+                                             if left else ""))
+        return n
+
+    def save_as_part(self):
+        """Save to library as part: the one selected device as a part in the library (its
+        symbol and footprint saved there too when the library hasn't got them)."""
+        from . import partsassign as PA
+        d = self.doc()
+        if d is None:
+            return None
+        ents = PA.devices(d.view.sheet(), d.view.sel)
+        if len(ents) != 1:
+            self._say("Save to library as part: select one device")
+            return None
+        dev = ents[0]
+        part, why = PA.part_from(d.project, dev)
+        if part is None:
+            self._say("Save to library as part: " + why)
+            return None
+        try:
+            for kind, name in (("symbol", part.symbol), ("footprint", part.footprint)):
+                if name and self.library.get(kind, name) is None:
+                    defn = d.project.blocks.get(name)
+                    if defn is not None:
+                        self.library.save_block(defn)
+            same = [p for p in self.library.parts()
+                    if (p.manufacturer.lower(), p.catalog.lower()) ==
+                    (part.manufacturer.lower(), part.catalog.lower())]
+            if same:
+                part.id = same[0].id    # (that part again: updated, not a second one)
+            self.library.save_part(part)
+        except OSError as ex:
+            QMessageBox.warning(self, APP, "Couldn't save the part to the library (%s):\n%s"
+                                % (self.library.folder, ex))
+            return None
+        self.library_panel.refresh()
+        self._say("Saved %s to your library as a part%s" % (
+            part.label(), " (with its footprint %s)" % part.footprint if part.footprint else ""))
+        return part
 
     def dxf_blocks(self):
         """Export DXF with symbols and footprints as blocks (Options; on to start, 0.20)."""

@@ -2835,6 +2835,41 @@ def random_editing(log, out, ops, seed, drawing=None):
                 mid, at)
             BC.CHECKED["SVG in as lines"] += 1
 
+    def op_assign_part():
+        # (0.20.1: Assign part on a random handful of devices, as the owner would: every one
+        # using the part's symbol takes its maker, catalog number and description, keeps its
+        # tag, and the project keeps a copy of the part; worked out from the devices before)
+        from kanzonascad import partsassign as PA
+        from kanzonascad.library import Part
+        devs = PA.devices(s, set(s.entities))
+        if not devs:
+            return
+        pick = rnd.sample(devs, min(len(devs), rnd.randint(1, 4)))
+        block = rnd.choice(pick).block
+        part = Part(manufacturer=rnd.choice(["Allen-Bradley", "Siemens", "ABB"]),
+                    catalog="BAT-%d" % rnd.randint(1, 10 ** 6), description="battery part",
+                    symbol=block)
+        win.library.save_part(part)
+        before = {e.id: dict(e.attrs) for e in pick}
+        v.set_selection(set(before))
+        win.ask_part = lambda parts, brand: (part.id, brand)
+        try:
+            n = win.assign_part()
+        finally:
+            win.__dict__.pop("ask_part", None)
+        want = [i for i in before if s.entities[i].block == block]
+        assert n == len(want), "Assign part put the part on %d devices, not %d" % (n, len(want))
+        for i, old in before.items():
+            a = s.entities[i].attrs
+            if i in want:
+                assert (a.get("CAT"), a.get("PART"), a.get("TAG")) == \
+                    (part.catalog, part.id, old.get("TAG")), \
+                    "Assign part left %s with %r" % (old.get("TAG"), a)
+            else:
+                assert a == old, "Assign part changed a device of another symbol"
+        assert p.settings["parts"][part.id]["catalog"] == part.catalog
+        BC.CHECKED["part assigned to the devices of its symbol"] += 1
+
     def op_contact_blocks():
         # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
         # line from it through the farthest, worked out from where they are; none of them
@@ -3393,7 +3428,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

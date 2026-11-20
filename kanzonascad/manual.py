@@ -347,6 +347,16 @@ attributes window's Shown on the drawing (or Show or hide attributes).</li>
 <p>It is saved to your library and, unless you untick it, the selected objects become the
 block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
 footprint.</p>
+<p><b>Assign part...</b> (Library menu, the Panel tab's Parts): select the devices
+(every contactor on the sheet, say), then pick one of your library's parts for them, from those
+made for their symbols, filtered as you type; every selected device using the part's symbol takes
+its manufacturer, catalog number and description, in one step, and keeps its tag. Type your
+<b>brand</b> there (Allen-Bradley, Siemens...) and its parts are listed first in this project.
+The project keeps its own copy of each part it uses, so changing or deleting a part in the
+library never changes a drawing. <b>Save to library as part</b> (Library menu) does the other
+way round: select one device with a catalog number and it is saved to your library as a part,
+with its manufacturer, description, symbol and the footprint linked to it (saving it again
+updates that part).</p>
 <p>Double-click a placed symbol or footprint to change its tag, description, manufacturer and
 catalog number, or pick one of the library's parts for it. Fuses, circuit breakers,
 disconnects, overloads, motors, the control transformer, the VFD and the power supply also
