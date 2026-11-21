@@ -58,8 +58,14 @@ gets that room) and a <b>title block</b> in the lower right corner.</p>
 of every wire number (6001, 6002 ...).</p>
 <ul>
 <li><b>New sheet</b> adds a sheet after the one shown, the same size and zones.</li>
+<li><b>Ctrl+Tab</b> goes back to the sheet you were last on, as Studio 5000 does: hold Ctrl
+and keep tapping Tab to go on through the sheets you were on before it, most recent first, then
+the ones you haven't opened yet in page order (Ctrl+Shift+Tab steps back). A list of the sheets
+shows meanwhile, the one picked lit; let Ctrl go to open it, or press Esc (Ctrl still held) to
+stay where you are.</li>
 <li><b>Duplicate sheet</b> (Sheets menu and tab) adds a copy of the sheet shown just after it,
-with everything on it, titled "(copy)", on a page of its own (the next free number when the
+with everything on it, titled with the next number no sheet has ("Motors" becomes "Motors-2",
+then "Motors-3"; "480 Distribution - 1" becomes "480 Distribution - 2"), on a page of its own (the next free number when the
 original's was typed). Its devices get tags of its page (CR201 becomes CR301), its wires new
 numbers, and its off-sheet connectors and arrows no name (so it isn't joined to the original's
 wires: name them for the copy). One step, so Undo takes it back.</li>
@@ -70,13 +76,15 @@ page numbers).</li>
 one sheet: its title, its <b>type</b> (Schematic, Panel, Report or Other: every tool works on
 every sheet; the type brings up the matching ribbon tab and shows in the Sheets panel), its
 <b>location</b> (the panel or box what it shows is in: MCP, JB-1, FIELD; see Cables between
-panels), page number and, if it differs from the project's, its own revision.
+panels), page number and, if it differs from the project's, its own revision, and its
+default <b>wire layer</b> (the layer new wires on it go on: as the project, or one of its own;
+see Colors and layers).
 Its size and zones are the project's unless you tick "This sheet has its own size and zones";
 then set how many columns run along the top and the first one's number (11 makes a sheet
 continue 11 to 20), and how many rows run down the left and the first one's letter. Grid
 references follow the zones as they are set: change them and every reference updates.</li>
 <li><b>Project properties...</b> (or double-click the title block): what belongs to the whole
-project, in three tabs:
+project, in four tabs:
 <ul>
 <li><b>General</b>: the title block fields (customer, project, drawing number, drawn by, drawn
 date (today's when the project is made), checked by, date, revision, and any field of your own
@@ -84,8 +92,14 @@ the title block uses), the <b>grid reference
 format</b> (<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1) and the height of new text.</li>
 <li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
 uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
-(changing it resizes every tag), and the wire and symbol colors.</li>
+(changing it resizes every tag), and the symbol color.</li>
 <li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors.</li>
+<li><b>Wire layers</b>: <b>New wires go on</b>, the wire layer new wires go on on every sheet
+that hasn't one of its own (WIRES to start), and the project's wire layers in a list, as in
+Layers...: <b>New</b> makes a wire layer of any name (CONTROL, say), <b>Add preset...</b> adds
+the 480 V, 120 V, 24 VDC and Ethernet ones, and Rename, Color..., Delete, the gauge (AWG), wire
+color and Gauge shown work as in Layers.... Changes in the list are made at once (Undo takes
+them back), even if you then click Cancel.</li>
 </ul></li>
 <li><b>Edit title block</b>: see below.</li>
 <li><b>Layers...</b>: add, rename, recolor, switch off, lock and delete layers, and choose the
@@ -93,21 +107,33 @@ current layer. To clean up (after importing a DXF, say), select several layers (
 Shift+click) or click <b>Select unused</b> (the empty ones), then <b>Delete</b>: empty layers
 go at once; if some hold objects (on any sheet or in the title block), it lists them and asks
 whether to delete them too, with everything on them, or keep them. Layer 0 always stays, and
-one Undo brings it all back. The Layer box on the Home tab (and on the Schematic and Panel tabs) picks the current layer; with objects selected, picking
-a layer moves them to it.</li>
+one Undo brings it all back. The Layer box on the Home and Panel tabs picks the current layer;
+with objects selected, picking a layer moves them to it. The Schematic tab's box is the
+<b>wire layer</b> box (below).</li>
 </ul>
 
 <h2>Colors and layers</h2>
 <p>As in AutoCAD, every object takes its <b>layer's color</b> (ByLayer) unless you give it its
 own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel tabs) to pick a
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
-layer it sits on, or its own color if you gave it one. Wires go on the current layer when it
-is a wire layer (WIRES, one named WIRE..., one with a gauge or wire color, or one Add wire
-layers made), else on layer WIRES. A wire (or a bus wire, with the Bus layers left at Wires)
+layer it sits on, or its own color if you gave it one.</p>
+<p><b>Wire layers</b> are WIRES, a layer named WIRE..., one with a gauge or wire color, one Add
+wire layers made, and one made in Project properties, Wire layers. Each sheet has a <b>default
+wire layer</b>, saved with the project: its own (Sheet properties: <b>Wire layer</b>) or, set
+to <b>As the project</b>, the project's (Project properties, Wire layers: <b>New wires go
+on</b>, WIRES to start). The Schematic tab's layer box is the <b>wire layer</b> box: it lists
+the wire layers only and shows the one wires go on. Pick another and the wires you draw on that
+sheet go on it, while lines and text stay on the current layer; picking a wire layer in the
+Home tab's layer box, or making one current in Layers..., picks it too. Pick a layer that isn't
+a wire layer (0, to draw lines) and wires go back on the sheet's default. Each sheet keeps its
+own pick while the project is open (another sheet shows its own); a pick isn't saved, so on
+opening the project each sheet starts at its default, and changing a default (Sheet properties,
+or Project properties) drops the picks it covers so it is used at once. With wires selected,
+picking in the wire layer box moves them to it (other objects stay where they are). A wire (or a bus wire, with the Bus layers left at Wires)
 that starts or ends on another wire, a tap off it or carrying it on, takes that wire's layer
 instead: it is the same conductor, so the same voltage, color and gauge (a size typed on the
 new wire is still its own), and the rubber band shows it in that color as you draw. A wire
-joining wires of two different layers stays on the current layer, and the command line warns
+joining wires of two different layers stays on the wire layer picked (or the default), and the command line warns
 that two conductors may be tied together. Symbols go on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them. On the black drawing,
@@ -140,7 +166,8 @@ layer's color with stripes of the second (a 24 VDC common), on the screen and pr
 printing in black only).</p>
 <p><b>Add wire layers...</b> (Format menu, Schematic tab: Layers; also the <b>Wire layers...</b>
 button in Layers...) adds a layer for each wire of the systems you tick, with its color, gauge
-and wire color, ready to draw on (pick one as the current layer, then draw wires):</p>
+and wire color, ready to draw on (pick one in the Schematic tab's wire layer box, then draw
+wires):</p>
 <ul>
 <li><b>480 V</b>, 12 AWG: 480V BLK, 480V RED, 480V ORG, 480V BRN, 480V YEL, 480V WHT (neutral)
 and 480V GRN (ground).</li>
@@ -161,8 +188,9 @@ are on one layer with one size.</p>
 it (the box shows their layer, empty when they are on several); with nothing selected it
 becomes the current layer. A hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
-Locked, color, current layer). Quicker, on the Home tab's Layers group (the Schematic and Panel tabs have the layer box, the layer list,
-Layers..., Color, Hide layer and Show all too) and the Modify menu:</p>
+Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the
+layer box, the layer list, Layers..., Color, Hide layer and Show all too; the Schematic tab the
+same with the wire layer box in place of the layer box) and the Modify menu:</p>
 <ul>
 <li>The <b>layer list</b> button next to the current layer: every layer with its light bulb
 (click to hide or show it) and lock (click to lock or unlock it).</li>
@@ -873,9 +901,11 @@ lists where its terminals are.</li>
 way, and list under it; double-click a point to type its <b>address</b> (I:0/3, %I0.3...),
 shown under it.</li>
 <li><b>PLC I/O modules</b>, drawn whole (Library, JIC/PLC): a box with the module's catalog
-number at the top and its terminals down its left side, one a rung (1/2" apart), each a pin
-with its terminal number and what it is (<b>0  IN 0</b>); wires land on the left and each
-point keeps its own wire number. Its tag goes above (PLC prefix: PLC601), and its
+number at the top and its terminals down one side, one a rung (1/2" apart), each a pin
+with its terminal number and what it is (<b>0  IN 0</b>); each point keeps its own wire
+number. An input module's terminals are on its left, where its field devices' wires come in;
+an output module's (1734-OB8, OB8E, OE4C and the generic output modules: sourcing) on its
+right, so it sits on the left of the sheet with its loads to its right. Its tag goes above (PLC prefix: PLC601), and its
 <b>SLOT</b> (double-click it, type 3) over the catalog number. Rockwell POINT I/O, as their
 wiring diagrams give: <b>1734-IB8</b> (inputs 0-7), <b>1734-OB8</b> and <b>1734-OB8E</b>
 (outputs 0-7), <b>1734-IE8C</b> (current inputs 0-7), <b>1734-OE4C</b> (outputs 0-3, C on 4
@@ -893,7 +923,10 @@ Channel), <b>Address</b>, <b>Tag</b> and <b>Description</b>. The rows of one slo
 module, the library's symbol of that catalog number (1734-IB8...) or a generic module by its
 name; each goes on a sheet of its own ("Slot 2 - 1734-IB8") after the sheet shown, its slot
 shown, its tag of that page, and each point's address, tag and description written beside its
-terminal on the left, where the field wire comes in (layer PLC I/O). A module the library
+terminal, where the field wire comes in (layer PLC I/O): an input module a third of the way
+across with the texts to its left, an output module at the left of the sheet with the texts to
+its right. Each point's address is also kept on the module (attributes ADDR0, ADDR1..., not
+shown), for <b>Number wires on PLC I/O points by their address</b>. A module the library
 hasn't got, or a point a module hasn't got, is left out and named on the command line. One
 Undo takes it all back.</li>
 <li><b>Two terminals a channel</b>: <b>PLC analog input module, 4, 8 or 16 channels IN/RTN</b>,
@@ -1049,6 +1082,20 @@ next pair; Enter or Esc ends it. An end connected to something, or the same wire
 refused with a message.</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
 numbers and cross-references.</li>
+<li><b>Number wires on PLC I/O points by their address</b> (Project properties, Schematic, or
+Schematic settings...; off to start): a wire on a PLC module's input or output point (a
+terminal marked <b>IN n</b>, <b>OUT n</b> or <b>IN-n</b>; not V, C, RTN or other power and
+common terminals) is numbered by that point's address, as if typed: the whole wire, up to
+the devices it lands on. The address is the one <b>Import I/O list...</b> brought in for the
+point, as the list writes it (Local:3:O.Data.0); otherwise it is made from the module's
+<b>SLOT</b> and the point: <b>O:3/0</b> for output 0 of slot 3, <b>I:2/7</b> for input 7 of
+slot 2 (a continued piece uses its module's SLOT). A <b>PLC input</b> or <b>PLC output</b>
+point's wire takes the point's <b>address</b> (ADDR). A module with no SLOT and no address
+kept leaves its wires numbered as usual, and a locked number (typed by hand) stays. A wire on
+two points takes the first of their addresses in order. Two separate wires on one address
+(two modules both slot 3) both take it and are marked as duplicates, never joined. Changing
+the setting, a SLOT or an address renumbers them with that change; turned off, they take
+page numbers again.</li>
 <li>Wire numbers go into PDF and DXF exports as text.</li>
 </ul>
 
@@ -1370,14 +1417,15 @@ marked as drawing-sized).</li>
 bring a manufacturer's drawing to real size with Scale, Reference before it becomes a
 footprint.</li>
 <li><b>{{Scale}}</b> in the title block shows the sheet's scale (Edit title block to add it).</li>
-<li><b>Align objects</b> (ALIGNOBJ, ALO; Modify menu, Panel tab) lines up footprints, DIN rail,
-duct or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right</b>,
+<li><b>Align objects</b> (ALIGNOBJ, ALO; Modify menu; Panel tab: Arrange; Schematic tab:
+Modify) lines up footprints, DIN rail, duct, symbols or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right</b>,
 <b>Top</b>, <b>Middle</b> or <b>Bottom</b> (L, C, R, T, M, B), then click the one to line
 them up with, or press Enter to line them up with the selection's own outer edge (or its
 middle). Each moves only straight across (Left, Center, Right) or straight up and down (Top,
-Middle, Bottom), by its outline; one Undo puts them back.</li>
-<li><b>Distribute objects</b> (DISTRIBUTE, DIST; Modify menu, Panel tab) spreads three or more
-selected objects out evenly: <b>Horizontally</b> or <b>Vertically</b> (H, V). The two
+Middle, Bottom), by its outline, and wires on a moved symbol's pins follow, square; one Undo
+puts them back.</li>
+<li><b>Distribute objects</b> (DISTRIBUTE, DIST; Modify menu; Panel tab: Arrange; Schematic
+tab: Modify) spreads three or more selected objects out evenly: <b>Horizontally</b> or <b>Vertically</b> (H, V). The two
 outermost stay where they are and the others move straight across (or straight up and down)
 so the gaps between them are equal. With Snap on, each move is rounded to the snap spacing, so
 symbols' pins stay on the grid and wires still meet them (the gaps can then differ by up to
@@ -1528,8 +1576,10 @@ instead of added (as in AutoCAD).</li>
 <li><b>Window</b>: click in an empty spot, move, and click again. <b>Left to right</b> (blue)
 selects what is wholly inside; <b>right to left</b> (green, dashed) also selects what it
 crosses.</li>
-<li><b>Lasso</b>: press in an empty spot, hold the button and draw around the objects, then let
-go. Dragged first to the <b>right</b> it is a window lasso (blue: what is wholly inside); to
+<li><b>Lasso</b>: press, hold the button and draw around the objects, then let go: in an empty
+spot or on an object not selected (it is picked when pressed, and let go of again once you
+drag on), however fast the mouse goes; let go with no move between, away from where you
+pressed, and it is the window between the two. Dragged first to the <b>right</b> it is a window lasso (blue: what is wholly inside); to
 the <b>left</b>, a crossing lasso (green: what it touches too). A quick drag nearly straight
 from one corner toward the other is a window from where you pressed to where you let go, left
 to right or right to left as above; once the drag has bent away from that straight line, it
@@ -1846,6 +1896,8 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>Ctrl+W / Ctrl+Q</td><td>Close project / Exit</td></tr>
 <tr><td>Ctrl+P</td><td>Print...</td></tr>
 <tr><td>Ctrl+Shift+N</td><td>Open this sheet in a new window</td></tr>
+<tr><td>Ctrl+Tab / Ctrl+Shift+Tab</td><td>The sheet you were last on; hold Ctrl and tap Tab for
+the ones before it (Shift+Tab back)</td></tr>
 <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>
 <tr><td>Ctrl+X / Ctrl+C / Ctrl+V / Ctrl+A</td><td>Cut / Copy / Paste / Select all</td></tr>
 <tr><td>Ctrl+Shift+E / Ctrl+0 / Ctrl+= / Ctrl+-</td><td>Zoom extents / sheet / in / out</td></tr>

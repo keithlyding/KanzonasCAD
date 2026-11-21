@@ -18,6 +18,14 @@ wires.
 
 The number shows above the group's longest straight piece on each sheet it's on (labels()).
 Project setting "wire_numbers" (on to start) turns all of it off.
+
+- Project setting "wire_numbers_io" (off to start; the owner, 0.21: "wire numbers for wires
+  connecting to a PLC input or output (not power) should have the option of being numbered
+  according to its I/O point"): a group on a PLC module's input or output point (its terminal
+  says IN n, OUT n or IN-n; not V, C, RTN) takes the point's address as its number, as a
+  number typed would: the module's ADDRn (Import I/O list writes it), else "I:<slot>/<n>" or
+  "O:<slot>/<n>" from its SLOT (a continued piece: its module's). A PLC input or PLC output
+  point symbol's wire takes its ADDR. A locked number stays; no address, normal numbering.
 """
 
 import math
@@ -34,6 +42,58 @@ _NUM = re.compile(r"(\d+?)(\d{3})([A-Z]*)")
 
 def enabled(project):
     return bool(project.settings.get("wire_numbers", True))
+
+
+def by_io_address(project):
+    """Wires on PLC input and output points numbered by the point's address (wire_numbers_io)."""
+    return bool(project.settings.get("wire_numbers_io", False))
+
+
+_IO_TEXT = re.compile(r"^(\S+)\s+(IN|OUT)[ -](\d+)$")
+
+
+def io_points(defn):
+    """{pin name: ("I" or "O", point number)} of a PLC module's input and output points: the
+    terminals whose text is "n  IN n", "n  OUT n" or "n  IN-n" (not V, C, RTN-n, power or
+    common terminals). Empty for any other block."""
+    if defn is None or defn.prefix != "PLC":
+        return {}
+    return point_terminals(defn)
+
+
+def point_terminals(defn):
+    """io_points of any block, a PLC one or not (Import I/O list reads a module's points)."""
+    names = {p["name"] for p in defn.pins}
+    out = {}
+    for e in defn.entities:
+        if isinstance(e, Text):
+            m = _IO_TEXT.match(e.text.strip())
+            if m and m.group(1) in names:
+                out.setdefault(m.group(1), ("I" if m.group(2) == "IN" else "O",
+                                            int(m.group(3))))
+    return out
+
+
+def is_io_point_symbol(defn):
+    """A PLC input or PLC output point symbol (a PLC block with an ADDR attribute shown): the
+    wire on its pin is numbered by its ADDR."""
+    return defn is not None and defn.prefix == "PLC" and any(
+        a["attr"] == "ADDR" for a in defn.attr_texts)
+
+
+def io_address(kind, n, attrs, module=None):
+    """The address of point n (kind "I" or "O") of a module whose attributes are attrs: its
+    ADDRn as written, else kind:SLOT/n; a continued piece's from its module's attributes
+    (module). "" without either."""
+    for a in (attrs, module or {}):
+        got = (a.get("ADDR%d" % n) or "").strip()
+        if got:
+            return got
+    for a in (attrs, module or {}):
+        slot = (a.get("SLOT") or "").strip()
+        if slot:
+            return "%s:%s/%d" % (kind, slot, n)
+    return ""
 
 
 @lru_cache(maxsize=65536)
@@ -382,8 +442,12 @@ def _summary(sheet, how=None, taps_mode="same"):
     local = {r: (g[0], g[1], sorted(g[2], key=_count), g[3]) for r, g in local.items()}
     links, dists, named = [], [], []
     pdbs = []                   # (power distribution blocks: [(DEV or PARENT, outlet, {pole: root})])
+    ios = []                    # (PLC points: [(root, kind, point, attrs, PARENT)]; point None: its ADDR)
+    mods = []                   # (PLC modules: [(DEV, attrs)], for their continued pieces)
     for ins in sheet.inserts():
         d = ins.defn
+        if d is not None and d.prefix == "PLC":
+            _plc_summary(sheet, ins, roots, ios, mods)
         if d is None or not d.wiring:
             continue
         at = _pin_wires(sheet, ins, roots)
@@ -421,9 +485,27 @@ def _summary(sheet, how=None, taps_mode="same"):
             if k is None:
                 k = known[q] = key(q)
             tapl.append((roots[b], roots[a], k))
-    out = (local, links, dists, tapl, named, pdbs)
+    out = (local, links, dists, tapl, named, pdbs, ios, mods)
     sheet._num_summary = (sig, out)
     return out
+
+
+def _plc_summary(sheet, ins, roots, ios, mods):
+    """A PLC block's points with a wire on them (ios) and, a module, its DEV (mods)."""
+    d = ins.defn
+    pts = io_points(d)
+    if pts and d.role != "child" and ins.attrs.get("DEV"):
+        mods.append((ins.attrs["DEV"], ins.attrs))
+    point = is_io_point_symbol(d)
+    if not pts and not point:
+        return
+    for name, r in _pin_wires(sheet, ins, roots).items():
+        if point:
+            ios.append((r, "", None, ins.attrs, ""))
+        elif name in pts:
+            kind, n = pts[name]
+            ios.append((r, kind, n, ins.attrs,
+                        ins.attrs.get("PARENT", "") if d.role == "child" else ""))
 
 
 def _count(num):
@@ -439,19 +521,30 @@ def groups(project):
 
 
 def _assemble(project):
+    """_assemble_all without the PLC points' addresses."""
+    return _assemble_all(project)[:5]
+
+
+def _assemble_all(project):
     """Local groups joined across sheets by off-sheet connectors: {group key: [(sheet,
     [wires])]}, {group key: [home order, page sheet, numbers, locked]}, distribution links,
     taps [(tapped group, tap group, (sheet index, sort key))], off-sheet connectors {name:
-    [group key or None, [(sheet, connector id, block name, on a wire)]]}."""
+    [group key or None, [(sheet, connector id, block name, on a wire)]]}, and {group key:
+    [addresses of the PLC points it is on]} (wire_numbers_io)."""
     u = _Union()
     names = {}
     named = {}
     src_at = []
     sums = []
+    plc_points, modules = [], {}
     mode = tap_mode(project)
     for i, s in enumerate(project.sheets):
-        local, links, dists, tapl, ins_named, pdbs = _summary(s, wire_order(project, s), mode)
+        local, links, dists, tapl, ins_named, pdbs, ios, mods = _summary(
+            s, wire_order(project, s), mode)
         sums.append((i, s, local, dists, tapl, pdbs))
+        plc_points += [(s, r, kind, n, attrs, parent) for r, kind, n, attrs, parent in ios]
+        for dev, attrs in mods:
+            modules.setdefault(dev, attrs)
         for name, r in links:
             names.setdefault(name, []).append((s.id, r))
         for name, iid, block, rs in ins_named:
@@ -521,7 +614,16 @@ def _assemble(project):
             dist.append((g, [outs.get(n, {}).get(j) for n in range(1, top + 1)]))
     conns = {name: [find(names[name][0]) if name in names else None, ends]
              for name, ends in named.items()}
-    return gs, info, dist, tapped, conns
+    io = {}
+    for s, r, kind, n, attrs, parent in plc_points:
+        if n is None:
+            a = (attrs.get("ADDR") or "").strip()
+        else:
+            a = io_address(kind, n, attrs, modules.get(parent) if parent else None)
+        g = find((s.id, r))
+        if a and g in info and a not in io.get(g, ()):
+            io.setdefault(g, []).append(a)
+    return gs, info, dist, tapped, conns, io
 
 
 # ---- numbering -------------------------------------------------------------------------------
@@ -571,7 +673,7 @@ def sync(ed, project, renumber=None):
     follow_links(ed, project)
     if not enabled(project):
         return
-    gs, info, dist, tapped, conns = _assemble(project)
+    gs, info, dist, tapped, conns, io = _assemble_all(project)
     again = [] if renumber is None else [renumber] if not isinstance(renumber, (list, tuple,
                                                                                set)) \
         else list(renumber)
@@ -603,6 +705,14 @@ def sync(ed, project, renumber=None):
             outputs.setdefault(o, (src, i, "tap"))
     _break_loops(outputs, info)
     want = dict(fixed)
+    if by_io_address(project):
+        # (a group on a PLC point: its address, as a number typed would be; on two points,
+        # the first address in sorted order. Two groups on one address both take it and
+        # dupes.py flags them: never joined)
+        for g, addrs in io.items():
+            if g not in fixed:
+                want[g] = sorted(addrs)[0]
+                outputs.pop(g, None)
     # groups keep a number of theirs when it's right (of their page, not taken earlier)
     todo = []
     for g in order:

@@ -67,6 +67,7 @@ DEFAULT_SETTINGS = {
     "duct_hatch": False,        # wire duct drawn with a light hatch (Panel settings)
     "xref_height": 0.065,       # cross-reference text (0.08 before 0.18: "slightly smaller")
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
+    "wire_numbers_io": False,   # wires on PLC input/output points take the point's address
     # a wire tapped off another (its end on the other's middle): "same" its number, "suffix"
     # its number with -1, -2... in the numbering order (a tap off a tap: a, b...), "own" a
     # number of its own (the owner, 0.18.3: "all three wires tapping off the bus are still
@@ -97,6 +98,10 @@ DEFAULT_SETTINGS = {
                                 # zone grid stops at
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
     "wire_gauge_shown": True,   # a wire layer's gauge and color beside its wires
+    # the layer new wires go on, on every sheet that hasn't one of its own (Sheet properties,
+    # or picked on the Schematic tab); the owner, 0.21: "every time I reopen the project, the
+    # layer I had selected reverts", for the project and per sheet
+    "wire_layer": "WIRES",
     "wire_gauge_height": 0.06,  # gauge labels' text, paper inches (wire numbers: 0.08)
     "wire_gauge_each": "group",  # once for wires side by side alike ("group"), or "each" run
     "footprint_label": "tag",   # what a footprint placed shows to start (Footprint label)
@@ -1406,7 +1411,7 @@ class Hatch(Composite):
     or with a pattern of lines (HATCH_PATTERNS) spacing apart, turned by angle. Not tied to
     the shapes it was made from: it moves, copies and scales on its own."""
     kind = "hatch"
-    __slots__ = ("loops", "pattern", "angle", "spacing", "_parts")
+    __slots__ = ("loops", "pattern", "angle", "spacing", "_parts", "_lines")
 
     def __init__(self, loops, pattern="SOLID", angle=0.0, spacing=0.125, **kw):
         super().__init__(**kw)
@@ -1415,6 +1420,7 @@ class Hatch(Composite):
         self.angle = float(angle)
         self.spacing = float(spacing) if spacing and spacing > 0 else 0.125
         self._parts = None
+        self._lines = None
 
     def _data(self):
         d = {"loops": [[list(q) for q in lp] for lp in self.loops], "pattern": self.pattern}
@@ -1433,15 +1439,26 @@ class Hatch(Composite):
     def solid(self):
         return self.pattern == "SOLID"
 
+    def pattern_lines(self):
+        """Its pattern's lines, [(a, b)] (none for a solid fill): what the renderer draws, with
+        no Line made for each (the self-test's notes sheet: 2,000 hatches, 57,000 lines)."""
+        if self._lines is None:
+            self._lines = [ab for ang, share in HATCH_PATTERNS[self.pattern][1]
+                           for ab in _scan(self.loops, ang + self.angle, self.spacing * share)]
+        return self._lines
+
+    def _compute_bbox(self):
+        # (its loops' box: the pattern's lines lie inside them, so they aren't worked out for
+        # it; the self-test's notes sheet, 2,000 hatches added)
+        return G.bbox_of([q for lp in self.loops for q in lp]) if self.loops else None
+
     def parts(self):
         """Its loops (closed polylines) and its pattern's lines (none for a solid fill: the
         renderer fills its loops)."""
         if self._parts is not None:
             return self._parts
         out = [Polyline(lp, True) for lp in self.loops]
-        for ang, share in HATCH_PATTERNS[self.pattern][1]:
-            for a, b in _scan(self.loops, ang + self.angle, self.spacing * share):
-                out.append(Line(a, b))
+        out += [Line(a, b) for a, b in self.pattern_lines()]
         for e in out:
             e.layer, e.color = self.layer, self.color
         self._parts = out
@@ -2721,7 +2738,7 @@ def gauge_text(g):
 
 class Layer:
     def __init__(self, name, color=ADAPTIVE, visible=True, locked=False, awg="",
-                 wire_color="", gauge_shown=True):
+                 wire_color="", gauge_shown=True, wire=False):
         self.name = name
         self.color = color
         self.visible = bool(visible)
@@ -2733,6 +2750,9 @@ class Layer:
         # its gauge label shown beside its wires (Layers: Gauge shown; the owner, 0.18.5:
         # control power, all 16 AWG blue, "I don't need to announce this all over the place")
         self.gauge_shown = bool(gauge_shown)
+        # a wire layer whatever its name, gauge or color (made one in Project properties:
+        # Wire layers, New; wirelayers.is_wire_layer)
+        self.wire = bool(wire)
 
     def wire_label(self):
         """What its wires show: "14 AWG BLK", "14 AWG", "BLK", or ""."""
@@ -2749,13 +2769,15 @@ class Layer:
             d["wire_color"] = self.wire_color
         if not self.gauge_shown:
             d["gauge_shown"] = False
+        if self.wire:
+            d["wire"] = True
         return d
 
     @classmethod
     def from_dict(cls, d):
         return cls(d["name"], d.get("color", ADAPTIVE), d.get("visible", True),
                    d.get("locked", False), d.get("awg", ""), d.get("wire_color", ""),
-                   d.get("gauge_shown", True))
+                   d.get("gauge_shown", True), d.get("wire", False))
 
 
 def row_letters(n, start=0):
@@ -2942,6 +2964,8 @@ class Sheet:
         # says (None: Project properties, Schematic)
         self.show_border = None
         self.show_title_block = None
+        self.wire_layer = None              # the layer new wires go on here: None = the
+                                            # project's (Project properties, Schematic)
         self.xref_device = None             # arrows show the device at the far end: None =
                                             # as the project, True/False this sheet's own
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
@@ -3177,6 +3201,7 @@ class Sheet:
              "show_border": self.show_border,
              "show_title_block": self.show_title_block,
              "xref_device": self.xref_device,
+             "wire_layer": self.wire_layer,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
              "rotation": self.rotation,
@@ -3221,6 +3246,7 @@ class Sheet:
         self.show_border = d.get("show_border")
         self.show_title_block = d.get("show_title_block")
         self.xref_device = d.get("xref_device")
+        self.wire_layer = str(d.get("wire_layer") or "").strip() or None
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         try:

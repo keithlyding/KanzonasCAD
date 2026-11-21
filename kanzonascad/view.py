@@ -142,6 +142,7 @@ class CadView(QWidget):
         self.grid_spacing = 0.5
         self.snap_spacing = 0.125
         self.current_layer = "0"
+        self.wire_layer_picks = {}      # {sheet id: the wire layer picked there} (commands)
         self.text_justify = ("left", "baseline")     # TEXT's justification (align, valign)
         self._pan = None
         # panning and zooming show the last picture moved and scaled (a millisecond), and the
@@ -942,6 +943,15 @@ class CadView(QWidget):
             got = cache[e.id] = (e, e.outline())
         return got[1]
 
+    def _start_drag_window(self, w, start_px, pos):
+        """A press dragged on: a window or lasso from where it was pressed (to the right a
+        window, to the left a crossing); a pick made by the press undone."""
+        w["lasso"] = [w["start"]]
+        w["crossing"] = pos.x() < start_px.x()
+        if w.get("picked"):
+            w["picked"] = False
+            self.set_selection(w["before"])
+
     def _finish_window(self, end, shift=False):
         """The window or lasso done: what it caught is added to the selection, or, with
         Shift (held when it started or when it ends), taken out of it (as AutoCAD's)."""
@@ -1038,8 +1048,7 @@ class CadView(QWidget):
                     if G.dist(start_px.toTuple(), pos.toTuple()) > 5:
                         # held down and dragged: a lasso, as in AutoCAD (dragged to the
                         # right: window lasso; to the left: crossing lasso)
-                        w["lasso"] = [w["start"]]
-                        w["crossing"] = pos.x() < start_px.x()
+                        self._start_drag_window(w, start_px, pos)
                 else:
                     last = self.to_screen(w["lasso"][-1])
                     if G.dist(last.toTuple(), pos.toTuple()) > 4:
@@ -1122,18 +1131,24 @@ class CadView(QWidget):
                 self.run(C.GripCmd, g[0], g[1], others)
                 return
         ent = self.pick_entity(p)
+        before = set(self.sel)
         if ent is not None:
-            if e.modifiers() & Qt.ShiftModifier:
-                self.set_selection(self.sel - {ent.id})
-            elif cmd is None and ent.id in self.sel:
+            if cmd is None and ent.id in self.sel and not e.modifiers() & Qt.ShiftModifier:
                 ents = self.sheet().entities
                 self._drag = {"start": p, "moved": False,
                               "ents": [ents[i] for i in self.sel if i in ents]}
+                return
+            if e.modifiers() & Qt.ShiftModifier:
+                self.set_selection(self.sel - {ent.id})
             else:
                 self.set_selection(self.sel | {ent.id})
-            return
+        # (a press on an object picks it; dragged on from it, it is a window or lasso after
+        # all, and the pick is undone: people start a window wherever the hand lands, on a
+        # wire as often as not; the owner, 0.21.2: "if I move my mouse too quickly, the
+        # rectangular lassos don't register")
         self._window = {"start": p, "pressed": True, "lasso": None, "crossing": None,
-                        "remove": bool(e.modifiers() & Qt.ShiftModifier)}
+                        "remove": bool(e.modifiers() & Qt.ShiftModifier),
+                        "picked": ent is not None, "before": before}
         self._preview = set()
         self.update()
 
@@ -1169,9 +1184,18 @@ class CadView(QWidget):
             return
         w = self._window
         if e.button() == Qt.LeftButton and w is not None and w["pressed"]:
+            pos = e.position()
+            start_px = self.to_screen(w["start"])
+            if w["lasso"] is None and G.dist(start_px.toTuple(), pos.toTuple()) > 5:
+                # (let go away from where it was pressed with no move between, as a quick
+                # flick of the mouse can be: a dragged window, not a click)
+                self._start_drag_window(w, start_px, pos)
             if w["lasso"] is not None:
-                self._finish_window(self.to_world(e.position()),
-                                    bool(e.modifiers() & Qt.ShiftModifier))
+                self._finish_window(self.to_world(pos), bool(e.modifiers() & Qt.ShiftModifier))
+            elif w.get("picked"):
+                self._window = None         # a click on an object: picked, as it was
+                self._preview = set()
+                self.update()
             else:
                 w["pressed"] = False        # a click: the window follows until the next click
 

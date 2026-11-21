@@ -63,6 +63,37 @@ def is_preset(name):
     return name in PRESET_NAMES
 
 
+def is_wire_layer(project, name):
+    """Is this layer one wires go on: WIRES, one named WIRE..., one with a gauge or wire color
+    (Layers), one of the preset (Add wire layers), or one made a wire layer (Project
+    properties: Wire layers, New)? The Schematic tab's layer box lists these."""
+    lay = project.layers.get(name)
+    if lay is None:
+        return False
+    return name.upper().startswith("WIRE") or bool(lay.awg or lay.wire_color or lay.wire) \
+        or is_preset(name)
+
+
+def wire_layers(project):
+    """The project's wire layers' names, in the layers' order."""
+    return [n for n in project.layers if is_wire_layer(project, n)]
+
+
+def project_wire_layer(project):
+    """The layer new wires go on on a sheet with none of its own (Project properties)."""
+    name = project.settings.get("wire_layer") or "WIRES"
+    return name if is_wire_layer(project, name) else "WIRES"
+
+
+def sheet_wire_layer(project, sheet):
+    """The layer new wires go on on this sheet: its own (Sheet properties, or picked on the
+    Schematic tab) while it is still a wire layer, else the project's."""
+    own = getattr(sheet, "wire_layer", None) if sheet is not None else None
+    if own and is_wire_layer(project, own):
+        return own
+    return project_wire_layer(project)
+
+
 def stripe(wire_color):
     """The stripes' color of a two-color wire ("BLU/WHT": white), or None."""
     parts = [p.strip().upper() for p in str(wire_color or "").split("/")]

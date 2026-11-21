@@ -1279,17 +1279,55 @@ class ZoomCmd(Command):
 
 
 def wire_layer(ctx):
-    """The layer a wire goes on: the current layer when it is a wire layer (WIRES, one named
-    WIRE..., or one with a gauge or wire color: Layers), else WIRES (the owner, 0.16: picking
-    WIRE BROWN and drawing a wire put it on WIRES; picking 0 for drafting leaves wires on
-    WIRES; a layer of the wire layer preset, Layers > Wire layers, ETHERNET too)."""
+    """The layer a wire goes on: the wire layer picked on this sheet (the Schematic tab's
+    layer box, or a wire layer picked in any layer box) until a layer that isn't one is
+    picked, else the sheet's default: its own (Sheet properties) or the project's (Project
+    properties, Wire layers; WIRES to start). The owner, 0.16: picking WIRE BROWN and drawing
+    a wire put it on WIRES; 0.21: "Picking layer 0 should revert the wires default back to
+    whatever the sheet default is"."""
     from . import wirelayers
-    name = ctx.layer()
-    lay = ctx.project.layers.get(name)
-    if name.upper().startswith("WIRE") or (lay is not None and (lay.awg or lay.wire_color)) \
-            or (lay is not None and wirelayers.is_preset(name)):
-        return name
-    return "WIRES"
+    sheet = ctx.sheet()
+    pick = wire_picks(ctx).get(getattr(sheet, "id", None))
+    if pick and wirelayers.is_wire_layer(ctx.project, pick):
+        return pick
+    return wirelayers.sheet_wire_layer(ctx.project, sheet)
+
+
+def wire_picks(ctx):
+    """{sheet id: the wire layer picked there}, the view's (not saved: on opening, each sheet
+    starts at its default)."""
+    picks = getattr(ctx, "wire_layer_picks", None)
+    if picks is None:
+        picks = ctx.wire_layer_picks = {}
+    return picks
+
+
+def set_wire_layer(ctx, name):
+    """A layer picked on this sheet: a wire layer is the one its new wires go on from now (the
+    sheet's default itself: no pick); any other layer (0, to draw lines) puts wires back on
+    the sheet's default. True when the layer wires go on changed."""
+    from . import wirelayers
+    sheet = ctx.sheet()
+    if sheet is None:
+        return False
+    before = wire_layer(ctx)
+    picks = wire_picks(ctx)
+    if wirelayers.is_wire_layer(ctx.project, name) and \
+            name != wirelayers.sheet_wire_layer(ctx.project, sheet):
+        picks[sheet.id] = name
+    else:
+        picks.pop(sheet.id, None)
+    return wire_layer(ctx) != before
+
+
+def clear_wire_picks(ctx, sheet=None):
+    """A default changed (Sheet properties: this sheet's; Project properties: every sheet's):
+    the picks it covers are dropped, so the new default is used at once."""
+    picks = wire_picks(ctx)
+    if sheet is None:
+        picks.clear()
+    else:
+        picks.pop(sheet.id, None)
 
 
 def joined_layers(sheet, ends):

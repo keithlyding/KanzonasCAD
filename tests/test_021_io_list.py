@@ -53,6 +53,19 @@ class IoListTest(unittest.TestCase):
         self.assertEqual(t.align, "right")
         self.assertLess(G.dist((t.pos[0] + 0.15, t.pos[1] - 0.03), pins["0"]), 1e-9)
         self.assertIn("I:2/7  LS201  PALLET PRESENT", texts)
+        # (an output module, sourcing: on the left of its sheet, its terminals down its right,
+        # each point's text to their right; the owner, 0.21.2: "Shouldn't the ob8e module
+        # default to the left side of the screen (sourcing output)?")
+        s3 = made[1]
+        out = next(e for e in s3.inserts())
+        q = dict(out.pin_points())["0"]
+        self.assertGreater(q[0], out.bbox()[0] + 0.5)
+        mid = (s3.paper()[0] * s3.k()) / 2.0
+        self.assertLess(out.bbox()[2], mid)
+        t3 = next(e for e in s3.entities.values() if isinstance(e, M.Text) and
+                  e.text == "O:3/0  M101  CONVEYOR RUN")
+        self.assertEqual(t3.align, "left")
+        self.assertLess(G.dist((t3.pos[0] - 0.15, t3.pos[1] - 0.03), q), 1e-9)
         from kanzonascad.scalefit import outside
         self.assertIsNone(outside(self.p, s))
         said = self.said[-1]

@@ -165,6 +165,19 @@ def sheet_properties(parent, project, sheet):
     worder.setToolTip("The order wire numbers go in on this sheet: the tags' numbering order "
                       "(along the wires too), or across and down")
     form.addRow("Wire numbers in", worder)
+    from . import wirelayers
+    wlay = QComboBox()
+    wlay.setObjectName("sheet_wire_layer")
+    wlay.addItem("As the project (%s)" % wirelayers.project_wire_layer(project), None)
+    for name in wirelayers.wire_layers(project):
+        wlay.addItem(_swatch(project.layers[name].color), name, name)
+    own_wl = sheet.wire_layer if sheet.wire_layer and wirelayers.is_wire_layer(
+        project, sheet.wire_layer) else None
+    wlay.setCurrentIndex(max(wlay.findData(own_wl), 0))
+    wlay.setToolTip("The layer new wires on this sheet go on unless another is picked on the "
+                    "Schematic tab (picking 0 goes back to it): the project's (Project "
+                    "properties, Wire layers) or this sheet's own")
+    form.addRow("Wire layer", wlay)
     shows = {}
     for key, label, what in (("show_border", "Border and zones", "border and zones"),
                              ("show_title_block", "Title block", "title block")):
@@ -228,6 +241,8 @@ def sheet_properties(parent, project, sheet):
                    own_layout=own.isChecked(), fields=fields, kind=kind.currentData(),
                    number_order=order.currentData(), location=loc.text().strip(),
                    wire_order_tags=worder.currentData(),
+                   wire_layer=wlay.currentData() if wlay.currentData() != own_wl
+                   else sheet.wire_layer,
                    show_border=shows["show_border"].currentData(),
                    show_title_block=shows["show_title_block"].currentData(),
                    xref_device=xdev.currentData())
@@ -314,9 +329,10 @@ def _color_button(color):
 
 
 def project_properties(parent, project, tab=0):
-    """What belongs to the whole project, in three tabs: General (title block fields,
+    """What belongs to the whole project, in four tabs: General (title block fields,
     revision, grid references, text size), Schematic (sheet size and zones, tags, wires),
-    Panel (footprints, dimensions). True when changed."""
+    Panel (footprints, dimensions), Wire layers (the layers wires go on, and the one they go
+    on on a sheet with none of its own). True when changed."""
     from .sheetframe import fields_used, is_auto_field
     dlg = QDialog(parent)
     dlg.setWindowTitle("Project properties")
@@ -401,6 +417,14 @@ def project_properties(parent, project, tab=0):
     wire_nums = QCheckBox("Number wires (page number + 3 digits: 6001, 6002...)")
     wire_nums.setChecked(bool(st.get("wire_numbers", True)))
     form.addRow("Wire numbers", wire_nums)
+    wire_io = QCheckBox("Number wires on PLC I/O points by their address (O:3/0, I:2/7)")
+    wire_io.setObjectName("wire_numbers_io")
+    wire_io.setChecked(bool(st.get("wire_numbers_io", False)))
+    wire_io.setToolTip("A wire on a PLC module's input or output point (IN n, OUT n; not V, C "
+                       "or RTN) takes the point's address: the one Import I/O list kept, else "
+                       "I: or O: with the module's SLOT and the point. A PLC input or output "
+                       "point takes its ADDR. A number typed and locked stays.")
+    form.addRow("", wire_io)
     num_h = QDoubleSpinBox()
     num_h.setDecimals(4)
     num_h.setRange(0.01, 5)
@@ -525,8 +549,6 @@ def project_properties(parent, project, tab=0):
                          "sheet's own afterward (Sheet scale, Sheet properties). Sheets already "
                          "made keep theirs.")
     form.addRow("New sheets' scale", sch_scale)
-    wire_color = _color_button(project.layer_color("WIRES"))
-    form.addRow("Wire color (layer WIRES)", wire_color)
     sym_color = _color_button(project.layer_color("SYMBOLS"))
     form.addRow("Symbol color (layer SYMBOLS)", sym_color)
     tabs.addTab(page, "Schematic")
@@ -616,6 +638,42 @@ def project_properties(parent, project, tab=0):
     form.addRow(_gray("Objects take their layer's color (ByLayer), as in AutoCAD, unless you "
                       "give them their own (Modify > Color...)."))
     tabs.addTab(page, "Panel")
+
+    # ---- Wire layers -------------------------------------------------------------------------
+    # (the owner, 0.21: "I still don't love that for the project properties, there is only one
+    # default wire layer"; the layers' own changes are made at once, as in Layers...)
+    from . import wirelayers
+    page = QWidget()
+    lay_v = QVBoxLayout(page)
+    form = QFormLayout()
+    wdefault = QComboBox()
+    wdefault.setObjectName("project_wire_layer")
+    wdefault.setToolTip("The layer new wires go on, on every sheet that hasn't a default of "
+                        "its own (Sheet properties), unless another is picked on the Schematic "
+                        "tab")
+    form.addRow("New wires go on", wdefault)
+    lay_v.addLayout(form)
+
+    def fill_default():
+        keep = wdefault.currentText() or wirelayers.project_wire_layer(project)
+        wdefault.blockSignals(True)
+        wdefault.clear()
+        for name in wirelayers.wire_layers(project):
+            wdefault.addItem(_swatch(project.layers[name].color), name)
+        i = wdefault.findText(keep)
+        if i < 0:       # (renamed: the project's follows it; deleted: back to WIRES)
+            i = wdefault.findText(wirelayers.project_wire_layer(project))
+        wdefault.setCurrentIndex(max(i, 0))
+        wdefault.blockSignals(False)
+    wtable = LayersDialog(page, project, "", wires_only=True, embedded=True,
+                          changed=fill_default)
+    wtable.setObjectName("wire_layers_table")
+    lay_v.addWidget(wtable, 1)
+    lay_v.addWidget(_gray("A sheet can have its own default (Sheet properties). The Schematic "
+                          "tab's layer box picks another for the sheet you're on until you pick "
+                          "a layer that isn't a wire layer (0). Wires drawn on or off another "
+                          "wire take that wire's layer."))
+    tabs.addTab(page, "Wire layers")
     tabs.setCurrentIndex(tab)
     outer.addWidget(_buttons(dlg))
 
@@ -652,6 +710,7 @@ def project_properties(parent, project, tab=0):
     settings["show_title_block"] = show_tb.isChecked()
     settings["tag_height"] = tag_h.value()
     settings["wire_numbers"] = wire_nums.isChecked()
+    settings["wire_numbers_io"] = wire_io.isChecked()
     settings["wire_number_height"] = num_h.value()
     settings["wire_label_ends"] = ends.value()
     settings["wire_order_tags"] = worder.isChecked()
@@ -674,13 +733,15 @@ def project_properties(parent, project, tab=0):
         None, M.ADAPTIVE) else ""
     settings["dim_height"] = dim_h.value()
     settings["dim_units"] = dim_u.currentData()
+    if wdefault.currentText():
+        settings["wire_layer"] = wdefault.currentText()
     for key, b in stocks.items():
         # (a length the box can only show rounded, 1 m = 39.3700787 in, stays as it was
         # unless changed: OK alone changed it and marked the project modified)
         if abs(b.value() - round(float(st.get(key, 39.37 if key == "rail_stock" else 72.0)),
                                  b.decimals())) > 1e-9:
             settings[key] = b.value()
-    colors = {"WIRES": wire_color.color, "SYMBOLS": sym_color.color, "PANEL": fp_color.color,
+    colors = {"SYMBOLS": sym_color.color, "PANEL": fp_color.color,
               "DIMENSIONS": dim_color.color}
     changed_colors = {n: c for n, c in colors.items() if c != project.layer_color(n)
                       or n not in project.layers}
@@ -744,18 +805,25 @@ def _swatch(color):
 
 
 class LayersDialog(QDialog):
-    """Add, rename, recolor, hide and lock layers (each change is one undoable step)."""
+    """Add, rename, recolor, hide and lock layers (each change is one undoable step). With
+    wires_only, the wire layers alone (New makes one), as a part of another window
+    (embedded: Project properties' Wire layers); changed is called after every change."""
     COLS = ["Name", "Color", "On", "Locked", "AWG", "Wire color", "Gauge shown"]
     GAUGES = ["22", "20", "18", "16", "14", "12", "10", "8", "6", "4", "3", "2", "1", "1/0",
               "2/0", "3/0", "4/0", "250 kcmil", "350 kcmil", "500 kcmil"]
     WIRE_COLORS = ["BLK", "WHT", "RED", "BLU", "GRN", "GRN/YEL", "BRN", "ORG", "YEL", "GRY",
                    "VIO", "PNK", "WHT/BLU", "BLU/WHT"]
 
-    def __init__(self, parent, project, current):
+    def __init__(self, parent, project, current, wires_only=False, embedded=False,
+                 changed=None):
         super().__init__(parent)
+        if embedded:
+            self.setWindowFlags(Qt.Widget)
         self.project = project
         self.current = current
-        self.setWindowTitle("Layers")
+        self.wires_only = wires_only
+        self.changed = changed
+        self.setWindowTitle("Wire layers" if wires_only else "Layers")
         self.resize(600, 380)
         v = QVBoxLayout(self)
         self.table = QTableWidget(0, len(self.COLS))
@@ -770,11 +838,13 @@ class LayersDialog(QDialog):
         self.table.cellClicked.connect(self._clicked)
         v.addWidget(self.table)
         row = QHBoxLayout()
-        for label, slot in (("New", self._new), ("Rename", self._rename),
-                            ("Color...", self._color), ("Delete", self._delete),
-                            ("Select unused", self._select_unused),
-                            ("Set current", self._set_current),
-                            ("Wire layers...", self._wire_layers)):
+        buttons = [("New", self._new), ("Rename", self._rename), ("Color...", self._color),
+                   ("Delete", self._delete), ("Select unused", self._select_unused),
+                   ("Set current", self._set_current), ("Wire layers...", self._wire_layers)]
+        if wires_only:
+            buttons = [(("Add preset..." if lab == "Wire layers..." else lab), slot)
+                       for lab, slot in buttons if lab != "Set current"]
+        for label, slot in buttons:
             b = QPushButton(label)
             b.setObjectName("layers_" + label.lower().replace(" ", "_").strip("."))
             b.clicked.connect(slot)
@@ -788,17 +858,26 @@ class LayersDialog(QDialog):
                       "480 V, 120 V, 24 VDC and Ethernet ones. "
                       "Select several (Ctrl or Shift) to delete them together; Select unused "
                       "picks the empty ones.")
+        if wires_only:
+            note.setText("The layers wires go on. New makes one; Add preset adds the 480 V, "
+                         "120 V, 24 VDC and Ethernet ones. Double-click AWG or Wire color to "
+                         "give a layer its wire's gauge and color (BLU/WHT draws them "
+                         "striped); click On, Locked or Gauge shown to switch it. Changes "
+                         "here are made at once (Undo takes them back).")
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
         v.addWidget(note)
-        close = QDialogButtonBox(QDialogButtonBox.Close)
-        close.rejected.connect(self.accept)
-        v.addWidget(close)
+        if not embedded:
+            close = QDialogButtonBox(QDialogButtonBox.Close)
+            close.rejected.connect(self.accept)
+            v.addWidget(close)
         self._fill()
 
     def _fill(self):
+        from . import wirelayers
         t = self.table
-        names = list(self.project.layers)
+        names = (wirelayers.wire_layers(self.project) if self.wires_only
+                 else list(self.project.layers))
         t.setRowCount(len(names))
         for r, name in enumerate(names):
             lay = self.project.layers[name]
@@ -814,6 +893,8 @@ class LayersDialog(QDialog):
             t.setItem(r, 5, QTableWidgetItem(lay.wire_color))
             t.setItem(r, 6, QTableWidgetItem(("Yes" if lay.gauge_shown else "No")
                                              if (lay.awg or lay.wire_color) else ""))
+        if self.changed is not None:
+            self.changed()
 
     def _name(self):
         r = self.table.currentRow()
@@ -892,8 +973,8 @@ class LayersDialog(QDialog):
         if name in self.project.layers:
             QMessageBox.information(self, "Layers", "There is already a layer %s." % name)
             return
-        with self.project.edit("New layer") as ed:
-            ed.layer(name, None, M.Layer(name).to_dict())
+        with self.project.edit("New wire layer" if self.wires_only else "New layer") as ed:
+            ed.layer(name, None, M.Layer(name, wire=self.wires_only).to_dict())
         self._fill()
 
     def _rename(self):
@@ -919,6 +1000,10 @@ class LayersDialog(QDialog):
                 for e in list(s.entities.values()):
                     if e.layer == n:
                         ed.change(s, e.copy(layer=new))
+                if s.wire_layer == n:               # (its wires go on it still)
+                    ed.sheet_meta(s, wire_layer=new)
+            if self.project.settings.get("wire_layer") == n:
+                ed.project_settings({"wire_layer": new})
         if self.current == n:
             self.current = new
         self._fill()
