@@ -644,15 +644,30 @@ def random_editing(log, out, ops, seed, drawing=None):
             v.cancel()
 
     def op_wire():
-        # (0.16: on the current layer when it is a wire layer, else WIRES)
-        want = "WIRES"
+        # (0.16: on the wire layer picked, else the sheet's default; 0.21: the default is the
+        # sheet's own or the project's, and picking a layer that isn't a wire layer goes back
+        # to it; worked out here from the names, not from wirelayers)
+        if rnd.random() < 0.1:
+            name = rnd.choice(["WIRE BROWN", "WIRE BLACK", None])
+            if name is not None and name not in p.layers:
+                with p.edit("layer") as ed:
+                    ed.layer(name, None, M.Layer(name).to_dict())
+            with p.edit("sheet wire layer") as ed:
+                ed.sheet_meta(s, wire_layer=name)
+            C.clear_wire_picks(v, s)
+        default = s.wire_layer if s.wire_layer in p.layers else (
+            p.settings.get("wire_layer") or "WIRES")
+        want = default
         if rnd.random() < 0.2:
             name = rnd.choice(["WIRE BROWN", "WIRE BLACK", "0"])
             if name not in p.layers:
                 with p.edit("layer") as ed:
                     ed.layer(name, None, M.Layer(name).to_dict())
             v.current_layer = name
-            want = name if name.startswith("WIRE") else "WIRES"
+            C.set_wire_layer(v, name)
+            want = name if name.startswith("WIRE") else default
+            BC.CHECKED["wire layer picked, or back to the sheet's default"] += 1
+        assert C.wire_layer(v) == want, (want, C.wire_layer(v))
         before = set(s.entities)
         old_wires = [list(map(tuple, w.points)) for w in s.wires()]
         v.run(C.WireCmd)
@@ -667,10 +682,11 @@ def random_editing(log, out, ops, seed, drawing=None):
                 a = b
         finish()
         v.current_layer = "0"
+        C.set_wire_layer(v, "0")
         new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
         # (0.21: a wire, as a bus, ends on pins but never runs through one)
         bus_clear_of_pins(new, old_wires, "wire")
-        if want != "WIRES" and len(new) == 1 and not wires.pins_on(s, new[0].points[0]):
+        if len(new) == 1 and not wires.pins_on(s, new[0].points[0]):
             # (a wire joined to another keeps the older's layer: only a wire on its own)
             if not any(wires.connects_at(s, q, exclude=new[0].id)
                        for q in (new[0].points[0], new[0].points[-1])):
@@ -2018,8 +2034,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             win.acts["wire_layers"].trigger()
             have = [n for n in p.layers if wirelayers.is_preset(n)]
             if have:
-                v.current_layer = rnd.choice(have + ["WIRES"])
-                assert C.wire_layer(v) == v.current_layer, v.current_layer
+                pick = rnd.choice(have + ["WIRES"])
+                C.set_wire_layer(v, pick)
+                assert C.wire_layer(v) == pick, (pick, C.wire_layer(v))
+                C.set_wire_layer(v, "0")
                 BC.CHECKED["wire layers added, wires go on them"] += 1
             return
         ws = [w for w in s.wires() if w.length() > 0.5]

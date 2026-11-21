@@ -4,6 +4,7 @@ import unittest
 
 from tests.util import APP, window
 
+from kanzonascad import commands as C
 from kanzonascad import model as M
 
 
@@ -65,12 +66,20 @@ class SchematicLayersTest(unittest.TestCase):
             self.assertTrue(page.isAncestorOf(win.sch_layer_states))
             with v.project.edit("layer") as ed:
                 ed.layer("24VDC BLU", None, M.Layer("24VDC BLU").to_dict())
+                ed.layer("NOTES", None, M.Layer("NOTES").to_dict())
             win._fill_layers()
+            # (the wire layers only, there: the owner, 0.21)
             items = [win.sch_layer_box.itemText(i) for i in range(win.sch_layer_box.count())]
-            win._layer_picked(items.index("24VDC BLU"), win.sch_layer_box)
-            self.assertEqual(v.layer(), "24VDC BLU")
-            self.assertEqual(win.layer_box.currentText(), "24VDC BLU")
-            self.assertEqual(win.panel_layer_box.currentText(), "24VDC BLU")
+            self.assertIn("24VDC BLU", items)
+            self.assertIn("WIRES", items)
+            self.assertNotIn("NOTES", items)
+            self.assertNotIn("0", items)
+            win._wire_layer_picked(items.index("24VDC BLU"))
+            self.assertEqual(C.wire_layer(v), "24VDC BLU")
+            self.assertEqual(win.sch_layer_box.currentText(), "24VDC BLU")
+            self.assertEqual(v.layer(), "0")        # (the drafting layer left as it was)
+            self.assertEqual(win.layer_box.currentText(), "0")
+            self.assertEqual(win.panel_layer_box.currentText(), "0")
         finally:
             v.project.saved_at = len(v.project.undo_stack)
             win.close()

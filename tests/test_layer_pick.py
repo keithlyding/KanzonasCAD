@@ -2,7 +2,8 @@
 change to a new layer"): with objects selected, they go on it and the box shows their layer
 (it showed the current layer again, as if nothing had happened); with none selected, it is
 the current layer, and wires drawn then go on it when it is a wire layer (they always went on
-WIRES); a drafting layer leaves wires on WIRES."""
+WIRES); a drafting layer puts wires back on the sheet's default (WIRES to start; 0.21:
+"Picking layer 0 should revert the wires default back to whatever the sheet default is")."""
 import unittest
 
 from tests.util import APP, window, type_in
@@ -58,7 +59,8 @@ class LayerPickTest(unittest.TestCase):
         self.assertEqual(self.wire("1,3", "5,3").layer, "WIRE BROWN")
         self.pick("POWER")                                  # (a gauge: a wire layer)
         self.assertEqual(self.wire("1,5", "5,5").layer, "POWER")
-        self.pick("0")                                      # (drafting: wires stay on WIRES)
+        self.pick("0")                                      # (drafting: the default)
+        self.assertEqual(self.v.layer(), "0")
         self.assertEqual(self.wire("1,7", "5,7").layer, "WIRES")
 
     def test_a_bus_too_unless_its_layers_are_picked(self):

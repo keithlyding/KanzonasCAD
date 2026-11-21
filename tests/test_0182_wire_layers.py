@@ -62,9 +62,10 @@ class WireLayerPresetTest(unittest.TestCase):
 
     def test_wires_go_on_a_preset_layer(self):
         self.add(["Ethernet"])
-        self.v.current_layer = "ETHERNET"
+        self.assertEqual(C.wire_layer(self.v), "WIRES")
+        self.assertTrue(C.set_wire_layer(self.v, "ETHERNET"))
         self.assertEqual(C.wire_layer(self.v), "ETHERNET")
-        self.v.current_layer = "0"
+        self.assertTrue(C.set_wire_layer(self.v, "0"))          # (back to the default)
         self.assertEqual(C.wire_layer(self.v), "WIRES")
 
     def test_stripes(self):

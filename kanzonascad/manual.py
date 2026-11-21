@@ -76,13 +76,15 @@ page numbers).</li>
 one sheet: its title, its <b>type</b> (Schematic, Panel, Report or Other: every tool works on
 every sheet; the type brings up the matching ribbon tab and shows in the Sheets panel), its
 <b>location</b> (the panel or box what it shows is in: MCP, JB-1, FIELD; see Cables between
-panels), page number and, if it differs from the project's, its own revision.
+panels), page number and, if it differs from the project's, its own revision, and its
+default <b>wire layer</b> (the layer new wires on it go on: as the project, or one of its own;
+see Colors and layers).
 Its size and zones are the project's unless you tick "This sheet has its own size and zones";
 then set how many columns run along the top and the first one's number (11 makes a sheet
 continue 11 to 20), and how many rows run down the left and the first one's letter. Grid
 references follow the zones as they are set: change them and every reference updates.</li>
 <li><b>Project properties...</b> (or double-click the title block): what belongs to the whole
-project, in three tabs:
+project, in four tabs:
 <ul>
 <li><b>General</b>: the title block fields (customer, project, drawing number, drawn by, drawn
 date (today's when the project is made), checked by, date, revision, and any field of your own
@@ -90,8 +92,14 @@ the title block uses), the <b>grid reference
 format</b> (<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1) and the height of new text.</li>
 <li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
 uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
-(changing it resizes every tag), and the wire and symbol colors.</li>
+(changing it resizes every tag), and the symbol color.</li>
 <li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors.</li>
+<li><b>Wire layers</b>: <b>New wires go on</b>, the wire layer new wires go on on every sheet
+that hasn't one of its own (WIRES to start), and the project's wire layers in a list, as in
+Layers...: <b>New</b> makes a wire layer of any name (CONTROL, say), <b>Add preset...</b> adds
+the 480 V, 120 V, 24 VDC and Ethernet ones, and Rename, Color..., Delete, the gauge (AWG), wire
+color and Gauge shown work as in Layers.... Changes in the list are made at once (Undo takes
+them back), even if you then click Cancel.</li>
 </ul></li>
 <li><b>Edit title block</b>: see below.</li>
 <li><b>Layers...</b>: add, rename, recolor, switch off, lock and delete layers, and choose the
@@ -99,21 +107,33 @@ current layer. To clean up (after importing a DXF, say), select several layers (
 Shift+click) or click <b>Select unused</b> (the empty ones), then <b>Delete</b>: empty layers
 go at once; if some hold objects (on any sheet or in the title block), it lists them and asks
 whether to delete them too, with everything on them, or keep them. Layer 0 always stays, and
-one Undo brings it all back. The Layer box on the Home tab (and on the Schematic and Panel tabs) picks the current layer; with objects selected, picking
-a layer moves them to it.</li>
+one Undo brings it all back. The Layer box on the Home and Panel tabs picks the current layer;
+with objects selected, picking a layer moves them to it. The Schematic tab's box is the
+<b>wire layer</b> box (below).</li>
 </ul>
 
 <h2>Colors and layers</h2>
 <p>As in AutoCAD, every object takes its <b>layer's color</b> (ByLayer) unless you give it its
 own: select it and use <b>Color...</b> (Modify menu, or the Schematic and Panel tabs) to pick a
 color, or to set it back to ByLayer. A symbol or footprint's lines follow the color of the
-layer it sits on, or its own color if you gave it one. Wires go on the current layer when it
-is a wire layer (WIRES, one named WIRE..., one with a gauge or wire color, or one Add wire
-layers made), else on layer WIRES. A wire (or a bus wire, with the Bus layers left at Wires)
+layer it sits on, or its own color if you gave it one.</p>
+<p><b>Wire layers</b> are WIRES, a layer named WIRE..., one with a gauge or wire color, one Add
+wire layers made, and one made in Project properties, Wire layers. Each sheet has a <b>default
+wire layer</b>, saved with the project: its own (Sheet properties: <b>Wire layer</b>) or, set
+to <b>As the project</b>, the project's (Project properties, Wire layers: <b>New wires go
+on</b>, WIRES to start). The Schematic tab's layer box is the <b>wire layer</b> box: it lists
+the wire layers only and shows the one wires go on. Pick another and the wires you draw on that
+sheet go on it, while lines and text stay on the current layer; picking a wire layer in the
+Home tab's layer box, or making one current in Layers..., picks it too. Pick a layer that isn't
+a wire layer (0, to draw lines) and wires go back on the sheet's default. Each sheet keeps its
+own pick while the project is open (another sheet shows its own); a pick isn't saved, so on
+opening the project each sheet starts at its default, and changing a default (Sheet properties,
+or Project properties) drops the picks it covers so it is used at once. With wires selected,
+picking in the wire layer box moves them to it (other objects stay where they are). A wire (or a bus wire, with the Bus layers left at Wires)
 that starts or ends on another wire, a tap off it or carrying it on, takes that wire's layer
 instead: it is the same conductor, so the same voltage, color and gauge (a size typed on the
 new wire is still its own), and the rubber band shows it in that color as you draw. A wire
-joining wires of two different layers stays on the current layer, and the command line warns
+joining wires of two different layers stays on the wire layer picked (or the default), and the command line warns
 that two conductors may be tied together. Symbols go on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them. On the black drawing,
@@ -146,7 +166,8 @@ layer's color with stripes of the second (a 24 VDC common), on the screen and pr
 printing in black only).</p>
 <p><b>Add wire layers...</b> (Format menu, Schematic tab: Layers; also the <b>Wire layers...</b>
 button in Layers...) adds a layer for each wire of the systems you tick, with its color, gauge
-and wire color, ready to draw on (pick one as the current layer, then draw wires):</p>
+and wire color, ready to draw on (pick one in the Schematic tab's wire layer box, then draw
+wires):</p>
 <ul>
 <li><b>480 V</b>, 12 AWG: 480V BLK, 480V RED, 480V ORG, 480V BRN, 480V YEL, 480V WHT (neutral)
 and 480V GRN (ground).</li>
@@ -167,8 +188,9 @@ are on one layer with one size.</p>
 it (the box shows their layer, empty when they are on several); with nothing selected it
 becomes the current layer. A hidden layer isn't drawn, printed or picked; a locked one
 is drawn but its objects can't be selected or changed. <b>Layers...</b> lists them all (On,
-Locked, color, current layer). Quicker, on the Home tab's Layers group (the Schematic and Panel tabs have the layer box, the layer list,
-Layers..., Color, Hide layer and Show all too) and the Modify menu:</p>
+Locked, color, current layer). Quicker, on the Home tab's Layers group (the Panel tab has the
+layer box, the layer list, Layers..., Color, Hide layer and Show all too; the Schematic tab the
+same with the wire layer box in place of the layer box) and the Modify menu:</p>
 <ul>
 <li>The <b>layer list</b> button next to the current layer: every layer with its light bulb
 (click to hide or show it) and lock (click to lock or unlock it).</li>

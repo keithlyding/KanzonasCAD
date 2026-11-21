@@ -142,6 +142,7 @@ class CadView(QWidget):
         self.grid_spacing = 0.5
         self.snap_spacing = 0.125
         self.current_layer = "0"
+        self.wire_layer_picks = {}      # {sheet id: the wire layer picked there} (commands)
         self.text_justify = ("left", "baseline")     # TEXT's justification (align, valign)
         self._pan = None
         # panning and zooming show the last picture moved and scaled (a millisecond), and the
