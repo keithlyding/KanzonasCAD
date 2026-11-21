@@ -6,6 +6,65 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.21
+
+**New**
+- Pictures and SVG: File > Import picture or SVG into this sheet... (or drag one onto the
+  drawing). A picture (a logo, a drawing to trace over) is kept in the project itself, drawn
+  under the lines, printed and exported. A simple SVG comes in as real lines and text you can
+  edit; one too detailed for that is refused, with the reason.
+- Report sheets (Sheets > Report sheet...): the bill of materials, wire list, terminal strip
+  list, pull list or panel materials drawn as a table on sheets of the project, so they print
+  with the drawings. Update report sheets draws them again after changes.
+- Reports save as Excel workbooks too: the wire list, terminal strip list, bill of materials,
+  panel materials and pull list (Save as CSV or Excel..., then Excel workbook as the type).
+- Import I/O list... (Sheets menu): an I/O list (CSV or Excel: slot, catalog, point, address,
+  tag, description) brought in as its PLC modules, each on a sheet of its own, with every
+  point's tag and description beside its terminal.
+- Assign part... (Library menu): give every selected device a part from your library in one
+  go, your brand's parts listed first. The project keeps its own copy of each part.
+- Save to library as part (Library menu): a placed device with its catalog number, symbol and
+  footprint saved to your library as a part to use again.
+- A second library folder (Library > Second library folder...), searched with the first: one
+  shared with your team, one of your own. Things save back where they are; new ones go to
+  the first, or to the second when you tick Save new blocks and parts to the second library.
+- Power distribution blocks (Library, JIC/Wiring): Distribution block 3-pole takes the three
+  phases, and its outlets (PDB101-1, PDB101-2...) go on any sheet. Each outlet's wires take
+  their phase's number with the outlet's letter (6001A, 6002A, 6003A), outlets past the
+  block's count (OUTLETS, 1:18) are marked red, and a block placed on a bus of another spacing
+  is drawn to fit it.
+- Edit array (Modify menu, Home tab): change an array after making it, its spacing, rows and
+  columns, or count round its center. Copies keep their tags, new ones get their own, and a
+  copy you changed on its own stays as it is. U unlinks the array.
+- Add attribute, in a block's tab (Library menu and the Block tab): give a symbol or footprint
+  attributes of your own (KW, FLA, a part's frame size...). Type the name, then click where its
+  value shows, or type S to put it under the block's ratings. Each copy then has a box for it
+  in its Properties... window.
+- Export to PDF can keep the layers' colors (Edit > Options..., General).
+
+**Changed**
+- Double-click a text or a note to edit it right on the drawing: Enter keeps it (Ctrl+Enter
+  in a note), Esc cancels. Its height and angle are under right-click, Text properties....
+- Save block closes the block's tab and goes back to your drawing.
+- Your library keeps each part in a file of its own (the parts folder), so a library in a
+  synced folder (OneDrive, Dropbox...) shared by several people doesn't get sync conflict
+  copies. Your existing parts move there the first time you save or delete one.
+- KanzonasCAD's license is now the PolyForm Shield License 1.0.0 (LICENSE.txt beside the
+  program). It stays free to use, at home and at work, including for paid projects, and its
+  source code stays public. The license doesn't allow using KanzonasCAD's code to make a
+  competing product. Versions 0.20 and earlier remain under the MIT License.
+
+**Fixed**
+- Renumber sheet and Update numbers now give a page's devices 01, 02, 03... every time. A
+  footprint or a drive's power section carrying a device's tag held its number, so a page
+  could come out 204, 205, 206 one time and 201, 202, 203 the next.
+- A wire no longer runs through a symbol's pin on its way (it was wired to that pin without
+  being asked): the click isn't taken, and the command line says which pin.
+- Updating with another copy of KanzonasCAD open: a copy slow to answer could be taken for
+  closed, and the update went ahead with it still running.
+- DXF export: the texts inside a flipped symbol (a timer coil's TR, a module's point names)
+  read backwards in AutoCAD. They now read as they do in KanzonasCAD.
+
 ## 0.20
 
 **New**

@@ -263,6 +263,7 @@ def to_block(project, sess):
         rank = {eid: i for i, eid in enumerate(s.pin_order)}
         pins.sort(key=lambda t: (rank.get(t[2], len(rank)),))
     attrs.sort(key=lambda t: (t[0], t[1]))
+    _join_stack(attrs)
     tags.sort(key=lambda t: (t[0], t[1]))
     rails.sort(key=lambda t: (t[0], t[1]))
     if len(tags) > 1:
@@ -308,6 +309,25 @@ def to_block(project, sess):
     return Result(defn, pin_map, warnings, base)
 
 
+def _join_stack(attrs):
+    """A new attribute put right under the block's stack of ratings (in its column, as
+    Add attribute's Stack puts it, or a rating's marker copied down) joins the stack: it closes
+    up with them when one above it is empty. attrs: to_block's [(new, key, eid, attribute)]."""
+    stack = [t[3] for t in attrs if t[3].get("stack")]
+    if not stack:
+        return
+    for t in attrs:
+        a = t[3]
+        if t[0] != 1 or a.get("stack"):
+            continue
+        low = stack[-1]
+        same_col = abs(a["pos"][0] - low["pos"][0]) < 1e-6 and \
+            a.get("align", "center") == low.get("align", "center")
+        if same_col and a["pos"][1] < low["pos"][1] - 1e-6:
+            a["stack"] = True
+            stack.append(a)
+
+
 def pin_markers(project, sess):
     """[(marker text, its pin's place in the block: x, y from the base point)] of the pins on
     the editor's sheet, in the order Save block would give them."""
@@ -326,6 +346,51 @@ def pin_marker(sess, point, name):
     left = point[0] < sess.offset[0] - 1e-9
     return M.Text(point, name, PIN_HEIGHT * sess.scale, align="right" if left else "left",
                   layer=LAYER_PINS)
+
+
+ATTR_HEIGHT = 0.08              # a new attribute's text (as the ratings: paper inches)
+
+
+def attr_names(project, sess):
+    """The names on the editor's attribute markers (BLOCK ATTRIBUTES)."""
+    s = project.sheet_by_id(sess.sheet_id)
+    return [e.text.strip().upper() for e in s.entities.values()
+            if isinstance(e, M.Text) and e.layer == LAYER_ATTRS]
+
+
+def attr_problem(project, sess, name):
+    """Why name can't be a new attribute of the block open in the editor, or None."""
+    if not name:
+        return "Type the attribute's name (HP, VOLTS, KW...)"
+    if any(ch.isspace() for ch in name):
+        return "An attribute's name has no spaces (AutoCAD's don't): FLA, not FULL LOAD"
+    if name == "TAG":
+        return "The tag has its own marker (the blue text on BLOCK TAG)"
+    if name in attr_names(project, sess):
+        return "There's already an attribute %s: type another name" % name
+    return None
+
+
+def stack_end(project, sess):
+    """Where the next rating goes under the block's stack of ratings (RATING, HP, VOLTS...: the
+    ones that close up when one is empty), on the editor's sheet, and that stack's alignment;
+    or None when the block has no stack."""
+    res = to_block(project, sess)
+    stack = [a for a in res.defn.attr_texts if a.get("stack")]
+    if not stack:
+        return None
+    from .symbols_jic import RATING_STEP
+    last = stack[-1]
+    step = (stack[-2]["pos"][1] - last["pos"][1]) if len(stack) > 1 else RATING_STEP
+    ox, oy = sess.offset
+    return ((last["pos"][0] + ox, last["pos"][1] - step + oy), last.get("align", "center"),
+            last["height"])
+
+
+def attr_marker(sess, point, name, align="center", height=ATTR_HEIGHT):
+    """A new attribute's marker (a text on BLOCK ATTRIBUTES, its text the attribute's name) at
+    point on the editor's sheet."""
+    return M.Text(point, name, height, 0.0, align, layer=LAYER_ATTRS)
 
 
 def next_pin_name(names):

@@ -1403,6 +1403,25 @@ class WireCmd(Command):
         if doubles_back(self.points[-2:] + list(new)):
             self.ctx.message(BACK_OVER)
             return
+        # (a wire run through a symbol's pin is wired to it on the way: refused, as Bus's
+        # are since 0.19.12; the battery saw a wire run down a PLC module's column of pins)
+        hit = _through_pins(self.ctx.sheet(), [self.points + list(new)])
+        if hit is not None and self.hfirst is None:
+            # (the corner the other way, when that one keeps clear of the pins: a wire to a
+            # 3-pole symbol's middle pin from beyond it came down its column of pins, through
+            # L1 into L2, the battery's wire_around)
+            last = self.points[-1]
+            self.hfirst = not (abs(p[0] - last[0]) >= abs(p[1] - last[1]))
+            try:
+                other = self._route(p)
+            finally:
+                self.hfirst = None
+            if not doubles_back(self.points[-2:] + list(other)) and \
+                    _through_pins(self.ctx.sheet(), [self.points + list(other)]) is None:
+                new, hit = other, None
+        if hit is not None:
+            self.ctx.message(_through_message(hit, "wire"))
+            return
         self.points += new
         self.base = self.last = p
         if connects_at(self.ctx.sheet(), p):
@@ -1684,7 +1703,7 @@ def _paths_cross(paths):
 
 
 def _through_pins(sheet, paths):
-    """The first symbol pin a bus's wires would run through (on a wire anywhere but its two
+    """The first symbol pin a bus's (or a wire's) wires would run through (on a wire anywhere but its two
     ends: there it would be wired to that pin, unasked): (insert, pin name), or None. A bus
     leaving its pins through the symbol's other pins, or carried on through a symbol whose
     side it couldn't land on, joined circuits nobody drew (the battery, 0.19.11, seed 152)."""
@@ -1704,8 +1723,11 @@ def _through_pins(sheet, paths):
     return None
 
 
-def _through_message(hit):
+def _through_message(hit, what="bus"):
     e, name = hit
+    if what == "wire":
+        return ("The wire would run through %s's pin %s (wired to it on the way): click on "
+                "the pin to end there, or elsewhere" % (e.attrs.get("TAG") or e.block, name))
     return ("The bus would run through %s's pin %s (wired to it on the way): click elsewhere, "
             "or U takes the last point back" % (e.attrs.get("TAG") or e.block, name))
 
@@ -3173,9 +3195,31 @@ class InsertCmd(Command):
         at, m = self._fit(p)
         return [self._make(self._on_rail(at), self.defn, m)]
 
+    def _sized_to_bus(self, p):
+        """A power distribution block (or its outlet) picked on a bus whose phases are spaced
+        other than the block's: the block drawn to fit them (the owner: "it would have to
+        automatically resize based on the spacing of the wires"); a "(0.75" poles)" variant."""
+        d = self.defn
+        if d.wiring != "pdb" or len(d.pins) < 2:
+            return
+        got = tap_lines(self.ctx.sheet(), p)
+        if got is None or len(got[1]) < len(d.pins):
+            return
+        pole = round(abs(d.pins[0]["pos"][1] - d.pins[1]["pos"][1]), 9)
+        if abs(got[2] - pole) < 1e-9:
+            return
+        from .symbols_jic import pdb_symbols
+        new = pdb_symbols(got[2])[1 if d.role == "child" else 0]
+        hold = self.holds[self.hold][0]
+        self.defn = new
+        self.holds = [(q["name"], q["pos"]) for q in new.pins] + [(None, (0.0, 0.0))]
+        self.hold = next((i for i, h in enumerate(self.holds) if h[0] == hold), 0)
+        self.ctx.message("%s drawn to fit the bus: its phases %g\" apart" % (new.name, got[2]))
+
     def point(self, p):
         if self.pending is not None:
             return                      # (waiting for the contact's device)
+        self._sized_to_bus(p)
         at, self.placed_mirror = self._fit(p)
         p = self._on_rail(at)
         d = self.defn
@@ -3513,10 +3557,15 @@ class ArrayCmd(Command):
             self.finish()
             return
         sheet = self.ctx.sheet()
+        from . import arrays
+        n = len(self.ents)
         with self.ctx.edit("Array") as ed:
-            for e in retag_copies(self.ctx.project, sheet, made):
-                ed.add(sheet, e)
-        self.ctx.message("Array: %d copies" % (len(made) // max(1, len(self.ents))))
+            ids = [ed.add(sheet, e).id for e in retag_copies(self.ctx.project, sheet, made)]
+            # (kept as an array: Edit array changes its spacing or counts later)
+            arrays.record(ed, sheet, self.mode, self.vals, self.center,
+                          [e.id for e in self.ents],
+                          {i: ids[i * n:(i + 1) * n] for i in range(len(ids) // n)})
+        self.ctx.message("Array: %d copies (Edit array changes it later)" % (len(made) // max(1, n)))
         self.finish()
 
     def preview(self, p):
@@ -3536,6 +3585,76 @@ class ArrayCmd(Command):
         for e in self.ents:
             bb = G.bbox_union(bb, e.bbox())
         return (bb[0], bb[1]) if bb else (0.0, 0.0)
+
+
+class ArrayEditCmd(Command):
+    """ARRAYEDIT (Edit array): an array made with Array changed (the owner, Nov 2026): select
+    any object of it, then its numbers again, each offered as it is (Enter keeps it): rows,
+    columns and their spacing, or how many round its center and the angle they fill. Copies
+    that are still the array's move, new ones take tags of their own, those past the new count
+    go; a copy edited on its own has left the array and stays. U unlinks it: the copies stay
+    where they are, objects of their own."""
+    name, title = "ARRAYEDIT", "Edit array"
+    selects = True
+
+    def begin(self):
+        from . import arrays
+        sheet = self.ctx.sheet()
+        self.aid = None
+        for e in _selected(self.ctx):
+            self.aid = arrays.find(sheet, e.id)
+            if self.aid is not None:
+                break
+        if self.aid is None:
+            self.ctx.message("Edit array: select an object of an array made with Array")
+            self.finish()
+            return
+        a = sheet.arrays[self.aid]
+        self.mode, self.old, self.vals = a["mode"], list(a["vals"]), []
+        self._ask()
+
+    def _ask(self):
+        q = ArrayCmd.QUESTIONS[self.mode][len(self.vals)]
+        v = self.old[len(self.vals)] if len(self.vals) < len(self.old) else None
+        self.ctx.prompt("%s (Enter keeps %s)" % (q, "%g" % v if v is not None else "it"),
+                        [("Unlink", "U")] if not self.vals else [])
+
+    def text(self, s):
+        if s.strip().upper() == "U" and not self.vals:
+            from . import arrays
+            sheet = self.ctx.sheet()
+            with self.ctx.edit("Unlink array") as ed:
+                arrays.unlink(ed, sheet, self.aid)
+            self.ctx.message("The array is unlinked: its copies are objects of their own")
+            self.finish()
+            return True
+        return False
+
+    def enter(self):
+        i = len(self.vals)
+        if i < len(self.old):
+            self.number(self.old[i])
+
+    def number(self, v):
+        i = len(self.vals)
+        if i < 2 and self.mode == "R" or i == 0 and self.mode == "P":
+            if v < 1 or abs(v - round(v)) > 1e-9 or v > 1000:
+                self.ctx.message("A whole number from 1 to 1000")
+                return True
+            v = int(round(v))
+        self.vals.append(v)
+        if len(self.vals) >= len(ArrayCmd.QUESTIONS[self.mode]):
+            from . import arrays
+            sheet = self.ctx.sheet()
+            with self.ctx.edit("Edit array") as ed:
+                moved, added, erased = arrays.edit(ed, self.ctx.project, sheet, self.aid,
+                                                   self.vals)
+            self.ctx.message("Edit array: %d moved, %d added, %d erased" % (moved, added,
+                                                                            erased))
+            self.finish()
+        else:
+            self._ask()
+        return True
 
 
 def offset_entity(e, d, side):
@@ -5372,6 +5491,82 @@ class AddPinCmd(Command):
         return [self.BE.pin_marker(self.sess, self.at, self._offered())]
 
 
+class AddAttrCmd(Command):
+    """ADDATTR (Add attribute, in a block's tab; AutoCAD's ATTDEF): an attribute's name (HP,
+    VOLTS, FLA...), then click where its value shows on the symbol, or S to put it under the
+    block's ratings, in their stack; again for the next, Enter or Esc ends. An attribute is a
+    text on BLOCK ATTRIBUTES; each copy of the block gets its own value in Properties... (the
+    owner, Nov 2026: "there is no way to add additional ones when creating or editing a
+    block")."""
+    name, title = "ADDATTR", "Add attribute"
+
+    def begin(self):
+        from . import block_editor as BE
+        self.BE = BE
+        self.sess = getattr(self.ctx, "block_session", None)
+        if self.sess is None:
+            self.ctx.message("Add attribute works in a block's tab (Edit block... opens one)")
+            self.finish()
+            return
+        self._ask_name()
+
+    def _ask_name(self):
+        self.step, self.attr = "name", None
+        self.ctx.prompt("Attribute name (HP, VOLTS, FLA...; Enter or Esc ends)", typing=True)
+
+    def wants_raw_text(self):
+        return self.step == "name"
+
+    def _stack(self):
+        return self.BE.stack_end(self.ctx.project, self.sess)
+
+    def text(self, s):
+        if self.step == "name":
+            name = s.strip().upper()
+            if not name:
+                self.finish()
+                return True
+            why = self.BE.attr_problem(self.ctx.project, self.sess, name)
+            if why:
+                self.ctx.message(why)
+                self._ask_name()
+                return True
+            self.attr = name
+            self.step = "pos"
+            self.ctx.prompt("Where %s shows%s" % (
+                name, " [Stack: under the ratings]" if self._stack() else ""))
+            return True
+        if self.step == "pos" and s.strip().upper() in ("S", "STACK"):
+            got = self._stack()
+            if got is None:
+                self.ctx.message("This block has no ratings to stack it under: click where it "
+                                 "shows")
+                return True
+            self._add(got[0], got[1], got[2])
+            return True
+        return False
+
+    def point(self, p):
+        if self.step == "pos":
+            self._add(p)
+
+    def _add(self, at, align="center", height=None):
+        h = height if height is not None else self.BE.ATTR_HEIGHT
+        with self.ctx.edit("Add attribute") as ed:
+            ed.add(self.ctx.sheet(), self.BE.attr_marker(self.sess, at, self.attr, align, h))
+        self.ctx.message("Attribute %s added: give it a value in a copy's Properties..."
+                         % self.attr)
+        self._ask_name()
+
+    def enter(self):
+        self.finish()
+
+    def preview(self, p):
+        if self.step == "pos":
+            return [self.BE.attr_marker(self.sess, p, self.attr)]
+        return []
+
+
 class LayerUnlockAllCmd(Command):
     """LAYULK: unlock every layer."""
     name, title = "LAYULK", "Unlock all layers"
@@ -5410,6 +5605,7 @@ COMMANDS = {
     "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
     "DASHBOX": (DashBoxCmd, ["DB", "DBOX", "BOX"]),
     "ARRAY": (ArrayCmd, ["AR", "ARRAYRECT", "ARRAYPOLAR"]),
+    "ARRAYEDIT": (ArrayEditCmd, ["AE"]),
     "OFFSET": (OffsetCmd, ["O"]),
     "NUMBER": (NumberCmd, ["NUM", "TCOUNT"]),
     "DIMALIGNED": (DimAlignedCmd, ["DAL"]),
@@ -5417,6 +5613,7 @@ COMMANDS = {
     "DUCT": (DuctCmd, ["WIREWAY", "WD", "PANDUIT"]),     # (what people call it)
     "SCOOT": (ScootCmd, ["AESCOOT"]),
     "ADDPIN": (AddPinCmd, ["PIN", "AP"]),
+    "ADDATTR": (AddAttrCmd, ["ATTDEF", "ATT", "AA"]),
     "AEALIGN": (AlignDevicesCmd, ["ALIGNDEV"]),
     "DISTRIBUTE": (DistributeCmd, ["DIST"]),
     "DELDOT": (DeleteDotCmd, ["DD"]),

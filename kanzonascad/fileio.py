@@ -111,18 +111,45 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True):
                 for i in range(48)]
         ents.append(M.Polyline(oval, closed=True, layer=lay))
         ents.append(M.Polyline(leader, layer=lay))
+    pictures = 0
     for e in ents:
+        if isinstance(e, M.Picture):
+            pictures += 1
+            _write_picture(doc, msp, e, path, pictures)
+            continue
         _write(msp, e)
     names = {}
+    # (a block placed flipped somewhere: AutoCAD flips the texts of its drawing with it, so
+    # they go out as attributes, each placed readable on every copy, as the program draws them)
+    flipped = {ins.defn.name for ins in placed if ins.mirror}
     for ins in placed:
-        _write_insert(doc, msp, ins, names)
+        _write_insert(doc, msp, ins, names, flipped)
     doc.saveas(path)
 
 
 PIN_TAG = "KZPIN"                   # (a block's pins, as hidden constant ATTDEFs: KZPIN1...)
+TEXT_TAG = "KZTEXT"                 # (a flipped block's own texts, as locked ATTDEFs: KZTEXT1...)
 
 # what a block's attributes carry out to AutoCAD (KanzonasCAD's own, internal ones stay home)
 _INTERNAL = {"DEV", "PARENT", "TAG_LOCK", "XREF", "XDEV", "FROM", "TAGLINK", "PART", "SLOT"}
+
+
+def _write_picture(doc, msp, e, path, n):
+    """A picture as an AutoCAD IMAGE: AutoCAD keeps a drawing's pictures in files of their own,
+    so it is written beside the DXF ("sheet-picture-1.png") and the IMAGE points to it there."""
+    import base64
+    raw = base64.b64decode(e.data.encode("ascii"))
+    from PySide6.QtGui import QImage
+    img = QImage.fromData(raw)
+    if img.isNull():
+        return
+    stem = os.path.splitext(os.path.basename(path))[0]
+    name = "%s-picture-%d.%s" % (stem, n, "jpg" if e.fmt == "jpeg" else "png")
+    with open(os.path.join(os.path.dirname(os.path.abspath(path)), name), "wb") as f:
+        f.write(raw)
+    idef = doc.add_image_def(filename=name, size_in_pixel=(img.width(), img.height()))
+    msp.add_image(idef, insert=(e.pos[0], e.pos[1]), size_in_units=(e.width, e.height),
+                  rotation=e.angle, dxfattribs={"layer": e.layer or "0"})
 
 
 def _block_name(name, names):
@@ -161,11 +188,43 @@ def _attr_names(ins):
     return out
 
 
-def _define_block(doc, d, bname):
+def _block_texts(d):
+    """A block's own texts (not its attributes), in the order its drawing has them."""
+    out = []
+    for e in d.entities:
+        parts = e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e]
+        out.extend(x for x in parts if isinstance(x, M.Text))
+    return out
+
+
+def _placed_texts(ins):
+    """Those texts as a block reference draws them on the sheet (a flipped one's kept
+    readable), in the same order as _block_texts."""
+    d = ins.defn
+    out = []
+    for e, w in zip(d.entities, ins.world_entities()):
+        if isinstance(e, (M.Insert, M.Composite)):
+            out.extend(x for x in w.exploded() if isinstance(x, M.Text))
+        elif isinstance(e, M.Text):
+            out.append(w)
+    return out
+
+
+def _text_attrib(ent, t):
+    """An ATTDEF or ATTRIB placed and aligned as the text t."""
+    from ezdxf.enums import TextEntityAlignment
+    h = {"left": "LEFT", "center": "CENTER", "right": "RIGHT"}[t.align]
+    v = {"baseline": "", "bottom": "BOTTOM_", "middle": "MIDDLE_", "top": "TOP_"}[t.valign]
+    ent.set_placement(t.pos, align=TextEntityAlignment[v + h])
+
+
+def _define_block(doc, d, bname, texts_as_attrs=False):
     """The BLOCK definition of a KanzonasCAD block: its drawing at its own size, upright and
     unflipped (the INSERT places, turns, scales and flips it), on layer 0 by block so it takes
     the INSERT's layer and color, unless the block keeps its own colors; an ATTDEF where each
-    of its attributes shows."""
+    of its attributes shows. texts_as_attrs: its own texts as locked ATTDEFs (KZTEXT1...), for
+    a block placed flipped: AutoCAD draws a flipped block's texts flipped, but its attributes
+    where each copy places them."""
     blk = doc.blocks.new(name=bname)
     # (what KanzonasCAD needs to read it back as the same kind of block, with its pins; AutoCAD
     # leaves both alone: the block's description, and a hidden constant ATTDEF on each pin)
@@ -181,9 +240,20 @@ def _define_block(doc, d, bname):
         a.dxf.text = str(pin["name"])
         a.is_invisible = True
         a.is_const = True
+    n_text = 0
     for e in d.entities:
         parts = e.exploded() if isinstance(e, (M.Insert, M.Composite)) else [e]
         for x in parts:
+            if texts_as_attrs and isinstance(x, M.Text):
+                n_text += 1
+                a = blk.add_attdef("%s%d" % (TEXT_TAG, n_text), insert=x.pos,
+                                   dxfattribs={"height": x.height, "rotation": x.angle,
+                                               "layer": "0", "color": 0})
+                a.dxf.text = x.text
+                a.dxf.lock_position = 1
+                a.is_const = False
+                _text_attrib(a, x)
+                continue
             c = x.copy()
             c.layer = "0"
             if not (d.own_colors and c.color not in (None, M.ADAPTIVE)):
@@ -203,17 +273,18 @@ def _define_block(doc, d, bname):
     return blk
 
 
-def _write_insert(doc, msp, ins, names):
+def _write_insert(doc, msp, ins, names, flipped=()):
     """A KanzonasCAD block reference as an INSERT of its block (defined once per drawing), its
     attributes as ATTRIBs: those shown where and as the program draws them, the others there
     too but invisible, so AutoCAD's attribute editor and data extraction see all of them; the
-    pin names (Show pin names) as texts beside it, on its layer."""
+    pin names (Show pin names) as texts beside it, on its layer. flipped: the blocks placed
+    flipped somewhere, whose own texts are attributes (KZTEXT1...) placed on each copy."""
     from ezdxf.enums import TextEntityAlignment
     d = ins.defn
     first = d.name not in names
     bname = _block_name(d.name, names)
     if first:
-        _define_block(doc, d, bname)
+        _define_block(doc, d, bname, texts_as_attrs=d.name in flipped)
     attribs = {"layer": ins.layer or "0", "xscale": ins.scale,
                "yscale": -ins.scale if ins.mirror else ins.scale, "rotation": ins.angle}
     ref = msp.add_blockref(bname, ins.pos, dxfattribs=attribs)
@@ -252,6 +323,13 @@ def _write_insert(doc, msp, ins, names):
             ent = ref.add_attrib(name, value, insert=ins.pos,
                                  dxfattribs={"height": h0, "layer": ins.layer or "0"})
             ent.is_invisible = True
+    if d.name in flipped:
+        for i, t in enumerate(_placed_texts(ins)):
+            ent = ref.add_attrib("%s%d" % (TEXT_TAG, i + 1), t.text, insert=t.pos,
+                                 dxfattribs={"height": t.height, "rotation": t.angle,
+                                             "layer": ins.layer or "0"})
+            ent.dxf.lock_position = 1
+            _text_attrib(ent, t)
     for pt in ins.pin_texts():
         _write(msp, pt.copy(layer=ins.layer or "0"))
 
@@ -599,8 +677,17 @@ def _block_defn(de, k, skipped, depth, blocks):
     attrs, seen = [], set()
     tags = set()
     pins = []
+    own_texts = []
     for sub in blk:
         if sub.dxftype() != "ATTDEF":
+            continue
+        if str(sub.dxf.tag).upper().startswith(TEXT_TAG) and _kz_block(blk) is not None:
+            # (a text of a flipped block KanzonasCAD wrote: a text of its drawing again)
+            p, align, valign, rot = _text_place(sub)
+            own_texts.append(M.Text((p[0] * k - bx, p[1] * k - by),
+                                    str(sub.dxf.get("text", "") or ""),
+                                    sub.dxf.get("height", 0.125) * k, rot, align, valign,
+                                    layer="0"))
             continue
         if str(sub.dxf.tag).upper().startswith(PIN_TAG):
             # (a pin of a block KanzonasCAD wrote: its name, where it is)
@@ -617,6 +704,7 @@ def _block_defn(de, k, skipped, depth, blocks):
         attrs.append({"attr": name, "pos": (p[0] * k - bx, p[1] * k - by),
                       "height": sub.dxf.get("height", 0.125) * k, "align": align,
                       "valign": valign, "angle": rot})
+    parts = parts + own_texts
     if not parts and not attrs:
         blocks[key] = None
         return None
@@ -861,8 +949,12 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             # MFR, CAT; AutoCAD Electrical's P_TAG1, DESC1... mapped)
             s, r, mirror = _keepable(de)
             defn = _block_defn(de, k, skipped, depth, blocks)
+            # (a flipped block KanzonasCAD wrote: its texts' attributes are its drawing's texts)
+            own = _kz_block(de.block()) is not None
+            atts = [a for a in de.attribs
+                    if not (own and str(a.dxf.tag).upper().startswith(TEXT_TAG))]
             vals = {}
-            for att in de.attribs:
+            for att in atts:
                 name = _attr_name(att.dxf.tag)
                 v = att.dxf.get("text", "")
                 if name and v and v.strip("-"):
@@ -877,7 +969,7 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             # ones were drawn back on their block's spot): hidden here, or placed elsewhere
             spots = {a["attr"]: a for a in defn.attr_texts}
             hide, seen_on, at = set(), set(), {}
-            for att in de.attribs:
+            for att in atts:
                 name = _shown_name(att.dxf.tag)
                 a = spots.get(name)
                 if a is None:
@@ -898,7 +990,7 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             out.append(ins)
             # a value its block has no field for (no ATTDEF) still shows where it stands
             shown = {a["attr"] for a in defn.attr_texts}
-            for att in de.attribs:
+            for att in atts:
                 if _shown_name(att.dxf.tag) not in shown:
                     _read(att, k, out, skipped, depth + 1, blocks)
         elif t == "INSERT" and depth < 12 and blocks is not None and _fast_insert(de):
@@ -946,6 +1038,8 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
                 p, align, valign, rot = _text_place(de)
                 out.append(M.Text(P(p), de.plain_text(), de.dxf.get("height", 0.125) * k, rot,
                                   align, valign, **kw))
+        elif t == "IMAGE" and _image(de, k, out, kw):
+            pass
         elif t == "POINT":
             skipped[t] = skipped.get(t, 0) + 1
         elif depth < 12 and _proxy_parts(de, k, out, skipped, depth, layer):
@@ -954,6 +1048,37 @@ def _read(de, k, out, skipped, depth, blocks=None, keep=False):
             skipped[t] = skipped.get(t, 0) + 1
     except Exception:                   # (reported to the user: "Skipped: X (unreadable)")
         skipped[t + " (unreadable)"] = skipped.get(t + " (unreadable)", 0) + 1
+
+
+def _image(de, k, out, kw):
+    """An IMAGE whose picture file is there (beside the drawing, or where it says): a Picture
+    kept in the project, placed, sized and turned as AutoCAD shows it (straight, not skewed).
+    False when its file is missing or it can't be read (then it is counted as skipped)."""
+    import base64
+    import ezdxf
+    try:
+        name = de.image_def.dxf.filename
+    except (AttributeError, ezdxf.DXFError):
+        return False
+    where = os.path.dirname(os.path.abspath(de.doc.filename or "")) if de.doc else ""
+    path = name if os.path.isabs(name) and os.path.isfile(name) else \
+        os.path.join(where, os.path.basename(name.replace("\\", "/")))
+    if not os.path.isfile(path) or os.path.getsize(path) > PICTURE_MAX_BYTES:
+        return False
+    u, v = de.dxf.u_pixel, de.dxf.v_pixel
+    px, py = de.dxf.image_size[0], de.dxf.image_size[1]
+    w, h = math.hypot(u[0], u[1]) * px * k, math.hypot(v[0], v[1]) * py * k
+    if w <= 0 or h <= 0 or abs(u[0] * v[0] + u[1] * v[1]) > 1e-9 * (w * h + 1):
+        return False                    # (skewed: not a picture it can place)
+    with open(path, "rb") as f:
+        raw = f.read()
+    fmt = "jpeg" if raw[:3] == b"\xff\xd8\xff" else "png" if raw[:4] == b"\x89PNG" else None
+    if fmt is None:
+        return False
+    ins = de.dxf.insert
+    out.append(M.Picture((ins[0] * k, ins[1] * k), w, h, base64.b64encode(raw).decode("ascii"),
+                         fmt, math.degrees(math.atan2(u[1], u[0])), layer=kw.get("layer", "0")))
+    return True
 
 
 def _ocs(de):
@@ -1087,10 +1212,55 @@ def read_dwg(path):
 
 
 def read_drawing(path):
-    """A DXF or DWG's model space (by its extension)."""
+    """A DXF or DWG's model space, or an SVG's lines (by its extension)."""
     if path.lower().endswith(".dwg"):
         return read_dwg(path)
+    if path.lower().endswith(".svg"):
+        from . import svg_import
+        return svg_import.read_svg(path)
     return read_dxf(path)
+
+
+PICTURE_TYPES = (".png", ".jpg", ".jpeg", ".bmp", ".gif")
+PICTURE_MAX_BYTES = 15 * 1024 * 1024
+
+
+def read_picture(path, width):
+    """A picture file as a Picture (kept in the project: the owner, "pics/svgs need to be
+    embedded"), width wide (its height as the picture's shape has it), its lower left at 0,0:
+    PNG and JPEG kept as they are, other kinds turned into PNG. ValueError when it can't be
+    read."""
+    import base64
+    if os.path.getsize(path) > PICTURE_MAX_BYTES:
+        raise ValueError("the picture is over %d MB" % (PICTURE_MAX_BYTES // (1024 * 1024)))
+    with open(path, "rb") as f:
+        raw = f.read()
+    from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+    from PySide6.QtGui import QImage
+    img = QImage.fromData(raw)
+    if img.isNull() or img.width() < 1 or img.height() < 1:
+        raise ValueError("not a picture it can read")
+    if raw[:8] == b"\x89PNG\r\n\x1a\n":
+        fmt = "png"
+    elif raw[:3] == b"\xff\xd8\xff":
+        fmt = "jpeg"
+    else:
+        data = QByteArray()
+        buf = QBuffer(data)
+        buf.open(QIODevice.WriteOnly)
+        img.save(buf, "PNG")
+        buf.close()
+        raw, fmt = bytes(data), "png"
+    height = width * img.height() / float(img.width())
+    return M.Picture((0.0, 0.0), width, height, base64.b64encode(raw).decode("ascii"), fmt)
+
+
+def import_picture(project, sheet, path, at=None, width=None):
+    """Add a picture to a sheet, one undoable step: width wide (2" on paper to start), its
+    middle at at (or at 0,0 by its lower left corner). The report as import_dxf's."""
+    pic = read_picture(path, width if width is not None else 2.0 * sheet.k())
+    rep = {"layers": {}, "skipped": {}, "units": "in"}
+    return add_drawing(project, sheet, [pic], rep, path, at)
 
 
 def import_dxf(project, sheet, path, at=None, anchor="center"):
@@ -1159,7 +1329,10 @@ def add_drawing(project, sheet, ents, rep, path, at=None, anchor="center"):
         bb = (bb[0] + dx, bb[1] + dy, bb[2] + dx, bb[3] + dy)
     ids = []
     kind = os.path.splitext(path)[1].lower()
-    with project.edit({".dwg": "Import DWG", ".pdf": "Import PDF"}.get(kind, "Import DXF")) as ed:
+    what = {".dwg": "Import DWG", ".pdf": "Import PDF", ".svg": "Import SVG"}.get(kind)
+    if kind in PICTURE_TYPES:
+        what = "Insert picture"
+    with project.edit(what or "Import DXF") as ed:
         for name, color in rep["layers"].items():
             if name not in project.layers:
                 ed.layer(name, None, M.Layer(name, color).to_dict())

@@ -242,10 +242,50 @@ class PathList:
         return iter(self.paths)
 
 
+_PICTURES = {}                  # (a picture's data -> its QImage, decoded once: picture_image)
+
+
+def picture_image(e):
+    """A picture's image, decoded once for every copy of it (its data is the key); a
+    broken one draws nothing."""
+    from PySide6.QtGui import QImage
+    img = _PICTURES.get(e.data)
+    if img is None:
+        import base64
+        import binascii
+        try:
+            raw = base64.b64decode(e.data.encode("ascii"), validate=True)
+        except (binascii.Error, ValueError, UnicodeEncodeError):
+            raw = b""
+        img = QImage.fromData(raw)
+        if len(_PICTURES) > 200:
+            _PICTURES.clear()
+        _PICTURES[e.data] = img
+    return img
+
+
+def paint_pictures(painter, pictures):
+    """Pictures in their place, upright as they stand (y up on the sheet, down in the image)."""
+    if not pictures:
+        return
+    base = painter.worldTransform()
+    for e in pictures:
+        img = picture_image(e)
+        if img.isNull():
+            continue
+        painter.setWorldTransform(base)
+        painter.translate(e.pos[0], e.pos[1])
+        painter.rotate(e.angle)
+        painter.scale(1.0, -1.0)
+        painter.drawImage(QRectF(0.0, -e.height, e.width, e.height), img)
+    painter.setWorldTransform(base)
+
+
 class _Chunk:
-    __slots__ = ("strokes", "fills", "areas", "texts", "stripes")
+    __slots__ = ("strokes", "fills", "areas", "texts", "stripes", "pictures")
 
     def __init__(self):
+        self.pictures = []      # (pictures: drawn first, under everything)
         self.stripes = {}       # rgba -> PathList: two-color wires' stripes (BLU/WHT)
         self.strokes = {}       # rgba -> PathList
         self.fills = {}         # (leaders' arrowheads)
@@ -299,7 +339,7 @@ class SheetRenderer:
         for k, ents in by_chunk.items():
             ch = _Chunk()
             self._fill_chunk(ch, ents)
-            if ch.strokes or ch.fills or ch.areas or ch.texts:
+            if ch.strokes or ch.fills or ch.areas or ch.texts or ch.pictures:
                 self.chunks[k] = ch
             else:
                 self.chunks.pop(k, None)
@@ -340,6 +380,9 @@ class SheetRenderer:
         for e in ents:
             lay = layers.get(e.layer)
             if lay is not None and not lay.visible:
+                continue
+            if isinstance(e, M.Picture):
+                ch.pictures.append(e)
                 continue
             if isinstance(e, M.Insert) and e.defn is not None and e.defn.own_colors:
                 # (an imported block: each piece in its own color, as AutoCAD shows it)
@@ -480,6 +523,8 @@ class SheetRenderer:
         if under is not None:
             under(painter)              # (the grid dots: under the drawing, not over it)
         lines, texts, tb = self._frame_paths()
+        for ch in [tb] + list(self.chunks.values()):
+            paint_pictures(painter, ch.pictures)        # (pictures under everything)
         pen = QPen(pal.frame, pen_width)
         pen.setCosmetic(pen_width == 0)
         painter.setPen(pen)

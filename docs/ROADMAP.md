@@ -109,7 +109,7 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    Converter, when installed, is only a fallback for a file ezdwg can't read. DXF stays the
    export format. Fixes go in our import code first, upstream to ezdwg second; fork only if
    urgent (its core is Rust).
-5. **Panel sheets and dimensions**:
+5. **Panel sheets and dimensions** (done by 0.12.6):
    - Panel geometry is always real-world inches, 1:1: a 3" contactor footprint is 3" in the
      data on every sheet, forever.
    - Each panel sheet has ONE visible scale (e.g. 1:4), a lens on the real-size layout. Named
@@ -139,7 +139,7 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
        footprint locks onto a rail's centerline by its rail point and slides along; near a
        neighbor on the rail it butts against it. Each footprint block may set its rail point
        (the middle of its clip) in Edit block; else the middle of its drawing.
-6. **Part assignment**: projects keep their own copies of the parts they use (as they do of
+6. **Part assignment** (wanted: the owner, Nov 2026): projects keep their own copies of the parts they use (as they do of
    blocks), so a part leaving the library never breaks a drawing.
    - Symbol, footprint and part stay three separate things; the symbol never knows the brand.
    - Draw with the generic symbol; assign a part now or later. The part picker is filtered to
@@ -149,7 +149,7 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
      from the schematic's devices, so tag and cross-reference come along; the schematic side
      flags devices not yet placed on a panel.
 7. **Library management**:
-   - Right-click a placed symbol with a part -> "Save to library as part" (name defaults to
+   - (wanted: the owner, Nov 2026) Right-click a placed symbol with a part -> "Save to library as part" (name defaults to
      the catalog number): writes symbol + footprint + part into the library.
    - Library browser: right-click Edit or Delete. Single delete asks once. Bulk delete asks
      once with the count ("Delete 14 parts?"); if some are used in the open project, ask
@@ -175,10 +175,11 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    per sheet or device, runs with landings, cable tag/type/marking and colors editable, CSV and
    PDF; lengths left to the job), bill of materials (done in 0.14: parts by manufacturer and catalog number, a
    device and its footprint once, rail and duct as stock lengths, CSV), wire list and terminal
-   strip list (done in 0.19.1, CSV). Still to come: Excel export (openpyxl, MIT, imported only
-   when exporting) and report sheets drawn in the project.
-9. **PDF export opening in KanzonasPDF** when it is installed (export exists).
-10. **Check out / check in** sheets: export chosen sheets (with their blocks, parts and
+   strip list (done in 0.19.1, CSV). Excel export (openpyxl, MIT, imported only when
+   exporting) and report sheets drawn in the project: done in 0.21.
+9. ~~PDF export opening in KanzonasPDF~~: dropped (the owner, Nov 2026: low value; opening a
+   .kzcad in KanzonasPDF would be KanzonasPDF's feature, not this one's).
+10. **Check out / check in** sheets (can wait: the owner, Nov 2026): export chosen sheets (with their blocks, parts and
    settings) for someone else, lock them while out, check them back in matched by sheet id
    with a summary of changes; references and numbers recalculate.
 11. **AutoCAD export with real blocks** (phase 1 done in 0.20: blocks, attributes, read back
@@ -229,8 +230,61 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     - **Linux, more at home**: the app offers to add itself to the applications menu and to
       open `.kzcad` files on a double-click (as KanzonasPDF's linux_desktop.py does); listed on
       Flathub and AppImageHub (the AppStream metadata exists already: packaging/linux).
-14. Later: terminal strips, PLC I/O from a spreadsheet, DWG export, color PDF option,
-    in-place text editing, Sheets panel as a popup.
+14. Later (all wanted: the owner, Nov 2026): terminal strips, DWG export (written by our own
+    code: the owner, "You write it. Don't rely on some third party tool"), Sheets panel as a
+    popup. Done in 0.21: PLC I/O from a spreadsheet, the color PDF option, in-place text
+    editing.
+15. **Editing an array** (done in 0.21; the owner, Nov 2026): the copies stay linked as one
+    array until exploded; Edit array changes its spacing, rows and columns, or a polar array's
+    count and angle. Copies added take tags of their own, copies kept keep theirs; wires on
+    copies taken away stay where they are, unconnected (flagged by the near-miss marker).
+    Still to come: a properties box and array grips.
+
+## Decided while the owner was away (Nov 2026; released in 0.21, to confirm)
+- **Power distribution block** (0.21): two symbols, the block (L1-L3 in, tag PDB) and its
+  outlet (T1-T3 out, PDB101-1...), not one box with outlets drawn on it: an outlet can sit on
+  any sheet beside what it feeds, as a contact beside its load. The block is where the feeder
+  ends (a bus going on past it isn't cut); outlets letter their wires by their own number
+  (outlet 3: C, even when 2 isn't drawn); OUTLETS is typed as on the part (1:18 or 18).
+
+- **Pictures and SVG** (0.21): a picture comes in 2" wide on paper (resized with its corner
+  grips, keeping its shape); it is drawn under everything and never flipped by Mirror; kept as
+  PNG or JPEG as it came (other kinds turned into PNG), up to 15 MB. An SVG too complex to edit:
+  over 20,000 straight pieces, 5,000 elements or 5 MB, refused whole (nothing half brought in);
+  its colors, fills and fonts are left out, its lines go on the sheet's current layer 0.
+
+- **Editing an array** (0.21): editing one copy on its own takes it out of the array (rather
+  than changing every copy); Edit array asks the numbers again on the command line, as Array
+  does (no dialog, no array grips yet); an array whose original objects are erased or moved on
+  their own is no longer one. Arrays made before 0.21 can't be edited (they weren't kept).
+
+- **Parts** (0.21): Assign part works on the selection (not "every contactor on the sheet" by
+  itself: select them first); the brand is typed in the Assign part window and kept per project;
+  a device whose symbol isn't the part's is left alone and counted in the message; Save to
+  library as part needs a catalog number, and the same maker and catalog number updates that
+  part. Not yet: the footprint from the part on panel insert, devices not yet on a panel flagged.
+
+- **Library parts** (0.21): one file a part done first, on its own (the two folders' shared
+  library needs it); parts.json moves to the files at the first save or delete, not at start-up
+  (opening a library never changes it).
+- **Second library folder** (0.21): a name in both libraries shows the first's only (not both,
+  as the roadmap said: one name, one block when placing); saving doesn't ask each time which
+  library: a checkable "Save new blocks and parts to the second library" (Library menu) says, and
+  anything already in a library is saved back there. Not yet: watching the folders for others'
+  changes (the Library panel refreshes when it opens).
+
+- **Report sheets** (0.21): drawn as plain lines and texts (not a live table), drawn again by
+  Update report sheets rather than at every change (keeps edits fast), placed after the sheet
+  shown; a cell too long for its column is cut with an ellipsis.
+
+- **In-place text editing** (0.21): clicking elsewhere keeps what was typed (as AutoCAD);
+  an emptied text is left as it was (not erased); the text's window moved to right-click Text
+  properties...; leaders and dashed boxes still open their windows.
+
+- **I/O list import** (0.21): one module a sheet (as the owner's one box per module); the
+  columns read by name (Slot, Catalog, Point, Address, Tag, Description); a point's text is
+  "address  tag  description" beside its terminal (no wire drawn to it, no PLC input symbol);
+  a module or point the library hasn't got is left out and named, never guessed.
 
 ## Standing decisions
 - Bringing in drawings from PDFs and pictures (owner, Nov 2026: "a feature ... that literally

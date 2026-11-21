@@ -85,10 +85,7 @@ def table(project):
 
 
 def write_csv(project, path):
-    import csv
+    """The panel materials as CSV, or Excel when the name ends .xlsx."""
+    from . import reports
     head, body = table(project)
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(head)
-        w.writerows(body)
-    return len(body)
+    return reports.write_csv(path, head, body, "Panel materials")

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QToolButton
 
 from tests.util import APP, window
 
-BLOCK_KEYS = ("save_block", "save_block_as", "block_props", "dup_block", "add_pin", "pins")
+BLOCK_KEYS = ("save_block", "save_block_as", "block_props", "dup_block", "add_pin", "pins", "add_attr")
 
 
 def tab_actions(win, title):

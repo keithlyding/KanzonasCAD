@@ -27,7 +27,8 @@ BUDGET = {
     "big_window": 2.0,          # that sheet opened in a new window and drawn, then closed
     "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings
     # a sheet of notes: 2,000 hatches (and their outlines), 1,000 leaders, 1,000 multi-line
-    # notes and 2,000 texts (text drawn as filled outlines took seconds a zoom step here)
+    # notes, 1,000 pictures and 2,000 texts (text drawn as filled outlines took seconds a zoom
+    # step here)
     "notes_open": 2.0,          # added and drawn
     "notes_zoom": 2.0,          # ten zoomed repaints
     "notes_move": 1.0,          # 1,000 of them moved in one edit, then drawn
@@ -655,6 +656,21 @@ def run(log_path):
         rnd = random.Random(5)
         p = M.Project.new()
         s = p.sheets[0]
+        # (0.21: 1,000 pictures, as a new kind of object must be measured: two pictures,
+        # each many times, as a logo is on every sheet)
+        import base64
+        from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+        from PySide6.QtGui import QColor, QImage
+        pics = []
+        for color in ("#c03030", "#3060c0"):
+            img = QImage(120, 60, QImage.Format_RGB32)
+            img.fill(QColor(color))
+            raw = QByteArray()
+            buf = QBuffer(raw)
+            buf.open(QIODevice.WriteOnly)
+            img.save(buf, "PNG")
+            buf.close()
+            pics.append(base64.b64encode(bytes(raw)).decode("ascii"))
         t = time.perf_counter()
         with p.edit("Notes") as ed:
             for i in range(2000):
@@ -675,6 +691,8 @@ def run(log_path):
                 # (0.16.4: dashed boxes with a note, as a new kind of object must be measured)
                 ed.add(s, M.DashBox.from_corners((x, y), (x + 1.2, y - .8),
                                                  text="FIELD WIRING\nBY OTHERS", height=0.1))
+                ed.add(s, M.Picture((x + .2, y - .6), 0.6, 0.3, pics[i % 2], "png",
+                                    rnd.choice([0.0, 90.0])))
         d = w.add_document(p)
         v = d.view
         v.zoom("sheet")
@@ -720,8 +738,9 @@ def run(log_path):
         assert caught > 100, "the lasso caught %d objects" % caught
         assert dl < BUDGET["lasso_move"], "a lasso mouse move took %.1f ms" % (dl * 1000)
         assert dp < BUDGET["lasso_pick"], "the lasso's pick took %.2f s" % dp
-        ids = [e.id for e in s.entities.values()
-               if isinstance(e, (M.Leader, M.Hatch, M.MText, M.DashBox))][:1000]
+        ids = [e.id for e in s.entities.values() if isinstance(e, M.Picture)][:500]
+        ids += [e.id for e in s.entities.values()
+                if isinstance(e, (M.Leader, M.Hatch, M.MText, M.DashBox))][:1000 - len(ids)]
         t = time.perf_counter()
         with p.edit("Move") as ed:
             for i in ids:

@@ -655,6 +655,105 @@ def _tidy(pts):
 
 
 @_register
+class Picture(Entity):
+    """A picture kept in the project (a company logo, a drawing to trace over: the owner, Nov
+    2026), never linked to its file, so the project travels whole: data is the PNG or JPEG file
+    itself, base64. pos is its lower left corner as it stands upright, width and height its
+    size on the sheet, angle its turn round pos. It is drawn under the lines, kept readable
+    (a mirrored picture isn't flipped, as a text isn't)."""
+    kind = "picture"
+    __slots__ = ("pos", "width", "height", "angle", "data", "fmt")
+
+    def __init__(self, pos, width, height, data, fmt="png", angle=0.0, **kw):
+        super().__init__(**kw)
+        self.pos = _pt(pos)
+        self.width = max(1e-6, abs(float(width)))
+        self.height = max(1e-6, abs(float(height)))
+        self.angle = float(angle) % 360.0
+        self.data = str(data)
+        self.fmt = fmt if fmt in ("png", "jpeg") else "png"
+
+    def _data(self):
+        return {"pos": list(self.pos), "width": self.width, "height": self.height,
+                "angle": self.angle, "data": self.data, "fmt": self.fmt}
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["pos"], d["width"], d["height"], d["data"], d.get("fmt", "png"),
+                   d.get("angle", 0.0), layer=d.get("layer", "0"), color=d.get("color"),
+                   id=d.get("id"))
+
+    def corners(self):
+        """Its four corners: lower left (pos), lower right, upper right, upper left."""
+        x, y = self.pos
+        return [G.rotate_point((x + dx, y + dy), self.pos, self.angle)
+                for dx, dy in ((0.0, 0.0), (self.width, 0.0), (self.width, self.height),
+                               (0.0, self.height))]
+
+    def center(self):
+        c = self.corners()
+        return ((c[0][0] + c[2][0]) / 2.0, (c[0][1] + c[2][1]) / 2.0)
+
+    def _outline_entity(self):
+        return Polyline(self.corners(), closed=True)
+
+    def _compute_bbox(self):
+        c = self.corners()
+        xs, ys = [q[0] for q in c], [q[1] for q in c]
+        return (min(xs), min(ys), max(xs), max(ys))
+
+    def distance(self, p):
+        return self._outline_entity().distance(p)
+
+    def crosses(self, rect):
+        if not G.bbox_overlaps(self.bbox(), rect):
+            return False
+        return self._outline_entity().crosses(rect)
+
+    def pieces(self):
+        return self._outline_entity().pieces()
+
+    def outline(self):
+        c = self.corners()
+        return [c + [c[0]]]
+
+    def _compute_snaps(self):
+        return [("end", q) for q in self.corners()] + [("center", self.center())]
+
+    def grips(self):
+        return self.corners() + [self.center()]
+
+    def with_grip(self, i, p):
+        """A corner dragged: the picture grows or shrinks from the corner across from it,
+        keeping its shape; the middle grip moves it."""
+        if i == 4:
+            c = self.center()
+            return self.moved(p[0] - c[0], p[1] - c[1])
+        c = self.corners()
+        fixed = c[(i + 2) % 4]
+        diag = G.dist(fixed, c[i])
+        if diag < 1e-12:
+            return self.copy()
+        u = ((c[i][0] - fixed[0]) / diag, (c[i][1] - fixed[1]) / diag)
+        along = (p[0] - fixed[0]) * u[0] + (p[1] - fixed[1]) * u[1]
+        f = max(1e-3, along / diag)
+        return self.scaled(fixed, f)
+
+    def _map(self, fn, rot=0.0, factor=1.0, mirror=None):
+        w, h = self.width * abs(factor), self.height * abs(factor)
+        ang = self.angle + rot
+        if mirror is not None:
+            # (it lands where mirroring puts it but isn't flipped: a logo stays readable)
+            ang = G.mirror_angle(self.angle, *mirror) + 180.0
+            if 90.0 + 1e-6 < ang % 360.0 <= 270.0 + 1e-6:
+                ang += 180.0
+        nc = fn(self.center())
+        half = G.rotate_point((w / 2.0, h / 2.0), (0.0, 0.0), ang)
+        return self.copy(pos=[nc[0] - half[0], nc[1] - half[1]], width=w, height=h,
+                         angle=ang % 360.0)
+
+
+@_register
 class Circle(Entity):
     kind = "circle"
     __slots__ = ("center", "radius")
@@ -1917,7 +2016,7 @@ CONTACTS = ("", "NO", "NC", "NOTC", "NCTO", "NOTO", "NCTC")
 # "distribution" (a distribution block: its first pin's number goes on, with A, B, C... added,
 # to the wires on its other pins), "link" (an off-sheet connector: wires at connectors with
 # the same name are one wire, whatever sheet they're on)
-WIRINGS = ("", "distribution", "link")
+WIRINGS = ("", "distribution", "link", "pdb")
 ATTR_NAMES = ["TAG", "DESC", "MFR", "CAT"]       # what every block reference can carry
 # a block's optional maker details: who makes it, and its catalog (part) number
 MAKER_FIELDS = ("manufacturer", "family", "series", "catalog")
@@ -2295,6 +2394,9 @@ class Insert(Entity):
         a = self.angle % 180.0
         h = (self.tag_h or d.tag_height) * self.scale
         text = tag or (d.prefix + "?" if d.prefix else "?")
+        if d.wiring == "pdb" and d.role == "child":
+            # (an outlet of a power distribution block: its block's tag and its own number)
+            text = "%s-%s" % (text, self.attrs.get("OUTLET") or "?")
         if "TAG" in self.attr_rot:
             return Text(self.to_world(spot), text, h, self._turned("TAG"), align, valign)
         if 45.0 <= a < 135.0:
@@ -2784,6 +2886,23 @@ SCALE_PRESETS = [
     ('3/4" = 1\'-0"', 1 / 16), ('1/2" = 1\'-0"', 1 / 24), ('1/4" = 1\'-0"', 1 / 48),
 ]
 
+def _arrays(got):
+    """A sheet's arrays as saved (arrays.py), those it can't read left out."""
+    out = {}
+    for k, a in (got or {}).items() if isinstance(got, dict) else ():
+        try:
+            out[str(k)] = {"mode": "P" if a.get("mode") == "P" else "R",
+                           "vals": [float(v) for v in a.get("vals") or []],
+                           "center": [float(a["center"][0]), float(a["center"][1])]
+                           if a.get("center") else None,
+                           "source": [int(i) for i in a.get("source") or []],
+                           "items": {str(i): [int(j) for j in ids]
+                                     for i, ids in (a.get("items") or {}).items()}}
+        except (TypeError, ValueError, KeyError, IndexError, AttributeError):
+            continue                    # (saved unreadably: its copies stay, on their own)
+    return out
+
+
 def _cabinet(v):
     """A stored cabinet size as [width, height, depth] (real inches), or None."""
     try:
@@ -2843,6 +2962,9 @@ class Sheet:
         self.xref_shown = None              # the cross-references shown while frozen (or while
                                             # the project's aren't automatic): xrefs.py
         self.no_dots = []                   # junction dots deleted (Delete dot): [(x, y)]
+        # arrays that stay arrays (arrays.py): {id: {mode, vals, center, source, items}}
+        self.arrays = {}
+        self.report = ""                    # (a report sheet: which report, report_sheets.py)
         self.pin_order = []                 # a block editor's sheet: its pin markers' ids in
                                             # the order set in Pins... (block_editor.to_block)
         self.col_start = int(col_start)     # the first column's number (1 to start)
@@ -3063,6 +3185,14 @@ class Sheet:
              "xref_shown": [list(t) for t in self.xref_shown]
              if self.xref_shown is not None else None,
              "no_dots": [list(q) for q in self.no_dots]}
+        if self.arrays:
+            d["arrays"] = {k: {"mode": a["mode"], "vals": list(a["vals"]),
+                               "center": list(a["center"]) if a.get("center") else None,
+                               "source": list(a["source"]),
+                               "items": {i: list(ids) for i, ids in a["items"].items()}}
+                           for k, a in self.arrays.items()}
+        if self.report:
+            d["report"] = self.report
         if self.pin_order:
             d["pin_order"] = list(self.pin_order)
         return d
@@ -3111,6 +3241,8 @@ class Sheet:
         self.no_dots = [(round(float(q[0]), 6), round(float(q[1]), 6))
                         for q in (d.get("no_dots") or [])]
         self.pin_order = [int(i) for i in (d.get("pin_order") or [])]
+        self.arrays = _arrays(d.get("arrays"))
+        self.report = str(d.get("report", "") or "")
         self.version += 1
 
     @classmethod

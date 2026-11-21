@@ -79,9 +79,41 @@ class Part:
 
 
 class Library:
-    def __init__(self, folder=None):
+    def __init__(self, folder=None, second=None):
         self.folder = folder or default_folder()
         self._builtins = None
+        self.part_problems = []         # (part files it couldn't read: parts)
+        # a second library folder (the owner's two folders, Nov 2026: one shared, one personal,
+        # each anything): searched with this one; save_second says new blocks and parts go there
+        self.second = Library(second) if second else None
+        self.save_second = False
+        self.second_parts = set()       # (the parts listed from the second library: parts)
+
+    def set_second(self, folder):
+        self.second = Library(folder) if folder else None
+        if self.second is None:
+            self.save_second = False
+
+    def where(self, kind, name):
+        """Which library a block comes from: "first", "second", or "built in" (yours first)."""
+        if self.has_own(kind, name):
+            return "first"
+        if self.second is not None and self.second.has_own(kind, name):
+            return "second"
+        return "built in" if name in self.builtins(kind) else None
+
+    def _target(self):
+        """The library new things are saved to."""
+        return _writable(self.second if self.save_second and self.second is not None
+                         else self)
+
+    def _home(self, kind, name):
+        """The library a block is saved to: the one it is in, else where new things go."""
+        if self.has_own(kind, name):
+            return _writable(self)
+        if self.second is not None and self.second.has_own(kind, name):
+            return _writable(self.second)
+        return self._target()
 
     # ---- folders ---------------------------------------------------------------------------
     def _dir(self, kind):
@@ -105,11 +137,22 @@ class Library:
         return self._builtins.get(kind, {})
 
     def blocks(self, kind):
-        """{name: BlockDef} of one kind: the program's own with yours over them.
-        Unreadable files are skipped and named in the second item returned."""
+        """{name: BlockDef} of one kind: the program's own, the second library's over them,
+        this one's over those (a name in both libraries: this one's). Unreadable files are
+        skipped and named in the second item returned."""
+        out = dict(self.builtins(kind))
+        bad = []
+        if self.second is not None:
+            got, bad2 = self.second._own_blocks(kind)
+            out.update(got)
+            bad += ["%s (second library)" % b for b in bad2]
+        got, bad1 = self._own_blocks(kind)
+        out.update(got)
+        return out, bad1 + bad
+
+    def _own_blocks(self, kind):
         out = {}
         bad = []
-        out.update(self.builtins(kind))
         d = self._dir(kind)
         if os.path.isdir(d):
             for fn in sorted(os.listdir(d)):
@@ -131,13 +174,20 @@ class Library:
         return blocks.get(name)
 
     def save_block(self, defn):
-        """Write a block to the library (a block of the same name is replaced)."""
+        """Write a block to the library (a block of the same name is replaced): where it
+        already is, else where new things go (_target)."""
+        lib = self._home(defn.kind, defn.name)
+        if lib is not self:
+            return lib.save_block(defn)
         self.ensure()
         path = self._path(defn.kind, defn.name)
         _write_json(path, defn.to_dict())
         return path
 
     def delete_block(self, kind, name):
+        if not self.has_own(kind, name) and self.second is not None and \
+                self.second.has_own(kind, name):
+            return _writable(self.second).delete_block(kind, name)
         path = self._path(kind, name)
         if os.path.exists(path):
             os.remove(path)
@@ -206,10 +256,23 @@ class Library:
         return sorted(seen.values(), key=str.lower)
 
     # ---- parts -----------------------------------------------------------------------------
+    # One file a part, in the library's parts folder (the owner's two library folders, Nov
+    # 2026: a shared library in a synced folder; two people adding parts at once each write a
+    # file of their own, never one file both change, which a sync app turns into a conflict
+    # copy). A library from before 0.21 kept them all in parts.json: still read, and moved to
+    # files of their own the first time a part is saved or deleted.
+    PARTS_DIR = "parts"
+
     def _parts_path(self):
         return os.path.join(self.folder, "parts.json")
 
-    def parts(self):
+    def _parts_dir(self):
+        return os.path.join(self.folder, self.PARTS_DIR)
+
+    def _part_file(self, part_id):
+        return os.path.join(self._parts_dir(), safe_name(part_id) + ".json")
+
+    def _legacy_parts(self):
         path = self._parts_path()
         if not os.path.exists(path):
             return []
@@ -217,19 +280,89 @@ class Library:
             data = json.load(f)
         return [Part.from_dict(d) for d in data.get("parts", [])]
 
+    def parts(self):
+        """Every part of both libraries (a part in both: this one's), by maker and catalog
+        number; the second library's ids in second_parts."""
+        got = {p.id: p for p in self._own_parts()}
+        problems = list(self.part_problems)
+        self.second_parts = set()
+        if self.second is not None:
+            for p in self.second._own_parts():
+                if p.id not in got:
+                    got[p.id] = p
+                    self.second_parts.add(p.id)
+            problems += ["%s (second library)" % t for t in self.second.part_problems]
+        self.part_problems = problems
+        return sorted(got.values(), key=lambda p: (p.manufacturer.lower(), p.catalog.lower()))
+
+    def _part_home(self, part_id):
+        if part_id in {p.id for p in self._own_parts()}:
+            return _writable(self)
+        if self.second is not None and part_id in {p.id for p in self.second._own_parts()}:
+            return _writable(self.second)
+        return self._target()
+
+    def _own_parts(self):
+        """This library's own parts, by maker and catalog number. The files it couldn't read, and the
+        conflict copies a sync app left ("1a2b3c (Keith's PC).json": a file not named by the
+        part in it), are in part_problems, not among the parts."""
+        self.part_problems = []
+        got = {p.id: p for p in self._legacy_parts()}
+        d = self._parts_dir()
+        if os.path.isdir(d):
+            for fn in sorted(os.listdir(d)):
+                if not fn.endswith(".json"):
+                    continue
+                try:
+                    with open(os.path.join(d, fn), encoding="utf-8") as f:
+                        part = Part.from_dict(json.load(f))
+                except (OSError, ValueError, TypeError) as ex:
+                    self.part_problems.append("%s (%s)" % (fn, ex))
+                    continue
+                if fn[:-5] != safe_name(part.id):
+                    self.part_problems.append("%s (a copy a sync app left: %s is %s)" % (
+                        fn, part.label(), safe_name(part.id) + ".json"))
+                    continue
+                got[part.id] = part
+        return sorted(got.values(), key=lambda p: (p.manufacturer.lower(), p.catalog.lower()))
+
+    def _move_legacy(self):
+        """parts.json's parts into files of their own, then parts.json gone."""
+        legacy = self._legacy_parts()
+        if not legacy:
+            return
+        os.makedirs(self._parts_dir(), exist_ok=True)
+        for p in legacy:
+            if not os.path.exists(self._part_file(p.id)):
+                _write_json(self._part_file(p.id), p.to_dict())
+        os.remove(self._parts_path())
+
     def save_parts(self, parts):
-        os.makedirs(self.folder, exist_ok=True)
-        _write_json(self._parts_path(), {"format": "kanzonascad-parts", "version": 1,
-                                         "parts": [p.to_dict() for p in parts]})
+        """The library's parts made these (each written to its own file; the others deleted)."""
+        self._move_legacy()
+        keep = {p.id for p in parts}
+        for p in self.parts():
+            if p.id not in keep:
+                self.delete_part(p.id)
+        for p in parts:
+            self.save_part(p)
 
     def save_part(self, part):
-        parts = [p for p in self.parts() if p.id != part.id]
-        parts.append(part)
-        parts.sort(key=lambda p: (p.manufacturer.lower(), p.catalog.lower()))
-        self.save_parts(parts)
+        lib = self._part_home(part.id)
+        if lib is not self:
+            return lib.save_part(part)
+        self._move_legacy()
+        os.makedirs(self._parts_dir(), exist_ok=True)
+        _write_json(self._part_file(part.id), part.to_dict())
 
     def delete_part(self, part_id):
-        self.save_parts([p for p in self.parts() if p.id != part_id])
+        lib = self._part_home(part_id)
+        if lib is not self:
+            return lib.delete_part(part_id)
+        self._move_legacy()
+        path = self._part_file(part_id)
+        if os.path.exists(path):
+            os.remove(path)
 
     def part(self, part_id):
         for p in self.parts():
@@ -240,6 +373,14 @@ class Library:
     def parts_using(self, kind, name):
         field = "symbol" if kind == "symbol" else "footprint"
         return [p for p in self.parts() if getattr(p, field) == name]
+
+
+def _writable(lib):
+    """lib, or OSError when its folder can't be written to (a read-only share is used
+    read-only: its blocks and parts listed and placed, never changed)."""
+    if os.path.isdir(lib.folder) and not os.access(lib.folder, os.W_OK):
+        raise OSError("%s is read-only: it can be used, not changed" % lib.folder)
+    return lib
 
 
 def _write_json(path, data):

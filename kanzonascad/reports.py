@@ -102,9 +102,46 @@ def terminal_rows(project):
     return out
 
 
-def write_csv(path, head, rows):
+XLSX = "Excel workbook (*.xlsx)"
+SAVE_TYPES = "CSV (*.csv);;" + XLSX         # (a report's Save box: CSV or Excel)
+
+
+def write_csv(path, head, rows, title="Report"):
+    """A report to a file: an Excel workbook when the name ends .xlsx (the roadmap's item 8:
+    its header bold and kept in sight, columns wide enough, whole numbers as numbers), else CSV.
+    The number of rows written."""
+    if path.lower().endswith(".xlsx"):
+        return write_xlsx(path, head, rows, title)
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(head)
         w.writerows(rows)
+    return len(rows)
+
+
+def _cell(v):
+    t = str(v)
+    if t.isdigit() and (len(t) == 1 or not t.startswith("0")) and len(t) < 15:
+        return int(t)                   # (a count; a wire number "0012" stays as written)
+    return t
+
+
+def write_xlsx(path, head, rows, title="Report"):
+    """A report as an Excel workbook of one sheet (openpyxl, imported only here)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "".join(ch for ch in title if ch not in '[]:*?/\\')[:31] or "Report"
+    ws.append([str(h) for h in head])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for r in rows:
+        ws.append([_cell(v) for v in r])
+    ws.freeze_panes = "A2"
+    for i, h in enumerate(head):
+        width = max([len(str(h))] + [len(str(r[i])) for r in rows if i < len(r)])
+        ws.column_dimensions[ws.cell(row=1, column=i + 1).column_letter].width = \
+            min(60, width + 2)
+    wb.save(path)
     return len(rows)

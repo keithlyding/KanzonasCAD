@@ -1404,7 +1404,7 @@ def report_dialog(parent, title, head, rows, folder, filename, empty_text, note)
         lay.addWidget(QLabel(empty_text))
     lay.addWidget(_gray(note))
     box = QDialogButtonBox(QDialogButtonBox.Close)
-    save = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    save = box.addButton("Save as CSV or Excel...", QDialogButtonBox.ActionRole)
     save.setEnabled(bool(rows))
     box.rejected.connect(dlg.reject)
 
@@ -1413,11 +1413,12 @@ def report_dialog(parent, title, head, rows, folder, filename, empty_text, note)
         import os
         from . import reports
         path, _f = QFileDialog.getSaveFileName(dlg, "Save %s" % title.lower(),
-                                               os.path.join(folder, filename), "CSV (*.csv)")
+                                               os.path.join(folder, filename),
+                                               reports.SAVE_TYPES)
         if not path:
             return
         try:
-            n = reports.write_csv(path, head, rows)
+            n = reports.write_csv(path, head, rows, title)
         except OSError as ex:
             QMessageBox.warning(dlg, title, "Couldn't save %s:\n%s" % (path, ex))
             return
@@ -1464,15 +1465,16 @@ def bom_dialog(parent, project, folder):
                         "materials has their cuts). Item numbers follow this list: a leader's "
                         "balloon (LE, B) can show them."))
     box = QDialogButtonBox(QDialogButtonBox.Close)
-    save = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    save = box.addButton("Save as CSV or Excel...", QDialogButtonBox.ActionRole)
     box.rejected.connect(dlg.reject)
 
     def do_save():
         from PySide6.QtWidgets import QFileDialog
         import os
+        from . import reports
         path, _f = QFileDialog.getSaveFileName(dlg, "Save bill of materials",
                                                os.path.join(folder, "bill of materials.csv"),
-                                               "CSV (*.csv)")
+                                               reports.SAVE_TYPES)
         if not path:
             return
         try:
@@ -1514,16 +1516,17 @@ def materials_dialog(parent, project, folder):
                         "size by double-clicking it; the project's stock lengths are in Project "
                         "properties, Panel."))
     box = QDialogButtonBox(QDialogButtonBox.Close)
-    save = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    save = box.addButton("Save as CSV or Excel...", QDialogButtonBox.ActionRole)
     save.setEnabled(bool(body))
     box.rejected.connect(dlg.reject)
 
     def do_save():
         from PySide6.QtWidgets import QFileDialog
         import os
+        from . import reports
         path, _f = QFileDialog.getSaveFileName(dlg, "Save panel materials",
                                                os.path.join(folder, "panel materials.csv"),
-                                               "CSV (*.csv)")
+                                               reports.SAVE_TYPES)
         if not path:
             return
         try:
@@ -1575,6 +1578,10 @@ def options_dialog(parent, cur, view, tab=None):
                           "tag, description, maker and catalog number as attributes. Off: as "
                           "plain lines and texts, as before version 0.20")
     form.addRow("", dxf_blocks)
+    pdf_colors = QCheckBox("Export to PDF in the layers' colors (off: black on white)")
+    pdf_colors.setObjectName("pdf_colors")
+    pdf_colors.setChecked(bool(cur.get("pdf_colors", False)))
+    form.addRow("", pdf_colors)
     tabs.addTab(page, "General")
 
     # Files
@@ -1667,7 +1674,7 @@ def options_dialog(parent, cur, view, tab=None):
                 "library_folder": folder,
                 "template_path": path, "backups_keep": keep.value(),
                 "autosave_minutes": auto.value(), "drafting": apply_drafting is not None,
-                "dxf_blocks": dxf_blocks.isChecked()}
+                "dxf_blocks": dxf_blocks.isChecked(), "pdf_colors": pdf_colors.isChecked()}
 
 
 def cables_dialog(parent, project, folder):
@@ -1783,7 +1790,7 @@ def cables_dialog(parent, project, folder):
     mark.currentIndexChanged.connect(marking_changed)
     lst.currentRowChanged.connect(show)
     box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-    csv_b = box.addButton("Save as CSV...", QDialogButtonBox.ActionRole)
+    csv_b = box.addButton("Save as CSV or Excel...", QDialogButtonBox.ActionRole)
     pdf_b = box.addButton("Save as PDF...", QDialogButtonBox.ActionRole)
     csv_b.setEnabled(bool(rs))
     pdf_b.setEnabled(bool(rs))
@@ -1794,7 +1801,8 @@ def cables_dialog(parent, project, folder):
         keep()
         from PySide6.QtWidgets import QFileDialog
         import os
-        ext = {"csv": "CSV (*.csv)", "pdf": "PDF (*.pdf)"}[kind]
+        from . import reports
+        ext = {"csv": reports.SAVE_TYPES, "pdf": "PDF (*.pdf)"}[kind]
         path, _f = QFileDialog.getSaveFileName(dlg, "Save the pull list",
                                                os.path.join(folder, "pull list." + kind), ext)
         if not path:
@@ -2495,3 +2503,42 @@ def wire_layers_question(parent):
     if dlg.exec() != QDialog.Accepted:
         return None
     return [g for g, b in boxes if b.isChecked()]
+
+
+def assign_part_dialog(parent, parts, brand):
+    """Assign part: the parts for the selected devices (the brand's first), a filter, and the
+    project's brand: (part id, brand) or None."""
+    from PySide6.QtWidgets import QListWidget, QListWidgetItem
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Assign part")
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel("The part for the selected devices (those using its symbol take it):"))
+    find = QLineEdit()
+    find.setPlaceholderText("Filter: maker, catalog number, description")
+    lay.addWidget(find)
+    lst = QListWidget()
+    lst.setObjectName("parts")
+    for p in parts:
+        it = QListWidgetItem("%s   (%s)" % (p.label(), p.symbol))
+        it.setData(Qt.UserRole, p.id)
+        lst.addItem(it)
+    lst.setCurrentRow(0)
+    lay.addWidget(lst)
+
+    def narrow(text):
+        t = text.strip().lower()
+        for i in range(lst.count()):
+            it = lst.item(i)
+            it.setHidden(bool(t) and t not in it.text().lower())
+    find.textChanged.connect(narrow)
+    form = QFormLayout()
+    brand_box = QLineEdit(brand)
+    brand_box.setObjectName("brand")
+    brand_box.setPlaceholderText("Allen-Bradley, Siemens...")
+    form.addRow("Brand listed first (this project):", brand_box)
+    lay.addLayout(form)
+    lay.addWidget(_buttons(dlg))
+    lst.itemDoubleClicked.connect(lambda _it: dlg.accept())
+    if dlg.exec() != QDialog.Accepted or lst.currentItem() is None:
+        return None
+    return lst.currentItem().data(Qt.UserRole), brand_box.text().strip()

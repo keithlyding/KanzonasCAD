@@ -1,12 +1,15 @@
 # Notices
 
-KanzonasCAD is MIT licensed (see LICENSE). It is built on:
+KanzonasCAD is licensed under the PolyForm Shield License 1.0.0 (see LICENSE); versions 0.20
+and earlier were released under the MIT License. It is built on:
 
 - Qt for Python (PySide6), LGPL-3.0 - https://www.qt.io/qt-for-python
 - ezdxf, MIT - https://github.com/mozman/ezdxf
 - QtAwesome, MIT, for its copy of the Material Design Icons font (Apache-2.0) -
   https://github.com/spyder-ide/qtawesome
 - ezdwg, MIT - DWG reading - https://pypi.org/project/ezdwg/
+- openpyxl, MIT - reports saved as Excel workbooks - https://foss.heptapod.net/openpyxl/openpyxl;
+  with et_xmlfile (MIT), which it asks for
 - pdfminer.six, MIT - Import PDF - https://github.com/pdfminer/pdfminer.six; with
   charset-normalizer (MIT), cryptography (Apache-2.0 or BSD-3-Clause), cffi (MIT) and
   pycparser (BSD-3-Clause), which it asks for
@@ -24,6 +27,3 @@ self-updating parts of `kanzonascad/updates.py`, `packaging/linux/`,
 
 The Linux AppImage starts with the AppImage runtime (MIT, https://github.com/AppImage/type2-runtime),
 packed by appimagetool (MIT, https://github.com/AppImage/appimagetool).
-
-Code taken from KatieCAD (https://github.com/Merecete/KatieCAD, MIT License,
-Copyright (c) 2026 Merecete) will be listed here with the files it went into. None yet.

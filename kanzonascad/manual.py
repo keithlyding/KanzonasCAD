@@ -31,7 +31,7 @@ buttons become small ones with their names beside them, then icons alone (the na
 when you hold the mouse over one); widen the window and they grow back. Only a tab that
 still doesn't fit as icons scrolls sideways (the mouse wheel over it).</li>
 <li><b>The Block tab</b> holds a block's own tools: <b>Save block</b>, <b>Save block as...</b>,
-<b>Block properties...</b>, <b>Duplicate block...</b>, <b>Add pin</b>, <b>Pins...</b>,
+<b>Block properties...</b>, <b>Duplicate block...</b>, <b>Add pin</b>, <b>Pins...</b>, <b>Add attribute</b>,
 <b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
 in a block's tab (Edit block..., on the Schematic tab's Symbols group and the Panel tab's
 Footprints group, opens one), and goes away when you leave it. To have it all the time, turn
@@ -261,10 +261,23 @@ with a scale the strip stays its size on paper.</p>
 <h2>Symbols, footprints and parts (the library)</h2>
 <p>Your <b>library</b> is a folder of its own (<code>Documents\\KanzonasCAD Library</code> to
 start, or <code>data\\Library</code> beside the program in the portable version; <b>Library
-folder...</b> picks another, a OneDrive folder say). It is kept apart from
+folder...</b> picks another, a OneDrive folder say). <b>Second library folder...</b> (Library
+menu) adds a second one, searched with the first: one shared with your team in a synced folder
+(OneDrive, SharePoint, Google Drive, Dropbox: their own apps sync it) and one of your own, say,
+or any two folders. Everything in the second shows "(second library)" in the Library panel; a
+name in both is the first library's. A block or part is always saved back to the library it is
+in; new ones go to the first, or to the second with <b>Save new blocks and parts to the second
+library</b> ticked (Library menu). A folder you can't write to (a read-only share) is used
+read-only: its blocks and parts are there to place, and saving one says why it can't. Cancel in
+the second folder's window offers to take it away (its files stay). It is kept apart from
 the program and from projects, so it lasts through updates and serves every project. Each
 project also keeps its own copy of the blocks it uses, so it opens the same anywhere, whatever
-happens to the library later.</p>
+happens to the library later. Each part is a file of its own in the library's <b>parts</b>
+folder, so two people adding parts to a library in a synced folder at the same time don't
+make the sync app keep a conflict copy; if it keeps one anyway ("... (Keith's PC).json"), the
+Library panel names it instead of listing the part twice. A library from before 0.21 keeps
+its parts in parts.json until a part is next saved or deleted, when they move to files of
+their own.</p>
 <ul>
 <li><b>Schematic symbols</b>: blocks with <b>pins</b> (where wires attach) and a <b>tag</b>.
 A starter set of JIC/NFPA symbols is built in (relay, contactor and timer coils, NO/NC and
@@ -347,6 +360,16 @@ attributes window's Shown on the drawing (or Show or hide attributes).</li>
 <p>It is saved to your library and, unless you untick it, the selected objects become the
 block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
 footprint.</p>
+<p><b>Assign part...</b> (Library menu, the Panel tab's Parts): select the devices
+(every contactor on the sheet, say), then pick one of your library's parts for them, from those
+made for their symbols, filtered as you type; every selected device using the part's symbol takes
+its manufacturer, catalog number and description, in one step, and keeps its tag. Type your
+<b>brand</b> there (Allen-Bradley, Siemens...) and its parts are listed first in this project.
+The project keeps its own copy of each part it uses, so changing or deleting a part in the
+library never changes a drawing. <b>Save to library as part</b> (Library menu) does the other
+way round: select one device with a catalog number and it is saved to your library as a part,
+with its manufacturer, description, symbol and the footprint linked to it (saving it again
+updates that part).</p>
 <p>Double-click a placed symbol or footprint to change its tag, description, manufacturer and
 catalog number, or pick one of the library's parts for it. Fuses, circuit breakers,
 disconnects, overloads, motors, the control transformer, the VFD and the power supply also
@@ -448,7 +471,15 @@ on them wire for wire, and the order Properties... lists them); <b>Delete</b> ta
 one step (Undo takes it back); two pins with the same name are refused. The blue text on BLOCK TAG is where the tag goes, and texts on
 BLOCK ATTRIBUTES are where a terminal's number, a PLC address or a rating shows; their
 alignment and angle (Edit text: middle center, say, so a rating sits in the middle of a fuse
-whichever way it is turned) are kept with the block. Leaving the block's tab, the ribbon goes
+whichever way it is turned) are kept with the block. <b>Add attribute</b> (ADDATTR, ATTDEF,
+ATT, AA; Library menu and the Block tab, in that tab) gives the block one more: type its name
+(HP, VOLTS, FLA, KW... one word, no spaces; TAG has its own marker), then click where its
+value shows, or type <b>S</b> to put it under the block's ratings (RATING, HP, VOLTS...), in
+their stack, so it closes up with them when one above it is empty (a rating's text copied
+straight down under the stack joins it too); it goes on with the next name until Enter or Esc.
+Each copy of the block then has a box for it in <b>Properties...</b>: an empty one shows
+nothing. HP, VOLTS, AMPS, FLA, VA, PRI and SEC typed as a plain number show their unit (5 shows
+5HP); any other attribute shows as typed. Leaving the block's tab, the ribbon goes
 back to the tab it was on. A footprint has a pink
 <b>DIN RAIL</b> text on layer BLOCK DIN RAIL: its insertion point (a ring, with a dashed line
 across the part where the rail's centerline runs) is the middle of the part's rail clip. Move
@@ -459,10 +490,11 @@ changes); erased, it goes back to that. The blue <b>LABEL</b> text on layer BLOC
 where its <b>Footprint label</b> goes, the same way: left where it opened, the middle of the
 drawing; moved, that spot. <b>Save block</b>
 (Library menu, the ribbon's Block tab, or Save, Ctrl+S, in that tab) puts it back in your library: the
-pins keep their order (or the one set in Pins...), new ones come after. Closing the tab with changes not saved asks
+pins keep their order (or the one set in Pins...), new ones come after, and the block's tab
+closes, back to the drawing it was opened from. Closing the tab with changes not saved asks
 first. <b>Save block as...</b> (Library menu and the Block tab, in that tab) saves it under a new
 name instead, with its catalog number left blank: the block it was opened from stays as it
-was in your library, and the tab goes on editing the new one.</li>
+was in your library, and the tab closes too.</li>
 <li><b>Duplicate...</b> (a button in the Library popup, its right-click menu, or
 <b>Duplicate block...</b> in the Library menu and the Block tab, for a block selected in the
 drawing): to make a block that is almost like one you have (a footprint of
@@ -506,7 +538,8 @@ changes it. Untick "Lock this tag" there to give it back.</li>
 <li><b>Renumber sheet</b> (Schematic tab, Sheets menu) numbers the sheet's unlocked devices
 01, 02... per prefix in the sheet's <b>numbering order</b> (Sheet properties): across then
 down, or down then across, or <b>along the wires</b>. Locked tags stay and their numbers are
-skipped.</li>
+skipped. Only devices hold numbers: a footprint, contact or power section carrying a device's
+tag takes the device's new tag, and never makes it skip one.</li>
 <li><b>Along the wires</b> follows a bus however it winds round the sheet (right along the top
 row, down the side and back left along the next, say). <b>Numbering source</b> (NUMSOURCE;
 Schematic tab: Numbering, Sheets menu): click the symbol the wires start from (the disconnect)
@@ -619,7 +652,9 @@ starts (a symbol's pin, another wire, or anywhere), then where it goes: it runs 
 and up or down, with one corner per click; the corner follows the cursor, and F flips it the
 other way. The wire <b>ends by itself</b> when you click a pin or another wire; Enter ends it
 anywhere; so does Esc or starting another command (what is drawn is kept). U takes back
-the last click.</p>
+the last click. A wire never runs <b>through a symbol's pin</b> on the way (that would wire
+the pin to it): a click whose leg would pass through one isn't taken, the command line says
+which pin, and you click on the pin to end there, or elsewhere.</p>
 <p>A wire <b>goes around the symbols in its way</b>: when the leg to your click would run
 through a symbol's drawing, it goes round it instead (straight across and up or down, the
 fewest corners, 1/8 inch clear of it on paper), and it leaves a pin, and arrives at one,
@@ -851,6 +886,16 @@ points: <b>Edit block...</b> renames their terminals to match the module, and Sa
 keeps it in your library under its own name. Each carries its manufacturer and catalog
 number, so the Bill of materials lists it; PLC input and output points can belong to it as to
 a PLC I/O card. To put the terminals on the right, Mirror it.</li>
+<li><b>Import I/O list...</b> (Sheets menu) brings in an I/O list as its modules: a CSV file or
+an Excel workbook (its first sheet) whose first row names the columns, in any order:
+<b>Slot</b> (or Rack), <b>Catalog</b> (or Catalog number, Module, Part), <b>Point</b> (or
+Channel), <b>Address</b>, <b>Tag</b> and <b>Description</b>. The rows of one slot are one
+module, the library's symbol of that catalog number (1734-IB8...) or a generic module by its
+name; each goes on a sheet of its own ("Slot 2 - 1734-IB8") after the sheet shown, its slot
+shown, its tag of that page, and each point's address, tag and description written beside its
+terminal on the left, where the field wire comes in (layer PLC I/O). A module the library
+hasn't got, or a point a module hasn't got, is left out and named on the command line. One
+Undo takes it all back.</li>
 <li><b>Two terminals a channel</b>: <b>PLC analog input module, 4, 8 or 16 channels IN/RTN</b>,
 each channel's input above its return, numbered as a 1756-IF16 is drawn (IN-0 on terminal 2,
 RTN-0 on 1, IN-1 on 4...).</li>
@@ -941,6 +986,17 @@ as device tags do.</li>
 order.</li>
 <li><b>Distribution block</b> (Library, JIC/Wiring): the wires on its outputs take the number
 of the wire on its input with A, B, C... added (6001A, 6001B; after Z come AA, AB...).</li>
+<li><b>Power distribution block</b> (Library, JIC/Wiring: <b>Distribution block 3-pole</b> and
+<b>Distribution block outlet 3-pole</b>): the block, tagged PDB101..., takes the three phases
+on its L1, L2 and L3, where the feeder ends; type how many outlets it has a phase in its
+<b>OUTLETS</b> attribute as on its part (1:18, or 18), shown under it. Each outlet belongs to a
+block (placing one asks which, as a contact asks for its coil) and numbers itself on it:
+<b>PDB101-1</b>, <b>PDB101-2</b>..., on any sheet, with a cross-reference to where its block
+is. The wires on an outlet's T1, T2 and T3 take their phase's number with the outlet's letter:
+outlet 1's are 6001A, 6002A, 6003A, outlet 2's 6001B... (each phase keeps its own number).
+More outlets than OUTLETS says are marked red and named on the command line. Placed on a bus
+whose phases are spaced other than 1/2" (its L1 clicked on the top wire), the block or outlet
+is drawn to fit them, as "Distribution block 3-pole (0.75" poles)".</li>
 <li><b>Off-sheet connector</b> (Library, JIC/Wiring): place one where a wire leaves the sheet
 and one where it comes back on another sheet, with the same name. Placing one asks its name:
 Enter takes the one offered (a connector still waiting for its other end, else the next free
@@ -1003,8 +1059,18 @@ order: its size and color (its layer's, or its own), what it lands on, each with
 pin), and the sheets it is on. Off-sheet connectors and source and destination arrows carry a
 wire on, so they are not landings. <b>Terminal strip list...</b> lists every terminal, strip
 by strip in number order, with the wire numbers on its left and right pins and where it is.
-Both are worked out from the drawing each time they open; <b>Save as CSV...</b> writes them
-for Excel or a label printer.</p>
+Both are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
+writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workbook" as the
+file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
+<p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints
+and goes into the PDF with the drawings: pick the bill of materials, wire list, terminal strip
+list, pull list or panel materials, and it comes in as a table (lines and texts on layer
+REPORT) on report sheets just after the sheet shown, as many as it takes ("Bill of materials (1
+of 3)"), in the room the border and title block leave; a cell too long for its column ends in
+"…". A report sheet isn't kept up to date as you draw (that would slow every change on a big
+project): <b>Update report sheets</b> (Sheets menu) draws every report sheet again from the
+drawing as it is, and picking a report that has sheets already draws it again there. One Undo
+each.</p>
 
 <h2>Cables between panels</h2>
 <p><b>Cables between locations...</b> (Sheets menu, Output tab: Reports) lists what has to be
@@ -1026,7 +1092,7 @@ and the terminal's number); where it lands on no terminal there, the devices' pi
 with the wire number on them: shown as BLK, #6001) or <b>Color coded</b>. Type any conductor's
 color or marking in its line (RED, WHT/BLK...); clear it to go back to the default. OK keeps
 it with the project in one step (Edit, Undo takes it back); Cancel keeps nothing.</li>
-<li><b>Save as CSV...</b>: a line per conductor (from, to, cable, type, wire, color or
+<li><b>Save as CSV or Excel...</b>: a line per conductor (from, to, cable, type, wire, color or
 marking, where it lands on each side) for a spreadsheet. <b>Save as PDF...</b>: a page per
 run, with empty <b>Pulled</b> and <b>Landed</b> columns to tick off on the job.</li>
 <li>Lengths are not part of it: they are worked out on the job. A wire landing in one
@@ -1060,16 +1126,20 @@ doesn't set the height. Before the click, type <b>H</b> for the height (inches o
 to start), <b>R</b> for the rotation (degrees), or <b>J</b> (Justify) for where the point sits
 on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR (bottom), or L,
 C, R (on the baseline). All three are kept for the next texts.
-<b>Double-click a text</b> to change its wording, height, angle and justification afterward
-(a new justification moves the text around its insertion point; tick "Keep the text where it
-is", unticked to start, to move only the insertion point instead, which is where it snaps and
-turns around).</td></tr>
+<b>Double-click a text</b> to change its wording where it is: an edit box opens over it,
+Enter keeps what you typed (one Undo), Esc leaves it as it was, and clicking elsewhere keeps it
+too. Right-click it and pick <b>Text properties...</b> for its wording, height, angle and
+justification (a new justification moves the text around its insertion point; tick "Keep the
+text where it is", unticked to start, to move only the insertion point instead, which is where
+it snaps and turns around).</td></tr>
 <tr><td>Multiline text</td><td>MTEXT, MT, NOTE</td><td>One text of several lines (a note): click a
 corner of its box, then the opposite corner (its lines wrap at the box's width), or press
 Enter after the first corner for no wrapping; type the text in the box that opens (Enter starts
 a new line) and click OK. Before the first click, <b>H</b> sets its height (paper inches). It
-is one object: it moves and copies whole. <b>Double-click</b> it to change its text, height,
-wrap width and the point it hangs from (top left ... bottom right). A DXF's or DWG's MTEXT
+is one object: it moves and copies whole. <b>Double-click</b> it to change its text where it
+is (Enter starts a new line there, <b>Ctrl+Enter</b> keeps it, Esc drops it); right-click
+<b>Text properties...</b> changes its text, height, wrap width and the point it hangs from (top
+left ... bottom right). A DXF's or DWG's MTEXT
 comes in as one, and DXF export writes it as MTEXT.</td></tr>
 <tr><td>Move</td><td>MOVE, M</td><td>Select, base point, second point.</td></tr>
 <tr><td>Copy objects</td><td>COPY, CO, CP</td><td>Select, base point, then as many copies as
@@ -1092,7 +1162,16 @@ end it leaves less than 0.01" from a pin or another wire is put on it. One step.
 (R, to start: how many rows, how many columns, the distance between rows (up; negative: down)
 and between columns (across; negative: left)) or round a center (P: the center, how many in
 all, the angle they fill: Enter for 360; each copy turned with it). Copied devices get tags of
-their own, as with Copy; one Undo takes the whole array back.</td></tr>
+their own, as with Copy; one Undo takes the whole array back. The copies stay an array, kept
+with the sheet: Edit array changes it later.</td></tr>
+<tr><td>Edit array</td><td>ARRAYEDIT, AE</td><td>Select any object of an array made with Array
+(Modify menu, Home tab), then type its numbers again, each offered as it is (Enter keeps it):
+rows, columns and the distances between them, or how many round its center and the angle they
+fill. Copies still the array's move to their new places and keep their tags, new ones get tags
+of their own, those past the new count are erased (a wire drawn to one stays where it is,
+unconnected). A copy you moved, turned or changed on its own has left the array and stays as
+it is. <b>U</b> (Unlink) at the first question ends the array: its copies stay, objects of their
+own. One Undo each.</td></tr>
 <tr><td>Offset</td><td>OFFSET, O</td><td>A copy of a line, polyline or rectangle, circle or
 arc, a set distance away: smaller or bigger, on the side you click. Type the distance (Enter:
 the last one), pick the object, click the side; it goes on with the same distance until
@@ -1381,12 +1460,12 @@ are listed by their block's name (a drawing brought in from AutoCAD: its termina
 and drives, counted), or left out with the box unticked. DIN rail and wire duct come last, as
 the stock lengths to buy (Panel materials has their cuts). The lines are numbered: a
 leader's balloon (Leader, B) can show a part's item number on the panel. <b>Save as
-CSV...</b> writes it for a spreadsheet or a purchase order. Give parts their manufacturer and
+CSV or Excel...</b> writes it for a spreadsheet or a purchase order. Give parts their manufacturer and
 catalog number by double-clicking them, or through a part from the library.</li>
 <li><b>Panel materials...</b> (Panel tab: Reports) lists the project's rail and duct per size and part:
 the pieces and their cut lengths, the total length, and how many stock lengths that takes
 (the cuts packed into stock lengths, longest first; saw cuts take no width). <b>Save as
-CSV...</b> writes it for a spreadsheet or a purchase order. The bill of materials takes it
+CSV or Excel...</b> writes it for a spreadsheet or a purchase order. The bill of materials takes it
 in.</li>
 <li><b>Linear dimension</b> (DLI) and <b>Aligned dimension</b> (DAL), Draw menu and the Home,
 Schematic and Panel tabs (Dimensions), measure the true distance, so they're right at any scale; they show inches with two
@@ -1484,8 +1563,11 @@ window more on every side) is made ready too, so panning and zooming out show it
 about a quarter of the window, on a sheet with a scale too (at 1:24 the sheet is 24 times its
 paper size).</li>
 <li><b>Black drawing background</b> (on to start, as in AutoCAD): the sheet is drawn black with
-white lines. Turn it off for a white sheet. <b>Export to PDF...</b> always prints black on
-white either way.</li>
+white lines. Turn it off for a white sheet. <b>Export to PDF...</b> prints black on white
+either way, unless <b>Export to PDF in the layers' colors</b> is ticked.</li>
+<li><b>Export to PDF in the layers' colors</b> (off to start): Export to PDF... draws each layer
+in its color on white paper (a white or black layer in black), as Print does with "the layers'
+colors".</li>
 <li><b>Theme</b>: Light, Dark or Same as system: the menus, ribbon and panels. Light stays
 light and Dark stays dark whatever Windows is set to; Same as system follows Windows, also when
 it switches while KanzonasCAD is open.</li>
@@ -1555,6 +1637,21 @@ command line says so). Lines come in as plain lines, not wires, and symbols as t
 symbols. Drag a PDF from Explorer onto the drawing to bring it in where you let go (the same
 window asks for the page and size first). A PDF that asks for a password to open can't be
 read.</li>
+<li><b>Import picture or SVG into this sheet...</b> (File menu, Output tab), or a picture or
+SVG dragged onto the drawing. A <b>picture</b> (PNG, JPEG, BMP or GIF: a company logo, a drawing
+to trace over) is kept in the project itself, so the project carries it wherever it goes and the
+picture file isn't needed again. It comes in 2" wide on paper, in the middle of the view (or
+where it was dropped), selected; drag a corner grip to size it (it keeps its shape, from the
+corner across), or move, copy, rotate and scale it like anything else. It is drawn under the
+lines, printed and put in PDFs; mirrored, it lands where the mirror puts it but isn't flipped.
+To have a logo on every sheet, put it in the title block (Edit title block). Exported to DXF, a
+picture goes out as an AutoCAD image with its file beside the DXF (sheet-picture-1.png), as
+AutoCAD keeps them; a DXF with its pictures beside it brings them back in. An <b>SVG</b> comes
+in as real lines, polylines, circles and texts you can snap to and edit: its shapes, paths
+(curves and arcs as short straight pieces) and texts, at the size the SVG says (or 96 to the
+inch); colors, fills, gradients and fonts are left out. An SVG too detailed to be worth editing
+(more than 20,000 pieces or 5,000 elements, or over 5 MB) isn't brought in, and the message
+says why: save it as a PNG to bring it in as a picture.</li>
 <li><b>Blocks stay blocks.</b> Opening or importing a DXF or DWG keeps each named block as a
 block of the project: every copy (a terminal, an I/O module, a drive, the border) is one
 object you click, move, copy, label (Footprint label) and list, placed where the other program
@@ -1613,8 +1710,11 @@ and flipped as it is), with its tag, description, maker, catalog number, locatio
 as <b>attributes</b>: those shown on the sheet where KanzonasCAD shows them, the others hidden,
 so AutoCAD's attribute editor and data extraction find all of them. Layers keep their names and
 colors; wires go out as polylines on their layers. AutoCAD opens the DXF and can save it as a
-DWG. A DXF exported this way opens again in KanzonasCAD with the same symbols, pins and
-attributes. To have everything broken into plain lines and texts instead, as before version
+DWG. A flipped symbol's own texts (the TR of a timer coil, a module's point names) stay
+readable in AutoCAD: AutoCAD would draw the texts inside a flipped block backwards, so in a
+block placed flipped they go out as locked attributes (KZTEXT1...) placed on each copy as
+KanzonasCAD draws them. A DXF exported this way opens again in KanzonasCAD with the same
+symbols, pins and attributes. To have everything broken into plain lines and texts instead, as before version
 0.20, untick <b>Export DXF with symbols and footprints as blocks</b> in Edit &gt; Options...,
 General.</li>
 <li><b>Backups</b>: each Save first keeps the version before it in a folder beside the project,
@@ -1626,7 +1726,8 @@ folder (never over your own file; in the portable version, <code>data\\recovery<
 the program). If KanzonasCAD doesn't close normally (a crash, a power
 cut), it offers to recover them the next time it starts.</li>
 <li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
-black on white (layer colors are for the screen).</li>
+black on white, or in the layers' colors with Export to PDF in the layers' colors ticked in Edit
+&gt; Options..., General.</li>
 </ul>
 
 <h2>Printing</h2>
@@ -1756,7 +1857,10 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 there; a chapter's sections under it) and a <b>search</b> box over it. Type in it: the chapters
 narrow to those that mention it, with how many times, every match lights up, and
 <b>Next</b> and <b>Previous</b> (Enter and Shift+Enter) go from one to the next ("3 of 17").
-<b>About KanzonasCAD</b> shows the logo, the version and where the source code is.</p>
+<b>About KanzonasCAD</b> shows the logo, the version, the license and where the source code is.
+KanzonasCAD is free to use, at home or at work, under the PolyForm Shield License 1.0.0
+(LICENSE.txt in the program's folder). Versions 0.20 and earlier were released under the MIT
+License.</p>
 
 <h2>Installing</h2>
 <p>On Windows, <b>KanzonasCAD-v&lt;version&gt;-setup.exe</b> from the Releases page installs

@@ -53,6 +53,25 @@ class InstancesTest(unittest.TestCase):
         c.asked.connect(lambda: c.answer(True, ["/y.kzcad"]))
         self.assertEqual(a.close_others(5000), (1, 1, ["/y.kzcad"]))
 
+    def test_answers_read_behind_slow_work(self):
+        # (a slow event in the queue, as an earlier test can leave in a full run: the wait ran
+        # out before the answers were read, and the copy that answered "kept" counted as gone,
+        # its note removed; CI, Nov 2026)
+        from PySide6.QtCore import QTimer
+        a, b, c = self.make(91001), self.make(91002), self.make(91003)
+        b.asked.connect(lambda: b.answer(False))
+        c.asked.connect(lambda: c.answer(True, ["/y.kzcad"]))
+        QTimer.singleShot(0, lambda: time.sleep(1.5))
+        self.assertEqual(a.close_others(1000), (1, 1, ["/y.kzcad"]))
+        self.assertEqual(sorted(a.others()), [91002, 91003])
+
+    def test_a_copy_that_never_answers_stays_open(self):
+        # (connected but silent past the wait: running, so counted as staying open, its note
+        # kept; the update doesn't go ahead over it)
+        a, b = self.make(91001), self.make(91002)
+        self.assertEqual(a.close_others(300), (0, 1, []))
+        self.assertEqual(a.others(), [91002])
+
     def test_a_note_nothing_answers_is_removed(self):
         a = self.make(91001)
         with open(os.path.join(self.folder, "91009"), "w") as f:

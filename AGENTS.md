@@ -61,8 +61,9 @@ it. When they pull against each other, say so and ask; don't trade one away quie
   (`-t .` loads `tests/__init__.py`, which tears Qt down in order at exit).
 - `QT_QPA_PLATFORM=offscreen python -m kanzonascad --selftest selftest.log` must exit 0.
 - New dependencies: add the minimum to `requirements.txt` and the exact version and license
-  to `constraints.txt`. Keep the license of every dependency compatible with MIT (no GPL or
-  AGPL libraries: KanzonasCAD does not use PyMuPDF).
+  to `constraints.txt`. Keep the license of every dependency compatible with KanzonasCAD's
+  (LICENSE): a permissive license such as MIT, BSD or Apache, or the LGPL for a library used
+  as it is; no GPL or AGPL libraries (KanzonasCAD does not use PyMuPDF).
 
 ## The battery
 `tests/battery.py` is the exhaustive battery (with `tests/battery_checks.py`):
@@ -206,7 +207,7 @@ a command with the snaps on and the screen drawn < 30 ms (zoomed out and in), pe
 < 800 MB. Typical today: 0.6 s, 0.2 s, 0.4 s, 0.06 s, 0.5 ms, a few ms, 180 MB.
 
 On a sheet of notes ("speed budget (notes, hatches, leaders, imports)": 2,000 hatches with
-their outlines, 2,000 texts, 1,000 leaders, 1,000 multi-line notes): added and drawn < 2 s, ten
+their outlines, 2,000 texts, 1,000 leaders, 1,000 multi-line notes, 1,000 pictures): added and drawn < 2 s, ten
 zoomed repaints < 2 s, 1,000 of them moved < 1 s, undone < 1 s; a DXF of 1,000 block
 references with attributes, 200 dimensions and 500 hatches imported < 4 s (its blocks kept as
 blocks); the bill of materials of its parts < 0.5 s. Typical today: 0.7, 0.6, 0.2, 0.2, 0.7 s,
@@ -225,8 +226,7 @@ must change that key (an edit does).
 The order of work and the owner's decisions are in docs/ROADMAP.md: read it before starting a
 feature, and update it when a decision changes.
 
-## Credits
-KanzonasCAD's electrical features (cross-references, device tags, terminals, reports) will
-draw on ideas and, where it fits, code from KatieCAD (https://github.com/Merecete/KatieCAD,
-MIT License, Copyright (c) 2026 Merecete). Any code taken from it keeps its copyright notice
-in the file it lands in and is listed in NOTICE.md.
+## Our own code
+KanzonasCAD's code is written here (the owner's decision, Nov 2026). Other programs,
+KatieCAD included, may inspire a feature, but no code is copied from them. The libraries it is built on
+(constraints.txt) and their notices are listed in NOTICE.md.

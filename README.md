@@ -2,7 +2,7 @@
 
 ![KanzonasCAD](assets/kanzonascad-logo.png)
 
-A free, open-source electrical CAD program for Windows and Linux (macOS planned), for people
+A free electrical CAD program for Windows and Linux (macOS planned), for people
 who know AutoCAD but want fewer commands, fewer settings and fewer surprises.
 
 **Made for Linux as much as Windows.** The big electrical CAD programs run on Windows only.
@@ -257,4 +257,7 @@ Self-test: `py -m kanzonascad --selftest selftest.log` (exit code 0 = passed).
 Tests: `py -m unittest discover -s tests -p "test_*.py" -t .`
 Rules for contributors (people and AI agents): [AGENTS.md](AGENTS.md).
 
-MIT License. See [NOTICE.md](NOTICE.md) for the libraries it is built on.
+Licensed under the PolyForm Shield License 1.0.0 (see [LICENSE](LICENSE)): free to use,
+including at work and for paid projects, and the source stays open to read. Versions 0.20
+and earlier were released under the MIT License and remain available under it. See
+[NOTICE.md](NOTICE.md) for the libraries it is built on.

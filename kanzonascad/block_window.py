@@ -227,9 +227,12 @@ class BlockEditing:
         self._say(msg, 12000)
         return d
 
-    def save_block(self):
+    def save_block(self, *, close=True):
         """Save block: the block editor's drawing back into the library; then the copies in
-        the project it was opened from updated if you say so. True when saved."""
+        the project it was opened from updated if you say so, and the block's tab closed,
+        back to the drawing it was opened from (the owner, 0.21: "the tab should auto-close
+        after saving"). close=False: the tab stays (closing it asked to save). True when
+        saved. (Keyword only: a menu action's triggered(checked) never sets it.)"""
         d = self.doc()
         if not is_block_doc(d):
             self._say("Save block works in a block's tab (Edit block... opens one)")
@@ -259,6 +262,10 @@ class BlockEditing:
         self._say(msg)
         src = d.block_source if self._is_open(d.block_source) else None
         self._offer_update(src, defn, defn.name, res.pin_map)
+        if close and self._is_open(d):
+            self.close_tab(self.tabs.indexOf(d))
+            if src is not None and self.tabs.indexOf(src) >= 0:
+                self.tabs.setCurrentWidget(src)
         return True
 
     # ---- Pins... -----------------------------------------------------------------------
@@ -371,7 +378,7 @@ class BlockEditing:
     def save_block_as(self):
         """Save block as...: the block editor's drawing saved to your library under a new
         name (its catalog number left blank); the block it was opened from stays as it was,
-        and this tab goes on editing the new one. True when saved."""
+        and the tab closes as after Save block. True when saved."""
         d = self.doc()
         if not is_block_doc(d):
             self._say("Save block as works in a block's tab (Edit block... opens one)")
@@ -402,7 +409,7 @@ class BlockEditing:
         if r == QMessageBox.Cancel:
             return False
         if r == QMessageBox.Save:
-            return self.save_block()
+            return self.save_block(close=False)        # (closing it already)
         return True
 
     # ---- the copies in a project -------------------------------------------------------------

@@ -219,7 +219,11 @@ class MainWindow(BlockEditing, QMainWindow):
         from .library_panel import LibraryPanel
         from .paths import follow_drive
         self.library = Library(follow_drive(self.settings.value("library_folder", "") or "")
+                               or None,
+                               follow_drive(self.settings.value("library_folder2", "") or "")
                                or None)
+        self.library.save_second = self.library.second is not None and \
+            self.settings.value("library_save_second", False) in (True, "true", "1", 1)
         self.library_panel = LibraryPanel(self.library)
         self.library_panel.insertRequested.connect(self.insert_block)
         self.library_panel.propertiesRequested.connect(self.block_properties)
@@ -329,6 +333,10 @@ class MainWindow(BlockEditing, QMainWindow):
           icon="pdf_in", label="Import PDF",
           tip="Bring in the lines and text of a PDF page (one made by a CAD program, or "
               "printed to PDF): drag a PDF onto the drawing to put it where you let go")
+        A("import_picture", "Import pict&ure or SVG into this sheet...",
+          lambda: self.import_picture(), icon="pdf_in", label="Picture or SVG",
+          tip="A picture (PNG, JPEG...: a logo, a drawing to trace over), kept in the project, "
+              "or a simple SVG's lines and texts; drag one onto the drawing to put it there")
         A("export_dxf", "Export this sheet to &DXF...", self.export_dxf, icon="dxf_out",
           label="Sheet to DXF")
         A("export_dxf_all", "Export all sheets to DX&F...", self.export_dxf_all, icon="dxf_out",
@@ -404,6 +412,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("scale", "&Scale", C.ScaleCmd, "Scale")
         self._cmd_act("mirror", "M&irror", C.MirrorCmd, "Mirror")
         self._cmd_act("array", "Arra&y", C.ArrayCmd, "Array")
+        self._cmd_act("array_edit", "Edit arra&y", C.ArrayEditCmd, "Edit array")
         self._cmd_act("offset", "O&ffset", C.OffsetCmd, "Offset")
         self._cmd_act("number", "&Number texts", C.NumberCmd, "Number texts")
         self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
@@ -454,6 +463,18 @@ class MainWindow(BlockEditing, QMainWindow):
           icon="terminal_list", label="Terminals",
           tip="Every terminal strip, terminal by terminal, with the wires on each side and "
               "where it is (save as CSV)")
+        A("report_sheet", "Report s&heet...", lambda: self.report_sheet(), icon="bom",
+          label="Report sheet",
+          tip="A report (bill of materials, wire list, terminals, pull list, panel materials) "
+              "drawn as a table on sheets of the project, so it prints with the drawings")
+        A("report_update", "Update report sheets", lambda: self.update_report_sheets(),
+          icon="bom", label="Update reports",
+          tip="Every report sheet drawn again from the drawing as it is now")
+        A("io_list", "Import I/O &list...", lambda: self.import_io_list(), icon="pdf_in",
+          label="I/O list",
+          tip="An I/O list (CSV or Excel: Slot, Catalog, Point, Address, Tag, Description) "
+              "brought in as its PLC modules, each on a sheet, every point's tag and "
+              "description beside its terminal")
         A("materials", "Panel &materials...", self.show_materials, icon="materials",
           label="Materials",
           tip="The DIN rail and wire duct this project takes: lengths, stock pieces and cuts "
@@ -545,8 +566,27 @@ class MainWindow(BlockEditing, QMainWindow):
           label="Library")
         A("new_part", "New &part...", lambda: self.library_panel.edit_part(new=True),
           icon="part", label="New part")
+        A("assign_part", "Assign pa&rt...", lambda: self.assign_part(), icon="part",
+          label="Assign part",
+          tip="Give every selected device a part from your library (maker, catalog number, "
+              "description) in one go: those using the part's symbol take it")
+        A("save_as_part", "Save to library as part", lambda: self.save_as_part(), icon="part",
+          label="Save as part",
+          tip="The selected device's maker, catalog number and description, its symbol and its "
+              "footprint, saved to your library as a part to use again")
         A("library_folder", "Library &folder...", self.choose_library_folder, icon="open",
           label="Library folder")
+        A("library_folder2", "Second library fol&der...", self.choose_second_library,
+          icon="open", label="Second library",
+          tip="A second library folder, searched with the first (one shared in a synced "
+              "folder, one of your own, say): Cancel in the folder window takes it away")
+        A("library_save2", "Save new blocks and parts to the second library",
+          self.toggle_save_second, checkable=True, label="Save to second")
+        a2 = self.acts["library_save2"]
+        a2.blockSignals(True)
+        a2.setChecked(self.library.save_second)
+        a2.blockSignals(False)
+        a2.setEnabled(self.library.second is not None)
         A("block_props", "Block p&roperties...", lambda: self.block_properties(),
           icon="block_props", label="Block properties",
           tip="The selected block's name, category, description, manufacturer, family and "
@@ -562,6 +602,11 @@ class MainWindow(BlockEditing, QMainWindow):
           label="Add pin",
           tip="Add a pin to the block open in this tab: click where it goes, then its name "
               "(ADDPIN, PIN, AP)")
+        A("add_attr", "Add a&ttribute", lambda: self._run(C.AddAttrCmd), icon="add_attr",
+          label="Add attribute",
+          tip="Add an attribute to the block open in this tab (HP, VOLTS, FLA...): its name, "
+              "then where its value shows; each copy gets its own value in Properties... "
+              "(ADDATTR, ATTDEF, ATT, AA)")
         A("pins", "P&ins...", self.pins_dialog, icon="pins", label="Pins",
           tip="The pins of the block open in this tab: their names, order and places; rename, "
               "reorder, move, delete or find one")
@@ -646,8 +691,8 @@ class MainWindow(BlockEditing, QMainWindow):
             else:
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
-        for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "offset", "erase",
-                  "trim", "number", None,
+        for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "array_edit",
+                  "offset", "erase", "trim", "number", None,
                   "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "dim_units", "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
@@ -662,7 +707,8 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
-                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "materials", None,
+                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "materials",
+                  "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
                   "layers", "wire_layers",
@@ -671,8 +717,9 @@ class MainWindow(BlockEditing, QMainWindow):
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
-                  "save_block_as", "add_pin", "pins", "update_blocks", None,
-                  "new_part", "library_folder"):
+                  "save_block_as", "add_pin", "pins", "add_attr", "update_blocks", None,
+                  "new_part", "assign_part", "save_as_part", "library_folder",
+                  "library_folder2", "library_save2"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Window")
         for k in ("new_window", "move_window", None, "close_window"):
@@ -711,8 +758,8 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
                                a["arc"], a["text"], a["mtext"], a["hatch"], a["number"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
-                                 a["stretch"], a["array"], a["offset"], a["erase"],
-                                 a["trim"]]),
+                                 a["stretch"], a["array"], a["array_edit"], a["offset"],
+                                 a["erase"], a["trim"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
             # (the owner, 0.17.4: "I also need the measuring tool repeated in home and
             # schematic tabs")
@@ -766,7 +813,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Arrange", "large", [a["align_obj"], a["distribute"]]),
             ("Reports", "large", [a["materials"]]),
-            ("Parts", "small", [a["new_part"]]),
+            ("Parts", "small", [a["new_part"], a["assign_part"], a["save_as_part"]]),
             ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
             ("Settings", "small", [a["panel_settings"]]),
@@ -782,7 +829,7 @@ class MainWindow(BlockEditing, QMainWindow):
         r.add_tab("Output", [
             ("Print", "large", [a["print"]]),
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
-            ("Import", "large", [a["import_dxf"], a["import_pdf"]]),
+            ("Import", "large", [a["import_dxf"], a["import_pdf"], a["import_picture"]]),
             ("Reports", "large", [a["bom"], a["cables"], a["wire_list"], a["terminal_list"],
                                   a["materials"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
@@ -801,6 +848,7 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Block", "large", [a["save_block"], a["save_block_as"], a["block_props"],
                                 a["dup_block"]]),
             ("Pins", "large", [a["add_pin"], a["pins"]]),
+            ("Attributes", "large", [a["add_attr"]]),
             ("Library", "large", [a["edit_block"], a["update_blocks"]]),
         ])
         tb = self.ribbon_bar = QToolBar("Ribbon")
@@ -998,7 +1046,7 @@ class MainWindow(BlockEditing, QMainWindow):
                "template_path": self.settings.value("template_path", "") or "",
                "backups_keep": self.backups_keep(),
                "autosave_minutes": self.autosave_minutes(),
-               "dxf_blocks": self.dxf_blocks()}
+               "dxf_blocks": self.dxf_blocks(), "pdf_colors": self.pdf_colors()}
         got = dialogs.options_dialog(self, cur, self.view())
         if got is None:
             return False
@@ -1018,6 +1066,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self.settings.setValue("backups_keep", int(got["backups_keep"]))
         self.settings.setValue("autosave_minutes", int(got["autosave_minutes"]))
         self.settings.setValue("dxf_blocks", bool(got.get("dxf_blocks", True)))
+        self.settings.setValue("pdf_colors", bool(got.get("pdf_colors", False)))
         self._set_autosave_timer()
         if got.get("drafting"):
             self._store_drafting(self.view())
@@ -1040,16 +1089,21 @@ class MainWindow(BlockEditing, QMainWindow):
         if getattr(d, "block_session", None) is not None:
             return
         dup_tags, dup_nums = dupes.find(d.project)
-        now = {("tag", t) for t in dup_tags} | {("num", n) for n in dup_nums}
+        over = dupes.over_outlets(d.project)
+        now = {("tag", t) for t in dup_tags} | {("num", n) for n in dup_nums} | {
+            ("over", t, tuple(sorted(e.attrs["OUTLET"] for _s, e in g[1])))
+            for t, g in over.items()}
         before = getattr(d, "_dupes_seen", None)
         d._dupes_seen = now
         if before is None:
             before = set()              # (a project opened with some: said once)
         new = now - before
         if new:
+            newer = {k[1] for k in new if k[0] == "over"}
             text = dupes.describe(d.project,
                                   {t: g for t, g in dup_tags.items() if ("tag", t) in new},
-                                  {n: g for n, g in dup_nums.items() if ("num", n) in new})
+                                  {n: g for n, g in dup_nums.items() if ("num", n) in new},
+                                  {t: g for t, g in over.items() if t in newer})
             self._say(text + " (marked red on the drawing)", 10000)
 
     def _tab_changed(self, _i):
@@ -1515,6 +1569,48 @@ class MainWindow(BlockEditing, QMainWindow):
         self._dxf_report(rep)
         d.view.zoom("extents")
 
+    def import_picture(self, path=None, at=None):
+        """Import picture or SVG into this sheet...: a picture kept in the project, 2" wide on
+        paper, or an SVG's lines and texts (svg_import.py), in the middle of the view (or at
+        at: where it was dropped), selected; one undoable step. The ids added ([] when not)."""
+        d = self.doc()
+        if d is None:
+            return []
+        if path is None:
+            path, _f = QFileDialog.getOpenFileName(
+                self, "Import picture or SVG", self._import_dir(),
+                "Pictures and SVG (*.png *.jpg *.jpeg *.bmp *.gif *.svg);;SVG (*.svg)")
+            if not path:
+                return []
+        self.settings.setValue("import_dir", os.path.dirname(path))
+        v = d.view
+        if at is None:
+            at = v.to_world(v.rect().center())
+        from . import svg_import
+        try:
+            if path.lower().endswith(".svg"):
+                rep = fileio.import_dxf(d.project, v.sheet(), path, at)
+                what = "%d line(s) and shape(s) and text(s) from the SVG" % rep["count"]
+            else:
+                rep = fileio.import_picture(d.project, v.sheet(), path, at)
+                what = "the picture (kept in the project; drag a corner grip to size it)"
+        except svg_import.TooComplex as ex:
+            QMessageBox.information(self, APP, "%s is too complex to bring in as lines (%s). "
+                                    "Simple drawings (a logo, an outline) come in; save this "
+                                    "one as a PNG to bring it in as a picture."
+                                    % (os.path.basename(path), ex))
+            return []
+        except (OSError, ValueError) as ex:
+            QMessageBox.warning(self, APP, "Couldn't read %s:\n%s" % (path, ex))
+            return []
+        v.set_selection(set(rep["ids"]))
+        msg = "Imported %s" % what
+        if rep["skipped"]:
+            msg += "; left out: " + ", ".join("%d %s" % (n, k)
+                                              for k, n in sorted(rep["skipped"].items()))
+        self._say(msg)
+        return rep["ids"]
+
     def ask_pdf_import(self, path, pages, k):
         """The Import PDF window: {"page", "scale", "filled"} or None (a test replaces it)."""
         from .dialogs import pdf_import_dialog
@@ -1571,11 +1667,12 @@ class MainWindow(BlockEditing, QMainWindow):
         self.statusBar().showMessage(msg, 8000)
 
     # ---- files dragged in (Explorer, a file manager) ----------------------------------------
-    DROP_TYPES = (".dxf", ".dwg", ".pdf", M.FILE_SUFFIX)
+    DROP_TYPES = (".dxf", ".dwg", ".pdf", M.FILE_SUFFIX) + fileio.PICTURE_TYPES + (".svg",)
 
     @classmethod
     def _dropped_paths(cls, mime):
-        """The local files of a drag that KanzonasCAD takes (DXF, DWG, projects)."""
+        """The local files of a drag that KanzonasCAD takes (DXF, DWG, PDF, pictures, SVG,
+        projects)."""
         if mime is None or not mime.hasUrls():
             return []
         out = []
@@ -1626,6 +1723,13 @@ class MainWindow(BlockEditing, QMainWindow):
         d = self.doc()
         imported = []
         for path in paths:
+            if path.lower().endswith(fileio.PICTURE_TYPES + (".svg",)):
+                if d is not None:
+                    imported += self.import_picture(path, at)
+                else:
+                    QMessageBox.information(self, APP, "Open or start a project first: a "
+                                            "picture is brought into a sheet (%s)" % path)
+                continue
             if path.lower().endswith(".pdf"):
                 # (a PDF goes into the drawing shown: where it was let go, or as the page was)
                 if d is not None:
@@ -1691,6 +1795,89 @@ class MainWindow(BlockEditing, QMainWindow):
                 "in." % (rep["count"], ", ".join("%s (%d)" % (_kind_name(t), n)
                                                   for t, n in sorted(left.items()))))
 
+    # ---- parts on devices (partsassign.py) -------------------------------------------------
+    def ask_part(self, parts, brand):
+        """The Assign part window: (part id, brand) or None (a test replaces it)."""
+        from .dialogs import assign_part_dialog
+        return assign_part_dialog(self, parts, brand)
+
+    def assign_part(self):
+        """Assign part...: a part from the library on every selected device using its
+        symbol, one undoable step. How many took it."""
+        from . import partsassign as PA
+        d = self.doc()
+        if d is None:
+            return 0
+        s = d.view.sheet()
+        ents = PA.devices(s, d.view.sel)
+        if not ents:
+            self._say("Assign part: select the devices first (contactors, relays...)")
+            return 0
+        brand = d.project.settings.get("brand", "") or ""
+        parts = PA.candidates(self.library, ents, brand)
+        if not parts:
+            self._say("No part in your library uses %s yet (Library > New part..., or Save "
+                      "to library as part)" % ", ".join(sorted({e.block for e in ents})))
+            return 0
+        got = self.ask_part(parts, brand)
+        if got is None:
+            return 0
+        pid, brand = got
+        part = next((p for p in parts if p.id == pid), None)
+        if part is None:
+            return 0
+        with d.project.edit("Assign part") as ed:
+            if brand != (d.project.settings.get("brand", "") or ""):
+                ed.project_settings({"brand": brand})
+            n = PA.assign(ed, d.project, s, ents, part)
+        left = len(ents) - n
+        self._say("%s on %d device(s)%s" % (part.label(), n,
+                                             "; %d use another symbol and kept theirs" % left
+                                             if left else ""))
+        return n
+
+    def save_as_part(self):
+        """Save to library as part: the one selected device as a part in the library (its
+        symbol and footprint saved there too when the library hasn't got them)."""
+        from . import partsassign as PA
+        d = self.doc()
+        if d is None:
+            return None
+        ents = PA.devices(d.view.sheet(), d.view.sel)
+        if len(ents) != 1:
+            self._say("Save to library as part: select one device")
+            return None
+        dev = ents[0]
+        part, why = PA.part_from(d.project, dev)
+        if part is None:
+            self._say("Save to library as part: " + why)
+            return None
+        try:
+            for kind, name in (("symbol", part.symbol), ("footprint", part.footprint)):
+                if name and self.library.get(kind, name) is None:
+                    defn = d.project.blocks.get(name)
+                    if defn is not None:
+                        self.library.save_block(defn)
+            same = [p for p in self.library.parts()
+                    if (p.manufacturer.lower(), p.catalog.lower()) ==
+                    (part.manufacturer.lower(), part.catalog.lower())]
+            if same:
+                part.id = same[0].id    # (that part again: updated, not a second one)
+            self.library.save_part(part)
+        except OSError as ex:
+            QMessageBox.warning(self, APP, "Couldn't save the part to the library (%s):\n%s"
+                                % (self.library.folder, ex))
+            return None
+        self.library_panel.refresh()
+        self._say("Saved %s to your library as a part%s" % (
+            part.label(), " (with its footprint %s)" % part.footprint if part.footprint else ""))
+        return part
+
+    def pdf_colors(self):
+        """Export to PDF in the layers' colors (Options; off to start: black on white)."""
+        v = self.settings.value("pdf_colors", False)
+        return v not in (False, "false", "0", 0, None)
+
     def dxf_blocks(self):
         """Export DXF with symbols and footprints as blocks (Options; on to start, 0.20)."""
         v = self.settings.value("dxf_blocks", True)
@@ -1744,7 +1931,7 @@ class MainWindow(BlockEditing, QMainWindow):
         if not self._fits_or_go_on(d.project, d.project.sheets, "Export"):
             return
         try:
-            n = fileio.export_pdf(d.project, path)
+            n = fileio.export_pdf(d.project, path, mono=not self.pdf_colors())
         except Exception as ex:
             QMessageBox.warning(self, APP, "Couldn't write %s:\n%s" % (path, ex))
             return
@@ -1905,6 +2092,28 @@ class MainWindow(BlockEditing, QMainWindow):
         return dialogs.mtext_text(self, text)
 
     def edit_text(self, ent):
+        """A double-click on a text or a multi-line note: edited where it is (text_edit.py);
+        leaders and dashed boxes open their windows."""
+        v = self.view()
+        if v is None:
+            return
+        if isinstance(ent, (M.Text, M.MText)):
+            from . import text_edit
+            sheet = v.sheet()
+
+            def done(text, ent=ent, sheet=sheet):
+                now = sheet.entities.get(ent.id)
+                new = text_edit.changed(now, text) if now is not None else None
+                if new is not None:
+                    with v.project.edit("Edit text") as ed:
+                        ed.change(sheet, new)
+            v.in_place = text_edit.InPlace(v, ent, done)
+            return
+        self.text_properties(ent)
+
+    def text_properties(self, ent):
+        """Text properties...: a text's wording, height, angle and justification in its
+        window (a multi-line note's, a leader's, a dashed box's)."""
         v = self.view()
         if v is None:
             return
@@ -1948,6 +2157,10 @@ class MainWindow(BlockEditing, QMainWindow):
                 lm = m.addMenu("Footprint label")
                 for k in self.LABEL_KEYS:
                     lm.addAction(a[k])
+            texts = [v.sheet().entities[i] for i in v.sel if i in v.sheet().entities and
+                     isinstance(v.sheet().entities[i], (M.Text, M.MText, M.Leader, M.DashBox))]
+            if len(texts) == 1:
+                m.addAction("Text properties...", lambda t=texts[0]: self.text_properties(t))
             m.addAction("Deselect all", lambda: v.set_selection(set()))
         m.addSeparator()
         m.addAction(a["select_all"])
@@ -2570,6 +2783,45 @@ class MainWindow(BlockEditing, QMainWindow):
         self.library_panel.refresh()
         self.statusBar().showMessage("Library: %s" % folder, 5000)
 
+    def ask_second_library(self):
+        """The second library's folder, "" to take it away, or None (a test replaces it)."""
+        folder = QFileDialog.getExistingDirectory(
+            self, "Second library folder (Cancel: none)",
+            self.library.second.folder if self.library.second else self.library.folder)
+        if folder:
+            return folder
+        if self.library.second is None:
+            return None
+        r = QMessageBox.question(self, APP, "Take away the second library (%s)? Its files stay "
+                                 "where they are." % self.library.second.folder)
+        return "" if r == QMessageBox.Yes else None
+
+    def choose_second_library(self):
+        """Second library folder...: a second library searched with the first."""
+        folder = self.ask_second_library()
+        if folder is None:
+            return
+        if folder and os.path.normcase(os.path.abspath(folder)) == \
+                os.path.normcase(os.path.abspath(self.library.folder)):
+            self._say("That is the first library's folder already")
+            return
+        self.library.set_second(folder or None)
+        self.settings.setValue("library_folder2", folder)
+        if not folder:
+            self.settings.setValue("library_save_second", False)
+        self.acts["library_save2"].setChecked(self.library.save_second)
+        self.acts["library_save2"].setEnabled(self.library.second is not None)
+        self.library_panel.refresh()
+        self._say("Second library: %s" % folder if folder else "No second library")
+
+    def toggle_save_second(self, on):
+        """Save new blocks and parts to the second library (a block or part already in one
+        is always saved back where it is)."""
+        self.library.save_second = bool(on) and self.library.second is not None
+        self.settings.setValue("library_save_second", self.library.save_second)
+        self._say("New blocks and parts go to the %s library" % (
+            "second" if self.library.save_second else "first"))
+
     def insert_block(self, defn, attrs):
         v = self.view()
         if v is None:
@@ -2625,6 +2877,82 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         if dialogs.cables_dialog(self, v.project, self._last_dir()):
             self._say("Cables between locations: kept with the project (Undo takes it back)")
+
+    def ask_report(self, titles):
+        """Which report to draw on sheets: its title, or None (a test replaces it)."""
+        from PySide6.QtWidgets import QInputDialog
+        got, ok = QInputDialog.getItem(self, "Report sheet", "Draw on sheets of the project:",
+                                       titles, 0, False)
+        return got if ok else None
+
+    def report_sheet(self, key=None):
+        """Report sheet...: a report drawn as a table on report sheets (after the sheet shown;
+        a report that has sheets already: drawn again there), one step. Its sheets."""
+        from . import report_sheets as RS
+        v = self.view()
+        if v is None:
+            return []
+        if key is None:
+            names = RS.kinds()
+            got = self.ask_report(list(names.values()))
+            key = next((k for k, t in names.items() if t == got), None)
+            if key is None:
+                return []
+        p = v.project
+        with p.edit("Report sheet") as ed:
+            made = RS.update(ed, p, key, v.sheet())
+        self._fill_sheets()
+        if made:
+            v.show_sheet(made[0].id)
+        self._say("%s on %d sheet(s): Update report sheets draws them again after changes"
+                  % (RS.kinds()[key], len(made)))
+        return made
+
+    def update_report_sheets(self):
+        """Update report sheets: every report sheet drawn again from the drawing, one step."""
+        from . import report_sheets as RS
+        v = self.view()
+        if v is None:
+            return 0
+        p = v.project
+        if not any(s.report for s in p.sheets):
+            self._say("No report sheets yet (Sheets > Report sheet...)")
+            return 0
+        with p.edit("Update report sheets") as ed:
+            n = RS.update_all(ed, p)
+        self._fill_sheets()
+        self._say("%d report(s) drawn again" % n)
+        return n
+
+    def import_io_list(self, path=None):
+        """Import I/O list...: an I/O list's modules on sheets after the sheet shown, one step
+        (io_list.py). The sheets made."""
+        from . import io_list
+        v = self.view()
+        if v is None:
+            return []
+        if path is None:
+            path, _f = QFileDialog.getOpenFileName(
+                self, "Import I/O list", self._import_dir(),
+                "I/O lists (*.csv *.xlsx);;CSV (*.csv);;Excel workbook (*.xlsx)")
+            if not path:
+                return []
+        p = v.project
+        try:
+            with p.edit("Import I/O list") as ed:
+                made, problems = io_list.import_list(ed, p, self.library, path, v.sheet())
+        except (OSError, ValueError) as ex:
+            QMessageBox.warning(self, APP, "Couldn't read %s:\n%s" % (path, ex))
+            return []
+        self._fill_sheets()
+        if made:
+            v.show_sheet(made[0].id)
+        msg = "%d module(s) brought in on %d sheet(s)" % (len(made), len(made))
+        if problems:
+            msg += "; left out: " + "; ".join(problems[:6]) + (
+                " and %d more" % (len(problems) - 6) if len(problems) > 6 else "")
+        self._say(msg, 12000)
+        return made
 
     def show_wire_list(self):
         v = self.view()
@@ -3271,15 +3599,15 @@ class MainWindow(BlockEditing, QMainWindow):
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
-                  "scale", "mirror", "array", "offset", "dash_box", "number", "erase", "trim",
-                  "paste",
+                  "scale", "mirror", "array", "array_edit", "offset", "dash_box", "number",
+                  "erase", "trim", "paste",
                   "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot",
                   "clean_wires", "del_comp", "wire_layers"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())
         a["save_block"].setEnabled(in_block)
         a["save_block"].setVisible(in_block)
-        for k in ("save_block_as", "add_pin", "pins"):
+        for k in ("save_block_as", "add_pin", "pins", "add_attr"):
             a[k].setEnabled(in_block)
             a[k].setVisible(in_block)
         a["undo"].setEnabled(bool(has and p.undo_stack))
@@ -3783,7 +4111,7 @@ class MainWindow(BlockEditing, QMainWindow):
         lay.addWidget(logo)
         from . import paths
         text = QLabel("Version %s%s. Free electrical CAD for Windows and Linux.<br><br>"
-                      "Free software under the MIT License.<br>"
+                      "Free to use under the PolyForm Shield License 1.0.0 (LICENSE.txt beside the program).<br>"
                       "Source code and downloads: "
                       "<a href='https://github.com/keithlyding/KanzonasCAD'>"
                       "github.com/keithlyding/KanzonasCAD</a>"

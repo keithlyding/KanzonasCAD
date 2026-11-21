@@ -654,6 +654,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             v.current_layer = name
             want = name if name.startswith("WIRE") else "WIRES"
         before = set(s.entities)
+        old_wires = [list(map(tuple, w.points)) for w in s.wires()]
         v.run(C.WireCmd)
         a = pt()
         type_in(v, fmt(a))
@@ -667,6 +668,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         finish()
         v.current_layer = "0"
         new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+        # (0.21: a wire, as a bus, ends on pins but never runs through one)
+        bus_clear_of_pins(new, old_wires, "wire")
         if want != "WIRES" and len(new) == 1 and not wires.pins_on(s, new[0].points[0]):
             # (a wire joined to another keeps the older's layer: only a wire on its own)
             if not any(wires.connects_at(s, q, exclude=new[0].id)
@@ -973,7 +976,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         bus_clear_of_pins([e for i, e in s.entities.items()
                            if i not in before and isinstance(e, M.Wire)], old_wires)
 
-    def bus_clear_of_pins(new, old=()):
+    def bus_clear_of_pins(new, old=(), what="bus"):
         # (0.19.11: no wire of a bus runs through a symbol's pin, only ends on it; worked out
         # from every pin near the wires, the battery's seed 152; a piece of a wire that was
         # there before, cut by the bus's cleanup and so a new id, is not the bus's: seed 163)
@@ -993,10 +996,10 @@ def random_editing(log, out, ops, seed, drawing=None):
                         for n, q in e.pin_points():
                             assert any(G.dist(q, x) <= 1e-6 for x in ends) or \
                                 G.dist_to_segment(q, a, b) > 1e-6, \
-                                "a bus wire runs through %s's pin %s: %r" % (e.block, n,
-                                                                              w.points)
+                                "a %s wire runs through %s's pin %s: %r" % (what, e.block, n,
+                                                                             w.points)
         if new:
-            BC.CHECKED["bus clear of pins"] += 1
+            BC.CHECKED["%s clear of pins" % what] += 1
 
     def op_bus_land():
         # (0.16.3: a bus from one symbol's pins ended on another's lands wire for wire, each
@@ -1265,6 +1268,49 @@ def random_editing(log, out, ops, seed, drawing=None):
                 left.remove(hit)
             BC.CHECKED["array where they go"] += 1
 
+    def op_array_edit():
+        # (0.21: an array changed with Edit array as the owner would: a copy picked, a new
+        # spacing typed, the rest kept with Enter: every copy still the array's lands where its
+        # place in rows and columns puts it from the source as it is now, those that had left
+        # the array stay where they were; worked out from the array's record and the sheet)
+        from kanzonascad import arrays
+        live = [aid for aid in s.arrays if arrays.alive(s, aid) and
+                s.arrays[aid]["mode"] == "R" and arrays.members(s, aid)]
+        if not live:
+            return
+        aid = rnd.choice(live)
+        a = s.arrays[aid]
+        have = arrays.members(s, aid)
+        left = {j: s.entities[j].to_dict() for k, ids in a["items"].items()
+                if int(k) not in have for j in ids if j in s.entities}
+        pick = rnd.choice([j for ids in have.values() for j in ids])
+        rows, cols = int(a["vals"][0]), int(a["vals"][1])
+        dr = rnd.choice([-1, 1]) * rnd.randint(1, 8) * 0.25 * s.k()
+        dc = rnd.choice([-1, 1]) * rnd.randint(1, 8) * 0.25 * s.k()
+        v.set_selection({pick})
+        v.run(C.ArrayEditCmd)
+        if v.cmd is None:
+            return
+        v.enter()
+        v.enter()
+        v.input_text("%.12g" % dr)
+        if v.cmd is not None:
+            v.input_text("%.12g" % dc)
+        finish()
+        src = [s.entities[i] for i in a["source"]]
+        now = s.arrays.get(aid)
+        assert now is not None, "Edit array lost the array"
+        offs = arrays.offsets("R", [rows, cols, dr, dc])
+        for k, ids in now["items"].items():
+            for e, j in zip(src, ids):
+                want = arrays.place(e, offs[int(k)])
+                assert j in s.entities and arrays._same(s.entities[j], want), \
+                    "Edit array left copy %s of %s elsewhere" % (k, e.kind)
+        for j, d in left.items():
+            assert j in s.entities and s.entities[j].to_dict() == d, \
+                "Edit array moved a copy that had left the array"
+        BC.CHECKED["array edited where they go"] += 1
+
     def op_offset():
         # (0.16.5: a copy a set distance away, smaller or bigger)
         a = pt()
@@ -1445,6 +1491,18 @@ def random_editing(log, out, ops, seed, drawing=None):
             now = s.entities.get(i)
             assert now is not None, "moving %d objects, %s %d went" % (
                 len(sel), type(e).__name__, i)
+            if isinstance(e, M.Insert):
+                # (a symbol by where it is: a contact block moved off its operator shows its
+                # tag again, and its box grows, the battery's seed 386, as the drag check's
+                # seed 379: its position moved as typed, not turned, flipped or scaled)
+                assert all(abs(now.pos[j] - e.pos[j] - d[j]) <= 1e-6 * max(1.0, abs(e.pos[j]))
+                           for j in range(2)), "%s %d (%s) moved %s, not %s" % (
+                    type(e).__name__, i, e.block, (now.pos[0] - e.pos[0],
+                                                   now.pos[1] - e.pos[1]), d)
+                assert (now.angle, now.mirror, now.scale, now.block) == \
+                    (e.angle, e.mirror, e.scale, e.block), "moving %s %d turned or changed it" % (
+                        e.block, i)
+                continue
             b0, b1 = e.bbox(), now.bbox()
             assert all(abs(b1[j] - b0[j] - d[j % 2]) <= 1e-6 * max(1.0, abs(b0[j]))
                        for j in range(4)), "%s %d moved %s, not %s" % (
@@ -1693,6 +1751,52 @@ def random_editing(log, out, ops, seed, drawing=None):
                         assert k not in seen, "%s twice after Update numbers" % k
                         seen[k] = 1
             BC.CHECKED["Update numbers: tags of their page, none twice"] += 1
+        if o["tags"] and o["renumber"]:
+            # renumbered, each page's unlocked devices of a prefix hold the lowest counts no
+            # other device has (worked out here from the devices alone: a footprint or a
+            # power section carrying a device's tag holds no number)
+            for sh in o["sheets"]:
+                if sh is p.title_block:
+                    continue
+                page = p.sheet_number(sh)
+                mine = [e for e in sh.entities.values()
+                        if tags_mod.is_device(e) and not tags_mod.locked(e)]
+                for prefix in {e.defn.prefix for e in mine}:
+                    held = set()
+                    for sx in p.sheets:
+                        for e in sx.entities.values():
+                            if not tags_mod.is_device(e) or e.defn.prefix != prefix or \
+                                    (sx is sh and not tags_mod.locked(e)):
+                                continue
+                            got = tags_mod.split(e.attrs.get("TAG", ""), prefix)
+                            if got and got[0] == page:
+                                held.add(got[1])
+                    group = [e for e in mine if e.defn.prefix == prefix]
+                    want, n = [], 0
+                    while len(want) < len(group):
+                        n += 1
+                        if n not in held:
+                            want.append(n)
+                    got = sorted(tags_mod.split(e.attrs["TAG"], prefix)[1] for e in group)
+                    assert got == want, "renumbered %s on sheet %s: %s, not %s" % (
+                        prefix, page, got, want)
+            BC.CHECKED["renumbered: the lowest free numbers"] += 1
+            # renumbered again, the same tags: a footprint carrying its device's tag held the
+            # number as if a device of its own, so a page went 204, 205, then back to 201
+            # (the owner, Nov 2026, "I never know what they're going to do")
+            def device_tags():
+                return {(sh.id, e.id): e.attrs.get("TAG") for sh in o["sheets"]
+                        for e in sh.entities.values() if tags_mod.is_device(e)}
+            before = device_tags()
+            win.ask_update_numbers = lambda project, sheet: o
+            try:
+                win.update_numbers()
+            finally:
+                win.__dict__.pop("ask_update_numbers", None)
+            after = device_tags()
+            moved = {k: (before[k], after.get(k)) for k in before if before[k] != after.get(k)}
+            assert not moved, "renumbered again, tags changed: %r" % sorted(moved.values())[:6]
+            BC.CHECKED["renumbered again, the same tags"] += 1
 
     def op_stretch():
         # (0.18) STRETCH through the command: a crossing window over some wire ends, moved;
@@ -2678,6 +2782,196 @@ def random_editing(log, out, ops, seed, drawing=None):
             "a column of drops shares a number: %r" % drops
         BC.CHECKED["column of drops numbered apart"] += 1
 
+    def op_pdb():
+        # (0.21: a power distribution block and its outlets: each outlet's wire on phase j
+        # takes the block's phase j number with the outlet's letter; worked out from the block
+        # and the outlets' numbers, not the numbering)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None or not wirenums.enabled(p):
+            return
+        before = set(s.entities)
+        v.run(C.InsertCmd, lib.get("symbol", "Distribution block 3-pole"), {})
+        v.input_text(fmt((o[0] + 3.0 * k, o[1] + 6.0 * k)))
+        finish()
+        pdb = [e for i, e in s.entities.items() if i not in before and
+               isinstance(e, M.Insert) and e.defn is not None and e.defn.wiring == "pdb"]
+        if len(pdb) != 1 or not pdb[0].attrs.get("TAG"):
+            return
+        pdb = pdb[0]
+        for _n, q in pdb.pin_points():
+            v.run(C.WireCmd)
+            type_in(v, fmt(q), fmt((q[0] - 2.0 * k, q[1])))
+            finish()
+        outs = []
+        for i in range(rnd.randint(1, 3)):
+            got = set(s.entities)
+            v.run(C.InsertCmd, lib.get("symbol", "Distribution block outlet 3-pole"), {})
+            v.input_text(fmt((o[0] + (1.0 + 3.0 * i) * k, o[1] + 2.0 * k)))
+            if v.cmd is not None:
+                v.input_text(pdb.attrs["TAG"])
+            finish()
+            new = [e for j, e in s.entities.items() if j not in got and isinstance(e, M.Insert)]
+            if len(new) == 1:
+                outs.append(new[0].id)
+                for _n, q in new[0].pin_points():
+                    v.run(C.WireCmd)
+                    type_in(v, fmt(q), fmt((q[0] + 1.0 * k, q[1])))
+                    finish()
+        tol = 1e-6 * max(1.0, k)
+
+        def num_at(q):
+            got = {w.num for w in s.wires() if w.num and w.touches(q, tol)}
+            return got.pop() if len(got) == 1 else None
+        pdb = s.entities.get(pdb.id)
+        if pdb is None:
+            return
+        base = {n: num_at(q) for n, q in pdb.pin_points()}
+        if None in base.values():
+            return
+        assert len(set(base.values())) == 3, "a distribution block's phases share a number: %r" \
+            % base
+        for oid in outs:
+            e = s.entities.get(oid)
+            if e is None or e.attrs.get("PARENT") != pdb.attrs.get("DEV") or \
+                    not (e.attrs.get("OUTLET") or "").isdigit():
+                continue
+            letter = wirenums.letters(int(e.attrs["OUTLET"]) - 1)
+            for n, q in e.pin_points():
+                got = num_at(q)
+                if got is None:
+                    continue
+                want = base["L" + n[1:]] + letter
+                assert got == want, "outlet %s's %s took %s, not %s" % (
+                    e.tag_text().text, n, got, want)
+                BC.CHECKED["distribution block outlets numbered by phase"] += 1
+
+    def op_picture():
+        # (0.21: a picture or a simple SVG brought in as the owner would, with Import picture
+        # or SVG (or dropped): the picture kept in the project, 2" wide on paper, its middle
+        # where it was put; the SVG's lines there, as many as it has; then edited, saved and
+        # undone with everything else)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        at = (o[0] + 3.0 * k, o[1] + 3.0 * k)
+        before = set(s.entities)
+        if rnd.random() < 0.5:
+            got = win.import_picture(picture_file(out), at)
+            new = [e for i, e in s.entities.items() if i not in before]
+            assert len(new) == 1 and isinstance(new[0], M.Picture) and got == [new[0].id], \
+                "a picture didn't come in as one: %r" % new
+            e = new[0]
+            assert abs(e.width - 2.0 * k) <= 1e-9 * k and \
+                G.dist(e.center(), at) <= 1e-6 * max(1.0, k), \
+                "a picture came in %.4g wide at %r, not %.4g at %r" % (e.width, e.center(),
+                                                                       2.0 * k, at)
+            BC.CHECKED["picture in as put"] += 1
+        else:
+            got = win.import_picture(svg_file(out), at)
+            new = [e for i, e in s.entities.items() if i not in before]
+            assert len(new) == SVG_PIECES and sorted(got) == sorted(e.id for e in new), \
+                "an SVG brought in %d objects, not %d" % (len(new), SVG_PIECES)
+            bb = None
+            for e in new:
+                bb = G.bbox_union(bb, e.bbox())
+            mid = ((bb[0] + bb[2]) / 2.0, (bb[1] + bb[3]) / 2.0)
+            assert G.dist(mid, at) <= 1e-6 * max(1.0, k), "an SVG landed at %r, not %r" % (
+                mid, at)
+            BC.CHECKED["SVG in as lines"] += 1
+
+    def op_assign_part():
+        # (0.21: Assign part on a random handful of devices, as the owner would: every one
+        # using the part's symbol takes its maker, catalog number and description, keeps its
+        # tag, and the project keeps a copy of the part; worked out from the devices before)
+        from kanzonascad import partsassign as PA
+        from kanzonascad.library import Part
+        devs = PA.devices(s, set(s.entities))
+        if not devs:
+            return
+        pick = rnd.sample(devs, min(len(devs), rnd.randint(1, 4)))
+        block = rnd.choice(pick).block
+        part = Part(manufacturer=rnd.choice(["Allen-Bradley", "Siemens", "ABB"]),
+                    catalog="BAT-%d" % rnd.randint(1, 10 ** 6), description="battery part",
+                    symbol=block)
+        win.library.save_part(part)
+        before = {e.id: dict(e.attrs) for e in pick}
+        v.set_selection(set(before))
+        win.ask_part = lambda parts, brand: (part.id, brand)
+        try:
+            n = win.assign_part()
+        finally:
+            win.__dict__.pop("ask_part", None)
+        want = [i for i in before if s.entities[i].block == block]
+        assert n == len(want), "Assign part put the part on %d devices, not %d" % (n, len(want))
+        for i, old in before.items():
+            a = s.entities[i].attrs
+            if i in want:
+                assert (a.get("CAT"), a.get("PART"), a.get("TAG")) == \
+                    (part.catalog, part.id, old.get("TAG")), \
+                    "Assign part left %s with %r" % (old.get("TAG"), a)
+            else:
+                assert a == old, "Assign part changed a device of another symbol"
+        assert p.settings["parts"][part.id]["catalog"] == part.catalog
+        BC.CHECKED["part assigned to the devices of its symbol"] += 1
+
+    def op_report_sheet():
+        # (0.21: a report drawn on sheets of the project, as the owner would: every page in
+        # its frame and clear of the title block, and every row's first cell on one of them,
+        # worked out from the report itself)
+        from kanzonascad import report_sheets as RS
+        from kanzonascad.scalefit import outside
+        key = rnd.choice(list(RS.kinds()))
+        head, rows = RS.table(p, key)
+        if len(rows) > 400:
+            return                          # (a long report is many pages: kept quick)
+        made = win.report_sheet(key)
+        assert made and all(m.report == key for m in made), "Report sheet made no sheet"
+        texts = set()
+        for m in made:
+            why = outside(p, m)
+            assert why is None, "a %s sheet is drawn %s" % (key, why)
+            texts |= {e.text.rstrip("\u2026") for e in m.entities.values()
+                      if isinstance(e, M.Text)}
+        for r in rows:
+            first = str(r[0]) if r else ""
+            if first:
+                assert any(first.startswith(t) and t for t in texts), \
+                    "the %s sheets left out %r" % (key, first)
+        v.show_sheet(s.id)                  # (back to the sheet the steps are on)
+        BC.CHECKED["report sheets hold their report"] += 1
+
+    def op_io_list():
+        # (0.21: an I/O list brought in as the owner would, with Import I/O list...: every
+        # point of the list written beside its module's terminal, worked out from the module's
+        # pins, nothing past its frame)
+        from kanzonascad.scalefit import outside
+        pts = sorted(rnd.sample(range(8), rnd.randint(1, 8)))
+        path = os.path.join(out, "battery-io.csv")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("Slot,Catalog,Point,Tag,Description\n")
+            for n in pts:
+                f.write("%d,1734-IB8,%d,BAT%d,POINT %d\n" % (rnd.randint(1, 9), n, n, n))
+        made = win.import_io_list(path)
+        v.show_sheet(s.id)                  # (back to the sheet the steps are on)
+        assert made, "Import I/O list made no sheet"
+        texts = {}
+        for sh in made:
+            assert outside(p, sh) is None, "an I/O sheet is drawn past its frame"
+            for e in sh.entities.values():
+                if isinstance(e, M.Text):
+                    texts[e.text] = (sh, e)
+        for n in pts:
+            got = texts.get("BAT%d  POINT %d" % (n, n))
+            assert got is not None, "point %d of the I/O list is missing" % n
+            sh, t = got
+            mod = next(e for e in sh.inserts() if e.block == "1734-IB8 module")
+            pin = dict(mod.pin_points())[str(n)]
+            assert G.dist((t.pos[0] + 0.15, t.pos[1] - 0.03), pin) < 1e-9, \
+                "point %d's text isn't beside its terminal" % n
+        BC.CHECKED["I/O list points beside their terminals"] += 1
+
     def op_contact_blocks():
         # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
         # line from it through the farthest, worked out from where they are; none of them
@@ -3218,6 +3512,60 @@ def random_editing(log, out, ops, seed, drawing=None):
             win.close_tab(win.tabs.indexOf(d))
             APP.processEvents()
 
+    def op_block_attrs():
+        # in a block's tab: attributes added with Add attribute, clicked or stacked under the
+        # ratings (S); what Save block would make has each one, where it went, a stacked one
+        # in the stack after the others; undone all the way, the tab is as it opened, and
+        # redone as it was (closed without saving)
+        name = rnd.choice(syms)
+        d = win.edit_block("symbol", name)
+        if d is None:
+            return
+        bp, sess, bs, bv = d.project, d.block_session, d.view.sheet(), d.view
+        opened = norm({"sheets": [bs.to_dict()]})
+        try:
+            ox, oy = sess.offset
+            had = [a["attr"] for a in BE.to_block(bp, sess).defn.attr_texts if a.get("stack")]
+            bv.run(C.AddAttrCmd)
+            added = []
+            for k in range(rnd.randint(1, 3)):
+                attr = "BAT%d" % k
+                assert bv.input_text(attr)
+                if had and rnd.random() < 0.5:
+                    assert bv.input_text("S")
+                    added.append((attr, None))
+                else:
+                    q = (ox + rnd.randint(-8, 8) * 0.0625, oy + rnd.randint(-8, 8) * 0.0625)
+                    type_in(bv, "%r,%r" % q)
+                    added.append((attr, (BE._round(q[0] - ox), BE._round(q[1] - oy))))
+            bv.input_text("")
+            assert bv.cmd is None, "Add attribute: Enter didn't end it"
+            got = {a["attr"]: a for a in BE.to_block(bp, sess).defn.attr_texts}
+            for attr, at in added:
+                assert attr in got, "Add attribute: %s not in the block" % attr
+                if at is not None:
+                    assert got[attr]["pos"] == at, "Add attribute: %s at %r, not %r" % (
+                        attr, got[attr]["pos"], at)
+            stack = [a["attr"] for a in BE.to_block(bp, sess).defn.attr_texts if a.get("stack")]
+            want = [a for a, at in added if at is None]
+            assert stack[:len(had)] == had and set(want) <= set(stack[len(had):]), \
+                "Add attribute: stack %r, had %r, stacked %r" % (stack, had, want)
+            BC.CHECKED["block attributes added"] += 1
+            after = norm({"sheets": [bs.to_dict()]})
+            steps = len(bp.undo_stack)
+            while bp.undo_stack:
+                bp.undo()
+            assert norm({"sheets": [bs.to_dict()]}) == opened, "block tab undone: not as it opened"
+            for _k in range(steps):
+                bp.redo()
+            assert norm({"sheets": [bs.to_dict()]}) == after, "block tab redone: not as it was"
+        finally:
+            if bv.cmd is not None:
+                bv.cancel()
+            bp.saved_at = len(bp.undo_stack)
+            win.close_tab(win.tabs.indexOf(d))
+            APP.processEvents()
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -3236,7 +3584,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -3458,6 +3806,13 @@ def mixed_project(win):
     type_in(v, "20,8")
     while v.cmd is not None:
         v.cmd.enter()
+    # (0.21) a timer coil placed flipped: its "TR" read backwards in AutoCAD's copy
+    v.run(C.InsertCmd, lib.get("symbol", "Timer coil"), {"TAG": "TR1"})
+    type_in(v, "F")
+    type_in(v, "14,1")
+    while v.cmd is not None:
+        v.cmd.enter()
+    assert any(e.block == "Timer coil" and e.mirror for e in v.sheet().inserts())
     # (0.17.5) a motor with its ratings, one hidden, one and its tag turned
     v.run(C.InsertCmd, lib.get("symbol", "Motor 3-phase"), {"TAG": "MTR1"})
     type_in(v, "6,2")
@@ -3539,7 +3894,34 @@ def mixed_project(win):
             {"tag": "W101", "type": "4C #14 SOOW", "marking": "colors",
              "colors": {rs[0]["conductors"][0]["num"]: "RED"}})}})
     v.show_sheet(p.sheets[0].id)
+    # (0.21) a picture kept in the project (a logo), on the first sheet
+    fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))
     return p
+
+
+SVG_PIECES = 4             # (svg_file's: a line, a rectangle, a circle and a text)
+
+
+def svg_file(out):
+    path = os.path.join(out, "battery.svg")
+    if not os.path.isfile(path):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write('<svg xmlns="http://www.w3.org/2000/svg" width="2in" height="1in" '
+                    'viewBox="0 0 200 100"><line x1="0" y1="0" x2="200" y2="0"/>'
+                    '<rect x="10" y="10" width="50" height="20"/>'
+                    '<circle cx="100" cy="50" r="25"/>'
+                    '<text x="10" y="90" font-size="20">PANEL</text></svg>')
+    return path
+
+
+def picture_file(out):
+    path = os.path.join(out, "battery-logo.png")
+    if not os.path.isfile(path):
+        from PySide6.QtGui import QColor, QImage
+        img = QImage(64, 32, QImage.Format_RGB32)
+        img.fill(QColor("#2060a0"))
+        img.save(path, "PNG")
+    return path
 
 
 def files(log, out):
@@ -3574,6 +3956,18 @@ def files(log, out):
                 pa, pb = dict(a.pin_points()), dict(b.pin_points())
                 assert set(pa) == set(pb) and all(G.dist(pa[n], pb[n]) < 1e-6 for n in pa), \
                     "a symbol's pins came back from DXF elsewhere: %s" % a.block
+        # (0.21: no text of a block reads mirror-written in AutoCAD: a flipped copy's own texts
+        # and attributes as the program draws them, readable; from the DXF, by its flags)
+        import ezdxf
+        for ref in ezdxf.readfile(dxf).modelspace().query("INSERT"):
+            for t in list(ref.virtual_entities()) + list(ref.attribs):
+                if t.dxftype() not in ("TEXT", "ATTRIB") or t.dxf.get("invisible", 0):
+                    continue
+                ext = t.dxf.get("extrusion", (0.0, 0.0, 1.0))
+                fl = t.dxf.get("text_generation_flag", 0)
+                assert not ((ext[2] < 0) ^ bool(fl & 2) ^ bool(fl & 4)), \
+                    "%r of %s reads mirrored in the DXF" % (t.dxf.text, ref.dxf.name)
+                BC.CHECKED["DXF block texts read right"] += 1
     notes.append("DXF out and in (%d sheets, blocks as blocks)" % len(p.sheets))
     pdf = os.path.join(out, "mixed.pdf")
     n = fileio.export_pdf(p, pdf)

@@ -142,7 +142,7 @@ class BlockPinsTest(unittest.TestCase):
         self.assertEqual(sorted(self.markers(s)), ["A1", "A2"])
         self.assertEqual([e.text for e, _p in BE.pin_markers(d.project, sess)], ["A1", "A2"])
         d.project.redo()
-        self.assertTrue(self.win.save_block())
+        self.assertTrue(self.win.save_block(close=False))
         got = self.lib.get("symbol", "Pin coil").pins
         self.assertEqual([(q["name"], q["pos"]) for q in got],
                          [("14", (0.25, -0.125)), ("13", (-0.25, 0.0))])
