@@ -201,7 +201,7 @@ IO_HEAD = 0.375     # from the box's top to its first terminal: room for its cat
 
 def _io_terminals(word, n, first=0):
     """[(terminal, what it is)] of n points numbered from first: ("0", "IN 0")..."""
-    return [(str(first + i), "%s %d" % (word, i)) for i in range(n)]
+    return [(str(first + i), "%s %d" % (word, first + i)) for i in range(n)]
 
 
 # Rockwell's POINT I/O terminal maps (terminal number: what it is), from their wiring diagrams.

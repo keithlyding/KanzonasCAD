@@ -417,6 +417,14 @@ def project_properties(parent, project, tab=0):
     wire_nums = QCheckBox("Number wires (page number + 3 digits: 6001, 6002...)")
     wire_nums.setChecked(bool(st.get("wire_numbers", True)))
     form.addRow("Wire numbers", wire_nums)
+    wire_io = QCheckBox("Number wires on PLC I/O points by their address (O:3/0, I:2/7)")
+    wire_io.setObjectName("wire_numbers_io")
+    wire_io.setChecked(bool(st.get("wire_numbers_io", False)))
+    wire_io.setToolTip("A wire on a PLC module's input or output point (IN n, OUT n; not V, C "
+                       "or RTN) takes the point's address: the one Import I/O list kept, else "
+                       "I: or O: with the module's SLOT and the point. A PLC input or output "
+                       "point takes its ADDR. A number typed and locked stays.")
+    form.addRow("", wire_io)
     num_h = QDoubleSpinBox()
     num_h.setDecimals(4)
     num_h.setRange(0.01, 5)
@@ -702,6 +710,7 @@ def project_properties(parent, project, tab=0):
     settings["show_title_block"] = show_tb.isChecked()
     settings["tag_height"] = tag_h.value()
     settings["wire_numbers"] = wire_nums.isChecked()
+    settings["wire_numbers_io"] = wire_io.isChecked()
     settings["wire_number_height"] = num_h.value()
     settings["wire_label_ends"] = ends.value()
     settings["wire_order_tags"] = worder.isChecked()
