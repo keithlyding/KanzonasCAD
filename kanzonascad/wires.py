@@ -1090,19 +1090,84 @@ def pull_on(ed, sheet, ends, hi=PULL):
                     q, _t = G.closest_on_segment(p, a, b)
                     d = G.dist(p, q)
                     if TOL < d < hi and (best is None or d < best[0]):
-                        best = (d, q)
+                        best = (d, q, "wire")
             elif isinstance(o, Insert) and o.defn is not None and o.defn.pins:
                 for _n, q in o.pin_points():
                     d = G.dist(p, q)
                     if TOL < d < hi and (best is None or d < best[0] + TOL):
-                        best = (d, q)       # (a pin wins over a wire as near)
+                        best = (d, q, "pin")    # (a pin wins over a wire as near)
+        along = _along_own_run(sheet, w, i, hi) if best is None or best[2] == "wire" else None
+        if along is not None:
+            # (slid along its own run onto the other wire: the run keeps its line, so what is
+            # joined to it stays joined)
+            pts = [list(q) for q in w.points]
+            pts[i] = list(along)
+            ed.change(sheet, w.copy(points=pts))
+            n += 1
+            continue
         if best is None:
             continue
         got = w.end_moved(i, best[1])
+        if not _keeps_joined(sheet, w, got, i):
+            # (the end put on the nearest point slides its run sideways with it: when that
+            # takes the run off a wire teed into it or a pin on it, the run stays and a piece
+            # the length of the gap goes on to the point instead (the long battery, seed 4213:
+            # an end stretched 0.0086" above a slanted wire was pulled 0.003" across, and the
+            # wire teed into its run was left 0.003" away))
+            pts = [list(q) for q in w.points]
+            if i == 0:
+                pts.insert(0, list(best[1]))
+            else:
+                pts.append(list(best[1]))
+            got = w.copy(points=pts)
         if len(got.points) >= 2:
             ed.change(sheet, got)
             n += 1
     return n
+
+
+def _along_own_run(sheet, w, i, hi):
+    """Where wire w's end i, moved less than hi along the line of its own last run (longer or
+    shorter), meets another wire, nearest first; None when it meets none that way."""
+    p = w.points[i]
+    k = w.points[1] if i == 0 else w.points[-2]
+    L = G.dist(p, k)
+    if L <= TOL:
+        return None
+    u = ((p[0] - k[0]) / L, (p[1] - k[1]) / L)
+    reach = min(hi, L - TOL)
+    a = (p[0] - u[0] * reach, p[1] - u[1] * reach)
+    b = (p[0] + u[0] * hi, p[1] + u[1] * hi)
+    box = (min(a[0], b[0]) - TOL, min(a[1], b[1]) - TOL, max(a[0], b[0]) + TOL,
+           max(a[1], b[1]) + TOL)
+    best = None
+    for o in sheet.query(box):
+        if not isinstance(o, Wire) or o.id == w.id:
+            continue
+        for c, d in zip(o.points, o.points[1:]):
+            for x in G.segment_intersections(a, b, c, d):
+                dd = G.dist(p, x)
+                if TOL < dd < hi and (best is None or dd < best[0]):
+                    best = (dd, x)
+    return best[1] if best else None
+
+
+def _keeps_joined(sheet, old, new, i):
+    """Whether every other wire end and pin on wire old (but at its end i, the one moving)
+    is still on new."""
+    p = old.points[i]
+    box = old.bbox()
+    box = (box[0] - TOL, box[1] - TOL, box[2] + TOL, box[3] + TOL)
+    spots = []
+    for o in sheet.query(box):
+        if isinstance(o, Wire) and o.id != old.id:
+            spots += [o.points[0], o.points[-1]]
+        elif isinstance(o, Insert) and o.defn is not None and o.defn.pins:
+            spots += [q for _n, q in o.pin_points()]
+
+    def on(w, q):
+        return any(G.dist_to_segment(q, a, b) <= TOL for a, b in zip(w.points, w.points[1:]))
+    return all(on(new, q) for q in spots if G.dist(q, p) > TOL and on(old, q))
 
 
 def near_misses(sheet, points, hi=None):
