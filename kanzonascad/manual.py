@@ -1528,8 +1528,10 @@ instead of added (as in AutoCAD).</li>
 <li><b>Window</b>: click in an empty spot, move, and click again. <b>Left to right</b> (blue)
 selects what is wholly inside; <b>right to left</b> (green, dashed) also selects what it
 crosses.</li>
-<li><b>Lasso</b>: press in an empty spot, hold the button and draw around the objects, then let
-go. Dragged first to the <b>right</b> it is a window lasso (blue: what is wholly inside); to
+<li><b>Lasso</b>: press, hold the button and draw around the objects, then let go: in an empty
+spot or on an object not selected (it is picked when pressed, and let go of again once you
+drag on), however fast the mouse goes; let go with no move between, away from where you
+pressed, and it is the window between the two. Dragged first to the <b>right</b> it is a window lasso (blue: what is wholly inside); to
 the <b>left</b>, a crossing lasso (green: what it touches too). A quick drag nearly straight
 from one corner toward the other is a window from where you pressed to where you let go, left
 to right or right to left as above; once the drag has bent away from that straight line, it
