@@ -1627,6 +1627,17 @@ def _flag_misses(ctx, points):
         flag(points)
 
 
+def _start_on(pts, pins):
+    """pts with its first point put exactly on the pin it is within 1e-6 of (its first leg
+    kept straight), or as it is."""
+    pin = min(pins, key=lambda q: G.dist(q, pts[0]))
+    if G.dist(pin, pts[0]) > 1e-6 or len(pts) < 2:
+        return pts
+    a, b = pts[0], pts[1]
+    b = (b[0], pin[1]) if abs(a[1] - b[1]) < 1e-6 else (pin[0], b[1])
+    return [pin, b] + list(pts[2:])
+
+
 def bus_paths(points, count, spacing, flip=False):
     """The wires of a bus following the path `points` (straight across / up and down):
     the first runs along the path, the others beside it, each `spacing` further to the right
@@ -2001,6 +2012,7 @@ class BusCmd(Command):
         self.flip = False
         self.toward = None              # started on a symbol's pins: where its others are
         self.side_pins = []             # ...and those pins, each wire starting exactly on one
+        self.land_pins = []             # the pins a landed bus ends on, each wire ending on one
         self.tap_start = None           # started on wires side by side: (across, [lines])
         self.tap_end = None             # ...ended on them
         self.offset = (0.0, 0.0)        # started on a pin or end not the first: from it to
@@ -2240,6 +2252,7 @@ class BusCmd(Command):
         land = self._landing(sheet, p)
         clicked = p
         self._kept = (list(self.points), self.tap_end)     # (put back if _make refuses)
+        self.land_pins = pin_side(sheet, p)[0] if land is not None else []
         if land is None:
             # (on or near a device: its nearest pins, wire for wire, jogging in when they are
             # spaced otherwise; the owner, 0.17.1)
@@ -2350,16 +2363,18 @@ class BusCmd(Command):
 
     def _on_pins(self, paths):
         """Started on a symbol's pins: each wire starts exactly on its pin (its first leg kept
-        straight), not where the spacing puts it, a hair off on a turned symbol."""
-        if not self.side_pins:
+        straight), not where the spacing puts it, a hair off on a turned symbol; landed on a
+        symbol's pins, each ends exactly on its pin the same way (the long battery, seed 4212:
+        a turned symbol's pin at y 0.5000000000000002, the wire ending at 0.5)."""
+        land = self.land_pins
+        if not self.side_pins and not land:
             return paths
         out = []
         for pts in paths:
-            pin = min(self.side_pins, key=lambda q: G.dist(q, pts[0]))
-            if G.dist(pin, pts[0]) <= 1e-6 and len(pts) >= 2:
-                a, b = pts[0], pts[1]
-                b = (b[0], pin[1]) if abs(a[1] - b[1]) < 1e-6 else (pin[0], b[1])
-                pts = [pin, b] + list(pts[2:])
+            if self.side_pins:
+                pts = _start_on(pts, self.side_pins)
+            if land:
+                pts = list(reversed(_start_on(list(reversed(pts)), land)))
             out.append(pts)
         return out
 
