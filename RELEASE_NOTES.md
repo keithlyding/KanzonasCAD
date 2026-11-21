@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.21.1
+
+**Fixed**
+- Stretch could leave a wire teed into a stretched wire a few thousandths of an inch off it,
+  not connected, when the stretched wire's end was pulled onto a slanted wire nearby.
+- A bus landed on a turned symbol's pins could end one wire a hair off its pin.
+
 ## 0.21
 
 **New**
