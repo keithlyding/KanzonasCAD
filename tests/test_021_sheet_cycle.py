@@ -3,8 +3,8 @@ Studio 5000 cycles through? It defaults to the last page you were on, but I can 
 ctrl and tapping tab to go through the rest of the sheets")."""
 import unittest
 
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 
 from tests.util import APP, window
 
@@ -14,7 +14,11 @@ from kanzonascad import model as M
 class SheetCycleTest(unittest.TestCase):
     def setUp(self):
         self.win, self.v = window()
+        self.win.show()
         self.win.activateWindow()
+        self.v.setFocus()
+        APP.processEvents()             # (the window active: its shortcuts work)
+        self.assertTrue(self.win.isActiveWindow())
         self.p = self.v.project
         with self.p.edit("sheets") as ed:
             for k in range(2, 6):
@@ -29,16 +33,17 @@ class SheetCycleTest(unittest.TestCase):
         self.win.close()
         self.assertTrue(APP)
 
-    def key(self, kind, key, mods=Qt.NoModifier):
-        self.win.sheet_cycler.eventFilter(self.v, QKeyEvent(kind, key, mods))
-
+    # (real keys, through Qt's shortcuts and the application: the window's Ctrl+Tab starts it,
+    # the filter put on while cycling takes the rest)
     def tab(self, n=1, back=False):
         for _k in range(n):
-            self.key(QEvent.KeyPress, Qt.Key_Backtab if back else Qt.Key_Tab,
-                     Qt.ControlModifier | (Qt.ShiftModifier if back else Qt.NoModifier))
+            # (a press with Ctrl held: keyClick lets Ctrl go after it, which ends it)
+            QTest.keyPress(self.v, Qt.Key_Backtab if back else Qt.Key_Tab,
+                           Qt.ControlModifier | (Qt.ShiftModifier if back else
+                                                 Qt.NoModifier))
 
     def let_go(self):
-        self.key(QEvent.KeyRelease, Qt.Key_Control)
+        QTest.keyRelease(self.v, Qt.Key_Control)
 
     def test_once_back_to_the_last_sheet(self):
         self.tab()
@@ -64,9 +69,22 @@ class SheetCycleTest(unittest.TestCase):
 
     def test_esc_stays(self):
         self.tab(2)
-        self.key(QEvent.KeyPress, Qt.Key_Escape, Qt.ControlModifier)
+        QTest.keyPress(self.v, Qt.Key_Escape, Qt.ControlModifier)
         self.let_go()
         self.assertEqual(self.v.sheet_id, self.ids[1])
+
+    def test_no_filter_on_the_application_but_while_cycling(self):
+        # (one for good, per window, ran on every event: a test run's hundreds of windows
+        # slowed it to a crawl)
+        cyc = self.win.sheet_cycler
+        self.assertFalse(cyc.filtering)
+        self.tab()
+        self.assertTrue(cyc.filtering)
+        self.let_go()
+        self.assertFalse(cyc.filtering)
+        self.tab()
+        QTest.keyPress(self.v, Qt.Key_Escape, Qt.ControlModifier)
+        self.assertFalse(cyc.filtering)
 
     def test_one_sheet_nothing_to_cycle(self):
         with self.p.edit("one") as ed:
