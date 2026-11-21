@@ -516,6 +516,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # (build provenance for the downloads: a signed record that this repository's workflow
+      # built each one, from this commit; checked with gh attestation verify)
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v5
 
@@ -553,10 +557,8 @@ jobs:
           printf '\n---\n**Windows:** download `KanzonasCAD-v%s-setup.exe` and run it (no administrator rights needed; Windows may warn about an unknown publisher: More info > Run anyway). Or, without installing, `KanzonasCAD-v%s-windows.zip`: unzip it and run `KanzonasCAD\\KanzonasCAD.exe`.\n**Portable (no install; settings and library stay with the app):** `KanzonasCAD-v%s-portable.zip`: unzip it anywhere (a USB stick) and run `KanzonasCAD\\KanzonasCAD.exe`; your settings, library and recovery copies stay in its `data` folder. To update, use Update now, or unzip the new one over the same folder (the `data` folder is kept).\n**Linux (64-bit PC; Ubuntu 22.04, Debian 12, Fedora 36 or newer):** download `KanzonasCAD-x86_64.AppImage`, make it executable (`chmod +x KanzonasCAD-x86_64.AppImage`, or Properties > Allow executing) and run it; it updates itself (Update now). Or `KanzonasCAD-v%s-linux.tar.gz`: unpack it and run `KanzonasCAD/KanzonasCAD`.\nOr run it from source: see the README.\n' "$v" "$v" "$v" "$v" >> notes.md
           cat notes.md
 
-      - name: Publish
+      - name: The downloads, named for this version
         if: steps.ver.outputs.exists == 'no'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           v="${{ steps.ver.outputs.version }}"
           mv artifacts/KanzonasCAD-windows/KanzonasCAD-windows.zip "KanzonasCAD-v$v-windows.zip"
@@ -572,6 +574,27 @@ jobs:
             "KanzonasCAD-v$v-portable.zip" "KanzonasCAD-x86_64.AppImage" \
             "KanzonasCAD-v$v-linux.tar.gz" > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      # (only here, on main and for a version not released yet: branch builds and versions
+      # already out get none; a file attested again would name another run as its source)
+      - name: Build provenance for every download
+        if: steps.ver.outputs.exists == 'no'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: |
+            KanzonasCAD-v${{ steps.ver.outputs.version }}-setup.exe
+            KanzonasCAD-v${{ steps.ver.outputs.version }}-windows.zip
+            KanzonasCAD-v${{ steps.ver.outputs.version }}-portable.zip
+            KanzonasCAD-x86_64.AppImage
+            KanzonasCAD-v${{ steps.ver.outputs.version }}-linux.tar.gz
+            SHA256SUMS.txt
+
+      - name: Publish
+        if: steps.ver.outputs.exists == 'no'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ steps.ver.outputs.version }}"
           { printf '\n**SHA-256 checksums** (also in `SHA256SUMS.txt`):\n```\n'; cat SHA256SUMS.txt; printf '```\n'; } >> notes.md
           gh release create "v$v" "KanzonasCAD-v$v-setup.exe" "KanzonasCAD-v$v-windows.zip" \
             "KanzonasCAD-v$v-portable.zip" "KanzonasCAD-x86_64.AppImage" "KanzonasCAD-v$v-linux.tar.gz" \
