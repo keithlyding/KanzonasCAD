@@ -58,6 +58,11 @@ gets that room) and a <b>title block</b> in the lower right corner.</p>
 of every wire number (6001, 6002 ...).</p>
 <ul>
 <li><b>New sheet</b> adds a sheet after the one shown, the same size and zones.</li>
+<li><b>Ctrl+Tab</b> goes back to the sheet you were last on, as Studio 5000 does: hold Ctrl
+and keep tapping Tab to go on through the sheets you were on before it, most recent first, then
+the ones you haven't opened yet in page order (Ctrl+Shift+Tab steps back). A list of the sheets
+shows meanwhile, the one picked lit; let Ctrl go to open it, or press Esc (Ctrl still held) to
+stay where you are.</li>
 <li><b>Duplicate sheet</b> (Sheets menu and tab) adds a copy of the sheet shown just after it,
 with everything on it, titled with the next number no sheet has ("Motors" becomes "Motors-2",
 then "Motors-3"; "480 Distribution - 1" becomes "480 Distribution - 2"), on a page of its own (the next free number when the
@@ -1848,6 +1853,8 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>Ctrl+W / Ctrl+Q</td><td>Close project / Exit</td></tr>
 <tr><td>Ctrl+P</td><td>Print...</td></tr>
 <tr><td>Ctrl+Shift+N</td><td>Open this sheet in a new window</td></tr>
+<tr><td>Ctrl+Tab / Ctrl+Shift+Tab</td><td>The sheet you were last on; hold Ctrl and tap Tab for
+the ones before it (Shift+Tab back)</td></tr>
 <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>
 <tr><td>Ctrl+X / Ctrl+C / Ctrl+V / Ctrl+A</td><td>Cut / Copy / Paste / Select all</td></tr>
 <tr><td>Ctrl+Shift+E / Ctrl+0 / Ctrl+= / Ctrl+-</td><td>Zoom extents / sheet / in / out</td></tr>
