@@ -750,9 +750,19 @@ class MainWindow(BlockEditing, QMainWindow):
         self.panel_layer_box, self.panel_layer_states = self._layer_widgets()
         self.panel_layer_box.setMinimumWidth(100)       # (the Panel tab is a full one)
         # (and on the Schematic tab: the owner, 0.18.6, "I need layer selection in both the
-        # schematic and the panel tabs as well as home")
+        # schematic and the panel tabs as well as home"; there the wire layers only, the one
+        # wires go on, kept with the sheet: the owner, 0.21, "replace the layers dropdown with
+        # only the wire layers")
         self.sch_layer_box, self.sch_layer_states = self._layer_widgets()
+        self.layer_boxes.remove(self.sch_layer_box)
+        self.sch_layer_box.setObjectName("wire_layer_box")
         self.sch_layer_box.setMinimumWidth(100)
+        self.sch_layer_box.setToolTip(
+            "Wire layer: new wires on this sheet go on it. It starts at the sheet's default "
+            "(Sheet properties, or Project properties); picking a layer that isn't a wire "
+            "layer (0) goes back to it. With wires selected, picking one moves them to it.")
+        self.sch_layer_box.activated.disconnect()
+        self.sch_layer_box.activated.connect(self._wire_layer_picked)
         r = self.ribbon = Ribbon()
         r.add_tab("Home", [
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
@@ -934,6 +944,7 @@ class MainWindow(BlockEditing, QMainWindow):
         v.selectionChanged.connect(self._label_checks)
         v.selectionChanged.connect(self._fill_layers)
         v.sheetChanged.connect(self._fill_sheets)
+        v.sheetChanged.connect(self._fill_layers)       # (each sheet its wire layer)
         v.sheetChanged.connect(self._pick_on_sheet_change)
         v.sheetChanged.connect(self._update_ui)
         v.sheetChanged.connect(lambda v=v: self._ribbon_for_sheet(v))
@@ -1167,6 +1178,7 @@ class MainWindow(BlockEditing, QMainWindow):
         v, nv = d.view, nd.view
         nv.show_sheet(v.sheet_id)
         nv.current_layer = v.current_layer
+        nv.wire_layer_picks = dict(C.wire_picks(v))
         win.resize(self.size())
         others = [sc for sc in QGuiApplication.screens() if sc is not self.screen()]
         if where is not None:
@@ -1220,6 +1232,7 @@ class MainWindow(BlockEditing, QMainWindow):
             nd = target.add_document(d.project)
             nd.view.show_sheet(d.view.sheet_id)
             nd.view.current_layer = d.view.current_layer
+            nd.view.wire_layer_picks = dict(C.wire_picks(d.view))
             self.close_tab(self.tabs.indexOf(d))
             target.raise_()
             target.activateWindow()
@@ -2210,7 +2223,44 @@ class MainWindow(BlockEditing, QMainWindow):
                 else:
                     box.setCurrentIndex(-1)
             box.blockSignals(False)
+        self._fill_wire_layers(v, sel)
         self.layer_label.setText("Layer: %s" % (v.layer() if v else ""))
+
+    def _fill_wire_layers(self, v, sel):
+        """The Schematic tab's wire layer box: the project's wire layers, showing the selected
+        wires' layer (empty when they are on several), else the one this sheet's wires go
+        on."""
+        from . import wirelayers
+        box = self.sch_layer_box
+        box.blockSignals(True)
+        box.clear()
+        if v is not None:
+            for name in wirelayers.wire_layers(v.project):
+                box.addItem(dialogs._swatch(v.project.layers[name].color), name)
+            on = {e.layer for e in sel if isinstance(e, M.Wire)}
+            if len(on) > 1:
+                box.setCurrentIndex(-1)
+            else:
+                box.setCurrentText(next(iter(on)) if on else C.wire_layer(v))
+        box.blockSignals(False)
+
+    def _wire_layer_picked(self, i):
+        """A wire layer picked on the Schematic tab: the selected wires go on it, or, with
+        none selected, it is the layer this sheet's new wires go on."""
+        v = self.view()
+        if v is None or i < 0:
+            return
+        name = self.sch_layer_box.itemText(i)
+        wires = [e for e in self._selected() if isinstance(e, M.Wire)]
+        if wires:
+            with v.project.edit("Change layer") as ed:
+                for e in wires:
+                    if e.layer != name:
+                        ed.change(v.sheet(), e.copy(layer=name))
+        else:
+            C.set_wire_layer(v, name)
+        self._fill_layers()
+        v.setFocus()
 
     def _fill_osnap_menu(self):
         """The running snaps, each ticked or not (a click toggles it, for every open drawing,
@@ -2335,6 +2385,7 @@ class MainWindow(BlockEditing, QMainWindow):
             self._fill_layers()
         else:
             v.current_layer = name
+            C.set_wire_layer(v, name)       # (a wire layer: wires go on it; else the default)
             self._fill_layers()
         v.setFocus()
 
@@ -2344,7 +2395,10 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         dlg = dialogs.LayersDialog(self, v.project, v.layer())
         dlg.exec()
+        before = v.layer()
         v.current_layer = dlg.current if dlg.current in v.project.layers else "0"
+        if v.current_layer != before:
+            C.set_wire_layer(v, v.current_layer)    # (as picked in the layer box)
         self._fill_layers()
         v.update()
 
@@ -2657,13 +2711,26 @@ class MainWindow(BlockEditing, QMainWindow):
 
     def sheet_properties(self):
         v = self.view()
-        if v is not None and dialogs.sheet_properties(self, v.project, v.sheet()):
+        if v is None:
+            return
+        own = v.sheet().wire_layer
+        if dialogs.sheet_properties(self, v.project, v.sheet()):
+            if v.sheet().wire_layer != own:
+                C.clear_wire_picks(v, v.sheet())    # (its new default: used at once)
             self._fill_sheets()
+            self._fill_layers()
 
     def project_properties(self, tab=0):
         v = self.view()
         if v is not None:
+            from . import wirelayers
+            before = wirelayers.project_wire_layer(v.project)
             dialogs.project_properties(self, v.project, tab if isinstance(tab, int) else 0)
+            if wirelayers.project_wire_layer(v.project) != before:
+                for _w, d in self.documents():          # (the new default: used at once)
+                    if d.project is v.project:
+                        C.clear_wire_picks(d.view)
+            self._fill_layers()
 
     def revisions(self, add=False):
         """Revisions... / New revision...: the revision history, changed in one undoable

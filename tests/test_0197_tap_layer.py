@@ -21,7 +21,7 @@ class TapLayerTest(unittest.TestCase):
                                              wire_color="BRN").to_dict())
             ed.add(self.s, M.Wire([(1.0, 8.0), (12.0, 8.0)], layer="480V BRN"))
             ed.add(self.s, M.Wire([(1.0, 2.0), (12.0, 2.0)], layer="24VDC BLU"))
-        self.v.current_layer = "24VDC BLU"
+        C.set_wire_layer(self.v, "24VDC BLU")
         self.said = []
         self.v.message = lambda text: self.said.append(text)
 
@@ -55,7 +55,7 @@ class TapLayerTest(unittest.TestCase):
         self.assertEqual([w.layer for w in new], ["24VDC BLU"])
 
     def test_two_layers_joined_warns_and_stays_current(self):
-        self.v.current_layer = "WIRES"
+        C.set_wire_layer(self.v, "WIRES")
         new = self.draw((9.0, 8.0), (9.0, 2.0))
         self.assertEqual([w.layer for w in new], ["WIRES"])
         self.assertTrue(any("two layers" in t for t in self.said), self.said)

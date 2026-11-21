@@ -97,6 +97,10 @@ DEFAULT_SETTINGS = {
                                 # zone grid stops at
     "wire_cleanup": True,       # wires cleaned up as they're drawn (wires.tidy_new)
     "wire_gauge_shown": True,   # a wire layer's gauge and color beside its wires
+    # the layer new wires go on, on every sheet that hasn't one of its own (Sheet properties,
+    # or picked on the Schematic tab); the owner, 0.21: "every time I reopen the project, the
+    # layer I had selected reverts", for the project and per sheet
+    "wire_layer": "WIRES",
     "wire_gauge_height": 0.06,  # gauge labels' text, paper inches (wire numbers: 0.08)
     "wire_gauge_each": "group",  # once for wires side by side alike ("group"), or "each" run
     "footprint_label": "tag",   # what a footprint placed shows to start (Footprint label)
@@ -2721,7 +2725,7 @@ def gauge_text(g):
 
 class Layer:
     def __init__(self, name, color=ADAPTIVE, visible=True, locked=False, awg="",
-                 wire_color="", gauge_shown=True):
+                 wire_color="", gauge_shown=True, wire=False):
         self.name = name
         self.color = color
         self.visible = bool(visible)
@@ -2733,6 +2737,9 @@ class Layer:
         # its gauge label shown beside its wires (Layers: Gauge shown; the owner, 0.18.5:
         # control power, all 16 AWG blue, "I don't need to announce this all over the place")
         self.gauge_shown = bool(gauge_shown)
+        # a wire layer whatever its name, gauge or color (made one in Project properties:
+        # Wire layers, New; wirelayers.is_wire_layer)
+        self.wire = bool(wire)
 
     def wire_label(self):
         """What its wires show: "14 AWG BLK", "14 AWG", "BLK", or ""."""
@@ -2749,13 +2756,15 @@ class Layer:
             d["wire_color"] = self.wire_color
         if not self.gauge_shown:
             d["gauge_shown"] = False
+        if self.wire:
+            d["wire"] = True
         return d
 
     @classmethod
     def from_dict(cls, d):
         return cls(d["name"], d.get("color", ADAPTIVE), d.get("visible", True),
                    d.get("locked", False), d.get("awg", ""), d.get("wire_color", ""),
-                   d.get("gauge_shown", True))
+                   d.get("gauge_shown", True), d.get("wire", False))
 
 
 def row_letters(n, start=0):
@@ -2942,6 +2951,8 @@ class Sheet:
         # says (None: Project properties, Schematic)
         self.show_border = None
         self.show_title_block = None
+        self.wire_layer = None              # the layer new wires go on here: None = the
+                                            # project's (Project properties, Schematic)
         self.xref_device = None             # arrows show the device at the far end: None =
                                             # as the project, True/False this sheet's own
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
@@ -3177,6 +3188,7 @@ class Sheet:
              "show_border": self.show_border,
              "show_title_block": self.show_title_block,
              "xref_device": self.xref_device,
+             "wire_layer": self.wire_layer,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
              "rotation": self.rotation,
@@ -3221,6 +3233,7 @@ class Sheet:
         self.show_border = d.get("show_border")
         self.show_title_block = d.get("show_title_block")
         self.xref_device = d.get("xref_device")
+        self.wire_layer = str(d.get("wire_layer") or "").strip() or None
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
         try:
