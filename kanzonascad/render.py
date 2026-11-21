@@ -40,9 +40,16 @@ def text_font():
     return f
 
 
+_advance = {}                   # text -> its advance in the font (pixels): texts repeat a lot
+
+
 def measure(text, height):
     text_font()
-    w = _font_cache["fm"].horizontalAdvance(text)
+    w = _advance.get(text)
+    if w is None:
+        if len(_advance) > 50000:
+            _advance.clear()        # (a bound on memory: measured again as they come)
+        w = _advance[text] = _font_cache["fm"].horizontalAdvance(text)
     if w <= 0 and text.strip():
         # no font to measure with (Qt found none: the Windows unit-test runner's offscreen
         # mode measures every text as nothing): the model's estimate, so notes still wrap and
@@ -133,7 +140,16 @@ def solid_fills(e):
 
 def add_entity(path, e):
     """Add an entity's outline to a stroke path (texts go to fill paths: see _Chunk)."""
-    if isinstance(e, (M.Insert, M.Composite)):
+    if isinstance(e, M.Hatch):
+        for lp in e.loops:
+            path.moveTo(lp[0][0], lp[0][1])
+            for p in lp[1:]:
+                path.lineTo(p[0], p[1])
+            path.closeSubpath()
+        for a, b in e.pattern_lines():
+            path.moveTo(a[0], a[1])
+            path.lineTo(b[0], b[1])
+    elif isinstance(e, (M.Insert, M.Composite)):
         for w in (e.world_entities() if isinstance(e, M.Insert) else e.parts()):
             if not isinstance(w, M.Text):
                 add_entity(path, w)
@@ -390,8 +406,10 @@ class SheetRenderer:
                 continue
             key = self.pal.color(self.project, e).rgba()
             if isinstance(e, (M.Insert, M.Composite)):
-                texts = [w for w in (e.world_entities() if isinstance(e, M.Insert)
-                                     else e.parts()) if isinstance(w, M.Text)]
+                # (a hatch has no texts: its pattern's lines aren't made for nothing)
+                texts = [] if isinstance(e, M.Hatch) else [
+                    w for w in (e.world_entities() if isinstance(e, M.Insert) else e.parts())
+                    if isinstance(w, M.Text)]
                 solids = solid_fills(e)
                 if texts:
                     ch.texts.setdefault(key, []).extend(text_item(t) for t in texts)
