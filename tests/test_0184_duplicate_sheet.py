@@ -38,7 +38,7 @@ class DuplicateSheetTest(unittest.TestCase):
         self.assertEqual(len(self.p.undo_stack), steps + 1)          # (one step)
         c = self.p.sheets[1]
         self.assertIs(self.v.sheet(), c)
-        self.assertEqual(c.title, "Motors (copy)")
+        self.assertEqual(c.title, "Motors-2")
         self.assertEqual(len(c.entities), len(self.s.entities))
         self.assertNotEqual(self.p.sheet_number(c), self.p.sheet_number(self.s))
         tags = sorted(e.attrs.get("TAG", "") for e in c.inserts())
@@ -49,6 +49,20 @@ class DuplicateSheetTest(unittest.TestCase):
         self.assertTrue(nums and nums[0] and nums[0] != orig, (nums, orig))
         self.p.undo()
         self.assertEqual(len(self.p.sheets), 1)
+
+
+class CopyTitleTest(unittest.TestCase):
+    # (the owner, 0.21.2: "instead of adding "copy", can you make it say -2, -3, etc?")
+    def test_numbered_on(self):
+        from kanzonascad.main_window import copy_title
+        self.assertTrue(APP)
+        self.assertEqual(copy_title("Motors", ["Motors"]), "Motors-2")
+        self.assertEqual(copy_title("Motors", ["Motors", "Motors-2"]), "Motors-3")
+        self.assertEqual(copy_title("Motors-2", ["Motors", "Motors-2"]), "Motors-3")
+        self.assertEqual(copy_title("480 Distribution - 1", ["480 Distribution - 1",
+                                                             "480 Distribution - 2"]),
+                         "480 Distribution - 3")
+        self.assertEqual(copy_title("", [""]), "")
 
 
 class GaugeOffNumbersTest(unittest.TestCase):

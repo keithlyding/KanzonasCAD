@@ -59,7 +59,8 @@ of every wire number (6001, 6002 ...).</p>
 <ul>
 <li><b>New sheet</b> adds a sheet after the one shown, the same size and zones.</li>
 <li><b>Duplicate sheet</b> (Sheets menu and tab) adds a copy of the sheet shown just after it,
-with everything on it, titled "(copy)", on a page of its own (the next free number when the
+with everything on it, titled with the next number no sheet has ("Motors" becomes "Motors-2",
+then "Motors-3"; "480 Distribution - 1" becomes "480 Distribution - 2"), on a page of its own (the next free number when the
 original's was typed). Its devices get tags of its page (CR201 becomes CR301), its wires new
 numbers, and its off-sheet connectors and arrows no name (so it isn't joined to the original's
 wires: name them for the copy). One step, so Undo takes it back.</li>
