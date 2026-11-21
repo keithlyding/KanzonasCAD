@@ -182,6 +182,8 @@ class MainWindow(BlockEditing, QMainWindow):
         self.settings = paths.settings()
         self.setWindowTitle(app_title())
         self.setAcceptDrops(True)       # (DXF, DWG and projects dragged in from Explorer)
+        from . import sheet_cycle
+        self.sheet_cycler = sheet_cycle.install(self)   # (Ctrl+Tab through the sheets)
         self.resize(1400, 900)
         self._untitled = 0
 
@@ -933,6 +935,9 @@ class MainWindow(BlockEditing, QMainWindow):
         v.selectionChanged.connect(self._update_ui)
         v.selectionChanged.connect(self._label_checks)
         v.selectionChanged.connect(self._fill_layers)
+        from . import sheet_cycle
+        sheet_cycle.shown(v)
+        v.sheetChanged.connect(lambda v=v: sheet_cycle.shown(v))
         v.sheetChanged.connect(self._fill_sheets)
         v.sheetChanged.connect(self._pick_on_sheet_change)
         v.sheetChanged.connect(self._update_ui)
