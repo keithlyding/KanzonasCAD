@@ -255,7 +255,7 @@ itself (Help > Check for updates...).
 
 Self-test: `py -m kanzonascad --selftest selftest.log` (exit code 0 = passed).
 Tests: `py -m unittest discover -s tests -p "test_*.py" -t .`
-Rules for contributors (people and AI agents): [AGENTS.md](AGENTS.md).
+Development rules: [AGENTS.md](AGENTS.md).
 
 Licensed under the PolyForm Shield License 1.0.0 (see [LICENSE](LICENSE)): free to use,
 including at work and for paid projects, and the source stays open to read. Versions 0.20
