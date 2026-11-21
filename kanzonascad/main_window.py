@@ -168,6 +168,25 @@ def _scale_name(name, val):
     return tmp.scale_text()
 
 
+def copy_title(title, taken):
+    """A duplicated sheet's title (the owner, 0.21.2: "instead of adding "copy", can you make it
+    say -2, -3"): the title with the next number after it that no sheet has, "Motors" ->
+    "Motors-2", then "Motors-3"; a title already ending in a number counts on from it, its
+    dash kept as written ("480 Distribution - 1" -> "480 Distribution - 2"). An untitled sheet's
+    copy is untitled too."""
+    import re
+    title = (title or "").strip()
+    if not title:
+        return ""
+    m = re.match(r"^(.*?)(\s*-\s*)(\d+)$", title)
+    base, dash, n = (m.group(1), m.group(2), int(m.group(3))) if m else (title, "-", 1)
+    names = {t.strip().lower() for t in taken if t}
+    n += 1
+    while ("%s%s%d" % (base, dash, n)).lower() in names:
+        n += 1
+    return "%s%s%d" % (base, dash, n)
+
+
 class MainWindow(BlockEditing, QMainWindow):
     def __init__(self, family=None):
         """family: the windows this one opens projects and sheets with (a window from Open
@@ -2489,7 +2508,7 @@ class MainWindow(BlockEditing, QMainWindow):
         meta = cur.meta_dict()
         for k in ("id", "number", "xref_shown", "xref_frozen", "no_dots", "number_from"):
             meta.pop(k, None)
-        meta["title"] = ("%s (copy)" % cur.title).strip() if cur.title else "Copy"
+        meta["title"] = copy_title(cur.title, [x.title for x in p.sheets])
         s = p.make_sheet(meta["title"])
         s.set_meta(dict(s.meta_dict(), **meta))
         if cur.number:
