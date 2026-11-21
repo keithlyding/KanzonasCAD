@@ -1406,7 +1406,7 @@ class Hatch(Composite):
     or with a pattern of lines (HATCH_PATTERNS) spacing apart, turned by angle. Not tied to
     the shapes it was made from: it moves, copies and scales on its own."""
     kind = "hatch"
-    __slots__ = ("loops", "pattern", "angle", "spacing", "_parts")
+    __slots__ = ("loops", "pattern", "angle", "spacing", "_parts", "_lines")
 
     def __init__(self, loops, pattern="SOLID", angle=0.0, spacing=0.125, **kw):
         super().__init__(**kw)
@@ -1415,6 +1415,7 @@ class Hatch(Composite):
         self.angle = float(angle)
         self.spacing = float(spacing) if spacing and spacing > 0 else 0.125
         self._parts = None
+        self._lines = None
 
     def _data(self):
         d = {"loops": [[list(q) for q in lp] for lp in self.loops], "pattern": self.pattern}
@@ -1433,15 +1434,26 @@ class Hatch(Composite):
     def solid(self):
         return self.pattern == "SOLID"
 
+    def pattern_lines(self):
+        """Its pattern's lines, [(a, b)] (none for a solid fill): what the renderer draws, with
+        no Line made for each (the self-test's notes sheet: 2,000 hatches, 57,000 lines)."""
+        if self._lines is None:
+            self._lines = [ab for ang, share in HATCH_PATTERNS[self.pattern][1]
+                           for ab in _scan(self.loops, ang + self.angle, self.spacing * share)]
+        return self._lines
+
+    def _compute_bbox(self):
+        # (its loops' box: the pattern's lines lie inside them, so they aren't worked out for
+        # it; the self-test's notes sheet, 2,000 hatches added)
+        return G.bbox_of([q for lp in self.loops for q in lp]) if self.loops else None
+
     def parts(self):
         """Its loops (closed polylines) and its pattern's lines (none for a solid fill: the
         renderer fills its loops)."""
         if self._parts is not None:
             return self._parts
         out = [Polyline(lp, True) for lp in self.loops]
-        for ang, share in HATCH_PATTERNS[self.pattern][1]:
-            for a, b in _scan(self.loops, ang + self.angle, self.spacing * share):
-                out.append(Line(a, b))
+        out += [Line(a, b) for a, b in self.pattern_lines()]
         for e in out:
             e.layer, e.color = self.layer, self.color
         self._parts = out
