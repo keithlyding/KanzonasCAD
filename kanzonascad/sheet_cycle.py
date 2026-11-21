@@ -5,9 +5,15 @@ holding ctrl and tapping tab to go through the rest of the sheets").
 Each view keeps the sheets in the order they were last shown. Ctrl+Tab picks the one before
 the sheet shown, each Tab more (Ctrl held) the next, Ctrl+Shift+Tab goes back; a list shows
 them meanwhile, the pick highlighted, and letting Ctrl go shows it. Esc, Ctrl still held, puts
-the list away and stays where it was."""
+the list away and stays where it was.
+
+The first Ctrl+Tab is a shortcut of the window; only while cycling does a key filter on the
+application watch for Ctrl let go, Esc and more Tabs, and it is taken off at the end: a
+filter there for good runs on every event (a test run's hundreds of windows, each with its
+own, slowed it to a crawl)."""
 
 from PySide6.QtCore import QEvent, QObject, Qt
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QApplication, QFrame, QListWidget, QVBoxLayout
 from shiboken6 import isValid
 
@@ -61,14 +67,17 @@ class _List(QFrame):
 
 
 class SheetCycler(QObject):
-    """The application's key filter for Ctrl+Tab (installed by the main window): Tab and
-    Shift+Tab with Ctrl step through order(view); Ctrl let go shows the pick."""
+    """Ctrl+Tab for one main window: its shortcut starts (step), then, while cycling, a key
+    filter on the application steps on with Tab and Shift+Tab (Ctrl held) through
+    order(view), shows the pick when Ctrl is let go and stays with Esc."""
 
     def __init__(self, win):
         super().__init__(win)
         self.win = win
         self.ids = None             # (cycling: the order when it began, and the pick)
         self.k = 0
+        self.filtering = False      # (the application's key filter on: while cycling only)
+        self.actions = []           # (its shortcuts, Ctrl+Tab and Ctrl+Shift+Tab: install)
         self.list = _List(win)
 
     def step(self, back=False):
@@ -82,25 +91,32 @@ class SheetCycler(QObject):
             return
         self.k = (self.k + (-1 if back else 1)) % len(self.ids)
         self.list.show_for(v, self.ids, self.k)
+        self._filter(True)
 
     def finish(self, go=True):
         ids, k = self.ids, self.k
         self.ids = None
+        self._filter(False)
         self.list.hide()
         v = self.win.view()
         if go and ids and v is not None and k:
             v.show_sheet(ids[k])
+
+    def _filter(self, on):
+        if on != self.filtering:
+            app = QApplication.instance()
+            (app.installEventFilter if on else app.removeEventFilter)(self)
+            self.filtering = on
 
     def eventFilter(self, obj, ev):
         t = ev.type()
         if t not in (QEvent.ShortcutOverride, QEvent.KeyPress, QEvent.KeyRelease,
                      QEvent.ApplicationDeactivate):
             return False
-        if not isValid(self.win):
-            QApplication.instance().removeEventFilter(self)
-            return False                # (its window is gone)
-        if not self.win.isActiveWindow() and self.ids is None:
-            return False                # (another window's keys: its own cycler's)
+        if not isValid(self.win) or self.ids is None:
+            QApplication.instance().removeEventFilter(self)     # (its window gone, or done)
+            self.filtering = False
+            return False
         if t in (QEvent.ShortcutOverride, QEvent.KeyPress):
             key, mods = ev.key(), ev.modifiers()
             if key in (Qt.Key_Tab, Qt.Key_Backtab) and mods & Qt.ControlModifier:
@@ -121,9 +137,17 @@ class SheetCycler(QObject):
 
 
 def install(win):
-    """Ctrl+Tab for the main window win (taken off when the window goes)."""
+    """Ctrl+Tab and Ctrl+Shift+Tab for the main window win: shortcuts of the window (no
+    filter on the application until cycling starts)."""
     cyc = SheetCycler(win)
-    app = QApplication.instance()
-    app.installEventFilter(cyc)
-    win.destroyed.connect(lambda _o=None: app.removeEventFilter(cyc))
+    for keys, back in (([QKeySequence(Qt.CTRL | Qt.Key_Tab)], False),
+                       ([QKeySequence(Qt.CTRL | Qt.SHIFT | Qt.Key_Tab),
+                         QKeySequence(Qt.CTRL | Qt.SHIFT | Qt.Key_Backtab),
+                         QKeySequence(Qt.CTRL | Qt.Key_Backtab)], True)):
+        act = QAction(win)
+        act.setShortcuts(keys)
+        act.setShortcutContext(Qt.WindowShortcut)
+        act.triggered.connect(lambda _c=False, b=back: cyc.step(back=b))
+        win.addAction(act)
+        cyc.actions.append(act)
     return cyc
