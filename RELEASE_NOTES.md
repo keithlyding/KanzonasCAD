@@ -6,6 +6,28 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.21.2
+
+**New**
+- Wire layers per project and per sheet. Project properties has a new Wire layers tab: the
+  layer new wires go on, and every wire layer in one list (add, rename, color, gauge and wire
+  color). Sheet properties can give a sheet its own. The Schematic tab's layer box now lists
+  only the wire layers: pick one to draw on it; pick layer 0 and wires go back to the sheet's
+  default.
+- Wire numbers by PLC I/O address (an option in Project properties, Schematic): a wire on a
+  PLC module's input or output point is numbered by its address, O:3/0 or I:2/7, or the address
+  Import I/O list brought in. Power and common terminals keep normal numbers.
+- Ctrl+Tab goes to the sheet you were last on; keep tapping Tab for the ones before it.
+- Align objects and Distribute objects on the Schematic tab too.
+- Duplicate sheet titles the copy "-2", "-3" instead of "(copy)".
+- Output modules (OB8, OB8E, OE4C...) have their terminals on the right and are placed on the
+  left of the sheet, as sourcing outputs are drawn.
+
+**Fixed**
+- A quick drag for a window or lasso selection could be missed, and one started on an object
+  only picked that object. Both make the window now.
+- Faster drawing of sheets with many hatches and texts.
+
 ## 0.21.1
 
 **Fixed**

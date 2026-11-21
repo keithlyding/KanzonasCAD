@@ -59,7 +59,7 @@ nobody understands).
   BRN, YEL, WHT neutral, GRN ground, 12 AWG; 120 V RED, BLK, WHT neutral, 14 AWG; 24 VDC BLU
   and a BLU/WHT striped common, 16 AWG; Ethernet green, no size); a size per wire with the
   layer's as default (Wire size); two-color wire layers drawn striped.
-- 0.21.x (owner, Nov 2026: "every time I reopen the project, the layer I had selected reverts
+- 0.21.2 (owner, Nov 2026: "every time I reopen the project, the layer I had selected reverts
   to the default wires layer"; "project and per sheet (so both)"): each sheet has a default
   wire layer, its own (Sheet properties: Wire layer, saved) or the project's (Project
   properties, new Wire layers tab, with the wire layers' list); the Schematic tab's layer box
@@ -67,6 +67,12 @@ nobody understands).
   picking a layer that isn't a wire layer (0) goes back to the sheet's default (owner:
   "Picking layer 0 should revert the wires default back to whatever the sheet default is"). Next (owner: "let's get the other 3 in first"): a wire starting
   on a PLC I/O pin or a motor/drive terminal picks its voltage's layer.
+- 0.21.2 (owner, Nov 2026: "wire numbers for wires connecting to a PLC input or output (not
+  power) should have the option of being numbered according to its I/O point"; asked: its
+  address, O:3/0): Project properties, Schematic, Number wires on PLC I/O points by their
+  address (off to start); Import I/O list's address wins over the one made from the SLOT.
+  Also in 0.21.2: Ctrl+Tab sheet cycling (as Studio 5000), output modules sourcing on the left,
+  -2/-3 duplicate sheet titles, Align/Distribute on the Schematic tab, fast window selection.
 - 0.18.3 (owner, Nov 2026: "all three wires tapping off the bus are still the same wire number
   ... Those need to change where they tap off"): taps numbered from the wire they tap, -1, -2,
   -3 in the numbering order, a tap off a tap a, b, c (2007-1a); a project setting (that, the
