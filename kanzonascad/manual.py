@@ -893,7 +893,9 @@ Channel), <b>Address</b>, <b>Tag</b> and <b>Description</b>. The rows of one slo
 module, the library's symbol of that catalog number (1734-IB8...) or a generic module by its
 name; each goes on a sheet of its own ("Slot 2 - 1734-IB8") after the sheet shown, its slot
 shown, its tag of that page, and each point's address, tag and description written beside its
-terminal on the left, where the field wire comes in (layer PLC I/O). A module the library
+terminal on the left, where the field wire comes in (layer PLC I/O); each point's address is
+also kept on the module (attributes ADDR0, ADDR1..., not shown), for <b>Number wires on PLC
+I/O points by their address</b>. A module the library
 hasn't got, or a point a module hasn't got, is left out and named on the command line. One
 Undo takes it all back.</li>
 <li><b>Two terminals a channel</b>: <b>PLC analog input module, 4, 8 or 16 channels IN/RTN</b>,
@@ -1049,6 +1051,20 @@ next pair; Enter or Esc ends it. An end connected to something, or the same wire
 refused with a message.</li>
 <li>Project properties, Schematic: <b>Number wires</b> (on to start) and the height of wire
 numbers and cross-references.</li>
+<li><b>Number wires on PLC I/O points by their address</b> (Project properties, Schematic, or
+Schematic settings...; off to start): a wire on a PLC module's input or output point (a
+terminal marked <b>IN n</b>, <b>OUT n</b> or <b>IN-n</b>; not V, C, RTN or other power and
+common terminals) is numbered by that point's address, as if typed: the whole wire, up to
+the devices it lands on. The address is the one <b>Import I/O list...</b> brought in for the
+point, as the list writes it (Local:3:O.Data.0); otherwise it is made from the module's
+<b>SLOT</b> and the point: <b>O:3/0</b> for output 0 of slot 3, <b>I:2/7</b> for input 7 of
+slot 2 (a continued piece uses its module's SLOT). A <b>PLC input</b> or <b>PLC output</b>
+point's wire takes the point's <b>address</b> (ADDR). A module with no SLOT and no address
+kept leaves its wires numbered as usual, and a locked number (typed by hand) stays. A wire on
+two points takes the first of their addresses in order. Two separate wires on one address
+(two modules both slot 3) both take it and are marked as duplicates, never joined. Changing
+the setting, a SLOT or an address renumbers them with that change; turned off, they take
+page numbers again.</li>
 <li>Wire numbers go into PDF and DXF exports as text.</li>
 </ul>
 

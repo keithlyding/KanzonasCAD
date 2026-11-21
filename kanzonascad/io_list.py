@@ -8,16 +8,17 @@ The list's first row names its columns (any order, any case; the first that fits
 - Catalog (Catalog number, Cat, Module, Part): a library symbol of that catalog number (its
   catalog, or its name: "1734-IB8 module"), or one of the generic modules by name;
 - Point (Channel, Bit, I/O point): its point number on the module (0, 1, ... 15);
-- Address (Addr), Tag (Device), Description (Desc): what is written beside the point.
+- Address (Addr), Tag (Device), Description (Desc): what is written beside the point; the
+  address is kept on the module too (ADDR0, ADDR1...), for numbering the point's wire by it.
 
 A module the library hasn't got, or a point it hasn't got, is left out and named in the
 report: nothing is guessed. No Qt (the windows ask and say)."""
 
 import csv
 import os
-import re
 
 from . import model as M
+from .wirenums import point_terminals
 
 COLUMNS = {
     "slot": ("slot", "rack", "module slot"),
@@ -78,18 +79,17 @@ def _block_for(library, catalog):
 def _point_pins(defn):
     """{point number: pin name} of a module: the terminal whose text is IN n, OUT n, IN-n
     (an input before its return, RTN-n)."""
-    texts = [e.text for e in defn.entities if isinstance(e, M.Text)]
     out = {}
-    for t in texts:
-        m = re.match(r"^(\S+)\s+(IN|OUT)[ -](\d+)$", t.strip())
-        if m:
-            out.setdefault(int(m.group(3)), m.group(1))
+    for pin, (_kind, n) in point_terminals(defn).items():
+        out.setdefault(n, pin)
     return out
 
 
 def plan(library, rows):
-    """([(slot, catalog, block, [(pin, text)])], [problems]): the modules the list names, in
-    the order it names them, each point's text ("I:2/0  PB101  START") for its pin."""
+    """([(slot, catalog, block, [(pin, text)], {ADDRn: address})], [problems]): the modules
+    the list names, in the order it names them, each point's text ("I:2/0  PB101  START") for
+    its pin and each point's address as the list writes it (ADDR0 for point 0: what a wire on
+    the point is numbered, wirenums.by_io_address)."""
     mods, order, problems = {}, [], []
     for r in rows:
         key = (r["slot"], r["catalog"])
@@ -104,7 +104,7 @@ def plan(library, rows):
             problems.append("slot %s: no %s in the library" % (slot or "?", cat or "module"))
             continue
         pins = _point_pins(d)
-        points = []
+        points, addrs = [], {}
         for r in mods[(slot, cat)]:
             try:
                 n = int(float(r["point"]))
@@ -117,21 +117,24 @@ def plan(library, rows):
             text = "  ".join(t for t in (r["address"], r["tag"], r["desc"]) if t)
             if text:
                 points.append((pins[n], text))
-        out.append((slot, cat, d, points))
+            if r["address"]:
+                addrs["ADDR%d" % n] = r["address"]
+        out.append((slot, cat, d, points, addrs))
     return out, problems
 
 
 def place(ed, project, modules, after=None):
     """Each module on a new sheet after the sheet after (or at the end): the module near the
     top of the room its frame leaves, its slot shown, each point's text beside its terminal,
-    right-aligned, on layer PLC I/O. Returns the sheets made."""
+    right-aligned, on layer PLC I/O, and each point's address kept on the module (ADDR0,
+    ADDR1...: not shown). Returns the sheets made."""
     from .scalefit import room
     from .tags import retag_copies
     if LAYER not in project.layers:
         ed.layer(LAYER, None, M.Layer(LAYER).to_dict())
     at = project.sheets.index(after) + 1 if after in project.sheets else len(project.sheets)
     made = []
-    for slot, cat, d, points in modules:
+    for slot, cat, d, points, addrs in modules:
         s = project.make_sheet(("Slot %s - %s" % (slot, cat)) if slot else cat, "schematic")
         ed.add_sheet(s, at + len(made))
         k = s.k()
@@ -142,7 +145,7 @@ def place(ed, project, modules, after=None):
         y = area[3] - 1.0
         # (as Insert places a symbol: its own size, its tag paper-sized, on layer SYMBOLS)
         ins = M.Insert(d.name, (x * k, y * k), 0.0, 1.0, False,
-                       {"SLOT": slot} if slot else {}, d,
+                       dict(addrs, SLOT=slot) if slot else dict(addrs), d,
                        project.settings.get("tag_height") * k, layer="SYMBOLS")
         ins = retag_copies(project, s, [ins])[0]
         ins = ed.add(s, ins)

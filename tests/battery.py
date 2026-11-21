@@ -2288,6 +2288,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         # (a tap off the source's wire is numbered from it: 1006-1, 1006-1a; its page is the
         # base number's)
         got = WN.split(re.sub(r"-\d+[a-z]*$", "", now[0].num))
+        if got is None and WN.by_io_address(p):
+            return                          # (numbered by a PLC point's address, O:3/0)
         assert got and got[0] == p.sheet_number(sh), \
             "a source arrow's wire on page %s took %s from a destination's page" % (
                 p.sheet_number(sh), now[0].num)
@@ -2972,6 +2974,102 @@ def random_editing(log, out, ops, seed, drawing=None):
                 "point %d's text isn't beside its terminal" % n
         BC.CHECKED["I/O list points beside their terminals"] += 1
 
+    def io_wanted():
+        """({group key: (addresses, locked)} of every wire group on a PLC module's input or
+        output point, worked out from the modules' terminal texts, SLOT and ADDRn (and a PLC
+        point symbol's ADDR), not from wirenums' own reading of them; addresses None for a
+        group on a continued piece (its module's slot: not worked out here), the groups)."""
+        gs, _dist = wirenums.groups(p)
+        group = {(sh.id, w.id): k for k, members in gs.items() for sh, w in members}
+        got = {}
+        for sh in p.sheets:
+            for e in sh.inserts():
+                d = e.defn
+                if d is None or d.prefix != "PLC":
+                    continue
+                pts = {}
+                for t in d.entities:
+                    m = isinstance(t, M.Text) and re.match(r"(\S+)\s+(IN|OUT)[ -](\d+)$",
+                                                           t.text.strip())
+                    if m:
+                        pts.setdefault(m.group(1), (m.group(2)[0], int(m.group(3))))
+                addr_sym = any(a["attr"] == "ADDR" for a in d.attr_texts)
+                for name, q in e.pin_points():
+                    if addr_sym:
+                        a = (e.attrs.get("ADDR") or "").strip()
+                    elif name not in pts:
+                        continue
+                    elif d.role == "child":
+                        a = None
+                    else:
+                        kind, n = pts[name]
+                        slot = (e.attrs.get("SLOT") or "").strip()
+                        a = (e.attrs.get("ADDR%d" % n) or "").strip() or (
+                            "%s:%s/%d" % (kind, slot, n) if slot else "")
+                    for w in sh.query_point(q, 1e-6):
+                        if getattr(w, "kind", "") == "wire" and w.touches(q, 1e-6):
+                            g = group[(sh.id, w.id)]
+                            cur = got.setdefault(g, set())
+                            if cur is not None:
+                                got[g] = None if a is None else cur | ({a} if a else set())
+        return {g: (a, any(w.num_lock for _s, w in gs[g])) for g, a in got.items()}, gs
+
+    def op_io_numbers():
+        # (0.21: Number wires on PLC I/O points by their address, turned on and off as the
+        # owner would in Schematic settings, on a module with wires on some of its points:
+        # on, each such wire is numbered by its point's address, worked out from the module;
+        # off, they take page numbers again)
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None or not wirenums.enabled(p):
+            return
+        block = rnd.choice(["1734-OB8E module", "1734-IB8 module", "1734-OE4C module",
+                            "PLC digital output module, 16 points"])
+        slot = rnd.choice(["", "1", "3", "7", "12"])
+        before = set(s.entities)
+        v.run(C.InsertCmd, lib.get("symbol", block), {"SLOT": slot} if slot else {})
+        v.input_text(fmt((o[0] + 3.0 * k, o[1] + 6.0 * k)))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) != 1:
+            return
+        mod = new[0]
+        pins = mod.pin_points()
+        if rnd.random() < 0.4:
+            # (an address kept on the module, as Import I/O list keeps it)
+            n = rnd.randrange(4)
+            with p.edit("Attributes") as ed:
+                ed.change(s, mod.copy(attrs=dict(mod.attrs, **{"ADDR%d" % n:
+                                                               "Local:9:O.Data.%d" % n})))
+        for _name, q in rnd.sample(pins, rnd.randint(1, min(4, len(pins)))):
+            v.run(C.WireCmd)
+            v.input_text(fmt(q))
+            if v.cmd is not None:
+                v.input_text(fmt((q[0] - 2.0 * k, q[1])))
+            finish()
+        for on in (True, False):
+            with p.edit("Schematic settings") as ed:
+                ed.project_settings({"wire_numbers_io": on})
+            want, gs = io_wanted()
+            for g, (addrs, locked) in want.items():
+                if addrs is None or locked or not addrs:
+                    continue
+                nums = {w.num for _s, w in gs[g]}
+                if on:
+                    assert nums == {sorted(addrs)[0]}, \
+                        "a wire on PLC point %s is numbered %s" % (sorted(addrs), nums)
+                    BC.CHECKED["wire on a PLC point numbered by its address"] += 1
+                else:
+                    assert not nums & addrs and all(
+                        n and wirenums.split(re.sub(r"-\d+[a-z]*$", "", n)) for n in nums), \
+                        "with I/O numbering off, a wire on PLC point %s is %s" % (
+                            sorted(addrs), nums)
+                    BC.CHECKED["wire on a PLC point numbered again when turned off"] += 1
+        if rnd.random() < 0.5:
+            # (left on for the steps after: everything else works with it too)
+            with p.edit("Schematic settings") as ed:
+                ed.project_settings({"wire_numbers_io": True})
+
     def op_contact_blocks():
         # (0.19.10: an emergency stop with contact blocks in its column: joined by a dashed
         # line from it through the farthest, worked out from where they are; none of them
@@ -3584,7 +3682,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

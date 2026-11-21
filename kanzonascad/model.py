@@ -67,6 +67,7 @@ DEFAULT_SETTINGS = {
     "duct_hatch": False,        # wire duct drawn with a light hatch (Panel settings)
     "xref_height": 0.065,       # cross-reference text (0.08 before 0.18: "slightly smaller")
     "wire_numbers": True,       # wires numbered by themselves (wirenums.py)
+    "wire_numbers_io": False,   # wires on PLC input/output points take the point's address
     # a wire tapped off another (its end on the other's middle): "same" its number, "suffix"
     # its number with -1, -2... in the numbering order (a tap off a tap: a, b...), "own" a
     # number of its own (the owner, 0.18.3: "all three wires tapping off the bus are still
