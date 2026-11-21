@@ -1370,14 +1370,15 @@ marked as drawing-sized).</li>
 bring a manufacturer's drawing to real size with Scale, Reference before it becomes a
 footprint.</li>
 <li><b>{{Scale}}</b> in the title block shows the sheet's scale (Edit title block to add it).</li>
-<li><b>Align objects</b> (ALIGNOBJ, ALO; Modify menu, Panel tab) lines up footprints, DIN rail,
-duct or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right</b>,
+<li><b>Align objects</b> (ALIGNOBJ, ALO; Modify menu; Panel tab: Arrange; Schematic tab:
+Modify) lines up footprints, DIN rail, duct, symbols or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right</b>,
 <b>Top</b>, <b>Middle</b> or <b>Bottom</b> (L, C, R, T, M, B), then click the one to line
 them up with, or press Enter to line them up with the selection's own outer edge (or its
 middle). Each moves only straight across (Left, Center, Right) or straight up and down (Top,
-Middle, Bottom), by its outline; one Undo puts them back.</li>
-<li><b>Distribute objects</b> (DISTRIBUTE, DIST; Modify menu, Panel tab) spreads three or more
-selected objects out evenly: <b>Horizontally</b> or <b>Vertically</b> (H, V). The two
+Middle, Bottom), by its outline, and wires on a moved symbol's pins follow, square; one Undo
+puts them back.</li>
+<li><b>Distribute objects</b> (DISTRIBUTE, DIST; Modify menu; Panel tab: Arrange; Schematic
+tab: Modify) spreads three or more selected objects out evenly: <b>Horizontally</b> or <b>Vertically</b> (H, V). The two
 outermost stay where they are and the others move straight across (or straight up and down)
 so the gaps between them are equal. With Snap on, each move is rounded to the snap spacing, so
 symbols' pins stay on the grid and wires still meet them (the gaps can then differ by up to

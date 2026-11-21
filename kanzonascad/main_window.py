@@ -782,10 +782,13 @@ class MainWindow(BlockEditing, QMainWindow):
             # Edit block here, the rest on the Block tab; a tab too wide for the window
             # shows its groups' buttons small, from the right: Ribbon.fit)
             ("Symbols", "small", [a["insert_symbol"], a["make_block"], a["edit_block"],
-                                  a["explode"], a["attr_vis"], a["del_comp"]]),
+                                  a["explode"], a["attr_vis"], a["del_comp"], a["new_part"]]),
             # (the owner: "Copy is not included in schematic and needs to be")
+            # (Align objects and Distribute objects too: the owner, 0.21.2, "I need alignment
+            # and distribution on the schematic sheet too"; wires on a moved symbol's pins
+            # follow)
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["stretch"],
-                                 a["erase"]]),
+                                 a["erase"], a["align_obj"], a["distribute"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
                                       a["dim_units"]]),
             ("Edit wires", "large", [a["trim_wire"], a["wire_label"], a["wire_size"], a["wire_color"],
@@ -795,7 +798,6 @@ class MainWindow(BlockEditing, QMainWindow):
                                     a["num_source"]]),
             ("Cross-references", "large", [a["sig_arrows"], a["xref_update"], a["xref_freeze"],
                                            a["xref_auto"]]),
-            ("Parts", "small", [a["new_part"]]),
             ("Layers", "small", [self.sch_layer_box, self.sch_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"],
                                  a["wire_layers"]]),
@@ -806,8 +808,11 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Footprints", "small", [a["insert_footprint"], a["make_block"], a["edit_block"],
                                      a["explode"], a["attr_vis"],
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
+            # (Align objects and Distribute objects too: the owner, 0.21.2, "I need alignment
+            # and distribution on the schematic sheet too"; wires on a moved symbol's pins
+            # follow)
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["mirror"], a["stretch"],
-                                 a["erase"]]),
+                                 a["erase"], a["align_obj"], a["distribute"]]),
             ("Dimensions", "small", [a["dim_linear"], a["dim_aligned"], a["leader"],
                                       a["dim_units"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
