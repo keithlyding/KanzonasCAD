@@ -879,9 +879,11 @@ lists where its terminals are.</li>
 way, and list under it; double-click a point to type its <b>address</b> (I:0/3, %I0.3...),
 shown under it.</li>
 <li><b>PLC I/O modules</b>, drawn whole (Library, JIC/PLC): a box with the module's catalog
-number at the top and its terminals down its left side, one a rung (1/2" apart), each a pin
-with its terminal number and what it is (<b>0  IN 0</b>); wires land on the left and each
-point keeps its own wire number. Its tag goes above (PLC prefix: PLC601), and its
+number at the top and its terminals down one side, one a rung (1/2" apart), each a pin
+with its terminal number and what it is (<b>0  IN 0</b>); each point keeps its own wire
+number. An input module's terminals are on its left, where its field devices' wires come in;
+an output module's (1734-OB8, OB8E, OE4C and the generic output modules: sourcing) on its
+right, so it sits on the left of the sheet with its loads to its right. Its tag goes above (PLC prefix: PLC601), and its
 <b>SLOT</b> (double-click it, type 3) over the catalog number. Rockwell POINT I/O, as their
 wiring diagrams give: <b>1734-IB8</b> (inputs 0-7), <b>1734-OB8</b> and <b>1734-OB8E</b>
 (outputs 0-7), <b>1734-IE8C</b> (current inputs 0-7), <b>1734-OE4C</b> (outputs 0-3, C on 4
@@ -899,7 +901,9 @@ Channel), <b>Address</b>, <b>Tag</b> and <b>Description</b>. The rows of one slo
 module, the library's symbol of that catalog number (1734-IB8...) or a generic module by its
 name; each goes on a sheet of its own ("Slot 2 - 1734-IB8") after the sheet shown, its slot
 shown, its tag of that page, and each point's address, tag and description written beside its
-terminal on the left, where the field wire comes in (layer PLC I/O). A module the library
+terminal, where the field wire comes in (layer PLC I/O): an input module a third of the way
+across with the texts to its left, an output module at the left of the sheet with the texts to
+its right. A module the library
 hasn't got, or a point a module hasn't got, is left out and named on the command line. One
 Undo takes it all back.</li>
 <li><b>Two terminals a channel</b>: <b>PLC analog input module, 4, 8 or 16 channels IN/RTN</b>,
