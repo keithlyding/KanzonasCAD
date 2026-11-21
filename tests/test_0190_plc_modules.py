@@ -52,6 +52,17 @@ class ModuleTest(unittest.TestCase):
         self.assertEqual(set(texts(self.lib.get("symbol", "1734-CTM module"))[1:]),
                          {"%d  C" % i for i in range(8)})
 
+    def test_output_modules_wire_out_to_the_right(self):
+        # (sourcing outputs: the module on the left, its loads to its right; the owner, 0.21.2:
+        # "Shouldn't the ob8e module default to the left side of the screen?"; inputs keep
+        # their terminals on the left)
+        for cat, right in (("1734-OB8E", True), ("1734-OB8", True), ("1734-OE4C", True),
+                           ("1734-IB8", False), ("1734-IE8C", False), ("1734-VTM", False)):
+            d = self.lib.get("symbol", cat + " module")
+            xs = {p["pos"][0] for p in d.pins}
+            self.assertEqual(len(xs), 1, cat)
+            self.assertEqual(xs.pop() > 0.5, right, cat)
+
     def test_generic_sizes(self):
         for kind, word, n in SJ.IO_GENERIC:
             d = self.lib.get("symbol", "PLC %s module, %d points" % (kind, n))

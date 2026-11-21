@@ -136,9 +136,13 @@ def place(ed, project, modules, after=None):
         ed.add_sheet(s, at + len(made))
         k = s.k()
         area, _tb = room(project, s)
-        # (its terminals down the left: the texts go to their left, so the module sits a
-        # third of the way across, its first terminal an inch under the top)
-        x = area[0] + (area[2] - area[0]) / 3.0
+        # (an input module's terminals down its left: the texts go to their left, so it sits a
+        # third of the way across; an output module's down its right (sourcing: its loads to
+        # its right), so it sits on the left, the texts to its right (the owner, 0.21.2:
+        # "Shouldn't the ob8e module default to the left side of the screen?"); its first
+        # terminal an inch under the top)
+        right = bool(d.pins) and d.pins[0]["pos"][0] > 0
+        x = area[0] + (area[2] - area[0]) * (1.0 / 6.0 if right else 1.0 / 3.0)
         y = area[3] - 1.0
         # (as Insert places a symbol: its own size, its tag paper-sized, on layer SYMBOLS)
         ins = M.Insert(d.name, (x * k, y * k), 0.0, 1.0, False,
@@ -149,8 +153,12 @@ def place(ed, project, modules, after=None):
         pins = dict(ins.pin_points())
         for pin, text in points:
             q = pins[pin]
-            ed.add(s, M.Text((q[0] - 0.15, q[1] + 0.03), text, TEXT_H * k, 0.0, "right",
-                             layer=LAYER))
+            if right:
+                ed.add(s, M.Text((q[0] + 0.15 * k, q[1] + 0.03 * k), text, TEXT_H * k, 0.0,
+                                 "left", layer=LAYER))
+            else:
+                ed.add(s, M.Text((q[0] - 0.15 * k, q[1] + 0.03 * k), text, TEXT_H * k, 0.0,
+                                 "right", layer=LAYER))
         made.append(s)
     return made
 
