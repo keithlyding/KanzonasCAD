@@ -117,6 +117,17 @@ GitHub's own build servers, and lists the SHA-256 checksum of each download (`SH
 also at the end of the release notes). Compare it with `Get-FileHash <file>` in PowerShell on
 Windows, or `sha256sum <file>` on Linux.
 
+From the first release after 0.21.1, each download also has a signed build record (a GitHub
+artifact attestation) saying which commit of this repository it was built from, and by which
+run of its build workflow. With the [GitHub CLI](https://cli.github.com/) installed, check a
+file with:
+
+    gh attestation verify KanzonasCAD-x86_64.AppImage --owner keithlyding
+
+It says the file passed and names the workflow and commit it came from; a changed or foreign
+file fails. The records are also listed on the repository's Actions > Attestations page. This
+checks that a download is genuine; it doesn't stop Windows warning about an unknown publisher.
+
 The rest of this page runs KanzonasCAD from its source code instead: for trying changes before
 they're released, or on a PC where you can't run a setup.
 
@@ -255,7 +266,7 @@ itself (Help > Check for updates...).
 
 Self-test: `py -m kanzonascad --selftest selftest.log` (exit code 0 = passed).
 Tests: `py -m unittest discover -s tests -p "test_*.py" -t .`
-Rules for contributors (people and AI agents): [AGENTS.md](AGENTS.md).
+Development rules: [AGENTS.md](AGENTS.md).
 
 Licensed under the PolyForm Shield License 1.0.0 (see [LICENSE](LICENSE)): free to use,
 including at work and for paid projects, and the source stays open to read. Versions 0.20
