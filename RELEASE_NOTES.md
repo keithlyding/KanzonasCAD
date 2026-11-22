@@ -6,6 +6,12 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.21.4
+
+**Changed**
+- The installer shows the KanzonasCAD icon (violet) at the top right of its pages, and on its
+  welcome and finish pages, instead of Inno Setup's own picture.
+
 ## 0.21.3
 
 **Changed**

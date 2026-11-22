@@ -29,6 +29,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist-installer
 OutputBaseFilename={#MyAppName}-v{#MyAppVersion}-setup
 SetupIconFile=..\assets\kanzonascad-setup.ico
+; (the window's icon blue, the setup's; the pictures the app icon, violet, as KanzonasPDF's:
+; Inno Setup's own picture was shown; tools/make_icons.py makes them)
+WizardImageFile=..\assets\wizard-large.bmp
+WizardSmallImageFile=..\assets\wizard-small.bmp
 UninstallDisplayIcon={app}\{#MyAppExe}
 LicenseFile=..\LICENSE
 Compression=lzma2/max
