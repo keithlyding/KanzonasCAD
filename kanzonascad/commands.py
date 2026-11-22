@@ -2045,8 +2045,15 @@ class BusCmd(Command):
     def begin(self):
         self.count = int(getattr(self.ctx, "_bus_count", 3))
         self.spacing = float(getattr(self.ctx, "_bus_spacing", 0.5))
+        # (the last spacing is the same on paper on a sheet of another scale: kept in that
+        # sheet's units, a 1/2" bus from a 1:24 sheet was 12" apart on a 1:1 one, too wide to
+        # find a way round a symbol, and ran through it: the battery, seed 433)
+        then = getattr(self.ctx, "_bus_k", None)
+        if then:
+            self.spacing *= self.ctx.sheet().k() / then
         self.layers = list(getattr(self.ctx, "_bus_layers", ["WIRES"]))
         self.straight = bool(getattr(self.ctx, "_bus_straight", False))
+        self.blocked = None             # (the symbol a click couldn't go round: _around)
         self.flip = False
         self.toward = None              # started on a symbol's pins: where its others are
         self.side_pins = []             # ...and those pins, each wire starting exactly on one
@@ -2143,6 +2150,7 @@ class BusCmd(Command):
     def _ask_start(self):
         self.step = "path"
         self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.spacing
+        self.ctx._bus_k = self.ctx.sheet().k()
         if self.points:
             self.ctx.prompt("Specify next %s (Enter ends the bus)" % (
                 "point" if self.straight else "corner"), self._options())
@@ -2361,6 +2369,15 @@ class BusCmd(Command):
         if hit is not None:
             self.ctx.message(_through_message(hit))
             return
+        if self.blocked is not None:
+            # (after the pins: through a pin says which pin)
+            e = self.blocked
+            self.ctx.message(
+                "The bus can't go round %s from here with its %d wires %s apart (it would run "
+                "through it): click farther from it, or Esc and start again with fewer wires "
+                "(N) or closer ones (D)" % (
+                    e.attrs.get("TAG") or e.block, self.count, _fmt(self.spacing)))
+            return
         self.points += new
         self.base = self.last = self.points[-1]
 
@@ -2431,7 +2448,11 @@ class BusCmd(Command):
         """The points a click adds, going round the symbols in the bus's way (the owner,
         0.16: "Bus needs to go around objects as well"): its first wire routed with room for
         the others beside it (wires.route_around, the clearance plus the bus's width), kept
-        only when then none of its wires runs through a symbol; new as it is otherwise."""
+        only when then none of its wires runs through a symbol; new as it is otherwise, with
+        self.blocked the symbol in the way when no way round was found (point refuses the
+        click then: a bus much wider than the room beside a symbol had run straight through
+        it, the battery, seed 433)."""
+        self.blocked = None
         if not new or not self.points or \
                 not self.ctx.project.settings.get("wire_around", True) or \
                 (len(self.points) == 1 and self.tap_start is not None):
@@ -2472,6 +2493,10 @@ class BusCmd(Command):
             tail = [q[len(self.points) - 1:] for q in paths]
             if not any(_crosses(q, boxes) for q in tail) and _apart(tail):
                 return got
+        paths = self._paths(self.points + new)
+        tail = [q[len(self.points) - 1:] for q in paths]
+        self.blocked = next((e for e, bb in boxes if any(_crosses(q, [(e, bb)]) for q in tail)),
+                            None)
         return new
 
     def _near_sides(self, sheet, p):

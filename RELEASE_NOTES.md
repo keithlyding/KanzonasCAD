@@ -16,6 +16,9 @@ build fails without them.
 **Fixed**
 - The mouse wheel no longer changes a number box or a closed drop-down list when it passes over
   one: it scrolls the window or list instead, so scrolling can't change a setting by accident.
+- A bus too wide to go round a symbol from where you clicked could run straight through it. The
+  click isn't taken now, and the command line says why. A bus also keeps the same spacing on
+  paper when you move to a sheet of another scale (it could come out many times wider).
 
 ## 0.21.2
 

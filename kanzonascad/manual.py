@@ -690,7 +690,10 @@ straight out of the side the pin is on: a wire from above to a drive's L3 on its
 goes down beside the drive and comes up into L3 from below. The preview shows the way it will
 go. With nothing in the way a wire is as it always was. A <b>bus</b> goes round them too, all
 its wires: as close as the clearance lets it when its other wires are on the outside of the
-turns, with room for them when they are on the inside. Project properties, Schematic,
+turns, with room for them when they are on the inside. When there is no way round for a bus
+that wide from where you clicked (its other wires already past the symbol), the click isn't
+taken and the command line says so: click farther from the symbol, or start again with fewer
+wires (N) or closer ones (D). Project properties, Schematic,
 <b>Wires go around the symbols in their way</b> turns it off, and <b>...keeping this far from
 them</b> sets how far (on paper: 1/8 inch to start, 0.25 for 1/4 inch).</p>
 <p><b>Dragging a run of wire</b> (AutoCAD Electrical's Scoot on a wire): select a wire and
@@ -743,7 +746,7 @@ side</b> (on the middle of one of three phases running across the sheet) and it 
 off each, the first off the farthest back, each with a dot where it leaves its own; <b>end it
 on them</b> (the last click on one of them, the bus arriving square) and each wire lands on its
 own, the first on the first it meets, crossing the others, and the bus is done: a vertical
-3-phase bus onto horizontal L1, L2, L3. Started anywhere else, it uses the last bus's count and spacing (3 wires,
+3-phase bus onto horizontal L1, L2, L3. Started anywhere else, it uses the last bus's count and spacing (the same on paper on a sheet of another scale; 3 wires,
 1/2 inch to start): type <b>N</b> (or just the number) for how many, then how far apart (1/2
 inch; 12mm works too), or <b>D</b> for the spacing alone. Then click the path as for a wire:
 every click turns it 90 degrees, as many times as you need, and all the wires turn together,

@@ -791,17 +791,31 @@ def random_editing(log, out, ops, seed, drawing=None):
         a = (bb[0] - 3.0 * k, cy + rnd.choice([-1, 1]) * 0.25 * k)
         b = (bb[2] + 3.0 * k, a[1])
         before = set(s.entities)
-        v.run(C.BusCmd)
-        if rnd.random() < 0.5:
-            v.input_text("F")
-        v.input_text(fmt(a))
-        if v.cmd is not None:
-            v.input_text(fmt(b))
-        finish()
+        said = []
+        v.message = lambda text: said.append(text)
+        try:
+            v.run(C.BusCmd)
+            width = max(0, v.cmd.count - 1) * v.cmd.spacing
+            if rnd.random() < 0.5:
+                v.input_text("F")
+            v.input_text(fmt(a))
+            if v.cmd is not None:
+                v.input_text(fmt(b))
+            finish()
+        finally:
+            del v.message
         new = [w for i, w in s.entities.items() if i not in before and isinstance(w, M.Wire)]
-        assert new, "the bus drew nothing"
         through = [w.points for w in new if wires._crosses(w.points, [(e, bb)])]
         assert not through, "a bus across %s ran through it: %s" % (name, through[:1])
+        if not new:
+            # (0.21.3: a bus far wider than the 3" clicked beside the symbol, its other wires
+            # already past it, has no way round: it says so and draws nothing, not through it,
+            # seed 433; a bus that fits must go round)
+            assert width >= 3.0 * k, "a %g\" wide bus didn't go round %s" % (width, name)
+            assert any("can't go round" in t for t in said), \
+                "a bus too wide to go round %s drew nothing and said nothing" % name
+            BC.CHECKED["bus too wide to go round says so"] += 1
+            return
         BC.CHECKED["bus goes around a symbol"] += 1
 
     def op_wire_run():
