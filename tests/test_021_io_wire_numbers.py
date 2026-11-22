@@ -160,6 +160,26 @@ class IoWireNumbersTest(unittest.TestCase):
         self.assertEqual(sum(1 for ws in gs.values()
                              if any(w.id in (wa, wb) for _s, w in ws)), 2)
 
+    def test_every_wire_on_a_point_takes_its_address(self):
+        # (two wires on one terminal are two groups, a pin joining none: both on IN 6, the
+        # second kept a page number, the battery, seed 435)
+        mod = self.place("1734-IB8 module", "8,9", {"SLOT": "2"})
+        q = dict(mod.pin_points())["6"]
+        with self.p.edit("wires") as ed:
+            # (one through the terminal, as a wire drawn before a module was moved onto it,
+            # one ending on it: the battery's seed 435)
+            wa = ed.add(self.s, M.Wire([(q[0] + 1.0, q[1]), (q[0] - 3.0, q[1]),
+                                        (q[0] - 3.0, q[1] - 0.5)])).id
+            wb = ed.add(self.s, M.Wire([(q[0] - 2.5, q[1] + 2.5), (q[0] - 2.5, q[1] + 1.0),
+                                        q])).id
+        gs, _dist = wirenums.groups(self.p)
+        self.assertEqual(sum(1 for ws in gs.values()
+                             if any(w.id in (wa, wb) for _s, w in ws)), 2)   # (two groups)
+        self.set_io(True)
+        self.assertEqual((self.num(wa), self.num(wb)), ("I:2/6", "I:2/6"))
+        self.set_io(False)
+        self.assertNotIn("I:2/6", (self.num(wa), self.num(wb)))
+
     def test_imported_address_as_written_and_kept_on_save(self):
         d = tempfile.mkdtemp()
         path = os.path.join(d, "io.csv")
