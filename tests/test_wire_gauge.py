@@ -6,7 +6,6 @@ color's name."""
 import json
 import unittest
 
-from PySide6.QtWidgets import QInputDialog
 
 from tests.util import APP, window, type_in
 
@@ -91,14 +90,15 @@ class GaugeTest(unittest.TestCase):
     def test_the_layers_window(self):
         self.set_layer("POWER")
         dlg = dialogs.LayersDialog(self.win, self.p, "0")
-        saved = QInputDialog.getItem
-        QInputDialog.getItem = staticmethod(lambda *a, **k: ("10 AWG", True))
+        from kanzonascad import no_wheel
+        saved = no_wheel.get_item
+        no_wheel.get_item = lambda *a, **k: ("10 AWG", True)
         try:
             dlg._wire("POWER", True)
-            QInputDialog.getItem = staticmethod(lambda *a, **k: ("brn", True))
+            no_wheel.get_item = lambda *a, **k: ("brn", True)
             dlg._wire("POWER", False)
         finally:
-            QInputDialog.getItem = saved
+            no_wheel.get_item = saved
         self.assertEqual((self.p.layers["POWER"].awg, self.p.layers["POWER"].wire_color),
                          ("10", "BRN"))
         row = [r for r in range(dlg.table.rowCount())

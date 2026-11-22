@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QMimeData, QTimer, QByteArray, QPoint
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QGuiApplication
 from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QListWidget,
                                QListWidgetItem, QFileDialog, QMessageBox, QLabel, QToolBar,
-                               QToolButton, QComboBox, QInputDialog, QMenu, QApplication,
+                               QToolButton, QComboBox, QMenu, QApplication,
                                QDialog, QVBoxLayout, QTextBrowser, QDialogButtonBox, QWidget,
                                QTabBar, QAbstractItemView)
 
@@ -2847,7 +2847,8 @@ class MainWindow(BlockEditing, QMainWindow):
         if not ents:
             self.statusBar().showMessage("Color: select the objects first.", 4000)
             return
-        pick, ok = QInputDialog.getItem(
+        from . import no_wheel
+        pick, ok = no_wheel.get_item(
             self, "Color", "Color of the %d selected object(s):" % len(ents),
             ["ByLayer (the layer's color)", "Choose a color..."], 0, False)
         if not ok:
@@ -2855,8 +2856,7 @@ class MainWindow(BlockEditing, QMainWindow):
         color = None
         if pick.startswith("Choose"):
             from PySide6.QtGui import QColor
-            from PySide6.QtWidgets import QColorDialog
-            c = QColorDialog.getColor(QColor("#ffffff"), self, "Color")
+            c = no_wheel.get_color(QColor("#ffffff"), self, "Color")
             if not c.isValid():
                 return
             color = c.name()
@@ -2983,9 +2983,9 @@ class MainWindow(BlockEditing, QMainWindow):
 
     def ask_report(self, titles):
         """Which report to draw on sheets: its title, or None (a test replaces it)."""
-        from PySide6.QtWidgets import QInputDialog
-        got, ok = QInputDialog.getItem(self, "Report sheet", "Draw on sheets of the project:",
-                                       titles, 0, False)
+        from . import no_wheel
+        got, ok = no_wheel.get_item(self, "Report sheet", "Draw on sheets of the project:",
+                                    titles, 0, False)
         return got if ok else None
 
     def report_sheet(self, key=None):

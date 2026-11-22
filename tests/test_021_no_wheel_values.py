@@ -5,9 +5,10 @@ entirely")."""
 import unittest
 
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
-from PySide6.QtWidgets import (QApplication, QComboBox, QDoubleSpinBox, QInputDialog,
-                               QScrollArea, QSpinBox, QVBoxLayout, QWidget)
+from PySide6.QtGui import QColor, QWheelEvent
+from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QColorDialog, QComboBox, QDialog,
+                               QDoubleSpinBox, QInputDialog, QScrollArea, QSpinBox,
+                               QVBoxLayout, QWidget)
 
 from tests.util import APP, window
 
@@ -25,7 +26,7 @@ def wheel(w, down=True):
 
 class NoWheelTest(unittest.TestCase):
     def setUp(self):
-        self.win, self.v = window()            # (the main window puts the filter on)
+        self.win, self.v = window()            # (the main window calls no_wheel.install)
         self.page = QScrollArea()
         inner = QWidget()
         lay = QVBoxLayout(inner)
@@ -69,33 +70,56 @@ class NoWheelTest(unittest.TestCase):
         self.spin.stepUp()
         self.assertEqual(self.spin.value(), 51)
 
-    def test_qts_own_dialogs_too(self):
+    def test_qts_own_windows_through_get_item_and_get_color(self):
+        # (their boxes are Qt's, not of the Python classes: guarded one window at a time)
         dlg = QInputDialog()
         dlg.setComboBoxItems(["14", "12", "10"])
+        no_wheel.guard(dlg)
         dlg.show()
         APP.processEvents()
         box = dlg.findChild(QComboBox)
-        self.assertIsNotNone(box)
         self.assertFalse(wheel(box))
         self.assertEqual(box.currentIndex(), 0)
         dlg.close()
+        colors = QColorDialog()
+        no_wheel.guard(colors)
+        colors.show()
+        APP.processEvents()
+        spins = colors.findChildren(QAbstractSpinBox)
+        self.assertTrue(spins)
+        before = [b.text() for b in spins]
+        for b in spins:
+            self.assertFalse(wheel(b))
+        self.assertEqual([b.text() for b in spins], before)
+        colors.close()
 
-    def test_installed_once(self):
-        # (every main window asks for it: one filter for the application, not one each)
-        first = APP._kz_no_wheel
-        again = no_wheel.install()
-        self.assertIs(again, first)
-        self.assertIsInstance(first, no_wheel._NoWheel)
+    def test_get_item_answers_as_qt_does(self):
+        real = QDialog.exec
+        try:
+            QDialog.exec = lambda dlg: QDialog.Accepted
+            self.assertEqual(no_wheel.get_item(None, "t", "l", ["a", "b", "c"], 1, False),
+                             ("b", True))
+            QDialog.exec = lambda dlg: QDialog.Rejected
+            self.assertFalse(no_wheel.get_item(None, "t", "l", ["a", "b"], 0, False)[1])
+            self.assertFalse(no_wheel.get_color(QColor("#ff0000"), None, "c").isValid())
+            QDialog.exec = lambda dlg: QDialog.Accepted
+            self.assertEqual(no_wheel.get_color(QColor("#ff0000"), None, "c").name(),
+                             "#ff0000")
+        finally:
+            QDialog.exec = real
 
     def test_without_it_the_wheel_would_change_them(self):
-        # (the check above means something: Qt's own boxes take the wheel)
-        APP.removeEventFilter(APP._kz_no_wheel)
+        # (the check above means something: Qt's own handling takes the wheel)
+        saved = {cls: cls.wheelEvent for cls in no_wheel.BOXES}
         try:
+            for cls, fn in no_wheel.QT_WHEEL.items():
+                cls.wheelEvent = fn
             wheel(self.spin)
             wheel(self.combo)
             self.assertNotEqual((self.spin.value(), self.combo.currentIndex()), (50, 0))
         finally:
-            APP.installEventFilter(APP._kz_no_wheel)
+            for cls, fn in saved.items():
+                cls.wheelEvent = fn
 
 
 if __name__ == "__main__":
