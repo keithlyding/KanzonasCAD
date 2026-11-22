@@ -196,6 +196,8 @@ class MainWindow(BlockEditing, QMainWindow):
         self.family = family if family is not None else []
         self.family.append(self)
         install_text_measure()
+        from . import no_wheel
+        no_wheel.install()              # (the wheel never changes a number box or a list)
         from . import paths
         # (portable: settings.ini in the data folder beside the program, not the registry)
         self.settings = paths.settings()
