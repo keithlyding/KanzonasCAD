@@ -1608,6 +1608,10 @@ middle button for <b>Zoom extents</b>. While you pan or zoom, the picture on scr
 scales with the mouse (instantly, however busy the drawing), and the drawing is drawn again
 sharp a moment after you stop. While the view stays still, the drawing around it (half the
 window more on every side) is made ready too, so panning and zooming out show it right away.</li>
+<li>The mouse wheel never changes a number box (the boxes with up and down arrows) or a closed
+drop-down list, in any window or on the ribbon: it scrolls the window or list they're in, so
+scrolling down a window can't change a setting by accident. Type the value, use the arrow
+keys, or click the arrows; open a list to pick from it (the wheel scrolls an open list).</li>
 <li><b>Zoom extents</b> (Ctrl+Shift+E), <b>Zoom to sheet</b> (Ctrl+0), <b>Zoom in</b> (Ctrl+=),
 <b>Zoom out</b> (Ctrl+-). Zooming out goes until the whole sheet and everything drawn take
 about a quarter of the window, on a sheet with a scale too (at 1:24 the sheet is 24 times its
