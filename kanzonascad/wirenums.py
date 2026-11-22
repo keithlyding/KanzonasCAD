@@ -380,12 +380,21 @@ def _outlet(ins):
 
 
 def _pin_wires(sheet, ins, roots):
-    """{pin name: sheet-local group root} of the wires ending on each of the symbol's pins."""
+    """{pin name: sheet-local group root} of the wires ending on each of the symbol's pins
+    (the first group on a pin: _pin_groups has them all)."""
+    return {name: rs[0] for name, rs in _pin_groups(sheet, ins, roots).items()}
+
+
+def _pin_groups(sheet, ins, roots):
+    """{pin name: [sheet-local group roots]} of the wires on each of the symbol's pins, every
+    group once (a pin doesn't join wires: two wires on one terminal are two groups)."""
     out = {}
     for name, p in ins.pin_points():
         for o in _touching(sheet, p):
             if o.kind == "wire" and o.id in roots and o.touches(p, TOL):
-                out.setdefault(name, roots[o.id])
+                got = out.setdefault(name, [])
+                if roots[o.id] not in got:
+                    got.append(roots[o.id])
     return out
 
 
@@ -499,13 +508,16 @@ def _plc_summary(sheet, ins, roots, ios, mods):
     point = is_io_point_symbol(d)
     if not pts and not point:
         return
-    for name, r in _pin_wires(sheet, ins, roots).items():
-        if point:
-            ios.append((r, "", None, ins.attrs, ""))
-        elif name in pts:
-            kind, n = pts[name]
-            ios.append((r, kind, n, ins.attrs,
-                        ins.attrs.get("PARENT", "") if d.role == "child" else ""))
+    # (every wire on a point, not the first only: a second wire on IN 6 kept a page number,
+    # the battery, seed 435)
+    for name, rs in _pin_groups(sheet, ins, roots).items():
+        for r in rs:
+            if point:
+                ios.append((r, "", None, ins.attrs, ""))
+            elif name in pts:
+                kind, n = pts[name]
+                ios.append((r, kind, n, ins.attrs,
+                            ins.attrs.get("PARENT", "") if d.role == "child" else ""))
 
 
 def _count(num):

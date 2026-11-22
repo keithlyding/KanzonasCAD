@@ -19,6 +19,9 @@ build fails without them.
 - A bus too wide to go round a symbol from where you clicked could run straight through it. The
   click isn't taken now, and the command line says why. A bus also keeps the same spacing on
   paper when you move to a sheet of another scale (it could come out many times wider).
+- With wire numbers by PLC I/O address on, a second wire on the same input or output point
+  (one teed onto the other right at the terminal) kept its usual number. Both take the
+  address now.
 
 ## 0.21.2
 
