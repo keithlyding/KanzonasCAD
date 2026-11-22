@@ -1627,8 +1627,9 @@ it switches while KanzonasCAD is open.</li>
 <h2>Edit menu</h2>
 <ul>
 <li><b>Undo</b> (Ctrl+Z) and <b>Redo</b> (Ctrl+Y or Ctrl+Shift+Z): every change, including
-sheet and layer changes, can be undone. Their arrows also sit right after the menus (File,
-Edit, View...), always a click away, with <b>Save</b> (Ctrl+S) just before them.</li>
+sheet and layer changes, can be undone. Their arrows also sit at the left end of the ribbon's
+row of tabs (Home, Schematic...), always a click away, after <b>Open</b>, <b>Save</b> and
+<b>Print</b>, as in KanzonasPDF.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
 insertion point (the copied objects' lower left corner lands there). Works between projects,
 and after KanzonasCAD is closed and started again. Their layers come with them: a layer the
@@ -1641,7 +1642,9 @@ color); a layer it already has keeps its own.</li>
 <ul>
 <li><b>New project</b> (Ctrl+N), <b>Open...</b> (Ctrl+O, a project, or a DXF or DWG drawing),
 <b>Open recent</b>, <b>Save</b> (Ctrl+S), <b>Save as...</b> (Ctrl+Shift+S),
-<b>Close project</b> (Ctrl+W), <b>Exit</b> (Ctrl+Q).</li>
+<b>Close project</b> (Ctrl+W), <b>Exit</b> (Ctrl+Q). Save is grayed out while the project has
+no unsaved changes (the tab's name shows a * when it has some); Save as... always works. In a
+block's tab, Save saves the block.</li>
 <li><b>Opening a DXF or DWG</b> (Open..., or a double-click on it) makes a new project of it
 and puts the drawing on the page, wherever the other program drew it: left where it is when
 it already lies on the sheet (a DXF exported from KanzonasCAD, or one drawn on a sheet of

@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.21.3
+
+**Changed**
+- Open, Save and Print, then Undo and Redo, now sit at the left end of the ribbon's row of tabs,
+  as in KanzonasPDF, instead of after the menus.
+- Save is grayed out while the project has no unsaved changes. Save as... always works.
+
 ## 0.21.2
 
 **New**
