@@ -13,6 +13,10 @@ build fails without them.
   as in KanzonasPDF, instead of after the menus.
 - Save is grayed out while the project has no unsaved changes. Save as... always works.
 
+**Fixed**
+- The mouse wheel no longer changes a number box or a closed drop-down list when it passes over
+  one: it scrolls the window or list instead, so scrolling can't change a setting by accident.
+
 ## 0.21.2
 
 **New**
