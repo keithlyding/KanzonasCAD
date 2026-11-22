@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QSpinBox,
                                QDialogButtonBox, QVBoxLayout, QTableWidget, QTableWidgetItem,
-                               QHBoxLayout, QPushButton, QColorDialog, QInputDialog,
+                               QHBoxLayout, QPushButton, QInputDialog,
                                QMessageBox, QDoubleSpinBox, QLabel, QHeaderView,
                                QCheckBox, QTabWidget, QWidget, QTreeWidget,
                                QTreeWidgetItem, QAbstractItemView)
@@ -318,7 +318,8 @@ def _color_button(color):
 
     def pick():
         start = QColor("#000000" if b.color in (None, M.ADAPTIVE) else b.color)
-        c = QColorDialog.getColor(start, b, "Color")
+        from . import no_wheel
+        c = no_wheel.get_color(start, b, "Color")
         if c.isValid():
             b.color = c.name()
             show()
@@ -940,7 +941,8 @@ class LayersDialog(QDialog):
         cur = lay.awg if gauge else lay.wire_color
         if cur and cur not in items:
             items.insert(1, cur)
-        got, ok = QInputDialog.getItem(
+        from . import no_wheel
+        got, ok = no_wheel.get_item(
             self, "Layers", "%s for the wires on %s:" % ("Gauge (AWG)" if gauge else
                                                       "Wire color", name),
             items, items.index(cur) if cur in items else 0, True)
@@ -1014,7 +1016,8 @@ class LayersDialog(QDialog):
             return
         lay = self.project.layers[n]
         start = QColor("#000000" if lay.color in (None, M.ADAPTIVE) else lay.color)
-        c = QColorDialog.getColor(start, self, "Layer color")
+        from . import no_wheel
+        c = no_wheel.get_color(start, self, "Layer color")
         if c.isValid():
             self._change(n, color=c.name())
 

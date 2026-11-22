@@ -768,18 +768,17 @@ class SheetLayoutTest(unittest.TestCase):
             v.project.undo()
             self.assertAlmostEqual(v.sheet().entities[ins.id].tag_text().height, 0.1)
             # an object's own color, then back to ByLayer
-            from PySide6.QtWidgets import QInputDialog
+            from kanzonascad import no_wheel
             v.set_selection({ins.id})
-            old = QInputDialog.getItem
-            QInputDialog.getItem = staticmethod(lambda *a, **k: ("ByLayer (the layer's color)",
-                                                                 True))
+            old = no_wheel.get_item
+            no_wheel.get_item = lambda *a, **k: ("ByLayer (the layer's color)", True)
             try:
                 with v.project.edit("c") as ed:
                     ed.change(v.sheet(), v.sheet().entities[ins.id].copy(color="#00ff00"))
                 self.assertEqual(v.sheet().entities[ins.id].color, "#00ff00")
                 w.object_color()
             finally:
-                QInputDialog.getItem = old
+                no_wheel.get_item = old
             self.assertIsNone(v.sheet().entities[ins.id].color)
             self.assertAlmostEqual(v.text_height(), 0.125)
         finally:

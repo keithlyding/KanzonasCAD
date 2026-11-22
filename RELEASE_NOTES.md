@@ -6,6 +6,20 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.21.3
+
+**Changed**
+- Open, Save and Print, then Undo and Redo, now sit at the left end of the ribbon's row of tabs,
+  as in KanzonasPDF, instead of after the menus.
+- Save is grayed out while the project has no unsaved changes. Save as... always works.
+
+**Fixed**
+- The mouse wheel no longer changes a number box or a closed drop-down list when it passes over
+  one: it scrolls the window or list instead, so scrolling can't change a setting by accident.
+- A bus too wide to go round a symbol from where you clicked could run straight through it. The
+  click isn't taken now, and the command line says why. A bus also keeps the same spacing on
+  paper when you move to a sheet of another scale (it could come out many times wider).
+
 ## 0.21.2
 
 **New**

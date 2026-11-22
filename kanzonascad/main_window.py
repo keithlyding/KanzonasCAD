@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QMimeData, QTimer, QByteArray, QPoint
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QGuiApplication
 from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QListWidget,
                                QListWidgetItem, QFileDialog, QMessageBox, QLabel, QToolBar,
-                               QToolButton, QComboBox, QInputDialog, QMenu, QApplication,
+                               QToolButton, QComboBox, QMenu, QApplication,
                                QDialog, QVBoxLayout, QTextBrowser, QDialogButtonBox, QWidget,
                                QTabBar, QAbstractItemView)
 
@@ -196,6 +196,8 @@ class MainWindow(BlockEditing, QMainWindow):
         self.family = family if family is not None else []
         self.family.append(self)
         install_text_measure()
+        from . import no_wheel
+        no_wheel.install()              # (the wheel never changes a number box or a list)
         from . import paths
         # (portable: settings.ini in the data folder beside the program, not the registry)
         self.settings = paths.settings()
@@ -667,7 +669,6 @@ class MainWindow(BlockEditing, QMainWindow):
     def _build_menus(self):
         mb = self.menuBar()
         a = self.acts
-        self._build_quick_access(mb)
         m = mb.addMenu("&File")
         for k in ("new", "new_template", "open"):
             m.addAction(a[k])
@@ -785,6 +786,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self.sch_layer_box.activated.disconnect()
         self.sch_layer_box.activated.connect(self._wire_layer_picked)
         r = self.ribbon = Ribbon()
+        self._build_quick_access(r)
         r.add_tab("Home", [
             ("Draw", "large", [a["line"], a["polyline"], a["rect"], self.circle_button,
                                a["arc"], a["text"], a["mtext"], a["hatch"], a["number"]]),
@@ -2337,24 +2339,29 @@ class MainWindow(BlockEditing, QMainWindow):
             d.view.osnap_modes = set(modes)
             d.view.update()
 
-    def _build_quick_access(self, mb):
-        """Save, Undo and Redo as icons right after the menus (added once the menus are in;
-        Save the owner's, 0.19.10: "a save button to the left of the undo/redo buttons")."""
+    def _build_quick_access(self, r):
+        """Open, Save and Print, then Undo and Redo, as icons in the ribbon's tab row on the
+        left, as KanzonasPDF has them (the owner, 0.19.10: "a save button to the left of the
+        undo/redo buttons"; 0.21.3: "Maybe it should be next to the ribbon tabs, like
+        KanzonasPDF is?"). The actions themselves: grayed with them (Save with nothing to
+        save), their icons following the theme."""
+        from PySide6.QtCore import QSize
+        q = self.quick_bar = QToolBar()
+        q.setObjectName("quick_access")
+        q.setIconSize(QSize(16, 16))
+        q.setStyleSheet("QToolBar { border: 0; padding: 0; spacing: 0; }")
         self._quick = []
-
-        def add():
-            for key in ("save", "undo", "redo"):
-                src = self.acts[key]
-                q = QAction(src.icon(), "", self)
-                q.setToolTip("%s (%s)" % (src.text().replace("&", ""),
-                                          src.shortcut().toString()))
-                q.setProperty("icon_key", src.property("icon_key"))
-                q.triggered.connect(src.trigger)
-                src.changed.connect(lambda q=q, s=src: q.setEnabled(s.isEnabled()))
-                q.setEnabled(src.isEnabled())
-                mb.addAction(q)
-                self._quick.append(q)
-        QTimer.singleShot(0, add)
+        for key in ("open", "save", "print", None, "undo", "redo"):
+            if key is None:
+                q.addSeparator()
+                continue
+            act = self.acts[key]
+            plain = act.text().replace("&", "").rstrip(".")
+            if act.toolTip().rstrip(".") == plain:          # (none of its own: its shortcut)
+                act.setToolTip("%s (%s)" % (plain, act.shortcut().toString()))
+            q.addAction(act)
+            self._quick.append(act)
+        r.setCornerWidget(q, Qt.TopLeftCorner)
 
     def _fill_layer_states(self, menu=None):
         """The layer list: a light bulb (shown) and a lock per layer, toggled with a click
@@ -2840,7 +2847,8 @@ class MainWindow(BlockEditing, QMainWindow):
         if not ents:
             self.statusBar().showMessage("Color: select the objects first.", 4000)
             return
-        pick, ok = QInputDialog.getItem(
+        from . import no_wheel
+        pick, ok = no_wheel.get_item(
             self, "Color", "Color of the %d selected object(s):" % len(ents),
             ["ByLayer (the layer's color)", "Choose a color..."], 0, False)
         if not ok:
@@ -2848,8 +2856,7 @@ class MainWindow(BlockEditing, QMainWindow):
         color = None
         if pick.startswith("Choose"):
             from PySide6.QtGui import QColor
-            from PySide6.QtWidgets import QColorDialog
-            c = QColorDialog.getColor(QColor("#ffffff"), self, "Color")
+            c = no_wheel.get_color(QColor("#ffffff"), self, "Color")
             if not c.isValid():
                 return
             color = c.name()
@@ -2976,9 +2983,9 @@ class MainWindow(BlockEditing, QMainWindow):
 
     def ask_report(self, titles):
         """Which report to draw on sheets: its title, or None (a test replaces it)."""
-        from PySide6.QtWidgets import QInputDialog
-        got, ok = QInputDialog.getItem(self, "Report sheet", "Draw on sheets of the project:",
-                                       titles, 0, False)
+        from . import no_wheel
+        got, ok = no_wheel.get_item(self, "Report sheet", "Draw on sheets of the project:",
+                                    titles, 0, False)
         return got if ok else None
 
     def report_sheet(self, key=None):
@@ -3701,6 +3708,10 @@ class MainWindow(BlockEditing, QMainWindow):
                   "clean_wires", "del_comp", "wire_layers"):
             a[k].setEnabled(has)
         in_block = is_block_doc(self.doc())
+        # (Save grayed with nothing to save, as KanzonasPDF's; the owner, 0.21.3: "the save
+        # button needs to be grayed out if the document is already saved". In a block's tab it
+        # saves the block)
+        a["save"].setEnabled(bool(has and (in_block or p.is_modified())))
         a["save_block"].setEnabled(in_block)
         a["save_block"].setVisible(in_block)
         for k in ("save_block_as", "add_pin", "pins", "add_attr"):

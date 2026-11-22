@@ -690,7 +690,10 @@ straight out of the side the pin is on: a wire from above to a drive's L3 on its
 goes down beside the drive and comes up into L3 from below. The preview shows the way it will
 go. With nothing in the way a wire is as it always was. A <b>bus</b> goes round them too, all
 its wires: as close as the clearance lets it when its other wires are on the outside of the
-turns, with room for them when they are on the inside. Project properties, Schematic,
+turns, with room for them when they are on the inside. When there is no way round for a bus
+that wide from where you clicked (its other wires already past the symbol), the click isn't
+taken and the command line says so: click farther from the symbol, or start again with fewer
+wires (N) or closer ones (D). Project properties, Schematic,
 <b>Wires go around the symbols in their way</b> turns it off, and <b>...keeping this far from
 them</b> sets how far (on paper: 1/8 inch to start, 0.25 for 1/4 inch).</p>
 <p><b>Dragging a run of wire</b> (AutoCAD Electrical's Scoot on a wire): select a wire and
@@ -743,7 +746,7 @@ side</b> (on the middle of one of three phases running across the sheet) and it 
 off each, the first off the farthest back, each with a dot where it leaves its own; <b>end it
 on them</b> (the last click on one of them, the bus arriving square) and each wire lands on its
 own, the first on the first it meets, crossing the others, and the bus is done: a vertical
-3-phase bus onto horizontal L1, L2, L3. Started anywhere else, it uses the last bus's count and spacing (3 wires,
+3-phase bus onto horizontal L1, L2, L3. Started anywhere else, it uses the last bus's count and spacing (the same on paper on a sheet of another scale; 3 wires,
 1/2 inch to start): type <b>N</b> (or just the number) for how many, then how far apart (1/2
 inch; 12mm works too), or <b>D</b> for the spacing alone. Then click the path as for a wire:
 every click turns it 90 degrees, as many times as you need, and all the wires turn together,
@@ -1608,6 +1611,10 @@ middle button for <b>Zoom extents</b>. While you pan or zoom, the picture on scr
 scales with the mouse (instantly, however busy the drawing), and the drawing is drawn again
 sharp a moment after you stop. While the view stays still, the drawing around it (half the
 window more on every side) is made ready too, so panning and zooming out show it right away.</li>
+<li>The mouse wheel never changes a number box (the boxes with up and down arrows) or a closed
+drop-down list, in any window or on the ribbon: it scrolls the window or list they're in, so
+scrolling down a window can't change a setting by accident. Type the value, use the arrow
+keys, or click the arrows; open a list to pick from it (the wheel scrolls an open list).</li>
 <li><b>Zoom extents</b> (Ctrl+Shift+E), <b>Zoom to sheet</b> (Ctrl+0), <b>Zoom in</b> (Ctrl+=),
 <b>Zoom out</b> (Ctrl+-). Zooming out goes until the whole sheet and everything drawn take
 about a quarter of the window, on a sheet with a scale too (at 1:24 the sheet is 24 times its
@@ -1627,8 +1634,9 @@ it switches while KanzonasCAD is open.</li>
 <h2>Edit menu</h2>
 <ul>
 <li><b>Undo</b> (Ctrl+Z) and <b>Redo</b> (Ctrl+Y or Ctrl+Shift+Z): every change, including
-sheet and layer changes, can be undone. Their arrows also sit right after the menus (File,
-Edit, View...), always a click away, with <b>Save</b> (Ctrl+S) just before them.</li>
+sheet and layer changes, can be undone. Their arrows also sit at the left end of the ribbon's
+row of tabs (Home, Schematic...), always a click away, after <b>Open</b>, <b>Save</b> and
+<b>Print</b>, as in KanzonasPDF.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
 insertion point (the copied objects' lower left corner lands there). Works between projects,
 and after KanzonasCAD is closed and started again. Their layers come with them: a layer the
@@ -1641,7 +1649,9 @@ color); a layer it already has keeps its own.</li>
 <ul>
 <li><b>New project</b> (Ctrl+N), <b>Open...</b> (Ctrl+O, a project, or a DXF or DWG drawing),
 <b>Open recent</b>, <b>Save</b> (Ctrl+S), <b>Save as...</b> (Ctrl+Shift+S),
-<b>Close project</b> (Ctrl+W), <b>Exit</b> (Ctrl+Q).</li>
+<b>Close project</b> (Ctrl+W), <b>Exit</b> (Ctrl+Q). Save is grayed out while the project has
+no unsaved changes (the tab's name shows a * when it has some); Save as... always works. In a
+block's tab, Save saves the block.</li>
 <li><b>Opening a DXF or DWG</b> (Open..., or a double-click on it) makes a new project of it
 and puts the drawing on the page, wherever the other program drew it: left where it is when
 it already lies on the sheet (a DXF exported from KanzonasCAD, or one drawn on a sheet of

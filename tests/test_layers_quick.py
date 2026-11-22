@@ -58,7 +58,7 @@ class LayerQuickTest(unittest.TestCase):
         self.assertTrue(undo.isEnabled())
         undo.trigger()
         self.assertTrue(self.vis("NOTES"))
-        self.assertIn(undo, w.menuBar().actions())
+        self.assertIn(undo, w.quick_bar.actions())         # (by the ribbon's tabs)
 
 
 if __name__ == "__main__":
