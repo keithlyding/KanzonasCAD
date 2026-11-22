@@ -2988,7 +2988,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             sh, t = got
             mod = next(e for e in sh.inserts() if e.block == "1734-IB8 module")
             pin = dict(mod.pin_points())[str(n)]
-            assert G.dist((t.pos[0] + 0.15, t.pos[1] - 0.03), pin) < 1e-9, \
+            # (0.15" left of it and 0.03" up on paper: in the sheet's scale, the project's for
+            # new sheets, which a step can change: seed 43 step 154)
+            k = sh.k()
+            assert G.dist((t.pos[0] + 0.15 * k, t.pos[1] - 0.03 * k), pin) < 1e-9, \
                 "point %d's text isn't beside its terminal" % n
         BC.CHECKED["I/O list points beside their terminals"] += 1
 
