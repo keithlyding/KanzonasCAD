@@ -81,7 +81,11 @@ class NoWheelTest(unittest.TestCase):
         dlg.close()
 
     def test_installed_once(self):
-        self.assertIs(no_wheel.install(), no_wheel.install())
+        # (every main window asks for it: one filter for the application, not one each)
+        first = APP._kz_no_wheel
+        again = no_wheel.install()
+        self.assertIs(again, first)
+        self.assertIsInstance(first, no_wheel._NoWheel)
 
     def test_without_it_the_wheel_would_change_them(self):
         # (the check above means something: Qt's own boxes take the wheel)
