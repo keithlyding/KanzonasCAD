@@ -13,6 +13,7 @@ from . import wirenums
 
 WIRE_HEAD = ["Wire", "Size and color", "Lands on", "Sheets"]
 TERM_HEAD = ["Strip", "Terminal", "Wires (left)", "Wires (right)", "Where"]
+COUNT_HEAD = ["Wire", "Taps", "Terminals", "Jumpers", "Sheets"]
 
 
 def _where(project, sheet, ins):
@@ -100,6 +101,58 @@ def terminal_rows(project):
                         _where(project, s, ins)])
     out.sort(key=lambda r: (pull._natural(r[0]), pull._natural(r[1])))
     return out
+
+
+def terminal_count_rows(project):
+    """[[wire number, its taps' numbers, terminals, jumpers, sheets]] for every wire number
+    tapped (tap_numbers "suffix" or "own": a tap is a group of its own), and the totals
+    (terminals, jumpers). The owner, 0.22.4: "When I'm tapping off a wire with -1, -2, -3,
+    etc, is there anything that is totalizing so I know how many terminal blocks I need?",
+    and the rule "one wire per terminal side": a wire number and each of its taps (a tap off a
+    tap too) a terminal of its own, the terminals bridged by one jumper fewer than them (6001
+    tapped three times: 4 terminals, 3 jumpers). An upper bound: multi-level terminals, or two
+    wires on a side, need fewer."""
+    if not wirenums.enabled(project) or wirenums.tap_mode(project) == "same":
+        return [], (0, 0)
+    gs, info, _dist, taps, _conns = wirenums._assemble(project)
+    parent = {}
+
+    def base(g):
+        seen = set()
+        while g in parent and g not in seen:
+            seen.add(g)
+            g = parent[g]
+        return g
+    for src, tap, _k in sorted(taps, key=lambda t: t[2]):
+        # (two wires each tapping the other, overlapping: the first tap found counts, as
+        # the numbering takes it, 2017 and 2017-1; the other would close a loop)
+        if tap != src and tap not in parent and base(src) != tap:
+            parent[tap] = src
+    fam = {}
+    for g in gs:
+        b = base(g)
+        if b != g:
+            fam.setdefault(b, []).append(g)
+    rows = []
+    t_all = j_all = 0
+    for b, tapped in fam.items():
+        def num(g):
+            nums = info[g][2] if g in info else []
+            return nums[0] if nums else "?"
+        names = sorted({num(g) for g in tapped}, key=pull._natural)
+        sheets = []
+        for g in [b] + tapped:
+            for s, _ws in gs.get(g, ()):
+                page = project.sheet_number(s)
+                if page not in sheets:
+                    sheets.append(page)
+        terms = 1 + len(tapped)
+        rows.append([num(b), ", ".join(names), str(terms), str(terms - 1),
+                     ", ".join(sorted(sheets, key=pull._natural))])
+        t_all += terms
+        j_all += terms - 1
+    rows.sort(key=lambda r: pull._natural(r[0]))
+    return rows, (t_all, j_all)
 
 
 XLSX = "Excel workbook (*.xlsx)"

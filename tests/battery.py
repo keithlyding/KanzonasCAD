@@ -3839,6 +3839,31 @@ def random_editing(log, out, ops, seed, drawing=None):
             win.close_tab(win.tabs.indexOf(d))
             APP.processEvents()
 
+    def terminal_count_check():
+        # (0.22.4: Terminal count's totals worked out here from the wire numbers, not from
+        # wirenums' taps: with taps numbered -1, -2 (and a tap off a tap -1a), a wire number
+        # and each of its taps one terminal, one jumper fewer than terminals a tapped number)
+        from kanzonascad import reports
+        if wirenums.tap_mode(p) != "suffix" or not wirenums.enabled(p):
+            return
+        nums = {w.num for sh in p.sheets for w in sh.wires() if w.num}
+        if any(w.num_lock or w.own_num for sh in p.sheets for w in sh.wires()):
+            return                          # (a number typed: anything may be a "tap")
+        tapped = {}
+        for n in nums:
+            # (a number by its PLC address too: O:7/4 tapped is O:7/4-1, the quick battery's
+            # seed 11)
+            m = re.fullmatch(r"(.+?)-\d+[a-z]*", n)
+            if m and m.group(1) in nums:
+                tapped.setdefault(m.group(1), set()).add(n)
+        want_t = sum(1 + len(v) for v in tapped.values())
+        want_j = sum(len(v) for v in tapped.values())
+        rows, (got_t, got_j) = reports.terminal_count_rows(p)
+        assert (got_t, got_j) == (want_t, want_j), \
+            "Terminal count: %d terminals, %d jumpers; from the numbers %d, %d" % (
+                got_t, got_j, want_t, want_j)
+        BC.CHECKED["terminal count from the tap numbers"] += 1
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -3885,6 +3910,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 APP.processEvents()
             if i % 25 == 24:
                 kinds.update(type(e).__name__ for e in s.entities.values())
+                terminal_count_check()
                 bom.table(p)
                 bom.write_csv(p, os.path.join(out, "bom.csv"))
                 runs_now = pull.runs(p)[0]
