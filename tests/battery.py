@@ -55,6 +55,10 @@ from kanzonascad import block_editor as BE  # noqa: E402
 from kanzonascad import commands as C  # noqa: E402
 from kanzonascad import model as M  # noqa: E402
 from kanzonascad import geometry as G  # noqa: E402
+
+# a tap's ending on the number it taps: -1, a or -a, and off a tap more of the other kind
+# (2007-1a, 2007a1, 2007-a1a; 0.22.4), lowercase (a distribution outlet's 1006A isn't one)
+TAP_END = re.compile(r"(?:-\d+|-?[a-z]+)[a-z0-9]*$")
 from kanzonascad import wires, crossings, wirenums, wirelayers, fileio, templates  # noqa: E402
 from kanzonascad import tags as tags_mod  # noqa: E402
 from kanzonascad import xrefs as XR  # noqa: E402
@@ -2149,6 +2153,12 @@ def random_editing(log, out, ops, seed, drawing=None):
         if rnd.random() < 0.2:
             with p.edit("tap numbers") as ed:
                 ed.project_settings({"tap_numbers": rnd.choice(["same", "suffix", "own"])})
+        if rnd.random() < 0.2:
+            # (0.22.4: how a tap's number ends, the project's and now and then a sheet's own)
+            with p.edit("tap style") as ed:
+                ed.project_settings({"tap_style": rnd.choice(M.TAP_STYLES)})
+                if rnd.random() < 0.4:
+                    ed.sheet_meta(s, tap_style=rnd.choice(M.TAP_STYLES + (None,)))
         mode = wirenums.tap_mode(p)
         k = s.k()
         o = clear_of_drawing(k)
@@ -2176,9 +2186,25 @@ def random_editing(log, out, ops, seed, drawing=None):
         tap = [x for x in s.wires() if x.touches(to) and x.touches(m)]
         main = s.entities.get(w.id)
         assert len(tap) == 1 and main is not None, "the tap or the wire it taps is gone"
+        if not said and rnd.random() < 0.3:
+            # (0.22.4: the tap's own style, chosen in its Wire number window)
+            pick = rnd.choice(M.TAP_STYLES + ("",))
+            win.ask_wire_number = lambda n, tap_of=None, own="", locked=False: (
+                n, own, locked, pick)
+            try:
+                win.edit_wire_number(tap[0])
+            finally:
+                win.__dict__.pop("ask_wire_number", None)
+            tap = [x for x in s.wires() if x.touches(to) and x.touches(m)]
+            assert len(tap) == 1 and tap[0].tap_style == pick, \
+                "a tap's style not kept: %r, not %r" % (tap and tap[0].tap_style, pick)
+            BC.CHECKED["tap style chosen for one wire"] += 1
         how = {"N": "own", "S": "same"}.get(said, mode)
         if main.num and tap[0].num:
-            want = {"same": main.num, "suffix": main.num + ("a" if "-" in main.num else "-1")}
+            # (the wire just drawn taps nothing: its tap is one level down, the first: -1, a
+            # or -a as the tap's own style says, else its sheet's, else the project's)
+            style = tap[0].tap_style or s.tap_style or p.settings.get("tap_style") or "-1"
+            want = {"same": main.num, "suffix": main.num + style}
             if how == "own":
                 assert tap[0].num != main.num, "a tap with its own number: %s, %s" % (
                     tap[0].num, main.num)
@@ -2187,7 +2213,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                     mode, said, tap[0].num, main.num)
             BC.CHECKED["tap numbered as asked"] += 1
             if how == "suffix":
-                BC.CHECKED["tap numbered -1 off the wire"] += 1
+                BC.CHECKED["tap numbered -1, a or -a off the wire"] += 1
 
     def op_wire_size():
         # (0.18.2: Wire size: a wire clicked given a gauge of its own, or the layer's again;
@@ -3248,7 +3274,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                     BC.CHECKED["wire on a PLC point numbered by its address"] += 1
                 else:
                     assert not nums & addrs and all(
-                        n and wirenums.split(re.sub(r"-\d+[a-z]*$", "", n)) for n in nums), \
+                        n and wirenums.split(TAP_END.sub("", n)) for n in nums), \
                         "with I/O numbering off, a wire on PLC point %s is %s" % (
                             sorted(addrs), nums)
                     BC.CHECKED["wire on a PLC point numbered again when turned off"] += 1
@@ -3864,10 +3890,13 @@ def random_editing(log, out, ops, seed, drawing=None):
         tapped = {}
         for n in nums:
             # (a number by its PLC address too: O:7/4 tapped is O:7/4-1, the quick battery's
-            # seed 11)
-            m = re.fullmatch(r"(.+?)-\d+[a-z]*", n)
-            if m and m.group(1) in nums:
-                tapped.setdefault(m.group(1), set()).add(n)
+            # seed 11; 0.22.4: or 2007a, 2007-a, and off those 2007a1...: the shortest number
+            # it starts with that the rest is a tap's ending of, lowercase, so a distribution
+            # outlet's 1006A is not a tap of 1006)
+            for k in range(1, len(n)):
+                if n[:k] in nums and TAP_END.fullmatch(n[k:]):
+                    tapped.setdefault(n[:k], set()).add(n)
+                    break
         rows, (got_t, got_j) = reports.terminal_count_rows(p)
         # (a tap that lands on a PLC point, numbered by its address, has no -1 to go by: the
         # seed 44's O:3/3 tapped by Local:9:O.Data.1. It counts only when it really is the

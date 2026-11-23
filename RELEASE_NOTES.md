@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.4
+
+**New**
+- Tap numbers can end in -1, -2, -3 (2007-1, as before), a, b, c (2007a) or -a, -b, -c
+  (2007-a): Project properties, Schematic, Tap numbers end in. A sheet can choose otherwise
+  (Sheet properties), and so can a single tap (double-click it: Wire number window).
+- A tap off a tap takes the other kind: 2007-1a, 2007a1, 2007-a1. Letters are lowercase, so a
+  tap isn't mistaken for a distribution outlet's 2007A.
+
+**Changed**
+- A tap three levels down is now 2007-1a1 (it was 2007-1aa).
+
 ## 0.22.3
 
 **Fixed**

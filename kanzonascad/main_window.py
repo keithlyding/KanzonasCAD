@@ -3553,6 +3553,7 @@ class MainWindow(BlockEditing, QMainWindow):
                 other, on_pin = partner, True
                 if not cur.pin_tap:
                     was = "same"            # (joined to it so far: one number)
+        self._asking_tap_style = (cur.tap_style, v.project.tap_style(v.sheet()))
         got = self.ask_wire_number(cur.num, other.num if other is not None else None,
                                    was, locked=cur.num_lock) \
             if other is not None or cur.own_num or cur.same_num else \
@@ -3560,12 +3561,14 @@ class MainWindow(BlockEditing, QMainWindow):
         if got is None:
             return
         num, own = got[:2]
+        # (how its tap number ends, 0.22.4: "" its sheet's; a window of before answers without)
+        style = got[3] if len(got) > 3 and got[3] in M.TAP_STYLES + ("",) else cur.tap_style
         own = "own" if own is True else "" if own is False else (own or "")
         lock = got[2] if len(got) > 2 else (cur.num_lock if num == (cur.num or "") else
                                             bool(num))
         same = num == (cur.num or "") and lock == cur.num_lock and \
             (cur.num_lock or not num or own != was)
-        if same and own == was:
+        if same and own == was and style == cur.tap_style:
             return
         go_same = False
         if num and num != (cur.num or ""):
@@ -3580,6 +3583,12 @@ class MainWindow(BlockEditing, QMainWindow):
                 self._say("Wire %s locked: another wire has that number, and numbering "
                           "would change an unlocked one" % num)
         with v.project.edit("Wire number") as ed:
+            if style != cur.tap_style:
+                # (every wire of its group: one style for the tap, whichever is clicked)
+                got_g = wirenums.group_of(v.project, v.sheet(), cur)
+                for sh, w in (got_g[1] if got_g else [(v.sheet(), cur)]):
+                    ed.change(sh, sh.entities[w.id].copy(tap_style=style))
+                cur = v.sheet().entities[cur.id]
             if own != was:
                 # (its own number where it taps another, or back to that wire's: numbering
                 # gives it one first, then a number typed takes over)
@@ -3659,7 +3668,10 @@ class MainWindow(BlockEditing, QMainWindow):
         from .dialogs import wire_number_dialog
         v = self.view()
         mode = wirenums.tap_mode(v.project) if v is not None else "same"
-        return wire_number_dialog(self, num, tap_of, own, locked, mode)
+        # (the wire's own tap style and its sheet's, noted by edit_wire_number: a test's
+        # replacement keeps the four arguments it has always had)
+        style, sheet_style = getattr(self, "_asking_tap_style", ("", "-1"))
+        return wire_number_dialog(self, num, tap_of, own, locked, mode, style, sheet_style)
 
     def _toggle_title_block(self, on):
         v = self.view()

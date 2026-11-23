@@ -84,7 +84,8 @@ every sheet; the type brings up the matching ribbon tab and shows in the Sheets 
 <b>location</b> (the panel or box what it shows is in: MCP, JB-1, FIELD; see Cables between
 panels), page number and, if it differs from the project's, its own revision, and its
 default <b>wire layer</b> (the layer new wires on it go on: as the project, or one of its own;
-see Colors and layers), and its <b>References</b> (as the project, Grid or Ladder: see Ladders).
+see Colors and layers), its <b>References</b> (as the project, Grid or Ladder: see Ladders), and
+how its <b>Tap numbers end in</b> (as the project, -1, a or -a: see Wire numbers).
 Its size and zones are the project's unless you tick "This sheet has its own size and zones";
 then set how many columns run along the top and the first one's number (11 makes a sheet
 continue 11 to 20), and how many rows run down the left and the first one's letter. Grid
@@ -1008,7 +1009,15 @@ numbered as Project properties, Schematic, <b>Wires tapped off a wire are number
 2007-1, 2007-2, 2007-3 in the sheet's numbering order, those off 2008 are 2008-1, 2008-2...,
 and a tap off a tap takes a letter, 2007-1a, 2007-1b. The wires past the device a drop lands
 on are numbered as usual. Adding or removing a drop renumbers the others on that wire
-(unless their numbers are locked).</li>
+(unless their numbers are locked). <b>Tap numbers end in</b>, just under it, picks how:
+<b>-1, -2, -3</b> (2007-1), <b>a, b, c</b> (2007a) or <b>-a, -b, -c</b> (2007-a). A tap off a
+tap takes the other kind, without a dash: 2007-1a, 2007a1, 2007-a1, and one off that the first
+kind again (2007-1a1). Letters are lowercase, so a tap is never taken for a distribution
+block outlet's 2007A; after z come aa, ab... A sheet can choose otherwise (Sheet properties,
+<b>Tap numbers end in</b>), and so can a tap (double-click it: the Wire number window's <b>Tap
+number ends in</b>; the choice goes with the whole wire, and copies, cuts and trims keep it).
+The tap's own choice comes first, then its sheet's, then the project's. Changing any of them
+renumbers the taps it touches (Undo puts them back).</li>
 <li><b>The same number as the wire</b> (projects from before 0.18.3 keep this one): a tap is
 one wire with the wire it taps.</li>
 <li><b>A number of its own</b>: each tap takes the next free number of its page.</li>
@@ -1160,9 +1169,9 @@ how many terminals and jumpers the tapped wires need: every wire number tapped o
 one for each tap, bridged by one jumper fewer than terminals (6001 tapped three times: 4
 terminals, 3 jumpers), with the sheets they are on and the totals at the bottom. It counts one
 wire on each terminal side, the most you can need: multi-level terminals, or two wires on a
-side, need fewer. It counts taps numbered -1, -2... (or with numbers of their own: Project
-properties, Schematic, Tap numbers); taps that keep the wire's number aren't told apart, and
-it says so. All three are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
+side, need fewer. It counts taps numbered -1, -2..., a, b... or -a, -b... (or with numbers of
+their own: Project properties, Schematic, <b>Wires tapped off a wire are numbered</b>); taps
+that keep the wire's number aren't told apart, and it says so. All three are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
 writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workbook" as the
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 <p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints

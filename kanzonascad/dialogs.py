@@ -15,6 +15,17 @@ from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QSpin
 from . import model as M
 
 
+
+# a tap's suffix styles, as the windows offer them (model.TAP_STYLES; the owner, 0.22.4)
+TAP_STYLE_LABELS = (("-1", "-1, -2, -3 (2007-1; a tap off it 2007-1a)"),
+                    ("a", "a, b, c (2007a; a tap off it 2007a1)"),
+                    ("-a", "-a, -b, -c (2007-a; a tap off it 2007-a1)"))
+
+
+def _tap_style_name(style):
+    return {"-1": "-1, -2, -3", "a": "a, b, c", "-a": "-a, -b, -c"}.get(style, "-1, -2, -3")
+
+
 def _buttons(dlg):
     b = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
     b.accepted.connect(dlg.accept)
@@ -175,6 +186,16 @@ def sheet_properties(parent, project, sheet):
     srefs.setToolTip("How places on this sheet are given in cross-references and reports: as "
                      "Project properties says, or by grid or by ladder on this sheet")
     form.addRow("References", srefs)
+    stap = QComboBox()
+    stap.setObjectName("sheet_tap_style")
+    stap.addItem("As the project (%s)" % _tap_style_name(project.tap_style()), None)
+    for key, label in TAP_STYLE_LABELS:
+        stap.addItem(label, key)
+    stap.setCurrentIndex(max(stap.findData(sheet.tap_style), 0))
+    stap.setToolTip("How the numbers of taps on this sheet end: as Project properties says, or "
+                    "2007-1, 2007a or 2007-a here (a wire's Wire number window can choose "
+                    "otherwise)")
+    form.addRow("Tap numbers end in", stap)
     from . import wirelayers
     wlay = QComboBox()
     wlay.setObjectName("sheet_wire_layer")
@@ -252,6 +273,7 @@ def sheet_properties(parent, project, sheet):
                    number_order=order.currentData(), location=loc.text().strip(),
                    wire_order_tags=worder.currentData(),
                    referencing=srefs.currentData(),
+                   tap_style=stap.currentData(),
                    wire_layer=wlay.currentData() if wlay.currentData() != own_wl
                    else sheet.wire_layer,
                    show_border=shows["show_border"].currentData(),
@@ -496,6 +518,18 @@ def project_properties(parent, project, tab=0):
                     "off a bus. With -1, -2..., in the numbering order; a tap off a tap takes "
                     "a, b... (2007-1a). A number typed on a wire stays.")
     form.addRow("Wires tapped off a wire are numbered", taps)
+    tstyle = QComboBox()
+    tstyle.setObjectName("tap_style")
+    for key, label in TAP_STYLE_LABELS:
+        tstyle.addItem(label, key)
+    tstyle.setCurrentIndex(max(tstyle.findData(st.get("tap_style", "-1")), 0))
+    tstyle.setToolTip("How a tap's number ends when taps take the wire's number with a suffix: "
+                      "2007-1, 2007a or 2007-a; a tap off a tap takes the other kind (2007-1a, "
+                      "2007a1, 2007-a1). A sheet (Sheet properties) or a wire (its Wire number "
+                      "window) can choose otherwise.")
+    tstyle.setEnabled(taps.currentData() == "suffix")
+    taps.currentIndexChanged.connect(lambda _i: tstyle.setEnabled(taps.currentData() == "suffix"))
+    form.addRow("Tap numbers end in", tstyle)
     n_own = sum(1 for sh in project.sheets for w in sh.wires() if w.own_num or w.same_num)
     taps_all = QCheckBox("Apply to taps set one by one too (%d)" % n_own)
     taps_all.setObjectName("tap_numbers_all")
@@ -767,6 +801,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_label_ends"] = ends.value()
     settings["wire_order_tags"] = worder.isChecked()
     settings["tap_numbers"] = taps.currentData()
+    settings["tap_style"] = tstyle.currentData()
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
@@ -2412,12 +2447,15 @@ def pdf_import_dialog(parent, name, pages, k):
     return {"page": page.value(), "scale": scale.value(), "filled": filled.isChecked()}
 
 
-def wire_number_dialog(parent, num, tap_of=None, own="", locked=False, mode="same"):
+def wire_number_dialog(parent, num, tap_of=None, own="", locked=False, mode="same",
+                       tap_style="", sheet_style="-1"):
     """A wire's number (empty: numbering gives one), whether it is locked (the owner, 0.17.5:
     "should there be a checkbox to check locked or unlocked?": ticked by itself when a number
     is typed), and, for a wire tapped off another (tap_of: that wire's number), how it is
     numbered (own: "" as the project's tap numbers say (mode), "same" that wire's number,
-    "own" a number of its own). Returns (number, own, locked) or None."""
+    "own" a number of its own) and how its tap number ends (tap_style: "" as its sheet's,
+    sheet_style, or "-1", "a", "-a"; 0.22.4). Returns (number, own, locked, tap_style) or
+    None."""
     dlg = QDialog(parent)
     dlg.setWindowTitle("Wire number")
     form = QFormLayout(dlg)
@@ -2445,11 +2483,22 @@ def wire_number_dialog(parent, num, tap_of=None, own="", locked=False, mode="sam
         box.addItem("A number of its own (not %s)" % t, "own")
         box.setCurrentIndex(max(box.findData(own or ""), 0))
         form.addRow("Tapped off %s" % t, box)
+        style = QComboBox()
+        style.setObjectName("wire_tap_style")
+        style.addItem("As the sheet (%s)" % _tap_style_name(sheet_style), "")
+        for key, label in TAP_STYLE_LABELS:
+            style.addItem(label, key)
+        style.setCurrentIndex(max(style.findData(tap_style or ""), 0))
+        style.setToolTip("How this tap's number ends when it takes %s's number with a suffix"
+                         % t)
+        form.addRow("Tap number ends in", style)
     form.addRow(_buttons(dlg))
     if dlg.exec() != QDialog.Accepted:
         return None
     text = edit.text().strip().upper()
-    return text, (box.currentData() if box is not None else own), bool(text) and lock.isChecked()
+    return (text, (box.currentData() if box is not None else own),
+            bool(text) and lock.isChecked(), style.currentData() if box is not None
+            else tap_style)
 
 
 def _sheet_list(project, sheet, some):
