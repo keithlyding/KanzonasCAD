@@ -51,9 +51,17 @@ class LabelColorTest(unittest.TestCase):
         self.assertEqual(got.get(red), 1, {QColor(k).name(): n for k, n in got.items()})
 
     def test_labels_in_their_color(self):
-        from PySide6.QtGui import QFontDatabase
-        if not QFontDatabase.families():
-            self.skipTest("no fonts here: no text is drawn (Windows' offscreen Qt)")
+        # (Windows' offscreen Qt lists fonts but draws no text: there the test above checks
+        # the color the label's text is kept under)
+        from PySide6.QtGui import QImage, QPainter
+        img = QImage(40, 40, QImage.Format_RGB32)
+        img.fill(0)
+        pt = QPainter(img)
+        pt.setPen(QColor("#ffffff"))
+        pt.drawText(5, 30, "X")
+        pt.end()
+        if not any(QColor(img.pixel(x, y)).red() for x in range(40) for y in range(40)):
+            self.skipTest("this Qt draws no text (Windows' offscreen platform)")
         for dark in (True, False):
             self.v.set_dark(dark)
             with self.p.edit("no color") as ed:
