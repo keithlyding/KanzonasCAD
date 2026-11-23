@@ -1031,6 +1031,18 @@ def random_editing(log, out, ops, seed, drawing=None):
                 if tuple(q) not in before_dots:
                     assert tuple(q) not in set(wires.junctions(s)), \
                         "carrying a bus on put a dot at %s" % (q,)
+                # (and no wire leaves an end straight back over the wire it carries on: two
+                # wires from that end the same way, one drawn over the other; seed 43)
+                legs = []
+                for w in s.wires():
+                    for e0, e1 in ((w.points[0], w.points[1]), (w.points[-1], w.points[-2])):
+                        if G.dist(e0, q) <= 1e-9:
+                            L = G.dist(e0, e1)
+                            legs.append(((e1[0] - e0[0]) / L, (e1[1] - e0[1]) / L))
+                for i in range(len(legs)):
+                    for j in range(i + 1, len(legs)):
+                        assert legs[i][0] * legs[j][0] + legs[i][1] * legs[j][1] < 1 - 1e-9, \
+                            "carrying a bus on drew a wire back over its own at %s" % (q,)
             BC.CHECKED["bus carried on"] += 1
         if from_taps is not None:
             # one off each of the wires side by side: each new wire starts on a different one
