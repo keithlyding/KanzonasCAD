@@ -161,6 +161,22 @@ def next_sheet(win, back=False):
 RECENT_KEYS = (Qt.Key_QuoteLeft, Qt.Key_AsciiTilde)     # (` and, with Shift on it, ~)
 
 
+class _KeyAction(QAction):
+    """A shortcut that works even when the key reads as two of its own spellings. Windows
+    reports Ctrl+Shift+Tab as both Ctrl+Shift+Tab and Ctrl+Backtab (qwindowskeymapper's
+    possibleKeyCombinations), and Ctrl+Shift+` as Ctrl+Shift+` and Ctrl+~: with more than one
+    registered, Qt marks the shortcut ambiguous and a plain QAction does nothing (the owner,
+    0.22.3: "Ctrl +shift+tab does not work"). Each key has one action here, and no other action
+    of the window uses these keys (tests/test_021_sheet_cycle), so ambiguous only ever means
+    two spellings of this one."""
+
+    def event(self, e):
+        if e.type() == QEvent.Shortcut and e.isAmbiguous():
+            self.trigger()
+            return True
+        return super().event(e)
+
+
 def install(win):
     """Ctrl+Tab and Ctrl+Shift+Tab (page order), Ctrl+` and Ctrl+Shift+` (most recent first)
     for the main window win: shortcuts of the window (no filter on the application until
@@ -175,7 +191,7 @@ def install(win):
               QKeySequence(Qt.CTRL | Qt.SHIFT | Qt.Key_AsciiTilde),
               QKeySequence(Qt.CTRL | Qt.Key_AsciiTilde)], lambda: cyc.step(back=True)))
     for seqs, run in keys:
-        act = QAction(win)
+        act = _KeyAction(win)
         act.setShortcuts(seqs)
         act.setShortcutContext(Qt.WindowShortcut)
         act.triggered.connect(lambda _c=False, r=run: r())
