@@ -37,6 +37,22 @@ class PortableTest(unittest.TestCase):
         self.assertFalse(backup.recovery_folder().startswith(self.app_dir))
         self.assertNotIn(self.app_dir, paths.settings().fileName())
 
+    def test_settings_file_named_in_the_environment(self):
+        # (the unit tests run in several processes at once, tools/run_tests.py: each its own
+        # INI file, never the one registry they would share on Windows)
+        from PySide6.QtCore import QSettings
+        ini = os.path.join(self.app_dir, "own.ini")
+        os.environ["KANZONASCAD_SETTINGS"] = ini
+        st = paths.settings()
+        self.assertEqual(os.path.abspath(st.fileName()), ini)
+        self.assertEqual(st.format(), QSettings.IniFormat)
+        os.environ.pop("KANZONASCAD_SETTINGS")
+        self.assertNotEqual(os.path.abspath(paths.settings().fileName()), ini)
+        os.environ["KANZONASCAD_SETTINGS"] = ini
+        self.marker()                   # (a portable copy keeps its own, whatever is set)
+        self.assertEqual(os.path.abspath(paths.settings().fileName()),
+                         os.path.join(self.app_dir, "data", "settings.ini"))
+
     def test_data_folder_beside_the_program(self):
         self.marker()
         data = os.path.join(self.app_dir, "data")

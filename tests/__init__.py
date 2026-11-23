@@ -10,8 +10,9 @@ runs before PySide's shutdown.
 Settings: QSettings resolves its folder once per process, so changing HOME inside a test does
 nothing after the first QSettings exists. The whole run is pointed at a fresh temporary folder
 here instead (on Linux and macOS; on Windows the native store is the registry and the path is
-ignored), so the tests never read or write the developer's real KanzonasCAD settings. Within a
-run the store is still shared, so a test that depends on a remembered option sets it."""
+ignored, so KANZONASCAD_SETTINGS points paths.settings() at an INI file there), so the tests never
+read or write the developer's real KanzonasCAD settings. Within a run the store is still shared,
+so a test that depends on a remembered option sets it."""
 import atexit
 import gc
 import os
@@ -25,6 +26,9 @@ _SETTINGS_DIR = tempfile.mkdtemp(prefix="kanzonascad-test-settings-")
 # the library (symbols, footprints, parts) in a scratch folder, never the developer's own
 os.environ["KANZONASCAD_LIBRARY"] = tempfile.mkdtemp(prefix="kanzonascad-test-library-")
 os.environ["KANZONASCAD_RECOVERY"] = tempfile.mkdtemp(prefix="kanzonascad-test-recovery-")
+# the settings in a file of this process's own: on Windows the store is otherwise the registry,
+# one for every process, and test runs side by side (tools/run_tests.py) would share it
+os.environ["KANZONASCAD_SETTINGS"] = os.path.join(_SETTINGS_DIR, "KanzonasCAD.ini")
 for _fmt in (QSettings.NativeFormat, QSettings.IniFormat):
     QSettings.setPath(_fmt, QSettings.UserScope, _SETTINGS_DIR)
 

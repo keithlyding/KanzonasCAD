@@ -204,7 +204,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self.setWindowTitle(app_title())
         self.setAcceptDrops(True)       # (DXF, DWG and projects dragged in from Explorer)
         from . import sheet_cycle
-        self.sheet_cycler = sheet_cycle.install(self)   # (Ctrl+Tab through the sheets)
+        self.sheet_cycler = sheet_cycle.install(self)   # (Ctrl+Tab, Ctrl+` through the sheets)
         self.resize(1400, 900)
         self._untitled = 0
 
@@ -487,6 +487,10 @@ class MainWindow(BlockEditing, QMainWindow):
           icon="terminal_list", label="Terminals",
           tip="Every terminal strip, terminal by terminal, with the wires on each side and "
               "where it is (save as CSV)")
+        A("terminal_count", "Terminal &count...", self.show_terminal_count,
+          icon="terminal_count", label="Terminal count",
+          tip="How many terminals and jumpers the tapped wires need: a wire number and each of "
+              "its taps (-1, -2...) one terminal, bridged by jumpers (save as CSV)")
         A("report_sheet", "Report s&heet...", lambda: self.report_sheet(), icon="bom",
           label="Report sheet",
           tip="A report (bill of materials, wire list, terminals, pull list, panel materials) "
@@ -730,7 +734,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
-                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "materials",
+                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_count", "materials",
                   "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
@@ -872,7 +876,9 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Print", "large", [a["print"]]),
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
             ("Import", "large", [a["import_dxf"], a["import_pdf"], a["import_picture"]]),
-            ("Reports", "large", [a["bom"], a["cables"], a["wire_list"], a["terminal_list"],
+            # (Terminal count on the Terminals button's menu: the tab as wide as before)
+            ("Reports", "large", [a["bom"], a["cables"], a["wire_list"],
+                                  split_button([a["terminal_list"], a["terminal_count"]]),
                                   a["materials"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
         ])
@@ -891,6 +897,8 @@ class MainWindow(BlockEditing, QMainWindow):
                                 a["dup_block"]]),
             ("Pins", "large", [a["add_pin"], a["pins"]]),
             ("Attributes", "large", [a["add_attr"]]),
+            # (measuring the block as it is drawn: not saved into it, block_editor.to_block)
+            ("Measure", "large", [a["dim_linear"], a["dim_aligned"]]),
             ("Library", "large", [a["edit_block"], a["update_blocks"]]),
         ])
         tb = self.ribbon_bar = QToolBar("Ribbon")
@@ -1976,7 +1984,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                                "PDF (*.pdf)")
         if not path:
             return
-        if not self._fits_or_go_on(d.project, d.project.sheets, "Export"):
+        if self._fits_or_go_on(d.project, d.project.sheets, "Export") != "go":
             return
         try:
             n = fileio.export_pdf(d.project, path, mono=not self.pdf_colors())
@@ -1985,17 +1993,77 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         self.statusBar().showMessage("Exported %d sheet(s) to %s" % (n, path), 5000)
 
-    def _fits_or_go_on(self, p, sheets, what):
-        """True unless a scaled sheet's drawing doesn't fit on it and the user goes back."""
+    def _misfits(self, p, sheets):
+        """[(sheet, [(entity, why)])] of the sheets chosen whose drawing doesn't fit at their
+        scale (a panel sheet, or one not 1:1), with what doesn't (scalefit.culprits)."""
         from . import scalefit
-        bad = ["%s (%s, %s)" % (p.sheet_number(s), s.title, why) for s, why in
-               ((s, scalefit.outside(p, s)) for s in sheets
-                if s.kind == "panel" or abs(s.scale - 1.0) > 1e-12) if why]
-        return not bad or QMessageBox.question(
-            self, APP, "The drawing doesn't fit on sheet(s) %s at their scale: it would "
-            "print cut off or under the title block.\n\n%s anyway? (No: go back and "
-            "use Fit, in the status bar's Scale or Sheet scale...)" % (", ".join(bad), what)) \
-            == QMessageBox.Yes
+        out = []
+        for s in sheets:
+            if (s.kind == "panel" or abs(s.scale - 1.0) > 1e-12) and scalefit.outside(p, s):
+                out.append((s, scalefit.culprits(p, s)))
+        return out
+
+    def _misfit_text(self, p, bad, what):
+        """The question for _fits_or_go_on: each sheet by its number and title, and what on it
+        doesn't fit (up to five things a sheet, then how many more)."""
+        from . import scalefit
+        lines = []
+        for s, found in bad:
+            head = 'Sheet %s "%s"' % (p.sheet_number(s), s.title) if s.title else \
+                "Sheet %s" % p.sheet_number(s)
+            whys = sorted({why for _e, why in found}) or ["past the border"]
+            names = [scalefit.describe(e) for e, _why in found[:5]]
+            more = len(found) - len(names)
+            lines.append("%s, %s: %s%s" % (head, " and ".join(whys), ", ".join(names) or
+                                           "its drawing", (" and %d more" % more)
+                                           if more > 0 else ""))
+        back = "the Print window again" if what == "Print" else "nothing is exported"
+        return ("These don't fit on their sheet at its scale: they would print cut off or "
+                "under the title block.\n\n%s\n\n%s anyway? Go back: %s (Fit, in the status "
+                "bar's Scale or Sheet scale..., makes a drawing fit). Show them: goes to the "
+                "sheet with them selected." % ("\n".join(lines), what, back))
+
+    def ask_fit(self, text, what):
+        """The doesn't-fit question: "go" (print or export anyway), "back" or "show" (a test
+        replaces it)."""
+        box = QMessageBox(QMessageBox.Question, APP, text, QMessageBox.NoButton, self)
+        go = box.addButton("%s anyway" % what, QMessageBox.AcceptRole)
+        back = box.addButton("Go back", QMessageBox.RejectRole)
+        show = box.addButton("Show them", QMessageBox.ActionRole)
+        box.setDefaultButton(back)
+        box.setEscapeButton(back)
+        box.exec()
+        got = box.clickedButton()
+        return "go" if got is go else "show" if got is show else "back"
+
+    def show_misfits(self, p, bad):
+        """Show them: the first sheet that doesn't fit, everything on it in view, what doesn't
+        fit selected and listed on the command line."""
+        d = self.doc()
+        if d is None or d.project is not p or not bad:
+            return
+        s, found = bad[0]
+        v = d.view
+        v.show_sheet(s.id)
+        v.zoom("extents")
+        v.set_selection({e.id for e, _why in found})
+        from . import scalefit
+        self.cmdline.add_history("Sheet %s: %d object(s) don't fit (selected): %s" % (
+            p.sheet_number(s), len(found), ", ".join(scalefit.describe(e)
+                                                     for e, _why in found[:10])))
+
+    def _fits_or_go_on(self, p, sheets, what):
+        """"go" when every scaled sheet's drawing fits or the user prints anyway; "back" or
+        "show" (shown already) otherwise. The owner, 0.22.2: "if this message pops up and the
+        user clicks no, it needs to go back to the [Print] dialog box. Also, the drawing(s)
+        that cause this notification need to be identified"."""
+        bad = self._misfits(p, sheets)
+        if not bad:
+            return "go"
+        got = self.ask_fit(self._misfit_text(p, bad, what), what)
+        if got == "show":
+            self.show_misfits(p, bad)
+        return got
 
     def print_sheets(self):
         """Print... (Ctrl+P): this sheet, all of them or those picked (in the Print window,
@@ -2009,14 +2077,19 @@ class MainWindow(BlockEditing, QMainWindow):
                           display=(w0[0], w0[1], w1[0], w1[1]))
         while True:
             r = dlg.exec()
-            if r != PrintDialog.PICK:
+            if r == PrintDialog.PICK:
+                dlg.set_window(self.pick_print_window(v))     # (Window: two corners, then back)
+                continue
+            if r != QDialog.Accepted:
+                return None
+            if dlg.area()[0] != "sheet":
                 break
-            dlg.set_window(self.pick_print_window(v))     # (Window: two corners, then back)
-        if r != QDialog.Accepted:
-            return None
-        if dlg.area()[0] == "sheet" and \
-                not self._fits_or_go_on(v.project, dlg.sheets(), "Print"):
-            return None
+            got = self._fits_or_go_on(v.project, dlg.sheets(), "Print")
+            if got == "go":
+                break
+            if got == "show":
+                return None
+            # (Go back: the Print window again, as it was left)
         n = dlg.run(self._last_dir())
         if n:
             self.statusBar().showMessage("Printed %d sheet(s)" % n, 5000)
@@ -2152,13 +2225,18 @@ class MainWindow(BlockEditing, QMainWindow):
             from . import text_edit
             sheet = v.sheet()
 
-            def done(text, ent=ent, sheet=sheet):
+            def done(text, side=None, ent=ent, sheet=sheet):
                 now = sheet.entities.get(ent.id)
-                new = text_edit.changed(now, text) if now is not None else None
+                new = text_edit.changed(now, text, side) if now is not None else None
                 if new is not None:
                     with v.project.edit("Edit text") as ed:
                         ed.change(sheet, new)
-            v.in_place = text_edit.InPlace(v, ent, done)
+
+            def more(ent=ent, sheet=sheet):
+                now = sheet.entities.get(ent.id)
+                if now is not None and v.sheet() is sheet:
+                    self.text_properties(now)
+            v.in_place = text_edit.InPlace(v, ent, done, more)
             return
         self.text_properties(ent)
 
@@ -3104,6 +3182,25 @@ class MainWindow(BlockEditing, QMainWindow):
                               "Each terminal with the wire numbers on its left and right pins, "
                               "as drawn; a terminal with no number yet shows ?.")
 
+    def show_terminal_count(self):
+        v = self.view()
+        if v is None:
+            return
+        from . import reports
+        from . import wirenums
+        rows, (terms, jumpers) = reports.terminal_count_rows(v.project)
+        if rows:
+            rows = rows + [["Total", "", str(terms), str(jumpers), ""]]
+        empty = ("Taps are numbered with the wire they tap (Project properties, Schematic: Tap "
+                 "numbers): choose -1, -2... (or numbers of their own) to count them."
+                 if wirenums.tap_mode(v.project) == "same" else
+                 "No tapped wires yet: a wire tapped off another (-1, -2...) is counted here.")
+        dialogs.report_dialog(self, "Terminal count", reports.COUNT_HEAD, rows,
+                              self._last_dir(), "terminal count.csv", empty,
+                              "One wire on each terminal side: a wire number and each of its "
+                              "taps a terminal, bridged by one jumper fewer. Multi-level "
+                              "terminals, or two wires on a side, need fewer.")
+
     def show_materials(self):
         v = self.view()
         if v is None:
@@ -3720,7 +3817,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",
-                  "rail", "duct", "materials", "bom", "cables", "wire_list", "terminal_list", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "rail", "duct", "materials", "bom", "cables", "wire_list", "terminal_list", "terminal_count", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",

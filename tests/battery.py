@@ -1031,6 +1031,18 @@ def random_editing(log, out, ops, seed, drawing=None):
                 if tuple(q) not in before_dots:
                     assert tuple(q) not in set(wires.junctions(s)), \
                         "carrying a bus on put a dot at %s" % (q,)
+                # (and no wire leaves an end straight back over the wire it carries on: two
+                # wires from that end the same way, one drawn over the other; seed 43)
+                legs = []
+                for w in s.wires():
+                    for e0, e1 in ((w.points[0], w.points[1]), (w.points[-1], w.points[-2])):
+                        if G.dist(e0, q) <= 1e-9:
+                            L = G.dist(e0, e1)
+                            legs.append(((e1[0] - e0[0]) / L, (e1[1] - e0[1]) / L))
+                for i in range(len(legs)):
+                    for j in range(i + 1, len(legs)):
+                        assert legs[i][0] * legs[j][0] + legs[i][1] * legs[j][1] < 1 - 1e-9, \
+                            "carrying a bus on drew a wire back over its own at %s" % (q,)
             BC.CHECKED["bus carried on"] += 1
         if from_taps is not None:
             # one off each of the wires side by side: each new wire starts on a different one
@@ -3839,6 +3851,63 @@ def random_editing(log, out, ops, seed, drawing=None):
             win.close_tab(win.tabs.indexOf(d))
             APP.processEvents()
 
+    def terminal_count_check():
+        # (0.22.2: Terminal count's totals worked out here from the wire numbers, not from
+        # wirenums' taps: with taps numbered -1, -2 (and a tap off a tap -1a), a wire number
+        # and each of its taps one terminal, one jumper fewer than terminals a tapped number)
+        from kanzonascad import reports
+        if wirenums.tap_mode(p) != "suffix" or not wirenums.enabled(p):
+            return
+        nums = {w.num for sh in p.sheets for w in sh.wires() if w.num}
+        if any(w.num_lock or w.own_num for sh in p.sheets for w in sh.wires()):
+            return                          # (a number typed: anything may be a "tap")
+        tapped = {}
+        for n in nums:
+            # (a number by its PLC address too: O:7/4 tapped is O:7/4-1, the quick battery's
+            # seed 11)
+            m = re.fullmatch(r"(.+?)-\d+[a-z]*", n)
+            if m and m.group(1) in nums:
+                tapped.setdefault(m.group(1), set()).add(n)
+        rows, (got_t, got_j) = reports.terminal_count_rows(p)
+        # (a tap that lands on a PLC point, numbered by its address, has no -1 to go by: the
+        # seed 44's O:3/3 tapped by Local:9:O.Data.1. It counts only when it really is the
+        # address of a PLC point on the project, and every other tap is a -1 of its own number)
+        addrs = set()
+        if wirenums.by_io_address(p):
+            for got in wirenums._assemble_all(p)[5].values():
+                addrs.update(got)
+        # each row a family (its number and its taps); which of them heads the row isn't
+        # checked here (two wires each tapping the other: seed 12's 1006A and 1006A-1)
+        want_fams = [{b} | v for b, v in tapped.items()]
+        extra = 0
+        for r in rows:
+            fam = {r[0]} | {t.strip() for t in r[1].split(",") if t.strip()}
+            mine = [f for f in want_fams if f & fam]
+            named = set().union(*mine) if mine else set()
+            other = fam - named
+            assert named <= fam, "Terminal count: %s's family %s left out" % (
+                r[0], sorted(named - fam))
+            # (with no -1 among them, all but one, whichever heads it, are addresses)
+            odd = other - addrs if mine else (set() if len(fam - addrs) <= 1 else fam - addrs)
+            assert not odd, \
+                "Terminal count: %s's taps %s neither -1, -2... nor a PLC address" % (
+                    r[0], sorted(odd))
+            if other:
+                extra += len(other) if mine else len(other) - 1
+                BC.CHECKED["terminal count: a tap numbered by its PLC address"] += 1
+            if not mine:
+                want_fams.append(set())         # (a family of an address tap alone)
+        for f in want_fams:
+            if f and not any(f & ({r[0]} | {t.strip() for t in r[1].split(",")}) for r in rows):
+                raise AssertionError("Terminal count: tapped %s left out" % sorted(f))
+        want_t = sum(len(f) for f in want_fams if f) + extra + \
+            sum(1 for f in want_fams if not f)
+        want_j = sum(len(f) - 1 for f in want_fams if f) + extra
+        assert (got_t, got_j) == (want_t, want_j), \
+            "Terminal count: %d terminals, %d jumpers; from the numbers %d, %d" % (
+                got_t, got_j, want_t, want_j)
+        BC.CHECKED["terminal count from the tap numbers"] += 1
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -3885,6 +3954,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 APP.processEvents()
             if i % 25 == 24:
                 kinds.update(type(e).__name__ for e in s.entities.values())
+                terminal_count_check()
                 bom.table(p)
                 bom.write_csv(p, os.path.join(out, "bom.csv"))
                 runs_now = pull.runs(p)[0]

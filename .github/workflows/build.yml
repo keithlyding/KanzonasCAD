@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: read
+  # (tools/already_tested.py reads whether the pull request's head passed its build)
+  actions: read
 
 # a newer push to the same branch cancels the older, still-running build. Not on main: a run
 # cancelled while publishing would leave a release half made; main's builds wait their turn.
@@ -46,10 +48,21 @@ jobs:
       - name: Release notes for this version
         run: python tools/check_release_notes.py
 
+      # (on main: the tests are skipped when main's files are exactly a pull request's head
+      # whose build passed, tools/already_tested.py; anywhere else, or on any doubt, they run)
+      - name: Tests already passed on these exact files?
+        id: tested
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/already_tested.py
+
+      # (in parallel processes, every test file, each process its own settings file: run one
+      # after another they took 55 of the Windows build's 62 minutes)
       - name: Unit tests
+        if: steps.tested.outputs.skip != 'true'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m unittest discover -s tests -p "test_*.py" -t .
+        run: python tools/run_tests.py
 
       - name: Build the app folder
         run: python -m PyInstaller ${{ env.PYINSTALLER_OPTIONS }} run.py
@@ -309,16 +322,28 @@ jobs:
       - name: Release notes for this version
         run: python tools/check_release_notes.py
 
+      # (on main: the tests are skipped when main's files are exactly a pull request's head
+      # whose build passed, tools/already_tested.py; anywhere else, or on any doubt, they run)
+      - name: Tests already passed on these exact files?
+        id: tested
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/already_tested.py
+
+      # (in parallel processes, every test file, each process its own settings file: run one
+      # after another they took 55 of the Windows build's 62 minutes)
       - name: Unit tests
+        if: steps.tested.outputs.skip != 'true'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m unittest discover -s tests -p "test_*.py" -t .
+        run: python tools/run_tests.py
 
       # The battery (the short one: every build; a middle-number release also runs the long
       # one, job battery-long), longer than the unit tests' short run, with a new seed every
       # build (the run number), so each build tries different random editing; a failure names
       # its seed (run it again with: python tests/battery.py OUT --ops 1000 --seed N)
       - name: Battery (random editing, every command, files, speed)
+        if: steps.tested.outputs.skip != 'true'
         env:
           QT_QPA_PLATFORM: offscreen
         run: python tests/battery.py battery-out --ops 1000 --seed ${{ github.run_number }}
@@ -467,11 +492,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Tests already passed on these exact files?
+        id: tested
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/already_tested.py
+
       - name: A middle-number release?
         id: ver
         run: |
           v=$(python3 -c "import kanzonascad; print(kanzonascad.__version__)")
-          if echo "$v" | grep -Eq '^[0-9]+\.[0-9]+$'; then
+          if [ "${{ steps.tested.outputs.skip }}" = "true" ]; then
+            echo "long=no" >> "$GITHUB_OUTPUT"
+            echo "$v: the long battery already passed on these exact files"
+          elif echo "$v" | grep -Eq '^[0-9]+\.[0-9]+$'; then
             echo "long=yes" >> "$GITHUB_OUTPUT"
             echo "$v bumps the middle number: the long battery runs"
           else

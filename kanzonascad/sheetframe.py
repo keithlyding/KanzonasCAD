@@ -15,13 +15,17 @@ from .model import Line, Text
 
 FRAME_LAYER = "BORDER"
 
-# the default title block, inches
-TB_WIDTH = 6.5
-TB_ROW = 0.3125
-TB_TITLE_ROW = 0.4375
+# the default title block, inches (the owner, 0.22.2: "The standard title block in the bottom
+# right hand corner is too big ... Scale is also not included in the title block": 5" by
+# 1-1/16", was 6-1/2" by 1-3/8", with a SCALE cell)
+TB_WIDTH = 5.0
+TB_ROW = 0.25
+TB_TITLE_ROW = 0.3125
 LABEL_H = 0.055
 VALUE_H = 0.1
 TITLE_H = 0.16
+TB_VALUE_H = 0.09               # (the corner block's values and title, in its smaller rows)
+TB_TITLE_H = 0.125
 
 # fields every title block can use besides the project's own (Project properties)
 SHEET_FIELDS = ["Sheet", "Sheets", "Sheet title", "Print date"]
@@ -81,12 +85,16 @@ def _box(x0, y0, x1, y1, out, layer="0"):
             Line((x1, y1), (x0, y1), layer=layer), Line((x0, y1), (x0, y0), layer=layer)]
 
 
-def _cell(out, x0, y0, x1, y1, label, value, value_h=VALUE_H):
+def _cell(out, x0, y0, x1, y1, label, value, value_h=VALUE_H, low=None):
+    """A box with its label at the top left and its value under it: in the middle of the
+    room left, or `low` above the box's bottom (the corner block's small rows, so the value
+    clears the label)."""
     _box(x0, y0, x1, y1, out)
     out.append(Text((x0 + 0.04, y1 - 0.04 - LABEL_H), label, LABEL_H))
     if value:
-        out.append(Text((x0 + 0.06, y0 + (y1 - y0 - LABEL_H) / 2 - value_h / 2 + 0.01), value,
-                        value_h))
+        y = y0 + low if low is not None else \
+            y0 + (y1 - y0 - LABEL_H) / 2 - value_h / 2 + 0.01
+        out.append(Text((x0 + 0.06, y), value, value_h))
 
 
 def default_title_block(sheet):
@@ -98,20 +106,21 @@ def default_title_block(sheet):
     bx0, bx1 = x1 - tw, x1
     rows_y = [y0, y0 + TB_ROW, y0 + 2 * TB_ROW, y0 + 3 * TB_ROW,
               y0 + 3 * TB_ROW + TB_TITLE_ROW]
-    third = tw / 3
-    half = tw / 2
-    q = tw / 6.5                # (the drawn-by row's four cells: 1.75, 1.5, 1.75, 1.5 in)
-    _cell(out, bx0, rows_y[0], bx0 + 1.5 * third, rows_y[1], "DRAWING NO.", "{Drawing number}")
-    _cell(out, bx0 + 1.5 * third, rows_y[0], bx0 + 2 * third, rows_y[1], "REV", "{Revision}")
-    _cell(out, bx0 + 2 * third, rows_y[0], bx1, rows_y[1], "SHEET", "{Sheet} OF {Sheets}")
-    xs = [bx0, bx0 + 1.75 * q, bx0 + 3.25 * q, bx0 + 5.0 * q, bx1]
-    for (label, value), a, b in zip((("DRAWN BY", "{Drawn by}"), ("DRAWN", "{Drawn date}"),
-                                     ("CHECKED BY", "{Checked by}"), ("REV DATE", "{Date}")),
-                                    xs, xs[1:]):
-        _cell(out, a, rows_y[1], b, rows_y[2], label, value)
-    _cell(out, bx0, rows_y[2], bx0 + half, rows_y[3], "CUSTOMER", "{Customer}")
-    _cell(out, bx0 + half, rows_y[2], bx1, rows_y[3], "PROJECT", "{Project}")
-    _cell(out, bx0, rows_y[3], bx1, rows_y[4], "SHEET TITLE", "{Sheet title}", TITLE_H)
+    q = tw / 5.0                # (cells in fifths of an inch of the 5" block)
+
+    def row(i, cells):
+        x = bx0
+        for label, value, w in cells:
+            _cell(out, x, rows_y[i], x + w * q, rows_y[i + 1], label, value, TB_VALUE_H,
+                  low=0.04)
+            x += w * q
+    row(0, (("DRAWING NO.", "{Drawing number}", 1.6), ("REV", "{Revision}", 0.5),
+            ("SCALE", "{Scale}", 1.3), ("SHEET", "{Sheet} OF {Sheets}", 1.6)))
+    row(1, (("DRAWN BY", "{Drawn by}", 1.35), ("DRAWN", "{Drawn date}", 1.15),
+            ("CHECKED BY", "{Checked by}", 1.35), ("REV DATE", "{Date}", 1.15)))
+    row(2, (("CUSTOMER", "{Customer}", 2.5), ("PROJECT", "{Project}", 2.5)))
+    _cell(out, bx0, rows_y[3], bx1, rows_y[4], "SHEET TITLE", "{Sheet title}", TB_TITLE_H,
+          low=0.05)
     out.append(_stamp(bx1 - 0.12, rows_y[3] + 0.03))      # (inside the title cell, low)
     return out
 

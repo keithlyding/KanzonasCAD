@@ -31,8 +31,11 @@ buttons become small ones with their names beside them, then icons alone (the na
 when you hold the mouse over one); widen the window and they grow back. Only a tab that
 still doesn't fit as icons scrolls sideways (the mouse wheel over it).</li>
 <li><b>The Block tab</b> holds a block's own tools: <b>Save block</b>, <b>Save block as...</b>,
-<b>Block properties...</b>, <b>Duplicate block...</b>, <b>Add pin</b>, <b>Pins...</b>, <b>Add attribute</b>,
-<b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
+<b>Block properties...</b> (in a block's tab, that block's: nothing to select), <b>Duplicate
+block...</b>, <b>Add pin</b>, <b>Pins...</b>, <b>Add attribute</b>, <b>Linear dimension</b> and
+<b>Aligned dimension</b> (Measure: to measure the block as you draw it; a dimension drawn in
+a block's tab isn't saved into the block, so its copies don't carry it; one the block already
+had stays), <b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
 in a block's tab (Edit block..., on the Schematic tab's Symbols group and the Panel tab's
 Footprints group, opens one), and goes away when you leave it. To have it all the time, turn
 on <b>Block tab</b> (View menu, and the View tab's Ribbon group). The same commands are always
@@ -58,11 +61,14 @@ gets that room) and a <b>title block</b> in the lower right corner.</p>
 of every wire number (6001, 6002 ...).</p>
 <ul>
 <li><b>New sheet</b> adds a sheet after the one shown, the same size and zones.</li>
-<li><b>Ctrl+Tab</b> goes back to the sheet you were last on, as Studio 5000 does: hold Ctrl
-and keep tapping Tab to go on through the sheets you were on before it, most recent first, then
-the ones you haven't opened yet in page order (Ctrl+Shift+Tab steps back). A list of the sheets
-shows meanwhile, the one picked lit; let Ctrl go to open it, or press Esc (Ctrl still held) to
-stay where you are.</li>
+<li><b>Ctrl+Tab</b> shows the next sheet in page order and <b>Ctrl+Shift+Tab</b> the one
+before; past the last sheet it goes round to the first (on sheet 13 of 15: 14, 15, then 1), and
+back from the first to the last. Hold Ctrl and keep tapping Tab to go on.</li>
+<li><b>Ctrl+`</b> (the key above Tab) goes back to the sheet you were last on, as Studio 5000
+does: hold Ctrl and keep tapping ` to go on through the sheets you were on before it, most
+recent first, then the ones you haven't opened yet in page order (Ctrl+Shift+` steps back). A
+list of the sheets shows meanwhile, the one picked lit; let Ctrl go to open it, or press Esc
+(Ctrl still held) to stay where you are.</li>
 <li><b>Duplicate sheet</b> (Sheets menu and tab) adds a copy of the sheet shown just after it,
 with everything on it, titled with the next number no sheet has ("Motors" becomes "Motors-2",
 then "Motors-3"; "480 Distribution - 1" becomes "480 Distribution - 2"), on a page of its own (the next free number when the
@@ -286,7 +292,11 @@ references (6-D1) still follow the zones when the border is off.</p>
 <p><b>Title block position</b> (Project properties, General) says where the title block sits:</p>
 <ul>
 <li><b>Lower right corner</b> (to start): the zones run the full width and height of the
-sheet, and the title block sits over the lower right corner.</li>
+sheet, and the title block sits over the lower right corner. The ready-made one is 5" wide and
+1-1/16" tall: SHEET TITLE; CUSTOMER and PROJECT; DRAWN BY, DRAWN, CHECKED BY and REV DATE;
+DRAWING NO., REV, SCALE and SHEET. A project made before 0.22.2 keeps its bigger one (6-1/2"
+by 1-3/8", no SCALE): choose Lower right corner and tick <b>Replace the title block with one
+made for this position</b> to get the new one.</li>
 <li><b>Right-hand strip</b>: the title block takes the whole right-hand column of the sheet.
 The zones stop at it (a line divides them from the strip) and are spread over the room left,
 so grid references (6-D1) never point into the title block.</li>
@@ -509,7 +519,11 @@ on them wire for wire, and the order Properties... lists them); <b>Delete</b> ta
 <b>Find</b> selects it on the drawing and puts it in the middle of the view; <b>Wire layer</b>
 (double-click it) gives a pin a wire layer of its own: a wire started on that pin goes on that
 layer when the project has it (blank: worked out from the block, as Layers describes). OK makes
-all of it one step (Undo takes it back); two pins with the same name are refused. The blue text on BLOCK TAG is where the tag goes, and texts on
+all of it one step (Undo takes it back); two pins with the same name are refused. A pin's name in a block's tab is a text you can justify like any other
+(double-click it: Left, Center, Right, or More... for top, middle or bottom too); the block
+keeps it, and a copy showing its pin names shows it so; left as it opened, it follows the
+pin's side: the side its lead line comes in from (or the nearest edge of the block), so a pin
+on the bottom edge near a corner (PE2 beside T3 on a drive) reads as a bottom pin. The blue text on BLOCK TAG is where the tag goes, and texts on
 BLOCK ATTRIBUTES are where a terminal's number, a PLC address or a rating shows; their
 alignment and angle (Edit text: middle center, say, so a rating sits in the middle of a fuse
 whichever way it is turned) are kept with the block. <b>Add attribute</b> (ADDATTR, ATTDEF,
@@ -1140,7 +1154,15 @@ order: its size and color (its layer's, or its own), what it lands on, each with
 pin), and the sheets it is on. Off-sheet connectors and source and destination arrows carry a
 wire on, so they are not landings. <b>Terminal strip list...</b> lists every terminal, strip
 by strip in number order, with the wire numbers on its left and right pins and where it is.
-Both are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
+<b>Terminal count...</b> (the same places; on the ribbon, the Terminals button's menu) says
+how many terminals and jumpers the tapped wires need: every wire number tapped off (6001 with
+6001-1, 6001-2... and a tap off a tap, 6001-1a), its taps, and one terminal for the number and
+one for each tap, bridged by one jumper fewer than terminals (6001 tapped three times: 4
+terminals, 3 jumpers), with the sheets they are on and the totals at the bottom. It counts one
+wire on each terminal side, the most you can need: multi-level terminals, or two wires on a
+side, need fewer. It counts taps numbered -1, -2... (or with numbers of their own: Project
+properties, Schematic, Tap numbers); taps that keep the wire's number aren't told apart, and
+it says so. All three are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
 writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workbook" as the
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 <p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints
@@ -1209,7 +1231,10 @@ on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR (b
 C, R (on the baseline). All three are kept for the next texts.
 <b>Double-click a text</b> to change its wording where it is: an edit box opens over it,
 Enter keeps what you typed (one Undo), Esc leaves it as it was, and clicking elsewhere keeps it
-too. Right-click it and pick <b>Text properties...</b> for its wording, height, angle and
+too. Just above the box, <b>Left</b>, <b>Center</b> and <b>Right</b> justify it (kept with
+what you typed, the same Undo; a multi-line note keeps its top, middle or bottom), and
+<b>More...</b> keeps what you typed and opens its window. Right-click it and pick <b>Text
+properties...</b> (or More...) for its wording, height, angle and
 justification (a new justification moves the text around its insertion point; tick "Keep the
 text where it is", unticked to start, to move only the insertion point instead, which is where
 it snaps and turns around).</td></tr>
@@ -1433,8 +1458,8 @@ while nothing is drawn on it changes its scale to the project's for that kind (s
 Scale box before you press OK, so you can pick another); a sheet with a drawing on it keeps its
 scale.</li>
 <li>When the drawing runs past the border or over the title block at the sheet's scale, the
-status bar says <b>doesn't fit</b> (in amber), and Export to PDF asks before printing it cut
-off.</li>
+status bar says <b>doesn't fit</b> (in amber), and Export to PDF and Print ask before printing
+it cut off, naming what doesn't fit (see Printing).</li>
 <li>The border, zones and title block are drawn around the real-size drawing, enlarged by the
 scale, so the sheet prints at its paper size (PDF) with the drawing at that scale. DXF
 exports hold the real-size drawing with the border enlarged around it, as AutoCAD drawings
@@ -1450,7 +1475,8 @@ marked as drawing-sized).</li>
 <li>Footprints aren't scaled by hand on a panel sheet (Scale leaves them out and says so):
 bring a manufacturer's drawing to real size with Scale, Reference before it becomes a
 footprint.</li>
-<li><b>{{Scale}}</b> in the title block shows the sheet's scale (Edit title block to add it).</li>
+<li><b>{{Scale}}</b> in the title block shows the sheet's scale (the ready-made title blocks
+have a SCALE cell; Edit title block adds it to one of your own).</li>
 <li><b>Align objects</b> (ALIGNOBJ, ALO; Modify menu; Panel tab: Arrange; Schematic tab:
 Modify) lines up footprints, DIN rail, duct, symbols or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right</b>,
 <b>Top</b>, <b>Middle</b> or <b>Bottom</b> (L, C, R, T, M, B), then click the one to line
@@ -1856,8 +1882,13 @@ the page; past the printer's paper is cut off at the page's edges (its middle sh
 colors.</li>
 </ul>
 <p>When a scaled sheet's drawing doesn't fit on it (the status bar's <b>doesn't fit</b>),
-printing the whole sheet asks first, as Export to PDF does. {{Print date}} in the title block
-is when you printed.</p>
+printing the whole sheet asks first, as Export to PDF does. The question names each sheet that
+doesn't fit by its number and title, says whether its drawing runs past the border or over the
+title block, and names what does (a symbol by its tag, a text by what it says, up to five a
+sheet). <b>Print anyway</b> prints; <b>Go back</b> opens the Print window again as you left it;
+<b>Show them</b> goes to the first of those sheets with everything on it in view and what
+doesn't fit selected (the command line lists it), so you can move it or use Fit. {{Print
+date}} in the title block is when you printed.</p>
 
 <h2>Windows and two screens</h2>
 <p>Any sheet can have a window of its own, to put on another screen: the schematic on one
@@ -1937,8 +1968,10 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>Ctrl+W / Ctrl+Q</td><td>Close project / Exit</td></tr>
 <tr><td>Ctrl+P</td><td>Print...</td></tr>
 <tr><td>Ctrl+Shift+N</td><td>Open this sheet in a new window</td></tr>
-<tr><td>Ctrl+Tab / Ctrl+Shift+Tab</td><td>The sheet you were last on; hold Ctrl and tap Tab for
-the ones before it (Shift+Tab back)</td></tr>
+<tr><td>Ctrl+Tab / Ctrl+Shift+Tab</td><td>Next / previous sheet in page order (round from
+the last to the first)</td></tr>
+<tr><td>Ctrl+` / Ctrl+Shift+`</td><td>The sheet you were last on; hold Ctrl and tap ` for the
+ones before it (Shift+` back)</td></tr>
 <tr><td>Ctrl+Z / Ctrl+Y</td><td>Undo / Redo</td></tr>
 <tr><td>Ctrl+X / Ctrl+C / Ctrl+V / Ctrl+A</td><td>Cut / Copy / Paste / Select all</td></tr>
 <tr><td>Ctrl+Shift+E / Ctrl+0 / Ctrl+= / Ctrl+-</td><td>Zoom extents / sheet / in / out</td></tr>

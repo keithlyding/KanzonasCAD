@@ -112,8 +112,12 @@ def recent_list(recent, path=None, limit=None, pathmod=os.path):
 
 def settings():
     """The program's settings store: settings.ini in the data folder when portable, else
-    the system's own (the registry on Windows)."""
+    the system's own (the registry on Windows). KANZONASCAD_SETTINGS names an INI file to use
+    instead (the unit tests: one per process, so tests run side by side don't share one)."""
     from PySide6.QtCore import QSettings
     if is_portable():
         return QSettings(os.path.join(data_dir(), "settings.ini"), QSettings.IniFormat)
+    env = os.environ.get("KANZONASCAD_SETTINGS")
+    if env:
+        return QSettings(env, QSettings.IniFormat)
     return QSettings(APP, APP)
