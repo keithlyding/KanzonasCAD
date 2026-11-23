@@ -1745,8 +1745,10 @@ def _apart(paths):
 
 
 def _paths_cross(paths):
-    """Does any piece of one of these wires cross or overlap a piece of another, other than
-    meeting it end to end?"""
+    """Does any piece of one of these wires (a bus's, each its own circuit) cross, overlap or
+    touch a piece of another? Touching counts too: one wire's end on another's run is a T,
+    joined there with a dot (the battery, seed 43: a bus carried on along the line of its own
+    ends ran one wire straight through the next one's end)."""
     segs = [(i, a, b) for i, q in enumerate(paths) for a, b in zip(q, q[1:])]
     for x in range(len(segs)):
         i, a, b = segs[x]
@@ -1754,9 +1756,8 @@ def _paths_cross(paths):
             j, c, d = segs[y]
             if i == j:
                 continue
-            for q in G.segment_intersections(a, b, c, d):
-                if not any(G.dist(q, e) <= 1e-9 for e in (a, b, c, d)):
-                    return True
+            if G.segment_intersections(a, b, c, d):
+                return True
             # (along each other: the same line, overlapping)
             if G.dist_to_segment(c, a, b) <= 1e-9 and G.dist_to_segment(d, a, b) <= 1e-9 or \
                     G.dist_to_segment(a, c, d) <= 1e-9 and G.dist_to_segment(b, c, d) <= 1e-9:
@@ -2075,6 +2076,7 @@ class BusCmd(Command):
         self.flip = False
         self.toward = None              # started on a symbol's pins: where its others are
         self.side_pins = []             # ...and those pins, each wire starting exactly on one
+        self.from_wires = []            # started on a bus's open ends: its wires (_back_over_own)
         self.land_pins = []             # the pins a landed bus ends on, each wire ending on one
         self.tap_start = None           # started on wires side by side: (across, [lines])
         self.tap_end = None             # ...ended on them
@@ -2289,6 +2291,7 @@ class BusCmd(Command):
                     # (a bus's open end: carried on, each wire on its own layer)
                     got = ends[:2]
                     self.layers = [w.layer for w in ends[2]]
+                    self.from_wires = list(ends[2])
                     what = "the bus's ends"
             if got is not None:
                 line, gap = got
@@ -2635,7 +2638,7 @@ class BusCmd(Command):
                 # corner, a dot with nothing tapped off; the battery, 0.17.5, seed 12, and a
                 # 3/4" bus onto 1/2" poles)
                 out.append([tuple(q) for q in M._tidy(straighten(pts))])
-            if _paths_cross(out):
+            if _paths_cross(out) or self._back_over_own(out):
                 continue
             bb = None
             for q in out:
@@ -2646,6 +2649,18 @@ class BusCmd(Command):
                 continue
             return out
         return None
+
+    def _back_over_own(self, paths):
+        """Carried on from a bus's open ends: does any wire leave its end straight back along
+        the wire it carries on (drawn over it, a hidden corner; the battery, seed 43)?"""
+        from .wires import doubles_back
+        for w in self.from_wires:
+            for end, nxt in ((w.points[0], w.points[1]), (w.points[-1], w.points[-2])):
+                for q in paths:
+                    if len(q) > 1 and G.dist(q[0], end) <= 1e-9 and \
+                            doubles_back([nxt, end, q[1]]):
+                        return True
+        return False
 
     def _fan_mains(self, S, k, m):
         """Every wire's points from the bus's start to S, its last leg coming square at the
