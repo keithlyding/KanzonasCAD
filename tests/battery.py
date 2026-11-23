@@ -2495,9 +2495,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         now = [w for w in sh.wires() if w.touches(src.pin_points()[0][1])]
         if not now or not now[0].num or now[0].num_lock:
             return
-        # (a tap off the source's wire is numbered from it: 1006-1, 1006-1a; its page is the
-        # base number's)
-        got = WN.split(re.sub(r"-\d+[a-z]*$", "", now[0].num))
+        # (a tap off the source's wire is numbered from it: 1006-1, 1006-1a, 1006a, 1006-a...;
+        # its page is the base number's)
+        got = WN.split(TAP_END.sub("", now[0].num))
         if got is None and WN.by_io_address(p):
             return                          # (numbered by a PLC point's address, O:3/0)
         assert got and got[0] == p.sheet_number(sh), \
