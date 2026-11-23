@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.7
+
+**New**
+- Ctrl+Tab goes to the next sheet in page order and Ctrl+Shift+Tab to the one before, going
+  round from the last sheet to the first (on sheet 13 of 15: 14, 15, then 1).
+- Going back to the sheet you were last on (hold Ctrl and tap to go further back) is now
+  Ctrl+` (the key above Tab), Ctrl+Shift+` to step back.
+
 ## 0.22.1
 
 **New**

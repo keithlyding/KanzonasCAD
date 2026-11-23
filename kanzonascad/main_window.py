@@ -204,7 +204,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self.setWindowTitle(app_title())
         self.setAcceptDrops(True)       # (DXF, DWG and projects dragged in from Explorer)
         from . import sheet_cycle
-        self.sheet_cycler = sheet_cycle.install(self)   # (Ctrl+Tab through the sheets)
+        self.sheet_cycler = sheet_cycle.install(self)   # (Ctrl+Tab, Ctrl+` through the sheets)
         self.resize(1400, 900)
         self._untitled = 0
 

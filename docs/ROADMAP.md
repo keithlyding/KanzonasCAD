@@ -73,6 +73,8 @@ nobody understands).
   address (off to start); Import I/O list's address wins over the one made from the SLOT.
   Also in 0.21.2: Ctrl+Tab sheet cycling (as Studio 5000), output modules sourcing on the left,
   -2/-3 duplicate sheet titles, Align/Distribute on the Schematic tab, fast window selection.
+  Changed in 0.22.7 (owner, Nov 23 2026): Ctrl+Tab / Ctrl+Shift+Tab go next / previous in
+  page order, round from the last sheet to the first; the most-recent cycle moved to Ctrl+`.
 - 0.18.3 (owner, Nov 2026: "all three wires tapping off the bus are still the same wire number
   ... Those need to change where they tap off"): taps numbered from the wire they tap, -1, -2,
   -3 in the numbering order, a tap off a tap a, b, c (2007-1a); a project setting (that, the
