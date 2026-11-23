@@ -86,20 +86,43 @@ def text_path(t):
 
 
 def text_item(t):
-    """A Text entity as kept for drawing: (placement, string)."""
-    return (text_transform(t), t.text)
+    """A Text entity as kept for drawing: (placement, string, a box on the sheet it can't
+    draw outside of: as many of the font's widest letter as it has letters, from above its
+    tallest to below its lowest, placed; draw_texts leaves out the ones off the screen).
+    (Measured exactly, the 2,000 texts of a sheet moved at once took half again as long.)"""
+    tr = text_transform(t)
+    text_font()
+    fm = _font_cache["fm"]
+    box = QRectF(-fm.maxWidth(), -fm.ascent() - fm.leading(),
+                 fm.maxWidth() * (len(t.text) + 2), fm.height() + 2 * fm.leading())
+    return (tr, t.text, tr.mapRect(box))
 
 
-def draw_texts(painter, items, color, outlines):
-    """Draw text items in one color: on screen with drawText (Qt's cached letters); with
-    outlines (PDF, print) as filled glyph outlines."""
+def visible_rect(painter):
+    """The part of the sheet a screen painter can show (drawing units), a little larger;
+    None when it can't be told (then everything is drawn)."""
+    inv, ok = painter.worldTransform().inverted()
+    if not ok:
+        return None
+    dev = painter.device()
+    # (the device's whole size in pixels, at least its size in the painter's units: a
+    # high-dpi picture shows no more than it; 8 pixels over for antialiasing)
+    r = QRectF(-8.0, -8.0, dev.width() + 16.0, dev.height() + 16.0)
+    return inv.mapRect(r)
+
+
+def draw_texts(painter, items, color, outlines, view=None):
+    """Draw text items in one color: on screen with drawText (Qt's cached letters), those
+    whose box is out of view (a QRectF on the sheet) left out; with outlines (PDF, print) as
+    filled glyph outlines, all of them. (The owner's notes sheet, 10,000 texts, drew every one
+    at every zoom: ten zooms took 2.2 s on the Windows build.)"""
     if not items:
         return
     f = text_font()
     if outlines:
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(color))
-        for tr, text in items:
+        for tr, text, _box in items:
             p = QPainterPath()
             p.addText(QPointF(0, 0), f, text)
             painter.drawPath(tr.map(p))
@@ -109,7 +132,9 @@ def draw_texts(painter, items, color, outlines):
     painter.setFont(f)
     base = painter.worldTransform()
     origin = QPointF(0, 0)
-    for tr, text in items:
+    for tr, text, box in items:
+        if view is not None and not view.intersects(box):
+            continue
         painter.setWorldTransform(tr * base)
         painter.drawText(origin, text)
     painter.setWorldTransform(base)
@@ -280,12 +305,17 @@ def picture_image(e):
     return img
 
 
-def paint_pictures(painter, pictures):
-    """Pictures in their place, upright as they stand (y up on the sheet, down in the image)."""
+def paint_pictures(painter, pictures, view=None):
+    """Pictures in their place, upright as they stand (y up on the sheet, down in the image);
+    those out of view (a QRectF on the sheet) left out."""
     if not pictures:
         return
     base = painter.worldTransform()
     for e in pictures:
+        if view is not None:
+            x0, y0, x1, y1 = e.bbox()
+            if not view.intersects(QRectF(x0, y0, x1 - x0, y1 - y0)):
+                continue
         img = picture_image(e)
         if img.isNull():
             continue
@@ -466,7 +496,7 @@ class SheetRenderer:
         for x0, y0, x1, y1 in boxes:
             painter.drawRect(QRectF(x0 - g, y0 - g, x1 - x0 + 2 * g, y1 - y0 + 2 * g))
 
-    def _paint_xrefs(self, painter, outlines):
+    def _paint_xrefs(self, painter, outlines, view=None):
         """Cross-references and wire numbers (worked out again only when what they show
         changed)."""
         from . import xrefs, wirenums
@@ -485,9 +515,10 @@ class SheetRenderer:
         lay = self.project.layers.get("XREFS")
         if lay is None or lay.visible:
             draw_texts(painter, refs, self.pal.color(self.project, M.Text(
-                (0, 0), "", 0.1, layer="XREFS" if lay is not None else "SYMBOLS")), outlines)
+                (0, 0), "", 0.1, layer="XREFS" if lay is not None else "SYMBOLS")), outlines,
+                view)
         num_color = self.pal.color(self.project, M.Text((0, 0), "", 0.1, layer="SYMBOLS"))
-        draw_texts(painter, items, num_color, outlines)
+        draw_texts(painter, items, num_color, outlines, view)
         joined = xrefs.links(self.project, self.sheet)
         if joined:
             # (a pushbutton's contact blocks in its column: the dashed line joining them, in
@@ -541,18 +572,20 @@ class SheetRenderer:
         if under is not None:
             under(painter)              # (the grid dots: under the drawing, not over it)
         lines, texts, tb = self._frame_paths()
+        outlines = pen_width != 0 or painter.device().paintEngine().type() not in (
+            QPaintEngine.Raster, QPaintEngine.OpenGL2)
+        # (on the screen, texts and pictures out of view are left out; printed, all)
+        view = None if outlines else visible_rect(painter)
         for ch in [tb] + list(self.chunks.values()):
-            paint_pictures(painter, ch.pictures)        # (pictures under everything)
+            paint_pictures(painter, ch.pictures, view)  # (pictures under everything)
         pen = QPen(pal.frame, pen_width)
         pen.setCosmetic(pen_width == 0)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
         painter.drawPath(lines)
-        outlines = pen_width != 0 or painter.device().paintEngine().type() not in (
-            QPaintEngine.Raster, QPaintEngine.OpenGL2)
-        draw_texts(painter, texts, pal.frame, outlines)
+        draw_texts(painter, texts, pal.frame, outlines, view)
         self._paint_dots(painter)
-        self._paint_xrefs(painter, outlines)
+        self._paint_xrefs(painter, outlines, view)
         if pen_width == 0:
             self._paint_dupes(painter)
         smooth = painter.testRenderHint(QPainter.Antialiasing)
@@ -587,7 +620,7 @@ class SheetRenderer:
                 for path in paths:
                     painter.drawPath(path)
             for rgba, items in ch.texts.items():
-                draw_texts(painter, items, QColor.fromRgba(rgba), outlines)
+                draw_texts(painter, items, QColor.fromRgba(rgba), outlines, view)
             painter.setPen(Qt.NoPen)
         self._paint_jumps(painter, pen_width)
 

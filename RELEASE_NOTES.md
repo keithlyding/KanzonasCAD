@@ -6,6 +6,23 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.1
+
+**New**
+- A wire takes its layer from the pin it starts on: from a PLC input or output it goes on
+  24VDC BLU, from a PLC common on 24VDC BLU-WHT, from a motor's or drive's power terminal on
+  480V BLK (its ground on 480V GRN), from a control transformer's X1 on 120V RED. The command
+  line says which. It uses the layers Add wire layers brings in; a wire joined to another still
+  takes that wire's layer. Project properties, Schematic turns it off.
+- In a block's tab, Pins... gives each pin a wire layer of its own if you like.
+
+**Fixed**
+- Zooming and panning are faster on sheets with many notes and pictures: what is off the
+  screen is no longer drawn.
+- A report sheet (Report sheet...) on a project whose title block isn't in the lower right
+  corner or down the right side now uses the room around it; with the title block at the top
+  left, its table came out empty.
+
 ## 0.22
 
 **New**

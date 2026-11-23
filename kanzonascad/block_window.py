@@ -300,7 +300,8 @@ class BlockEditing:
         if d.view.cmd is not None:
             d.view.cancel()
         sess = d.block_session
-        rows = [(e.id, e.text.strip(), pos[0], pos[1])
+        lays = BE.pin_layers(d.project, sess)
+        rows = [(e.id, e.text.strip(), pos[0], pos[1], lays.get(e.id, ""))
                 for e, pos in BE.pin_markers(d.project, sess)]
         while True:
             got = self.ask_pins(rows)

@@ -136,7 +136,16 @@ that starts or ends on another wire, a tap off it or carrying it on, takes that 
 instead: it is the same conductor, so the same voltage, color and gauge (a size typed on the
 new wire is still its own), and the rubber band shows it in that color as you draw. A wire
 joining wires of two different layers stays on the wire layer picked (or the default), and the command line warns
-that two conductors may be tied together. Symbols go on
+that two conductors may be tied together. A wire on its own that starts on a symbol's pin (or, failing that, ends
+on one) takes <b>the layer the pin gives</b>, whatever layer is picked: a PLC module's input or
+output point, or its V, 24VDC BLU; its common (C, COM, RTN), 24VDC BLU-WHT; a motor's or
+drive's power terminal (L1-L3, T1-T3, U, V, W), 480V BLK, and its ground (PE), 480V GRN; a
+control transformer's H terminals 480V BLK, X1 120V RED and X2 120V WHT; a power supply's L
+120V RED, N 120V WHT, + 24VDC BLU and - 24VDC BLU-WHT. A pin given a wire layer of its own
+(<b>Pins...</b>, in a block's tab) gives that one. Only a layer the project has is used (<b>Add
+wire layers...</b> brings in all of these), and the command line says which layer and pin. Project
+properties, Schematic: <b>A wire takes its layer from the pin it starts on</b> (on to start) turns
+it off. Symbols go on
 SYMBOLS, footprints on PANEL and dimensions on DIMENSIONS: the Schematic and Panel tabs of
 Project properties set those colors, which recolors everything on them. On the black drawing,
 black (or nearly black) objects are drawn white, and on a white one, white objects are drawn
@@ -497,8 +506,10 @@ pins in their order, with each one's name and place (X and Y in inches from the 
 double-click a name or a place to change it (a pin put in the wrong spot: type where it goes);
 drag a row, or <b>Move up</b> and <b>Move down</b>, to change the order (the order a bus lands
 on them wire for wire, and the order Properties... lists them); <b>Delete</b> takes a pin out;
-<b>Find</b> selects it on the drawing and puts it in the middle of the view. OK makes all of it
-one step (Undo takes it back); two pins with the same name are refused. The blue text on BLOCK TAG is where the tag goes, and texts on
+<b>Find</b> selects it on the drawing and puts it in the middle of the view; <b>Wire layer</b>
+(double-click it) gives a pin a wire layer of its own: a wire started on that pin goes on that
+layer when the project has it (blank: worked out from the block, as Layers describes). OK makes
+all of it one step (Undo takes it back); two pins with the same name are refused. The blue text on BLOCK TAG is where the tag goes, and texts on
 BLOCK ATTRIBUTES are where a terminal's number, a PLC address or a rating shows; their
 alignment and angle (Edit text: middle center, say, so a rating sits in the middle of a fuse
 whichever way it is turned) are kept with the block. <b>Add attribute</b> (ADDATTR, ATTDEF,

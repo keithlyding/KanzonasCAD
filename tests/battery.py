@@ -55,7 +55,7 @@ from kanzonascad import block_editor as BE  # noqa: E402
 from kanzonascad import commands as C  # noqa: E402
 from kanzonascad import model as M  # noqa: E402
 from kanzonascad import geometry as G  # noqa: E402
-from kanzonascad import wires, crossings, wirenums, fileio, templates  # noqa: E402
+from kanzonascad import wires, crossings, wirenums, wirelayers, fileio, templates  # noqa: E402
 from kanzonascad import tags as tags_mod  # noqa: E402
 from kanzonascad import xrefs as XR  # noqa: E402
 from tests import battery_checks as BC  # noqa: E402
@@ -743,7 +743,13 @@ def random_editing(log, out, ops, seed, drawing=None):
         if o is None:
             return
         name = rnd.choice(["Drive control terminals", "Disconnect 3-pole", "Relay coil",
-                           "Fuses 3-pole"])
+                           "Fuses 3-pole", "Variable frequency drive", "Motor 3-phase",
+                           "1734-IB8 module"])
+        if rnd.random() < 0.3:
+            # (0.22.1: the preset's layers in, so a wire to a drive's, motor's or PLC point's pin
+            # takes its voltage's layer)
+            with p.edit("preset") as ed:
+                wirelayers.add_preset(ed, p)
         before = set(s.entities)
         v.run(C.InsertCmd, lib.get("symbol", name), {})
         for _i in range(rnd.randint(0, 3)):
@@ -783,6 +789,26 @@ def random_editing(log, out, ops, seed, drawing=None):
         assert not wires._crosses(w.points, [(e, bb)]), \
             "a wire to %s's pin %s ran through it: %s" % (name, pin_name, w.points)
         BC.CHECKED["wire goes around a symbol"] += 1
+        # (0.22.1: a wire on its own ending on a pin takes the layer the pin's kind gives,
+        # when the project has it; worked out here from the symbol's name and the pin's, not
+        # from autolayer)
+        far = w.points[0] if G.dist(pin, w.points[-1]) <= wires.TOL else w.points[-1]
+        if len(new) == 1 and not wires.connects_at(s, far, exclude=w.id) and \
+                not wires.pins_on(s, far):
+            want = None
+            if name in ("Variable frequency drive", "Motor 3-phase"):
+                want = "480V GRN" if pin_name.startswith("PE") else (
+                    "480V BLK" if pin_name[:1] in "LT" else None)
+            elif name == "1734-IB8 module":
+                want = "24VDC BLU"                  # (every terminal an input point)
+            if want is None or want not in p.layers or \
+                    not p.settings.get("wire_layer_auto", True):
+                assert w.layer == C.wire_layer(v), \
+                    "a wire to %s's pin %s went on %s" % (name, pin_name, w.layer)
+            else:
+                assert w.layer == want, "a wire to %s's pin %s went on %s, not %s" % (
+                    name, pin_name, w.layer, want)
+                BC.CHECKED["a wire to a drive's, motor's or PLC point's pin takes its layer"] += 1
 
     def op_bus_around():
         # (0.16.7: a bus clicked across a symbol off on its own goes round it: none of its

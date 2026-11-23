@@ -184,7 +184,7 @@ class BlockPinsTest(unittest.TestCase):
         self.assertEqual(found, [9])
         t.topLevelItem(1).setText(1, "-0.5")
         t.topLevelItem(1).setText(0, " B1 ")
-        self.assertEqual(dlg.rows()[1], (7, "B1", -0.5, 0.0))
+        self.assertEqual(dlg.rows()[1], (7, "B1", -0.5, 0.0, ""))
         dlg.delete()
         self.assertEqual([r[0] for r in dlg.rows()], [7, 8])
         t.topLevelItem(0).setText(2, "up")

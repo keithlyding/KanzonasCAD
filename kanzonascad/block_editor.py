@@ -135,9 +135,11 @@ def open_block(defn):
     s._put(M.Circle((ox, oy), r / 3, layer=LAYER_BASE))
     for i, pin in enumerate(defn.pins):
         # (a pin left of the base point: its name to the left of it, clear of the drawing)
-        put(M.Text(at(pin["pos"]), pin["name"], PIN_HEIGHT * n,
-                   align="right" if pin["pos"][0] < -1e-9 else "left", layer=LAYER_PINS),
-            ("pin", i))
+        t = M.Text(at(pin["pos"]), pin["name"], PIN_HEIGHT * n,
+                   align="right" if pin["pos"][0] < -1e-9 else "left", layer=LAYER_PINS)
+        put(t, ("pin", i))
+        if pin.get("layer"):
+            s.pin_layers[t.id] = pin["layer"]       # (its own wire layer: Pins...)
     if defn.kind == "symbol" and defn.tag_pos is not None:
         put(M.Text(at(defn.tag_pos), (defn.prefix + "?") if defn.prefix else "TAG",
                    defn.tag_height, 0.0, "center", layer=LAYER_TAG), ("tag", 0))
@@ -206,7 +208,8 @@ def to_block(project, sess):
             i = what[1] if what and what[0] == "pin" else None
             pos = old.pins[i]["pos"] if stays and i is not None else back(e.pos)
             pins.append((0 if i is not None else 1, i if i is not None else eid, eid,
-                         {"name": name, "pos": pos}, i))
+                         {"name": name, "pos": pos} |
+                         ({"layer": s.pin_layers[eid]} if s.pin_layers.get(eid) else {}), i))
         elif marker and e.layer == LAYER_TAG and old.kind == "footprint":
             # a footprint's label spot: left where it opened, as it was (automatic stays so)
             if what and what[0] == "tag" and stays:
@@ -284,7 +287,7 @@ def to_block(project, sess):
             defn.entities.append(c)
         if len(out) == 1:
             base[eid] = (s.entities[eid].to_dict(), ("ent", len(defn.entities) - 1))
-    defn.pins = [{"name": p[3]["name"], "pos": M._pt(p[3]["pos"])} for p in pins]
+    defn.pins = [dict(p[3], pos=M._pt(p[3]["pos"])) for p in pins]
     pin_map = {q["name"]: None for q in old.pins}
     for k, p in enumerate(pins):
         if p[4] is not None:
@@ -415,9 +418,11 @@ def pin_names(project, sess):
 
 
 def apply_pins(project, sess, rows):
-    """Pins... done: rows [(marker id, name, x, y)] in the order the pins take, x and y from
-    the base point. Markers left out are erased; the others renamed and moved; the order kept
-    with the sheet (one step, undone as one). Returns what's wrong with the rows, or None."""
+    """Pins... done: rows [(marker id, name, x, y[, wire layer])] in the order the pins take, x
+    and y from the base point, the wire layer "" for none of its own (autolayer.py: worked out
+    from the block). Markers left out are erased; the others renamed and moved; the order and
+    the wire layers kept with the sheet (one step, undone as one). Returns what's wrong with
+    the rows, or None."""
     s = project.sheet_by_id(sess.sheet_id)
     names = [str(r[1]).strip() for r in rows]
     if any(not n for n in names):
@@ -431,7 +436,7 @@ def apply_pins(project, sess, rows):
         for e in list(s.entities.values()):
             if isinstance(e, M.Text) and e.layer == LAYER_PINS and e.id not in keep:
                 ed.remove(s, e.id)
-        for (eid, _n, x, y), name in zip(rows, names):
+        for (eid, _n, x, y, *_lay), name in zip(rows, names):
             cur = s.entities[eid]
             at = (_round(ox + float(x)), _round(oy + float(y)))
             if cur.text != name or G.dist(cur.pos, at) > 1e-9:
@@ -439,7 +444,16 @@ def apply_pins(project, sess, rows):
                                       align="right" if float(x) < -1e-9 else "left"))
         if list(s.pin_order) != keep:
             ed.sheet_meta(s, pin_order=keep)
+        # (rows without a fifth column leave the pins' wire layers as they were)
+        lays = {r[0]: str(r[4]).strip() for r in rows if len(r) > 4 and str(r[4]).strip()}
+        if any(len(r) > 4 for r in rows) and lays != s.pin_layers:
+            ed.sheet_meta(s, pin_layers={str(k): v for k, v in lays.items()})
     return None
+
+
+def pin_layers(project, sess):
+    """{pin marker id: its own wire layer} on the editor's sheet."""
+    return dict(project.sheet_by_id(sess.sheet_id).pin_layers)
 
 
 def saved(sess, result):

@@ -1342,15 +1342,28 @@ def joined_layers(sheet, ends):
     return out
 
 
-def new_wire_layer(ctx, sheet, pts, warn=False):
+def new_wire_layer(ctx, sheet, pts, warn=False, say=None):
     """The layer a new wire goes on: that of the wire it starts or ends on (one conductor: the
     same voltage and color; the owner, 0.19.7, "when connecting a wire to another wire... the
-    new wire should automatically become the same layer"), else the current wire layer. Joining
+    new wire should automatically become the same layer"), else the one the pin it starts (or
+    ends) on gives (autolayer.py: a PLC point's 24VDC BLU...), else the current wire layer. Joining
     wires of two layers, it stays on the current one and, with warn, says so (two conductors
     tied together are rarely meant)."""
     got = joined_layers(sheet, [pts[0], pts[-1]]) if len(pts) >= 2 else []
     if len(got) == 1:
         return got[0]
+    if not got:
+        # (started on a PLC point, a motor's terminal...: its voltage's layer, autolayer.py)
+        from . import autolayer
+        from .wires import TOL
+        auto = autolayer.layer_for(ctx.project, sheet, pts, TOL)
+        if auto is not None:
+            if warn if say is None else say:
+                layer, ins, pin = auto
+                ctx.message("On %s, from %s terminal %s (Project properties: A wire takes its "
+                            "layer from the pin it starts on)"
+                            % (layer, ins.attrs.get("TAG") or ins.block, pin))
+            return auto[0]
     cur = wire_layer(ctx)
     if len(got) > 1 and warn:
         ctx.message("That wire joins wires on two layers (%s): drawn on %s. Check it isn't two "
@@ -2858,7 +2871,8 @@ class BusCmd(Command):
             if default:
                 # (left at the default: each wire that taps or carries on another takes its
                 # layer, as a wire does, 0.19.7; a layer picked for the bus is kept)
-                layers = [new_wire_layer(self.ctx, sheet, q, warn=True) for q in paths]
+                layers = [new_wire_layer(self.ctx, sheet, q, warn=True, say=False)
+                          for q in paths]
             with self.ctx.edit("Bus") as ed:
                 for pts, layer in zip(paths, layers):
                     if layer not in project.layers:
