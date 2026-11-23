@@ -162,6 +162,46 @@ class PageOrderTest(unittest.TestCase):
         self.press(back=True)
         self.assertEqual(self.page(), 13)
 
+    def shortcut(self, seq, ambiguous=True):
+        """The shortcut event Qt sends the action of seq: ambiguous as on Windows, where
+        Ctrl+Shift+Tab reads as both Ctrl+Shift+Tab and Ctrl+Backtab (the owner, 0.22.3:
+        "Ctrl +shift+tab does not work")."""
+        from PySide6.QtCore import QCoreApplication
+        from PySide6.QtGui import QKeySequence, QShortcutEvent
+        key = QKeySequence(seq)
+        act = next(a for a in self.win.sheet_cycler.actions if key in a.shortcuts())
+        QCoreApplication.sendEvent(act, QShortcutEvent(key, 0, ambiguous))
+
+    def test_ambiguous_ctrl_shift_tab_still_goes_back(self):
+        from PySide6.QtCore import QKeyCombination
+        for seq in (QKeyCombination(Qt.ControlModifier | Qt.ShiftModifier, Qt.Key_Tab),
+                    QKeyCombination(Qt.ControlModifier, Qt.Key_Backtab)):
+            before = self.page()
+            self.shortcut(seq)
+            self.assertEqual(self.page(), before - 1, seq)
+        self.shortcut(QKeyCombination(Qt.ControlModifier, Qt.Key_Tab))
+        self.assertEqual(self.page(), 12)
+
+    def test_ambiguous_ctrl_shift_backtick_still_cycles_back(self):
+        from PySide6.QtCore import QKeyCombination
+        self.shortcut(QKeyCombination(Qt.ControlModifier | Qt.ShiftModifier, Qt.Key_QuoteLeft))
+        self.assertTrue(self.win.sheet_cycler.list.isVisible())
+        QTest.keyRelease(self.v, Qt.Key_Control)
+        self.assertFalse(self.win.sheet_cycler.list.isVisible())
+        self.assertNotEqual(self.page(), 13)
+
+    def test_no_other_action_uses_the_sheet_keys(self):
+        # (an ambiguous shortcut is taken as this action's own: that holds only while no other
+        # action of the window has one of its keys)
+        from PySide6.QtGui import QAction
+        mine = self.win.sheet_cycler.actions
+        keys = {k.toString() for a in mine for k in a.shortcuts()}
+        for a in self.win.findChildren(QAction):
+            if a in mine:
+                continue
+            clash = keys & {k.toString() for k in a.shortcuts()}
+            self.assertFalse(clash, "%s uses %s" % (a.text(), clash))
+
     def test_ctrl_backtick_still_goes_to_the_last_sheet(self):
         QTest.keyPress(self.v, Qt.Key_QuoteLeft, Qt.ControlModifier)
         QTest.keyRelease(self.v, Qt.Key_Control)
