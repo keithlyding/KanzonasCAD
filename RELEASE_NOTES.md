@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.3
+
+**Fixed**
+- Security: the DWG reader (ezdwg) is updated to 0.21.3. A deliberately malformed DWG file
+  could make the older one use up memory and crash KanzonasCAD when opened; now such a file is
+  refused with an error.
+
 ## 0.22.1
 
 **New**
