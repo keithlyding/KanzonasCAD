@@ -465,6 +465,7 @@ class MainWindow(BlockEditing, QMainWindow):
         self._cmd_act("dim_units", "Dimension &units", C.DimUnitsCmd, "Units")
         self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
         self._cmd_act("dash_box", "Dashed bo&x", C.DashBoxCmd, "Dashed box")
+        self._cmd_act("ladder", "La&dder", C.LadderCmd, "Ladder")
         self._cmd_act("hatch", "&Hatch", C.HatchCmd, "Hatch")
         self._cmd_act("mtext", "&Multiline text", C.MTextCmd, "Multiline text")
         self._cmd_act("use_tb", "&Use as title block", C.UseTitleBlockCmd, "Use as title block")
@@ -701,7 +702,7 @@ class MainWindow(BlockEditing, QMainWindow):
             tm.addAction(a["theme_" + mode])
         m = mb.addMenu("&Draw")
         for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", "mtext", "hatch", None,
-                  "wire", "bus",
+                  "wire", "bus", "ladder",
                   "wire_cross", "sig_arrows", None,
                   "dim_linear", "dim_aligned", "leader", "dash_box", None, "rail", "duct"):
             if k == "CIRCLE":
@@ -809,7 +810,8 @@ class MainWindow(BlockEditing, QMainWindow):
         # order), Modify, Dimensions; the tab's own groups; then Parts, Layers and Settings at
         # the right end
         r.add_tab("Schematic", [
-            ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"], a["dash_box"]]),
+            ("Draw", "large", [a["wire"], a["bus"], a["ladder"], a["wire_cross"],
+                               a["dash_box"]]),
             # (the owner, 0.18: "0.17.4's schematic ribbon goes off the screen. Block
             # properties should generally only be visible when editing/creating a block":
             # Edit block here, the rest on the Block tab; a tab too wide for the window
@@ -2141,6 +2143,9 @@ class MainWindow(BlockEditing, QMainWindow):
         v = self.view()
         if v is None:
             return
+        if isinstance(ent, M.Ladder):
+            self.ladder_properties(ent)
+            return
         if isinstance(ent, (M.Text, M.MText)):
             from . import text_edit
             sheet = v.sheet()
@@ -2154,6 +2159,21 @@ class MainWindow(BlockEditing, QMainWindow):
             v.in_place = text_edit.InPlace(v, ent, done)
             return
         self.text_properties(ent)
+
+    def ladder_properties(self, ent):
+        """A ladder's window (a double-click on it): its first rung number (blank: worked out
+        from the page), how many rungs and how far apart."""
+        v = self.view()
+        if v is None:
+            return
+        got = dialogs.ladder_dialog(self, ent, v.sheet().k())
+        if got is None:
+            return
+        first, rungs, spacing = got
+        new = ent.copy(first=first, rungs=rungs, spacing=spacing * v.sheet().k())
+        if new.to_dict() != ent.to_dict():
+            with v.project.edit("Ladder") as ed:
+                ed.change(v.sheet(), new)
 
     def text_properties(self, ent):
         """Text properties...: a text's wording, height, angle and justification in its
@@ -3702,7 +3722,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
-                  "scale", "mirror", "array", "array_edit", "offset", "dash_box", "number",
+                  "scale", "mirror", "array", "array_edit", "offset", "dash_box", "ladder", "number",
                   "erase", "trim", "paste",
                   "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot",
                   "clean_wires", "del_comp", "wire_layers"):

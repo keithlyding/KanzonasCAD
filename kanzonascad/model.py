@@ -80,6 +80,14 @@ DEFAULT_SETTINGS = {
     # doesn't say otherwise (Sheet properties; the owner, 0.18.4: "turn the title block and/or
     # grid off and on, for the whole project and for individual sheets")
     "show_border": True,
+    # how a device's place is given (cross-references, reports, the status bar): "grid" its
+    # zone (6-D1), or "ladder" the rung it is on (603), a sheet can choose otherwise (Sheet
+    # properties; the owner, 0.22: "Let's do ladder references as an option"); rung numbers
+    # "hundreds" (the page times 100 on: 600, 601...) or "prefix" (the page, a dash, the rung:
+    # 6-01, 6-02...); a new ladder's rungs this far apart (paper inches)
+    "referencing": "grid",
+    "ladder_numbers": "hundreds",
+    "ladder_spacing": 0.5,
     # new dimensions read decimal (12.50") or fractional to the nearest 1/16 (1-9/16"): "decimal",
     # "1/8", "1/16", "1/32", "1/64"; each dimension keeps its own (Dimension units)
     "dim_units": "decimal",
@@ -1795,6 +1803,157 @@ class DashBox(Composite):
         return out
 
 
+@_register
+class Ladder(Composite):
+    """A ladder (the owner, 0.22: ladder references): its two rails and its rungs' numbers down
+    the left of the left rail. a and b: the tops of its left and right rails; the rails run
+    down from them (square to a-b, to the right of the way a goes to b) through rungs rungs
+    spacing apart, the first at a. first: its first rung's number as typed (None: worked out
+    from the page and the ladders before it, ladders.sync, kept in start); prefix and pad:
+    how its numbers read (ladder_numbers "prefix": "6-" and 2, so 6-01). height: the numbers'
+    text height in drawing units (paper-sized)."""
+    kind = "ladder"
+    __slots__ = ("a", "b", "rungs", "spacing", "first", "start", "prefix", "pad", "height",
+                 "_parts")
+
+    def __init__(self, a, b, rungs=10, spacing=0.5, first=None, start=None, prefix="", pad=0,
+                 height=0.1, **kw):
+        kw.setdefault("layer", "LADDER")
+        super().__init__(**kw)
+        self.a, self.b = _pt(a), _pt(b)
+        self.rungs = max(1, int(rungs))
+        self.spacing = float(spacing)
+        self.first = int(first) if first not in (None, "") else None
+        self.start = int(start) if start not in (None, "") else None
+        self.prefix = str(prefix or "")
+        self.pad = int(pad or 0)
+        self.height = float(height)
+        self._parts = None
+
+    def _data(self):
+        d = {"a": list(self.a), "b": list(self.b), "rungs": self.rungs,
+             "spacing": self.spacing, "height": self.height}
+        for k in ("first", "start"):
+            if getattr(self, k) is not None:
+                d[k] = getattr(self, k)
+        if self.prefix:
+            d["prefix"] = self.prefix
+        if self.pad:
+            d["pad"] = self.pad
+        return d
+
+    @classmethod
+    def _from(cls, d):
+        return cls(d["a"], d["b"], d.get("rungs", 10), d.get("spacing", 0.5), d.get("first"),
+                   d.get("start"), d.get("prefix", ""), d.get("pad", 0), d.get("height", 0.1),
+                   layer=d.get("layer", "LADDER"), color=d.get("color"), id=d.get("id"))
+
+    # ---- its frame: across (a to b) and down (the rails) ------------------------------------
+    def width(self):
+        return G.dist(self.a, self.b)
+
+    def _axes(self):
+        L = self.width()
+        if L < 1e-12:
+            return (1.0, 0.0), (0.0, -1.0)
+        ux, uy = (self.b[0] - self.a[0]) / L, (self.b[1] - self.a[1]) / L
+        return (ux, uy), (uy, -ux)
+
+    def rung_point(self, i, right=False):
+        """Where rung i (0 the first) meets the left rail (or the right one)."""
+        _u, d = self._axes()
+        o = self.b if right else self.a
+        return (o[0] + d[0] * i * self.spacing, o[1] + d[1] * i * self.spacing)
+
+    def bottom(self, right=False):
+        return self.rung_point(self.rungs - 1, right)
+
+    def number(self, i):
+        """Rung i's number as shown (603, 6-03), or "" before its numbers are worked out."""
+        if self.start is None and self.first is None:
+            return ""
+        n = (self.first if self.first is not None else self.start) + i
+        return self.prefix + (str(n).zfill(self.pad) if self.pad else str(n))
+
+    def numbers(self):
+        return [self.number(i) for i in range(self.rungs)]
+
+    def rung_at(self, p):
+        """The rung a point is on (0 the first; nearest), or None when it is off the ladder: past
+        the rails by more than a third of the ladder's width, or more than half a rung above
+        the first or below the last."""
+        (ux, uy), (dx, dy) = self._axes()
+        rx, ry = p[0] - self.a[0], p[1] - self.a[1]
+        t = rx * ux + ry * uy
+        s = (rx * dx + ry * dy) / self.spacing if self.spacing > 0 else 0.0
+        m = self.width() / 3.0
+        if t < -m or t > self.width() + m or s < -0.5 or s > self.rungs - 0.5:
+            return None
+        return int(round(s))
+
+    def parts(self):
+        if self._parts is not None:
+            return self._parts
+        (ux, uy), _d = self._axes()
+        out = [Line(self.a, self.bottom()), Line(self.b, self.bottom(True))]
+        gap = self.height * 1.5
+        for i in range(self.rungs):
+            label = self.number(i)
+            if label:
+                q = self.rung_point(i)
+                out.append(Text((q[0] - ux * gap, q[1] - uy * gap), label, self.height, 0.0,
+                                "right", "middle"))
+        for e in out:
+            e.layer, e.color = self.layer, self.color
+        self._parts = out
+        return out
+
+    def outline(self):
+        return [[self.a, self.bottom()], [self.b, self.bottom(True)]]
+
+    def pieces(self):
+        return [("seg", self.a, self.bottom()), ("seg", self.b, self.bottom(True))]
+
+    def _compute_snaps(self):
+        out = [("end", q) for q in (self.a, self.b, self.bottom(), self.bottom(True))]
+        # (every rung's two ends: wires start and end on the rails there)
+        for i in range(self.rungs):
+            out.append(("node", self.rung_point(i)))
+            out.append(("node", self.rung_point(i, True)))
+        return out
+
+    def grips(self):
+        """The left rail's top (moves it), the right rail's top (its width) and the left rail's
+        bottom (how many rungs)."""
+        return [self.a, self.b, self.bottom()]
+
+    def with_grip(self, i, p):
+        if i == 0:
+            dx, dy = p[0] - self.a[0], p[1] - self.a[1]
+            return self.copy(a=list(p), b=[self.b[0] + dx, self.b[1] + dy])
+        (ux, uy), (dx, dy) = self._axes()
+        if i == 1:
+            # (wider or narrower, square: along the rung)
+            t = (p[0] - self.a[0]) * ux + (p[1] - self.a[1]) * uy
+            if t <= 1e-9:
+                return self
+            return self.copy(b=[self.a[0] + ux * t, self.a[1] + uy * t])
+        s = ((p[0] - self.a[0]) * dx + (p[1] - self.a[1]) * dy) / self.spacing
+        return self.copy(rungs=max(1, int(round(s)) + 1))
+
+    def _map(self, fn, **_kw):
+        # (moved, turned, mirrored or scaled: the rails' tops follow; the rungs' spacing with
+        # them, the numbers keep their size: they are paper-sized)
+        a, b = fn(self.a), fn(self.b)
+        w = self.width()
+        f = G.dist(a, b) / w if w > 1e-12 else 1.0
+        c = self.copy(a=list(a), b=list(b), spacing=self.spacing * f)
+        # (mirrored, the rails ran up: the ladder still runs down from a to b's right)
+        if c.rung_point(1)[1] > c.a[1] + 1e-9 and abs(a[1] - b[1]) < 1e-9:
+            c = c.copy(a=list(b), b=list(a))
+        return c
+
+
 # ---- DIN rail and wire duct: real-size pieces from one end to the other ---------------------
 MM_IN = 1 / 25.4
 # rail profiles: key -> (name, width, depth) in inches
@@ -2966,6 +3125,7 @@ class Sheet:
         self.show_title_block = None
         self.wire_layer = None              # the layer new wires go on here: None = the
                                             # project's (Project properties, Schematic)
+        self.referencing = None             # "grid" or "ladder": None = as the project
         self.xref_device = None             # arrows show the device at the far end: None =
                                             # as the project, True/False this sheet's own
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
@@ -3107,6 +3267,17 @@ class Sheet:
                 y0 = min(y1 - (y1 - y0) * 0.2, y0 + size)
         return x0, y0, x1, y1
 
+    def ladders(self):
+        """Its ladders, left to right then top down (kept until the sheet changes: looked up for
+        every place a cross-reference gives)."""
+        got = getattr(self, "_ladders", None)
+        if got is not None and got[0] == self.version:
+            return got[1]
+        out = sorted((e for e in self.entities.values() if isinstance(e, Ladder)),
+                     key=lambda e: (round(e.a[0], 6), -e.a[1]))
+        self._ladders = (self.version, out)
+        return out
+
     def zone_at(self, x, y):
         """(row letter, column number) of a point, or None outside the zone grid. Columns
         count left to right from col_start, rows top to bottom from the row_start letter
@@ -3201,6 +3372,7 @@ class Sheet:
              "show_border": self.show_border,
              "show_title_block": self.show_title_block,
              "xref_device": self.xref_device,
+             "referencing": self.referencing,
              "wire_layer": self.wire_layer,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
@@ -3246,6 +3418,8 @@ class Sheet:
         self.show_border = d.get("show_border")
         self.show_title_block = d.get("show_title_block")
         self.xref_device = d.get("xref_device")
+        self.referencing = d.get("referencing") if d.get("referencing") in ("grid",
+                                                                              "ladder") else None
         self.wire_layer = str(d.get("wire_layer") or "").strip() or None
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
@@ -3566,9 +3740,21 @@ class Project:
             return str(sheet.number)
         return str(self.sheets.index(sheet) + 1)
 
+    def referencing(self, sheet):
+        """How places on the sheet are given: "grid" or "ladder" (its own, else the
+        project's)."""
+        got = getattr(sheet, "referencing", None) or self.settings.get("referencing")
+        return got if got in ("grid", "ladder") else "grid"
+
     def zone_text(self, sheet, x, y):
         if sheet is self.title_block:
             return ""
+        if self.referencing(sheet) == "ladder":
+            # (the rung of a ladder the point is on; off every ladder, the grid zone)
+            for lad in sheet.ladders():
+                i = lad.rung_at((x, y))
+                if i is not None and lad.number(i):
+                    return lad.number(i)
         z = sheet.zone_at(x, y)
         if z is None:
             return ""
@@ -3872,6 +4058,11 @@ class _EditContext:
                 touched = {op[1] for op in self.ed.ops if op[0] == "ent"}
                 sync_block_tags(self.ed, [s for s in self.ed.project.sheets
                                           if sheets or s.id in touched])
+            if sheets or "ladder" in kinds or any(op[0] == "settings" for op in self.ed.ops):
+                # ladders drawn or changed, pages renumbered, the numbering style changed:
+                # rung numbers (0.22)
+                from .ladders import sync as number_rungs
+                number_rungs(self.ed, self.ed.project)
             if sheets or "insert" in kinds or "wire" in kinds or any(
                     op[0] == "settings" for op in self.ed.ops):
                 # wires drawn, cut, joined or moved, symbols placed on them: wire numbers

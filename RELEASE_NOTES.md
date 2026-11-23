@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22
+
+**New**
+- Ladder references, as an option. Draw > Ladder (or LADDER) draws a ladder's two rails with
+  its rungs numbered down the left: 600, 601, 602... on page 6, a second ladder carrying on
+  from the first (or 6-01, 6-02... : Project properties, Rung numbers). Pages renumbered, the
+  rungs follow.
+- With References set to Ladder (Project properties, General, or one sheet in Sheet
+  properties), cross-references give the rung a device is on instead of its grid zone: NO 603
+  under a coil, 603 beside its contact. Arrows, reports and the status bar follow. A device
+  off every ladder still gives its grid zone.
+
 ## 0.21.4
 
 **Changed**

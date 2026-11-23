@@ -78,7 +78,7 @@ every sheet; the type brings up the matching ribbon tab and shows in the Sheets 
 <b>location</b> (the panel or box what it shows is in: MCP, JB-1, FIELD; see Cables between
 panels), page number and, if it differs from the project's, its own revision, and its
 default <b>wire layer</b> (the layer new wires on it go on: as the project, or one of its own;
-see Colors and layers).
+see Colors and layers), and its <b>References</b> (as the project, Grid or Ladder: see Ladders).
 Its size and zones are the project's unless you tick "This sheet has its own size and zones";
 then set how many columns run along the top and the first one's number (11 makes a sheet
 continue 11 to 20), and how many rows run down the left and the first one's letter. Grid
@@ -89,7 +89,9 @@ project, in four tabs:
 <li><b>General</b>: the title block fields (customer, project, drawing number, drawn by, drawn
 date (today's when the project is made), checked by, date, revision, and any field of your own
 the title block uses), the <b>grid reference
-format</b> (<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1) and the height of new text.</li>
+format</b> (<code>{{sheet}}-{{row}}{{col}}</code> gives 6-D1), <b>References</b> (Grid, or
+Ladder: places given by rung; see Ladders), <b>Rung numbers</b> and the <b>Rung spacing</b> of
+new ladders, and the height of new text.</li>
 <li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
 uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
 (changing it resizes every tag), and the symbol color.</li>
@@ -652,7 +654,25 @@ object.</li>
 <li><b>Cross-references</b> are worked out from the drawing, never typed: under a coil or
 operator, one line per contact, <b>NO 6-D3</b> or <b>NC 7-B2</b> (in sheet order, then zone
 order); under each contact, where its device is (<b>6-D1</b>). They use the project's grid
-reference format and each sheet's zones, and go into PDF and DXF exports as text.</li>
+reference format and each sheet's zones (or, by ladder, the rung: <b>NC 605</b>, <b>603</b>;
+see Ladders), and go into PDF and DXF exports as text.</li>
+<li><b>Ladders</b> (LADDER, LAD; Draw menu and the Schematic tab, Draw): a ladder's two rails,
+its rungs numbered down the left of the left rail. Click the top of the left rail, then the top
+of the right rail (or type the width; the rails stay level), then the bottom (or type how many
+rungs, or Enter: down to the bottom of the sheet). Before the first click, <b>F</b> gives it a
+first number of its own and <b>S</b> the rungs' spacing (1/2 inch to start: Project
+properties, General, <b>Rung spacing</b>). Rungs are numbered from the page: page 6 gives 600,
+601, 602... (or, with Project properties, General, <b>Rung numbers</b> set to the page, a dash,
+the rung: 6-01, 6-02...), and a second ladder on the sheet carries on from the first (left to
+right, then top down). Renumbering pages renumbers them. Its rails' ends and every rung's ends
+are snap points, for wires. Its grips: the left rail's top (moves it), the right rail's top
+(its width) and the left rail's bottom (how many rungs). Double-click it for its first number
+(blank: from the page), its rungs and their spacing. It goes on layer LADDER and moves, copies,
+prints and exports to DXF (as lines and texts) like any object.
+<br>With <b>References</b> set to <b>Ladder</b> (Project properties, General; or one sheet's,
+Sheet properties), a device's place is the number of the rung it is on, not its grid zone:
+cross-references (<b>NO 603</b> under a coil, <b>603</b> beside a contact), off-sheet arrows,
+reports and the status bar read it. A device off every ladder still gives its grid zone.</li>
 <li><b>Moving a contact's reference</b>: select the contact; the grip under it is its
 reference's. Drag it anywhere, inside a big block (a drive's control terminals) say: it
 stays there, moving and turning with the block.</li>

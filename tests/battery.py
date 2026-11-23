@@ -1194,6 +1194,82 @@ def random_editing(log, out, ops, seed, drawing=None):
             names[i], e.block)
         BC.CHECKED["text grip"] += 1
 
+    def ladder_numbers_expected():
+        """{ladder id: [numbers]} of the sheet's ladders, worked out from the page, the
+        numbering style and each ladder's place (left to right, then top down), not from
+        ladders.py."""
+        how = p.settings.get("ladder_numbers") or "hundreds"
+        page = p.sheet_number(s)
+        try:
+            base = int(page) * 100
+        except ValueError:
+            base = (p.sheets.index(s) + 1) * 100
+        nxt = 1 if how == "prefix" else base
+        out = {}
+        for lad in sorted((e for e in s.entities.values() if isinstance(e, M.Ladder)),
+                          key=lambda e: (round(e.a[0], 6), -e.a[1])):
+            start = lad.first if lad.first is not None else nxt
+            if how == "prefix":
+                out[lad.id] = ["%s-%02d" % (page, start + i) for i in range(lad.rungs)]
+            else:
+                out[lad.id] = [str(start + i) for i in range(lad.rungs)]
+            nxt = start + lad.rungs
+        return out
+
+    def op_ladder():
+        # (0.22: a ladder through its command, as the owner would: its rungs numbered from the
+        # page and the ladders to its left; on a sheet by ladder, a point on a rung reads its
+        # number)
+        k = s.k()
+        a = pt()
+        w = rnd.choice([3.0, 4.0, 6.0]) * k
+        rungs = rnd.randint(2, 12)
+        first = rnd.randint(100, 900) if rnd.random() < 0.2 else None
+        before = set(s.entities)
+        v.run(C.LadderCmd)
+        if first is not None:
+            v.input_text("F")
+            v.input_text(str(first))
+        v.input_text(fmt(a))
+        if v.cmd is not None:
+            v.input_text(fmt((a[0] + w, a[1])))
+        if v.cmd is not None:
+            v.input_text(str(rungs))
+        finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Ladder)]
+        assert len(new) == 1, "the ladder command drew %d ladders" % len(new)
+        lad = new[0]
+        assert lad.rungs == rungs and lad.first == first, (lad.rungs, rungs, lad.first, first)
+        if rnd.random() < 0.3:
+            with p.edit("Rung numbers") as ed:
+                ed.project_settings({"ladder_numbers": rnd.choice(["hundreds", "prefix"])})
+        want = ladder_numbers_expected()
+        for e in s.entities.values():
+            if isinstance(e, M.Ladder):
+                assert e.numbers() == want[e.id], "ladder rungs numbered %s, not %s" % (
+                    e.numbers()[:3], want[e.id][:3])
+        BC.CHECKED["ladder rungs numbered from the page"] += 1
+        if rnd.random() < 0.5:
+            with p.edit("References") as ed:
+                ed.sheet_meta(s, referencing="ladder")
+            lad = s.entities[lad.id]
+            i = rnd.randrange(lad.rungs)
+            q = (lad.a[0] + lad.width() / 2, lad.a[1] - i * lad.spacing)
+            # (the first ladder, left to right then top down, that q is on: within a third of
+            # its width past its rails and half a rung past its ends)
+            hit = None
+            for e in sorted((e for e in s.entities.values() if isinstance(e, M.Ladder)),
+                            key=lambda e: (round(e.a[0], 6), -e.a[1])):
+                m = e.width() / 3.0
+                low = e.a[1] - (e.rungs - 1) * e.spacing
+                if e.a[0] - m <= q[0] <= e.b[0] + m and \
+                        low - e.spacing / 2 <= q[1] <= e.a[1] + e.spacing / 2:
+                    hit = e.numbers()[int(round((e.a[1] - q[1]) / e.spacing))]
+                    break
+            assert p.zone_text(s, *q) == hit, "a point on rung %s reads %s" % (
+                hit, p.zone_text(s, *q))
+            BC.CHECKED["a place on a ladder reads its rung"] += 1
+
     def op_dash_box():
         # (0.16.4: a dashed box through its command and window: a note, belonging to nothing,
         # to a device from the list, or to one picked on the drawing on another sheet)
@@ -3717,7 +3793,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -4011,6 +4087,10 @@ def mixed_project(win):
         ed.add(s, M.Hatch([[(17, 3), (18, 3), (18, 4), (17, 4)]], "SOLID", 0.0, 0.125))
         ed.add(s, M.DashBox.from_corners((20, 1), (24, 4), text="FIELD WIRING\nBY OTHERS",
                                          height=0.1))
+        # (0.22: a ladder, on its layer as the command puts it; its rungs numbered when the
+        # edit closes)
+        ed.layer("LADDER", None, M.Layer("LADDER", M.ADAPTIVE).to_dict())
+        ed.add(s, M.Ladder((25, 10.5), (31, 10.5), rungs=8, spacing=0.5, height=0.1))
     # locations: the schematic and the panel in the MCP, the coil in the field (its own LOC),
     # and the run between them given a cable (Cables between locations)
     from kanzonascad import pull
