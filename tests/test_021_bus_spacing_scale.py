@@ -41,6 +41,24 @@ class BusSpacingScaleTest(unittest.TestCase):
         self.assertAlmostEqual(self.spacing_on(self.one), 0.5)      # (and back)
         self.assertAlmostEqual(self.spacing_on(self.one), 0.5)      # (not growing each time)
 
+    def test_a_spacing_taken_from_wires_isnt_kept(self):
+        # (0.22: a bus started on wires side by side takes their spacing, for that bus only:
+        # wires 2" apart on the 1:4 sheet (1/2" on paper) made the next bus on the 1:1 sheet
+        # 1/8" apart; on a 1:58 sheet, 0.0086", the battery's seed 4421)
+        v, s = self.v, self.four
+        v.show_sheet(s.id)
+        v.osnap_on = v.snap_on = v.ortho_on = v.polar_on = False
+        with self.p.edit("wires") as ed:
+            for y in (10.0, 12.0, 14.0):
+                ed.add(s, M.Wire([(0.0, y), (40.0, y)]))
+        v._bus_count, v._bus_spacing, v._bus_k = 3, 0.25, 1.0       # (1/4" chosen)
+        v.run(C.BusCmd)
+        self.assertAlmostEqual(v.cmd.spacing, 1.0)                  # (1/4" on paper at 1:4)
+        v.input_text("20,12")
+        self.assertAlmostEqual(v.cmd.spacing, 2.0)                  # (the wires')
+        v.cancel()
+        self.assertAlmostEqual(self.spacing_on(self.one), 0.25)     # (the one chosen)
+
 
     def drive_and_bus(self, spacing):
         """A drive's control terminals at (50, 50), then a 3-wire bus clicked across them from
