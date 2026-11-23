@@ -67,18 +67,29 @@ def _widths(head, rows, room):
     return [w * f for w in want]
 
 
+def free_box(area, tb):
+    """The biggest box of the drawing area clear of the title block (paper inches): above or
+    below it, or beside it, wherever it is (the battery's seed 453: a title block moved to the
+    top left left a box 0.57" wide beside it, where 0.21 looked only above a bottom one or
+    beside a right-hand one, and every cell of the report came out empty). The whole area when
+    the title block is outside it."""
+    x0, y0, x1, y1 = area
+    if tb is None or tb[0] >= x1 or tb[2] <= x0 or tb[1] >= y1 or tb[3] <= y0:
+        return area
+    boxes = [(x0, y0, x1, min(y1, tb[1])), (x0, max(y0, tb[3]), x1, y1),
+             (x0, y0, min(x1, tb[0]), y1), (max(x0, tb[2]), y0, x1, y1)]
+    # (room for the header and a few rows first, then the most room)
+    return max(boxes, key=lambda b: ((b[3] - b[1]) >= 4 * ROW_H and b[2] > b[0],
+                                     max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])))
+
+
 def pages(project, sheet, head, rows):
     """The table on as many pages as it takes: [[entities of a page]], drawn in sheet's units
     in the room its frame and title block leave (every page the same shape as sheet)."""
     from .scalefit import room
     k = sheet.k()
     area, tb = room(project, sheet)
-    x0, y0, x1, y1 = area
-    if tb is not None and tb[1] < y1:
-        y0 = max(y0, tb[3])                 # (above the title block across the bottom)
-        if y1 - y0 < 4 * ROW_H:
-            y0 = area[1]
-            x1 = min(x1, tb[0])             # (a tall title block on the right: beside it)
+    x0, y0, x1, y1 = free_box(area, tb)
     widths = _widths(head, rows, x1 - x0)
     per = max(1, int((y1 - y0) / ROW_H) - 1)
     out = []

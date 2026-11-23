@@ -110,3 +110,20 @@ class ReportSheetsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FreeBoxTest(unittest.TestCase):
+    """The table goes in the biggest box clear of the title block, wherever the title block
+    is (the battery's seed 453: moved to the top left, it left the table 0.57" wide)."""
+
+    def test_wherever_the_title_block_is(self):
+        area = (0.875, 0.625, 16.375, 10.125)
+        # (the lower right corner, as made: above it, the full width)
+        self.assertEqual(RS.free_box(area, (11.5, 0.5, 16.5, 1.5)), (0.875, 1.5, 16.375, 10.125))
+        # (top left: below it, the full width)
+        self.assertEqual(RS.free_box(area, (1.44, 9.0, 3.83, 10.5)), (0.875, 0.625, 16.375, 9.0))
+        # (a strip down the right: beside it)
+        self.assertEqual(RS.free_box(area, (14.5, 0.5, 16.5, 10.5)), (0.875, 0.625, 14.5, 10.125))
+        # (none, or outside the area: all of it)
+        self.assertEqual(RS.free_box(area, None), area)
+        self.assertEqual(RS.free_box(area, (20.0, 0.0, 22.0, 2.0)), area)

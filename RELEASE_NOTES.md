@@ -19,6 +19,9 @@ build fails without them.
 **Fixed**
 - Zooming and panning are faster on sheets with many notes and pictures: what is off the
   screen is no longer drawn.
+- A report sheet (Report sheet...) on a project whose title block isn't in the lower right
+  corner or down the right side now uses the room around it; with the title block at the top
+  left, its table came out empty.
 
 ## 0.22
 
