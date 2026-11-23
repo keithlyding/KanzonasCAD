@@ -982,7 +982,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             # bus takes one of theirs)
             side = C.pin_side(s, a)
         else:
-            for t in (str(rnd.randint(2, 4)), "0.5"):
+            # (the spacing 1/2" on paper, as a user types it: 0.5 on a 1:87 sheet is 0.0057" on
+            # paper, and carried to the next bus, the same on paper, made a 1:1 one's wires
+            # 0.0057" apart, the near-miss check's seed 4442: the battery's own slop)
+            for t in (str(rnd.randint(2, 4)), "%r" % (0.5 * s.k())):
                 if v.cmd is not None:
                     v.input_text(t)
             a = pt()
