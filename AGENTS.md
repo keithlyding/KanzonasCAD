@@ -59,6 +59,11 @@ it. When they pull against each other, say so and ask; don't trade one away quie
 ## Before pushing
 - `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -p "test_*.py" -t .` must pass
   (`-t .` loads `tests/__init__.py`, which tears Qt down in order at exit).
+  `QT_QPA_PLATFORM=offscreen python tools/run_tests.py` runs the same tests in parallel
+  processes, as both builds do (the owner, Nov 2026: one after another they took 55 of the
+  Windows build's 62 minutes); it fails if fewer tests ran than discover finds. Each process gets
+  its own settings file (`KANZONASCAD_SETTINGS`, set in `tests/__init__.py`), library and
+  recovery folder: a test must not rely on another file's tests having run first.
 - `QT_QPA_PLATFORM=offscreen python -m kanzonascad --selftest selftest.log` must exit 0.
 - New dependencies: add the minimum to `requirements.txt` and the exact version and license
   to `constraints.txt`. Keep the license of every dependency compatible with KanzonasCAD's
@@ -88,7 +93,13 @@ The run reports how many times each check ran to the end: a check that always sk
 nothing.
 
 **How much runs (the owner's rule, Nov 2026):**
-- Every build runs the short battery (the Linux job, 1,000 steps, the run number as its seed).
+- Every build runs the short battery (the Linux job, 1,000 steps, the run number as its seed),
+  except a build on main whose files are exactly a pull request's head that passed its build
+  (the owner, Nov 2026: "Don't re-run the tests on main for code the PR build already
+  passed"). There `tools/already_tested.py` skips the unit tests and both batteries; the apps
+  are still built and self-tested (installed, portable, PortableApps.com, AppImage) and only
+  then published. If main moved after the branch merged it in, the files differ and
+  everything runs. So merge the latest main into a branch before merging it, as above.
   A short run is also part of the unit tests (`tests/test_battery_quick.py`).
 - A release that bumps the middle number (0.16, 0.17: a version of two parts) also runs the
   long battery: job `battery-long`, 3,000 steps on each of three seeds. Publishing waits for it.

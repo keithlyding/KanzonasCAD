@@ -106,7 +106,7 @@ def terminal_rows(project):
 def terminal_count_rows(project):
     """[[wire number, its taps' numbers, terminals, jumpers, sheets]] for every wire number
     tapped (tap_numbers "suffix" or "own": a tap is a group of its own), and the totals
-    (terminals, jumpers). The owner, 0.22.4: "When I'm tapping off a wire with -1, -2, -3,
+    (terminals, jumpers). The owner, 0.22.2: "When I'm tapping off a wire with -1, -2, -3,
     etc, is there anything that is totalizing so I know how many terminal blocks I need?",
     and the rule "one wire per terminal side": a wire number and each of its taps (a tap off a
     tap too) a terminal of its own, the terminals bridged by one jumper fewer than them (6001

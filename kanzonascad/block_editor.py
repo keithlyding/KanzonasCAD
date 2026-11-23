@@ -206,7 +206,7 @@ def to_block(project, sess):
             continue
         if isinstance(e, M.Dimension) and eid not in sess.base:
             # (a dimension drawn in the block's tab measures it: shown there, not made part
-            # of the block, so its copies don't carry it; the owner, 0.22.5: "I need linear
+            # of the block, so its copies don't carry it; the owner, 0.22.2: "I need linear
             # measurement inside of the block edit tab as well". One the block had is kept)
             measured += 1
             continue

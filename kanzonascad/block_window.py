@@ -102,7 +102,7 @@ class BlockEditing:
             return kind, self.library.get(kind, name), None
         d = self.doc()
         if is_block_doc(d):
-            # (in a block's own tab: that block, the one being edited; the owner, 0.22.5: "I
+            # (in a block's own tab: that block, the one being edited; the owner, 0.22.2: "I
             # would like to be able to edit block properties when I'm editing the actual
             # block. There's a selection for it in the block tab but I can't do anything
             # with it")

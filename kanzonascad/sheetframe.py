@@ -15,7 +15,7 @@ from .model import Line, Text
 
 FRAME_LAYER = "BORDER"
 
-# the default title block, inches (the owner, 0.22.3: "The standard title block in the bottom
+# the default title block, inches (the owner, 0.22.2: "The standard title block in the bottom
 # right hand corner is too big ... Scale is also not included in the title block": 5" by
 # 1-1/16", was 6-1/2" by 1-3/8", with a SCALE cell)
 TB_WIDTH = 5.0

@@ -1,4 +1,4 @@
-"""The standard corner title block (the owner, 0.22.3: "too big ... Scale is also not included
+"""The standard corner title block (the owner, 0.22.2: "too big ... Scale is also not included
 in the title block"): 5" by 1-1/16" in the lower right corner, with a SCALE cell showing the
 sheet's scale; every value clear of its label; the same on paper at any scale."""
 import unittest

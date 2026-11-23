@@ -1,4 +1,4 @@
-"""Terminal count (the owner, 0.22.4: "When I'm tapping off a wire with -1, -2, -3, etc, is
+"""Terminal count (the owner, 0.22.2: "When I'm tapping off a wire with -1, -2, -3, etc, is
 there anything that is totalizing so I know how many terminal blocks I need?", and "Do number
 1": one wire on each terminal side): every tapped wire number, its taps, and the terminals
 (the number and each tap one) and jumpers (one fewer) they need, with the totals; a tap off a

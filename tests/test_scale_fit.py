@@ -116,7 +116,7 @@ class SheetScaleWindowTest(unittest.TestCase):
             b.setValue(x)
         self.assertTrue(d.fit_btn.isEnabled())
         d.fit()
-        # (48" x 48" with its side: 9.6" x 9.6" at 1:5 beside the 5" title block of 0.22.3;
+        # (48" x 48" with its side: 9.6" x 9.6" at 1:5 beside the 5" title block of 0.22.2;
         # beside the 6-1/2" one before it only 1:6 fitted; 1:8 until 1:6 was a preset, 0.15.9)
         self.assertEqual(d.combo.currentText(), "1:5")
         self.assertEqual(d.words.text(), "1 inch on paper = 5 inches of panel")

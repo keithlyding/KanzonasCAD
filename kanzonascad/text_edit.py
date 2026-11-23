@@ -3,7 +3,7 @@ a text or a multi-line note opens an edit box over it on the drawing, at its siz
 screen; Enter (Ctrl+Enter in a multi-line note, where Enter starts a new line) keeps what was
 typed, one Undo, as does clicking elsewhere; Esc leaves it as it was. Over the box, its
 justification: Left, Center and Right (kept with the wording, the same Undo), and More... for
-its whole window (height, angle, the vertical justification). The owner, 0.22.5: "Now that we're
+its whole window (height, angle, the vertical justification). The owner, 0.22.2: "Now that we're
 editing text on the document instead of the pop up, I've lost the ability to justify text"."""
 
 from PySide6.QtCore import Qt, QEvent, QObject, QTimer

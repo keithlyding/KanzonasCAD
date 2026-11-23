@@ -294,7 +294,7 @@ references (6-D1) still follow the zones when the border is off.</p>
 <li><b>Lower right corner</b> (to start): the zones run the full width and height of the
 sheet, and the title block sits over the lower right corner. The ready-made one is 5" wide and
 1-1/16" tall: SHEET TITLE; CUSTOMER and PROJECT; DRAWN BY, DRAWN, CHECKED BY and REV DATE;
-DRAWING NO., REV, SCALE and SHEET. A project made before 0.22.3 keeps its bigger one (6-1/2"
+DRAWING NO., REV, SCALE and SHEET. A project made before 0.22.2 keeps its bigger one (6-1/2"
 by 1-3/8", no SCALE): choose Lower right corner and tick <b>Replace the title block with one
 made for this position</b> to get the new one.</li>
 <li><b>Right-hand strip</b>: the title block takes the whole right-hand column of the sheet.

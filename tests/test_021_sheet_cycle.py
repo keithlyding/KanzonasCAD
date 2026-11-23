@@ -1,6 +1,6 @@
 """Ctrl+` through the sheets, the last shown first (the owner, 0.21.2: "Kind of like how AB's
 Studio 5000 cycles through? It defaults to the last page you were on, but I can keep holding
-ctrl and tapping tab to go through the rest of the sheets"; 0.22.7: on Ctrl+` now, Ctrl+Tab
+ctrl and tapping tab to go through the rest of the sheets"; 0.22.2: on Ctrl+` now, Ctrl+Tab
 goes in page order), and Ctrl+Tab and Ctrl+Shift+Tab in page order."""
 import unittest
 
@@ -100,7 +100,7 @@ class SheetCycleTest(unittest.TestCase):
 
 
 class PageOrderTest(unittest.TestCase):
-    """The owner, 0.22.7: "if I'm on sheet 13 of 15 and hit ctrl + tab, the next sheet is 14,
+    """The owner, 0.22.2: "if I'm on sheet 13 of 15 and hit ctrl + tab, the next sheet is 14,
     then 15, then 1. If I hit shift + ctrl + tab, it would go 12, 11, 10"."""
 
     def setUp(self):

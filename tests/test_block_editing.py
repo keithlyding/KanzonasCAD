@@ -315,7 +315,7 @@ class BlockWindowTest(unittest.TestCase):
         d.view.repaint()                                    # (the pin rings drawn)
 
     def test_properties_in_the_blocks_own_tab(self):
-        # (the owner, 0.22.5: "There's a selection for it in the block tab but I can't do
+        # (the owner, 0.22.2: "There's a selection for it in the block tab but I can't do
         # anything with it": the block being edited, nothing selected)
         self.lib.save_block(coil())
         d = self.win.edit_block("symbol", "Test coil")
@@ -339,7 +339,7 @@ class BlockWindowTest(unittest.TestCase):
         self.assertEqual(self.lib.get("symbol", "Test coil").description, "Its own tab")
 
     def test_a_pin_names_justification_is_kept(self):
-        # (the owner, 0.22.6: "when I edit text justification for a block's pins, it just goes
+        # (the owner, 0.22.2: "when I edit text justification for a block's pins, it just goes
         # back to where it was after saving")
         self.lib.save_block(coil())
         d = self.win.edit_block("symbol", "Test coil")
@@ -368,7 +368,7 @@ class BlockWindowTest(unittest.TestCase):
         self.assertEqual(texts["A1"].pos, (4.75, 5.0))
 
     def test_dimensions_in_the_tab_measure_and_stay_out(self):
-        # (the owner, 0.22.5: "I need linear measurement inside of the block edit tab": the
+        # (the owner, 0.22.2: "I need linear measurement inside of the block edit tab": the
         # Block tab's Measure group; a dimension drawn there isn't saved into the block)
         self.lib.save_block(coil())
         d = self.win.edit_block("symbol", "Test coil")

@@ -8,11 +8,40 @@ build fails without them.
 
 ## 0.22.2
 
+**New**
+- Ctrl+Tab goes to the next sheet in page order and Ctrl+Shift+Tab to the one before, going
+  round from the last sheet to the first (on sheet 13 of 15: 14, 15, then 1).
+- Going back to the sheet you were last on (hold Ctrl and tap to go further back) is now
+  Ctrl+` (the key above Tab), Ctrl+Shift+` to step back.
+- Terminal count... (Sheets menu; Output tab, Reports: on the Terminals button) adds up the
+  terminals and jumpers your tapped wires need: a wire number and each of its taps (-1, -2...)
+  one terminal, bridged by jumpers, with the totals. It counts one wire per terminal side, the
+  most you can need; multi-level terminals or two wires on a side need fewer.
+- Editing a text where it is: Left, Center and Right just above the edit box justify it, and
+  More... opens its full window (height, angle and the rest).
+- The Block tab has Linear and Aligned dimensions to measure a block as you draw it; they
+  aren't saved into the block.
+
+**Changed**
+- The standard title block in the lower right corner is smaller (5" by 1-1/16", was 6-1/2"
+  by 1-3/8") and shows the sheet's SCALE. New projects get it. To use it in a project you
+  already have: Project properties, Title block position: Lower right corner, and tick
+  "Replace the title block with one made for this position" (Undo puts the old one back).
+
 **Fixed**
+- Security: the DWG reader (ezdwg) is updated to 0.21.3. A deliberately malformed DWG file
+  could make the older one use up memory and crash KanzonasCAD when opened; now such a file is
+  refused with an error.
 - When a drawing doesn't fit its sheet and you print, the question now names each sheet (its
   number and title) and what on it doesn't fit (a symbol by its tag, a text by what it says).
   Go back opens the Print window again instead of stopping; Show them goes to that sheet with
   those objects selected.
+- Block properties... on the Block tab works in a block's own tab, on the block you are
+  editing.
+- A pin name's justification set in a block's tab is kept when the block is saved (it went
+  back to how it was), and copies showing their pin names show it so.
+- Pin names on a placed block no longer land on top of each other near a corner (PE2 and T3
+  on a drive): a pin on the bottom edge reads as a bottom pin.
 
 ## 0.22.1
 

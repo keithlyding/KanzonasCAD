@@ -1,13 +1,13 @@
 """Moving between sheets from the keyboard.
 
 Ctrl+Tab shows the next sheet in page order and Ctrl+Shift+Tab the one before, going round
-from the last to the first (the owner, 0.22.7: "if I'm on sheet 13 of 15 and hit ctrl + tab,
+from the last to the first (the owner, 0.22.2: "if I'm on sheet 13 of 15 and hit ctrl + tab,
 the next sheet is 14, then 15, then 1 ... no more alternating between pages").
 
 Ctrl+` (the key above Tab) goes through the sheets most recently shown first (the owner,
 0.21.2: "Kind of like how AB's Studio 5000 cycles through? It defaults to the last page you
 were on, but I can keep holding ctrl and tapping tab to go through the rest of the sheets";
-0.22.7: "I do like the alternating feature but we need to use a different hot key combo").
+0.22.2: "I do like the alternating feature but we need to use a different hot key combo").
 Each view keeps the sheets in the order they were last shown. Ctrl+` picks the one before the
 sheet shown, each ` more (Ctrl held) the next, Ctrl+Shift+` goes back; a list shows them
 meanwhile, the pick highlighted, and letting Ctrl go shows it. Esc, Ctrl still held, puts the

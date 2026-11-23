@@ -2216,7 +2216,7 @@ class BlockDef:
         # (a pin's own wire layer, set in the block editor's Pins...: a wire started on it goes
         # on that layer, autolayer.py; "layer" left out: worked out from the block)
         # (and its name's justification as set in the block's tab, "align" and "valign",
-        # left out when worked out from its side: the owner, 0.22.6, "when I edit text
+        # left out when worked out from its side: the owner, 0.22.2, "when I edit text
         # justification for a block's pins, it just goes back to where it was after saving")
         self.pins = [{"name": str(p["name"]), "pos": _pt(p["pos"])} |
                      ({"layer": str(p["layer"])} if p.get("layer") else {}) |
@@ -2319,7 +2319,7 @@ class BlockDef:
         that ends on it, else in from the edge of the drawing nearest it. Its name goes that
         way (a pin near a corner, as a drive's PE2 on its bottom line beside T3, was taken by
         the middle of the drawing for one on the side, and its name drawn over T3's: the
-        owner, 0.22.6)."""
+        owner, 0.22.2)."""
         key = (len(self.entities), tuple((p["name"], p["pos"]) for p in self.pins))
         cached = getattr(self, "_inward", None)
         got = cached[1] if cached is not None and cached[0] == key else None

@@ -73,7 +73,7 @@ nobody understands).
   address (off to start); Import I/O list's address wins over the one made from the SLOT.
   Also in 0.21.2: Ctrl+Tab sheet cycling (as Studio 5000), output modules sourcing on the left,
   -2/-3 duplicate sheet titles, Align/Distribute on the Schematic tab, fast window selection.
-  Changed in 0.22.7 (owner, Nov 23 2026): Ctrl+Tab / Ctrl+Shift+Tab go next / previous in
+  Changed in 0.22.2 (owner, Nov 23 2026): Ctrl+Tab / Ctrl+Shift+Tab go next / previous in
   page order, round from the last sheet to the first; the most-recent cycle moved to Ctrl+`.
 - 0.18.3 (owner, Nov 2026: "all three wires tapping off the bus are still the same wire number
   ... Those need to change where they tap off"): taps numbered from the wire they tap, -1, -2,
@@ -103,6 +103,14 @@ nobody understands).
   each footprint terminal labeled with its wire number and where it goes); symbols "lean heavy
   on the Allen Bradley stuff" and "also put in IEC symbols" (IEC 60617 as a per-project symbol
   set: changes AGENTS.md's US-only line when it lands).
+- 0.22.2 (owner, Nov 23 2026: "the poor efficiency of releases and builds and merges is getting
+  really tedious"; chose one release for the six queued changes and parallel unit tests, not
+  batch releases from now on): print fit check, ezdwg 0.21.3 (security, #139), smaller title
+  block with SCALE, Terminal count..., justify in-place text, Measure on the Block tab, block
+  properties in a block's tab, pin name justification kept, pin names near corners, Ctrl+Tab
+  in page order (the last-shown cycle on Ctrl+`). Unit tests in parallel (tools/run_tests.py), and main's build
+  skips the tests already passed on the same files (the owner: "Don't re-run the tests on main
+  for code the PR build already passed"; tools/already_tested.py).
 
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).

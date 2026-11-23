@@ -3840,7 +3840,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             APP.processEvents()
 
     def terminal_count_check():
-        # (0.22.4: Terminal count's totals worked out here from the wire numbers, not from
+        # (0.22.2: Terminal count's totals worked out here from the wire numbers, not from
         # wirenums' taps: with taps numbered -1, -2 (and a tap off a tap -1a), a wire number
         # and each of its taps one terminal, one jumper fewer than terminals a tapped number)
         from kanzonascad import reports

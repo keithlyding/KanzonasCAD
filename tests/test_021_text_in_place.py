@@ -74,7 +74,7 @@ class TextInPlaceTest(unittest.TestCase):
         self.assertEqual(self.s.entities[self.t.id].text, "MOTOR 1")
         self.assertEqual(len(self.p.undo_stack), n)
 
-    # ---- justification over the box (the owner, 0.22.5: "I've lost the ability to justify
+    # ---- justification over the box (the owner, 0.22.2: "I've lost the ability to justify
     # text") -------------------------------------------------------------------------------
     def bar_button(self, label):
         from PySide6.QtWidgets import QFrame, QToolButton

@@ -1,5 +1,5 @@
 """A pin's name beside it on a copy (Show pin names) goes in along the pin's lead line, or in
-from the edge of the drawing the pin is on (the owner, 0.22.6: a drive's PE2, on the bottom
+from the edge of the drawing the pin is on (the owner, 0.22.2: a drive's PE2, on the bottom
 line of its box near the corner beside T3, was taken by the middle of the drawing for a pin on
 the side, its name drawn over T3's: "I don't like the way this looks ... PE2 and T3 are right
 on top of each other")."""
