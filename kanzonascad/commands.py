@@ -1381,6 +1381,10 @@ BACK_OVER = ("That goes straight back over the wire just drawn: click on past it
              "the side, U takes the last point back, Enter ends the wire here")
 
 
+BACK_OVER_OWN = ("That takes the bus's wires straight back over the wires they carry on: click "
+                 "on past their ends, or off to the side")
+
+
 class WireCmd(Command):
     """WIRE: click where it starts (a pin, a wire, or anywhere), then where it goes: it runs
     straight across and up or down, turning one corner per click (F flips which way the
@@ -2380,6 +2384,12 @@ class BusCmd(Command):
         new = self._around(new)
         if new and doubles_back(self.points[-2:] + list(new)):
             self.ctx.message(BACK_OVER)
+            return
+        if new and len(self.points) == 1 and \
+                self._back_over_own(self._paths(self.points + list(new))):
+            # (carried on from its open ends: none goes straight back over the wire it carries
+            # on, a hidden corner; the battery, seed 41, step 809)
+            self.ctx.message(BACK_OVER_OWN)
             return
         if not new:
             if self.toward is not None and len(self.points) == 1:

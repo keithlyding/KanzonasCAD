@@ -61,6 +61,31 @@ class BusAlongItsEndsTest(unittest.TestCase):
         landed = [n for n, q in self.pins.items() if any(w.touches(q) for w in self.s.wires())]
         self.assertEqual(len(landed), 4, landed)
 
+    def test_not_back_over_the_wires_it_carries_on(self):
+        # (the battery, seed 41, step 809: one wire bent into a U, its two ends side by side
+        # heading up, carried on as a bus of two straight down: each new wire ran back over the
+        # U's own legs)
+        said = []
+        self.v.messaged.connect(said.append)
+        with self.p.edit("u") as ed:
+            ed.add(self.s, M.Wire([(21.75, 20.5), (21.75, 19.125), (19.5, 19.125), (19.5, 20.5)]))
+        count = len(self.s.wires())
+        cmd = self.v.run(C.BusCmd)
+        self.v.input_text("19.5,20.5")
+        self.v.input_text("S")
+        self.assertTrue(cmd.straight)
+        self.v.input_text("22.5,18.5")              # (down: back over the legs)
+        self.assertIn(C.BACK_OVER_OWN, said)
+        self.assertEqual(len(self.s.wires()), count)
+        self.v.input_text("22.5,22.5")              # (up: on past the ends)
+        while self.v.cmd is not None:
+            self.v.cmd.enter()
+        for w in self.s.wires():
+            self.assertFalse(W.doubles_back(w.points), w.points)
+        for x in (19.5, 21.75):
+            got = [w for w in self.s.wires() if w.touches((x, 22.5))]
+            self.assertEqual(len(got), 1, x)
+
     def test_wires_touching_count_as_crossing(self):
         # (a T: one wire's end on the middle of another's run)
         self.assertTrue(C._paths_cross([[(0.0, 0.0), (2.0, 0.0)], [(1.0, 0.0), (1.0, 1.0)]]))
