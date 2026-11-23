@@ -926,6 +926,7 @@ class Arc(Entity):
 # where a text's insertion point sits, as AutoCAD's justifications (TEXT, Justify):
 # align: left, center, right; valign: baseline, bottom (under the descenders), middle (half
 # the capital height), top (the capitals' top)
+ALIGNS = ("left", "center", "right")
 VALIGNS = ("baseline", "bottom", "middle", "top")
 DESCENT = 0.3           # descenders reach this share of the text height under the baseline
 JUSTIFY = {             # AutoCAD's letters -> (align, valign)
@@ -957,7 +958,7 @@ class Text(Entity):
         self.text = str(text)
         self.height = float(height)
         self.angle = float(angle) % 360.0
-        self.align = align if align in ("left", "center", "right") else "left"
+        self.align = align if align in ALIGNS else "left"
         self.valign = valign if valign in VALIGNS else "baseline"
 
     def _data(self):
@@ -2214,8 +2215,14 @@ class BlockDef:
         self.entities = list(entities)
         # (a pin's own wire layer, set in the block editor's Pins...: a wire started on it goes
         # on that layer, autolayer.py; "layer" left out: worked out from the block)
+        # (and its name's justification as set in the block's tab, "align" and "valign",
+        # left out when worked out from its side: the owner, 0.22.6, "when I edit text
+        # justification for a block's pins, it just goes back to where it was after saving")
         self.pins = [{"name": str(p["name"]), "pos": _pt(p["pos"])} |
-                     ({"layer": str(p["layer"])} if p.get("layer") else {}) for p in pins]
+                     ({"layer": str(p["layer"])} if p.get("layer") else {}) |
+                     ({"align": p["align"]} if p.get("align") in ALIGNS else {}) |
+                     ({"valign": p["valign"]} if p.get("valign") in VALIGNS and
+                      p["valign"] != "baseline" else {}) for p in pins]
         self.tag_pos = _pt(tag_pos) if tag_pos is not None else None
         self.tag_height = float(tag_height)
         self.category = category
@@ -2267,7 +2274,8 @@ class BlockDef:
                 "prefix": self.prefix, "tag_height": self.tag_height,
                 "tag_pos": list(self.tag_pos) if self.tag_pos is not None else None,
                 "pins": [{"name": p["name"], "pos": list(p["pos"])} |
-                         ({"layer": p["layer"]} if p.get("layer") else {}) for p in self.pins],
+                         {k: p[k] for k in ("layer", "align", "valign") if p.get(k)}
+                         for p in self.pins],
                 "entities": [e.to_dict() for e in self.entities]} | (
                     {"wiring": self.wiring} if self.wiring else {}) | (
                     {"attr_texts": [dict(a, pos=list(a["pos"])) for a in self.attr_texts]}
@@ -2305,6 +2313,39 @@ class BlockDef:
         """Where a footprint's label goes: its label spot when one is set (Edit block: the
         tag spot), else the middle of its drawing."""
         return self.tag_pos if self.tag_pos is not None else self.middle()
+
+    def pin_inward(self, name):
+        """Which way from a pin its symbol lies (a vector in the block): along the lead line
+        that ends on it, else in from the edge of the drawing nearest it. Its name goes that
+        way (a pin near a corner, as a drive's PE2 on its bottom line beside T3, was taken by
+        the middle of the drawing for one on the side, and its name drawn over T3's: the
+        owner, 0.22.6)."""
+        key = (len(self.entities), tuple((p["name"], p["pos"]) for p in self.pins))
+        cached = getattr(self, "_inward", None)
+        got = cached[1] if cached is not None and cached[0] == key else None
+        if got is None:
+            got = {}
+            self._inward = (key, got)
+            ends = {}
+            for e in self.entities:
+                if isinstance(e, Line) and G.dist(e.p1, e.p2) > 1e-9:
+                    ends.setdefault(_pt(e.p1), []).append(e.p2)
+                    ends.setdefault(_pt(e.p2), []).append(e.p1)
+            bb = self.extents()
+            for p in self.pins:
+                x, y = p["pos"]
+                far = ends.get(_pt((x, y)))
+                if far and len(far) == 1:
+                    got[p["name"]] = (far[0][0] - x, far[0][1] - y)
+                elif bb is not None:
+                    # (no lead line: in from the edge of the drawing it is nearest, a pin on
+                    # the bottom line near a corner a bottom pin)
+                    sides = [(x - bb[0], (1.0, 0.0)), (bb[2] - x, (-1.0, 0.0)),
+                             (y - bb[1], (0.0, 1.0)), (bb[3] - y, (0.0, -1.0))]
+                    got[p["name"]] = min(sides, key=lambda t: t[0])[1]
+                else:
+                    got[p["name"]] = (0.0, 0.0)
+        return got.get(name, (0.0, 0.0))
 
     def middle(self):
         """The middle of its drawing (pins left out)."""
@@ -2548,11 +2589,17 @@ class Insert(Entity):
             return []
         h = 0.6 * (self.tag_h or d.tag_height) * self.scale
         g = 0.35 * h
-        mx, my = self.to_world(d.middle())
         out = []
         for p in d.pins:
             x, y = self.to_world(p["pos"])
-            dx, dy = mx - x, my - y
+            if p.get("align") or p.get("valign"):
+                # (justified in the block's tab: as set there, on the pin)
+                out.append(Text((x, y), p["name"], h, 0.0, p.get("align", "left"),
+                                p.get("valign", "baseline")))
+                continue
+            ix, iy = d.pin_inward(p["name"])
+            wx, wy = self.to_world((p["pos"][0] + ix, p["pos"][1] + iy))
+            dx, dy = wx - x, wy - y
             if abs(dx) >= abs(dy):
                 out.append(Text((x + (g if dx >= 0 else -g), y + g), p["name"], h, 0.0,
                                 "left" if dx >= 0 else "right", "bottom"))

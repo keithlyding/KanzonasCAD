@@ -100,6 +100,23 @@ def _scale_for(defn):
     return max(1, int(math.ceil(max(ax / ROOM[0], ay / ROOM[1]) - 1e-9)))
 
 
+def pin_side(pos):
+    """A pin name's justification worked out from where the pin is: right of its point for a
+    pin left of the base point (clear of the drawing), else left."""
+    return "right" if pos[0] < -1e-9 else "left"
+
+
+def pin_justification(e, pos):
+    """{"align", "valign"} of a pin marker that differ from what pin_side works out (kept
+    with the pin), else {}."""
+    out = {}
+    if e.align != pin_side(pos):
+        out["align"] = e.align
+    if e.valign != "baseline":
+        out["valign"] = e.valign
+    return out
+
+
 def open_block(defn):
     """A scratch project with one sheet showing the block, and its Session."""
     p = M.Project()
@@ -136,7 +153,8 @@ def open_block(defn):
     for i, pin in enumerate(defn.pins):
         # (a pin left of the base point: its name to the left of it, clear of the drawing)
         t = M.Text(at(pin["pos"]), pin["name"], PIN_HEIGHT * n,
-                   align="right" if pin["pos"][0] < -1e-9 else "left", layer=LAYER_PINS)
+                   align=pin.get("align") or pin_side(pin["pos"]),
+                   valign=pin.get("valign", "baseline"), layer=LAYER_PINS)
         put(t, ("pin", i))
         if pin.get("layer"):
             s.pin_layers[t.id] = pin["layer"]       # (its own wire layer: Pins...)
@@ -182,8 +200,15 @@ def to_block(project, sess):
         return (_round(q[0] - ox), _round(q[1] - oy))
     ents, pins, attrs, tags, rails = [], [], [], [], []
     warnings = []
+    measured = 0
     for eid, e in s.entities.items():
         if e.layer == LAYER_BASE:
+            continue
+        if isinstance(e, M.Dimension) and eid not in sess.base:
+            # (a dimension drawn in the block's tab measures it: shown there, not made part
+            # of the block, so its copies don't carry it; the owner, 0.22.5: "I need linear
+            # measurement inside of the block edit tab as well". One the block had is kept)
+            measured += 1
             continue
         got = sess.base.get(eid)
         same = got is not None and got[0] == e.to_dict()
@@ -209,7 +234,8 @@ def to_block(project, sess):
             pos = old.pins[i]["pos"] if stays and i is not None else back(e.pos)
             pins.append((0 if i is not None else 1, i if i is not None else eid, eid,
                          {"name": name, "pos": pos} |
-                         ({"layer": s.pin_layers[eid]} if s.pin_layers.get(eid) else {}), i))
+                         ({"layer": s.pin_layers[eid]} if s.pin_layers.get(eid) else {}) |
+                         pin_justification(e, pos), i))
         elif marker and e.layer == LAYER_TAG and old.kind == "footprint":
             # a footprint's label spot: left where it opened, as it was (automatic stays so)
             if what and what[0] == "tag" and stays:
@@ -269,6 +295,9 @@ def to_block(project, sess):
     _join_stack(attrs)
     tags.sort(key=lambda t: (t[0], t[1]))
     rails.sort(key=lambda t: (t[0], t[1]))
+    if measured:
+        warnings.append("%d dimension(s) drawn here left out of the block (measurements)"
+                        % measured)
     if len(tags) > 1:
         warnings.append("%d %s markers: the first one was used"
                         % (len(tags), "label" if old.kind == "footprint" else "tag"))
@@ -440,8 +469,10 @@ def apply_pins(project, sess, rows):
             cur = s.entities[eid]
             at = (_round(ox + float(x)), _round(oy + float(y)))
             if cur.text != name or G.dist(cur.pos, at) > 1e-9:
-                ed.change(s, cur.copy(text=name, pos=at,
-                                      align="right" if float(x) < -1e-9 else "left"))
+                # (a name justified by hand keeps it; one worked out from its side follows)
+                was = (cur.pos[0] - ox, cur.pos[1] - oy)
+                align = cur.align if cur.align != pin_side(was) else pin_side((float(x), 0.0))
+                ed.change(s, cur.copy(text=name, pos=at, align=align))
         if list(s.pin_order) != keep:
             ed.sheet_meta(s, pin_order=keep)
         # (rows without a fifth column leave the pins' wire layers as they were)
