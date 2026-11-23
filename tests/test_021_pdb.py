@@ -124,5 +124,28 @@ class PdbTest(unittest.TestCase):
         self.assertNotIn("OUTLET", got[0].attrs)
 
 
+    def test_terminal_count_heads_a_tapped_outlet_with_its_own_number(self):
+        # (an outlet's wire and a wire overlapping it, each with an end on the other: the
+        # numbering keeps the outlet's lettered number and makes the other its -1; Terminal
+        # count showed them the other way round, 1006A-1 tapped by 1006A; the battery, seed 12)
+        from kanzonascad import reports
+        pdb = self.place(self.par, (5.0, 5.0))
+        self.wire_pins(pdb)
+        o1 = self.place(self.out, (3.0, 1.0), pdb.attrs["TAG"])
+        self.wire_pins(o1, out=True)
+        q = sorted(q for _n, q in o1.pin_points())[0]
+        with self.p.edit("overlap") as ed:
+            # (from just before the pin to the outlet wire's middle, as the battery had it: the
+            # tap found first is the outlet's end on this one)
+            ed.add(self.s, M.Wire([(q[0] - 0.5, q[1]), (q[0] + 0.5, q[1])]))
+        self.number()
+        outlet = next(w.num for w in self.s.wires() if w.touches((q[0] + 1.5, q[1])))
+        other = next(w.num for w in self.s.wires() if w.touches((q[0] - 0.5, q[1])))
+        self.assertEqual(other, outlet + "-1")
+        rows, totals = reports.terminal_count_rows(self.p)
+        self.assertIn([outlet, other], [r[:2] for r in rows])
+        self.assertEqual(totals, (2, 1))
+
+
 if __name__ == "__main__":
     unittest.main()

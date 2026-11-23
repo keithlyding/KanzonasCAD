@@ -6,6 +6,13 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.3
+
+**Fixed**
+- Terminal count... could show a power distribution outlet's wire as a tap of its own tap
+  (1006A-1, tapped by 1006A) when another wire crossed the outlet's pin. It now shows 1006A,
+  tapped by 1006A-1. The totals were already right.
+
 ## 0.22.2
 
 **New**

@@ -114,7 +114,11 @@ def terminal_count_rows(project):
     wires on a side, need fewer."""
     if not wirenums.enabled(project) or wirenums.tap_mode(project) == "same":
         return [], (0, 0)
-    gs, info, _dist, taps, _conns = wirenums._assemble(project)
+    gs, info, dist, taps, _conns = wirenums._assemble(project)
+    # (a distribution block's outlet wire is numbered from its feed, 1006A, never as a tap,
+    # as the numbering does: taken for one, 1006A-1's row showed 1006A as its tap; the
+    # battery, seed 12)
+    outlets = {o for src, outs in dist for o in outs if o is not None and o != src}
     parent = {}
 
     def base(g):
@@ -126,7 +130,7 @@ def terminal_count_rows(project):
     for src, tap, _k in sorted(taps, key=lambda t: t[2]):
         # (two wires each tapping the other, overlapping: the first tap found counts, as
         # the numbering takes it, 2017 and 2017-1; the other would close a loop)
-        if tap != src and tap not in parent and base(src) != tap:
+        if tap != src and tap not in parent and tap not in outlets and base(src) != tap:
             parent[tap] = src
     fam = {}
     for g in gs:

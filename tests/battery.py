@@ -3876,9 +3876,11 @@ def random_editing(log, out, ops, seed, drawing=None):
         if wirenums.by_io_address(p):
             for got in wirenums._assemble_all(p)[5].values():
                 addrs.update(got)
-        # each row a family (its number and its taps); which of them heads the row isn't
-        # checked here (two wires each tapping the other: seed 12's 1006A and 1006A-1)
+        # each row a family (its number and its taps), headed by the number the others are -1,
+        # -2... of (two wires each tapping the other, an outlet's 1006A and 1006A-1: shown the
+        # other way round up to 0.22.2, the seed 12)
         want_fams = [{b} | v for b, v in tapped.items()]
+        heads = {frozenset({b} | v): b for b, v in tapped.items()}
         extra = 0
         for r in rows:
             fam = {r[0]} | {t.strip() for t in r[1].split(",") if t.strip()}
@@ -3892,6 +3894,11 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert not odd, \
                 "Terminal count: %s's taps %s neither -1, -2... nor a PLC address" % (
                     r[0], sorted(odd))
+            if len(mine) == 1 and not other:
+                assert r[0] == heads[frozenset(mine[0])], \
+                    "Terminal count: the row of %s headed by %s" % (
+                        heads[frozenset(mine[0])], r[0])
+                BC.CHECKED["terminal count: headed by the tapped number"] += 1
             if other:
                 extra += len(other) if mine else len(other) - 1
                 BC.CHECKED["terminal count: a tap numbered by its PLC address"] += 1
