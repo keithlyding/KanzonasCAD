@@ -16,6 +16,10 @@ build fails without them.
   takes that wire's layer. Project properties, Schematic turns it off.
 - In a block's tab, Pins... gives each pin a wire layer of its own if you like.
 
+**Fixed**
+- Zooming and panning are faster on sheets with many notes and pictures: what is off the
+  screen is no longer drawn.
+
 ## 0.22
 
 **New**
