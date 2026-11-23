@@ -507,6 +507,17 @@ def project_properties(parent, project, tab=0):
     wgh.setSuffix(" in")
     wgh.setValue(float(st.get("wire_gauge_height", 0.06)))
     form.addRow("Gauge label height", wgh)
+    wauto = QCheckBox("A wire takes its layer from the pin it starts on")
+    wauto.setObjectName("wire_layer_auto")
+    wauto.setToolTip("A wire started (or, failing that, ended) on a PLC input or output goes "
+                     "on 24VDC BLU, on a PLC common on 24VDC BLU-WHT, on a motor's or drive's "
+                     "power terminal on 480V BLK (its ground on 480V GRN), on a control "
+                     "transformer's X1 on 120V RED (X2: 120V WHT), and on a pin given a wire "
+                     "layer of its own (Pins..., in a block's tab) on that layer, when the "
+                     "project has that layer. A wire joined to another still takes the other "
+                     "wire's layer. Off: the layer picked.")
+    wauto.setChecked(bool(st.get("wire_layer_auto", True)))
+    form.addRow("", wauto)
     wlead = QCheckBox("A second wire on a pin leaves it on a 45-degree lead")
     wlead.setToolTip("Double landing as drawn by hand: a wire started or ended on a pin that "
                      "already has one bends off it beside the first. Off: it runs straight "
@@ -720,6 +731,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
     settings["wire_lead"] = wlead.isChecked()
+    settings["wire_layer_auto"] = wauto.isChecked()
     settings["wire_around"] = waround.isChecked()
     settings["wire_clear"] = wclear.value()
     settings["wire_gauge_shown"] = wgauge.isChecked()
@@ -2243,7 +2255,9 @@ class PinsDialog(QDialog):
     """Pins... (a block's tab): its pins in order, each with its name and its place (x, y in
     inches from the base point), all editable. Drag a row, or Move up / Move down, to change
     the order (the order a bus lands wire for wire); Delete takes one out; Find shows it on
-    the drawing (find(marker id)). rows() gives [(marker id, name, x, y)] in order."""
+    the drawing (find(marker id)). Each pin can have a wire layer of its own: a wire started
+    on it goes on that layer (autolayer.py); blank, it is worked out from the block. rows()
+    gives [(marker id, name, x, y, wire layer)] in order."""
 
     def __init__(self, parent, rows, find=None):
         super().__init__(parent)
@@ -2254,14 +2268,17 @@ class PinsDialog(QDialog):
                              "Double-click a name or a place to change it; drag a row to "
                              "move it."))
         t = self.tree = QTreeWidget()
-        t.setColumnCount(3)
-        t.setHeaderLabels(["Pin", "X (in)", "Y (in)"])
+        t.setColumnCount(4)
+        t.setHeaderLabels(["Pin", "X (in)", "Y (in)", "Wire layer"])
+        t.headerItem().setToolTip(3, "The layer a wire started on this pin goes on (24VDC "
+                                     "BLU, 480V BLK...) when the project has it. Blank: "
+                                     "worked out from the block (a PLC point: 24VDC BLU...).")
         t.setRootIsDecorated(False)
         t.setDragDropMode(QAbstractItemView.InternalMove)
         t.setSelectionMode(QAbstractItemView.SingleSelection)
         t.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
-        for eid, name, x, y in rows:
-            it = QTreeWidgetItem([name, _num(x), _num(y)])
+        for eid, name, x, y, *own in rows:
+            it = QTreeWidgetItem([name, _num(x), _num(y), own[0] if own else ""])
             it.setData(0, Qt.UserRole, eid)
             # (no drops onto a row: a dragged row goes between rows, never under one)
             it.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable |
@@ -2279,7 +2296,7 @@ class PinsDialog(QDialog):
         lay.addWidget(_buttons(self))
         if rows:
             t.setCurrentItem(t.topLevelItem(0))
-        self.resize(420, 360)
+        self.resize(520, 360)
 
     def _current(self):
         it = self.tree.currentItem()
@@ -2315,7 +2332,8 @@ class PinsDialog(QDialog):
                     xy.append(float(it.text(c).strip().rstrip('"')))
                 except ValueError:
                     raise ValueError("Pin %s: %r isn't a number" % (it.text(0), it.text(c)))
-            out.append((it.data(0, Qt.UserRole), it.text(0).strip(), xy[0], xy[1]))
+            out.append((it.data(0, Qt.UserRole), it.text(0).strip(), xy[0], xy[1],
+                        it.text(3).strip().upper()))
         return out
 
 

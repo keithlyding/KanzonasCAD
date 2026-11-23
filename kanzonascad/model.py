@@ -107,6 +107,8 @@ DEFAULT_SETTINGS = {
     "footprint_label": "tag",   # what a footprint placed shows to start (Footprint label)
     "wire_around": True,        # a wire goes round the symbols in its way (wires.route_around)
     "wire_clear": 0.125,        # ...that far from them, paper inches
+    "wire_layer_auto": True,    # a wire started on a PLC point, a motor's or drive's terminal...
+                                # goes on its voltage's wire layer (autolayer.py; the owner, 0.22.1)
     "wire_lead": False,         # a second wire on a pin leaves it on a 45-degree lead (the
                                 # owner, 0.16: "a little bend... That needs to go away": off)
     "wire_label_ends": 6.0,     # a wire longer than this (paper inches) shows its number
@@ -2051,7 +2053,10 @@ class BlockDef:
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
-        self.pins = [{"name": str(p["name"]), "pos": _pt(p["pos"])} for p in pins]
+        # (a pin's own wire layer, set in the block editor's Pins...: a wire started on it goes
+        # on that layer, autolayer.py; "layer" left out: worked out from the block)
+        self.pins = [{"name": str(p["name"]), "pos": _pt(p["pos"])} |
+                     ({"layer": str(p["layer"])} if p.get("layer") else {}) for p in pins]
         self.tag_pos = _pt(tag_pos) if tag_pos is not None else None
         self.tag_height = float(tag_height)
         self.category = category
@@ -2102,7 +2107,8 @@ class BlockDef:
                 "description": self.description, "role": self.role, "contact": self.contact,
                 "prefix": self.prefix, "tag_height": self.tag_height,
                 "tag_pos": list(self.tag_pos) if self.tag_pos is not None else None,
-                "pins": [{"name": p["name"], "pos": list(p["pos"])} for p in self.pins],
+                "pins": [{"name": p["name"], "pos": list(p["pos"])} |
+                         ({"layer": p["layer"]} if p.get("layer") else {}) for p in self.pins],
                 "entities": [e.to_dict() for e in self.entities]} | (
                     {"wiring": self.wiring} if self.wiring else {}) | (
                     {"attr_texts": [dict(a, pos=list(a["pos"])) for a in self.attr_texts]}
@@ -2991,6 +2997,8 @@ class Sheet:
         self.report = ""                    # (a report sheet: which report, report_sheets.py)
         self.pin_order = []                 # a block editor's sheet: its pin markers' ids in
                                             # the order set in Pins... (block_editor.to_block)
+        self.pin_layers = {}                # a block editor's sheet: {pin marker id: the wire
+                                            # layer set for that pin in Pins...}
         self.col_start = int(col_start)     # the first column's number (1 to start)
         self.row_start = int(row_start)     # the first row's letter: 0 = A, 1 = B...
         self.fields = dict(fields or {})
@@ -3220,6 +3228,8 @@ class Sheet:
             d["report"] = self.report
         if self.pin_order:
             d["pin_order"] = list(self.pin_order)
+        if self.pin_layers:
+            d["pin_layers"] = {str(k): v for k, v in self.pin_layers.items()}
         return d
 
     def to_dict(self):
@@ -3267,6 +3277,8 @@ class Sheet:
         self.no_dots = [(round(float(q[0]), 6), round(float(q[1]), 6))
                         for q in (d.get("no_dots") or [])]
         self.pin_order = [int(i) for i in (d.get("pin_order") or [])]
+        self.pin_layers = {int(k): str(v) for k, v in (d.get("pin_layers") or {}).items()
+                           if v}
         self.arrays = _arrays(d.get("arrays"))
         self.report = str(d.get("report", "") or "")
         self.version += 1
