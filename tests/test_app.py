@@ -396,17 +396,23 @@ class TitleBlockTest(unittest.TestCase):
         self.assertAlmostEqual(x0, s.MARGIN + s.STRIP)
         self.assertAlmostEqual(y1, h - s.MARGIN - s.STRIP)
 
-    def test_edit_title_block_mode_in_the_window(self):
+    def test_edit_title_block_in_its_own_tab(self):
+        # (0.22.5: a tab of its own, as a block's; tests/test_0225_title_block_tab.py)
         w, v = window()
         try:
             w.acts["edit_tb"].trigger()
-            self.assertIs(v.sheet(), v.project.title_block)
+            t = w.view()
+            self.assertIsNot(t, v)
+            self.assertIs(t.sheet(), t.project.title_block)
             self.assertFalse(w.acts["sheet_del"].isEnabled())
-            v.snap_on = v.osnap_on = False
-            v.run(C.TextCmd)
-            type_in(v, "H", "0.1", "1,1", "{Customer}", "")
-            w.acts["edit_tb"].trigger()
+            t.snap_on = t.osnap_on = False
+            t.run(C.TextCmd)
+            type_in(t, "H", "0.1", "1,1", "{Customer}", "")
+            w.acts["save_tb"].trigger()
+            self.assertIs(w.view(), v)
             self.assertIs(v.sheet(), v.project.sheets[0])
+            self.assertIn("{Customer}", [e.text for e in v.project.title_block.entities.values()
+                                         if isinstance(e, M.Text)])
             self.assertTrue(w.acts["black"].isChecked())
             self.assertTrue(v.dark)
             v.repaint()

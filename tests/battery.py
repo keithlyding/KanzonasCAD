@@ -2735,6 +2735,49 @@ def random_editing(log, out, ops, seed, drawing=None):
         v.run(C.UseTitleBlockCmd)
         finish()
 
+    def op_title_block():
+        # (0.22.5) Edit title block in a tab of its own: a line drawn there, then Save title
+        # block (in the project, one step, back to the drawing) or Close title block and
+        # Discard (the project's as it was)
+        from unittest import mock
+        from PySide6.QtWidgets import QMessageBox
+        src, sheet_id = win.doc(), v.sheet_id
+        lines = lambda pr: sorted(tuple(map(tuple, (e.p1, e.p2))) for e in
+                                  pr.title_block.entities.values() if isinstance(e, M.Line))
+        before = lines(p)
+        win.acts["edit_tb"].trigger()
+        d = win.doc()
+        assert d is not src and d.view.sheet() is d.project.title_block, \
+            "Edit title block didn't open a tab of its own"
+        a = (round(rnd.uniform(0.5, 4.0), 3), round(rnd.uniform(0.1, 1.0), 3))
+        b = (a[0] + 0.5, a[1])
+        t = d.view
+        t.snap_on = t.osnap_on = t.ortho_on = t.polar_on = False
+        t.run(C.LineCmd)
+        for q in (a, b):
+            if t.cmd is not None:
+                t.input_text(fmt(q))
+        while t.cmd is not None:
+            t.cmd.enter()
+            if t.cmd is not None:
+                t.cancel()
+        drawn = lines(d.project) != before
+        save = rnd.random() < 0.6
+        if save:
+            win.acts["save_tb"].trigger()
+        else:
+            with mock.patch.object(QMessageBox, "question", return_value=QMessageBox.Discard):
+                win.acts["close_tb"].trigger()
+        assert win.doc() is src and v.sheet_id == sheet_id and win.tabs.indexOf(d) < 0, \
+            "Save or Close title block didn't go back to the drawing"
+        if save and drawn:
+            assert (a, b) in lines(p) or (b, a) in lines(p), \
+                "the line drawn in the title block's tab isn't in the project's"
+            BC.CHECKED["title block saved from its tab"] += 1
+        elif not save:
+            assert lines(p) == before, "a title block closed without saving changed"
+            BC.CHECKED["title block closed without saving"] += 1
+
     fps = sorted(n for n, d in lib.blocks("footprint")[0].items() if d.builtin)
 
     def op_footprint():
@@ -3957,7 +4000,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2), (op_stretch, 2), (op_grips, 2), (op_lock_numbers, 2), (op_number_bus, 2),
+             (op_usetb, 1), (op_title_block, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2), (op_stretch, 2), (op_grips, 2), (op_lock_numbers, 2), (op_number_bus, 2),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),

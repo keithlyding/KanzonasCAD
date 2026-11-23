@@ -20,6 +20,7 @@ from . import fileio
 from . import model as M
 from . import theme
 from .block_window import BlockEditing, is_block_doc
+from .tb_window import TitleBlockEditing, is_tb_doc
 from .commandline import CommandLine
 from .render import install_text_measure
 from .view import CadView
@@ -78,6 +79,8 @@ class Document(QWidget):
     def name(self):
         if is_block_doc(self):                  # (a block editor: Edit block...)
             return "Block: %s" % self.block_session.name
+        if is_tb_doc(self):                     # (Edit title block)
+            return "Title block: %s" % self.tb_source.name()
         if self.project.path:
             return os.path.splitext(os.path.basename(self.project.path))[0]
         return "Untitled"
@@ -187,7 +190,7 @@ def copy_title(title, taken):
     return "%s%s%d" % (base, dash, n)
 
 
-class MainWindow(BlockEditing, QMainWindow):
+class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
     def __init__(self, family=None):
         """family: the windows this one opens projects and sheets with (a window from Open
         this sheet in a new window joins its opener's); the first is the main one, which
@@ -559,10 +562,18 @@ class MainWindow(BlockEditing, QMainWindow):
         A("new_revision", "&New revision...", lambda: self.revisions(add=True),
           icon="new_revision", label="New revision",
           tip="Add the next revision (0, 1, 2...), dated today")
-        A("edit_tb", "Edit &title block", self._toggle_title_block, checkable=True,
+        A("edit_tb", "Edit &title block", lambda: self.edit_title_block(),
           icon="title_block", label="Edit title block",
           tip="Draw and change the title block (lines and texts; {Field} in a text shows "
-              "that field's value). Click it again to go back to the sheets.")
+              "that field's value) in a tab of its own; Save title block puts it back")
+        A("save_tb", "Sa&ve title block", lambda: self.save_title_block(),
+          icon="save_block", label="Save title block",
+          tip="Put the title block drawn in this tab in its project (Undo there takes it "
+              "back) and go back to the drawing")
+        A("close_tb", "Close title &block", self.close_title_block, icon="close_window",
+          label="Close title block",
+          tip="Close the title block's tab (asking to save its changes) and go back to the "
+              "drawing")
         A("black", "&Black drawing background", self._set_black, checkable=True,
           icon="black_bg", label="Black background",
           tip="Draw on black, as in AutoCAD. PDF export always prints black on white.")
@@ -737,7 +748,8 @@ class MainWindow(BlockEditing, QMainWindow):
                   "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_count", "materials",
                   "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
-                  "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
+                  "project_props", "schematic_settings", "panel_settings", "edit_tb",
+                  "save_tb", "close_tb", "use_tb",
                   "layers", "wire_layers",
                   None, "new_revision", "revisions"):
             m.addSeparator() if k is None else m.addAction(a[k])
@@ -892,6 +904,13 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Ribbon", "small", [a["collapse"], a["group_names"], a["block_tab"]]),
         ])
         # a block's own tools: shown in a block's tab (Edit block), or always (View, Block tab)
+        # the title block's own tools: shown in its tab only (Edit title block)
+        r.add_tab("Title block", [
+            ("Title block", "large", [a["save_tb"], a["close_tb"]]),
+            ("Draw", "large", [a["line"], a["rect"], a["text"], a["mtext"]]),
+            ("Modify", "small", [a["move"], a["copy"], a["stretch"], a["erase"], a["trim"]]),
+            ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
+        ])
         r.add_tab("Block", [
             ("Block", "large", [a["save_block"], a["save_block_as"], a["block_props"],
                                 a["dup_block"]]),
@@ -917,6 +936,7 @@ class MainWindow(BlockEditing, QMainWindow):
         a["block_tab"].setChecked(self.settings.value("ribbon_block_tab", "false")
                                   in (True, "true"))
         self._show_block_tab()
+        self.ribbon.show_tab("Title block", False)
 
     def _build_status(self):
         sb = self.statusBar()
@@ -1163,6 +1183,7 @@ class MainWindow(BlockEditing, QMainWindow):
     def _tab_changed(self, _i):
         v = self.view()
         self._show_block_tab(select=True)
+        self._show_tb_tab(select=True)
         self.cmdline.attach(v)
         self._fill_sheets()
         self._fill_layers()
@@ -1212,9 +1233,10 @@ class MainWindow(BlockEditing, QMainWindow):
         """A new window of the family with a tab on d's project (its view as d's), put on
         the other screen when there is one, else at `where` (a global point) or beside this
         one."""
-        if is_block_doc(d):
-            QMessageBox.information(self, APP, "A block being edited stays in its window: "
-                                    "save or close it first.")
+        if is_block_doc(d) or is_tb_doc(d):
+            QMessageBox.information(self, APP, "A %s being edited stays in its window: "
+                                    "save or close it first." % (
+                                        "block" if is_block_doc(d) else "title block"))
             return None
         win = MainWindow(self.family)
         nd = win.add_document(d.project)
@@ -1270,7 +1292,7 @@ class MainWindow(BlockEditing, QMainWindow):
         at = QApplication.widgetAt(where)
         target = at.window() if at is not None else None
         if target is not self and target in self.family:
-            if is_block_doc(d):
+            if is_block_doc(d) or is_tb_doc(d):
                 return
             nd = target.add_document(d.project)
             nd.view.show_sheet(d.view.sheet_id)
@@ -1285,6 +1307,8 @@ class MainWindow(BlockEditing, QMainWindow):
     def _maybe_save(self, d):
         if is_block_doc(d):
             return self._ask_save_block(d)
+        if is_tb_doc(d):
+            return self._ask_save_title_block(d)
         if not d.project.is_modified():
             return True
         self.tabs.setCurrentWidget(d)
@@ -1450,6 +1474,8 @@ class MainWindow(BlockEditing, QMainWindow):
             return False
         if is_block_doc(d):
             return self.save_block()
+        if is_tb_doc(d):
+            return self.save_title_block()
         if not d.project.path:
             return self.save_as()
         return self._save_to(d, d.project.path)
@@ -1460,6 +1486,8 @@ class MainWindow(BlockEditing, QMainWindow):
             return False
         if is_block_doc(d):
             return self.save_block()
+        if is_tb_doc(d):
+            return self.save_title_block()
         start = d.project.path or os.path.join(self._last_dir(), d.name() + M.FILE_SUFFIX)
         path, _f = QFileDialog.getSaveFileName(self, "Save project", start,
                                                "KanzonasCAD project (*.kzcad)")
@@ -1501,6 +1529,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for i in range(self.tabs.count()):
             d = self.tabs.widget(i)
             if isinstance(d, Document) and d.project.is_modified() and not is_block_doc(d) \
+                    and not is_tb_doc(d) \
                     and getattr(d.project, "autosaved_at", None) != d.project.revision:
                 try:
                     backup.write_autosave(d.project, d.autosave_key)
@@ -2563,7 +2592,8 @@ class MainWindow(BlockEditing, QMainWindow):
     def _fill_sheets(self):
         lst = self.sheet_list
         v = self.view()
-        want = [] if v is None else [
+        # (the title block's tab: no sheets to list, only its working copy's)
+        want = [] if v is None or is_tb_doc(self.doc()) else [
             ("%s   %s%s" % (v.project.sheet_number(s), s.title or "(untitled)",
                             "" if s.kind == "schematic" else "  [%s]" % M.SHEET_KINDS[s.kind]),
              s.id) for s in v.project.sheets]
@@ -2582,7 +2612,7 @@ class MainWindow(BlockEditing, QMainWindow):
         lst.blockSignals(True)
         picked = set(self.selected_sheet_ids())
         lst.clear()
-        if v is not None:
+        if v is not None and want:
             p = v.project
             items = []
             for s in p.sheets:
@@ -2611,6 +2641,8 @@ class MainWindow(BlockEditing, QMainWindow):
         title = {"schematic": "Schematic", "panel": "Panel"}.get(v.sheet().kind)
         if is_block_doc(self.doc()):
             title = "Block"             # (a block's tab: its own tools)
+        elif is_tb_doc(self.doc()):
+            title = "Title block"       # (the title block's tab, Edit title block)
         if title is None:
             return
         for i in range(self.ribbon.count()):
@@ -3673,23 +3705,6 @@ class MainWindow(BlockEditing, QMainWindow):
         style, sheet_style = getattr(self, "_asking_tap_style", ("", "-1"))
         return wire_number_dialog(self, num, tap_of, own, locked, mode, style, sheet_style)
 
-    def _toggle_title_block(self, on):
-        v = self.view()
-        if v is None:
-            return
-        if on:
-            if v.sheet() is not v.project.title_block:
-                self._tb_return = v.sheet_id
-                v.show_sheet(M.TITLE_BLOCK_ID)
-                self.cmdline.add_history(
-                    "Editing the title block. Draw and change it like any drawing; a text with "
-                    "{Customer}, {Sheet}, {Sheets}, {Sheet title}... shows that field's value on "
-                    "the sheets. Click Edit title block again when done.")
-        else:
-            self._leave_title_block(v)
-        self._fill_sheets()
-        self._update_ui()
-
     def _leave_title_block(self, v):
         if v.sheet() is v.project.title_block:
             back = getattr(self, "_tb_return", None)
@@ -3842,7 +3857,11 @@ class MainWindow(BlockEditing, QMainWindow):
         # (Save grayed with nothing to save, as KanzonasPDF's; the owner, 0.21.3: "the save
         # button needs to be grayed out if the document is already saved". In a block's tab it
         # saves the block)
+        in_tb = is_tb_doc(self.doc())
         a["save"].setEnabled(bool(has and (in_block or p.is_modified())))
+        for k in ("save_tb", "close_tb"):
+            a[k].setEnabled(in_tb)
+            a[k].setVisible(in_tb)
         a["save_block"].setEnabled(in_block)
         a["save_block"].setVisible(in_block)
         for k in ("save_block_as", "add_pin", "pins", "add_attr"):
@@ -3859,10 +3878,11 @@ class MainWindow(BlockEditing, QMainWindow):
         a["sheet_down"].setEnabled(0 <= pos < len(p.sheets) - 1)
         a["sheet_del"].setEnabled(bool(has and not on_tb and len(p.sheets) > 1))
         a["sheet_props"].setEnabled(bool(has and not on_tb))
-        a["edit_tb"].setEnabled(has)
-        a["edit_tb"].blockSignals(True)
-        a["edit_tb"].setChecked(on_tb)
-        a["edit_tb"].blockSignals(False)
+        # (the title block in a tab of its own; no sheets to add or reorder there)
+        a["edit_tb"].setEnabled(bool(has and not is_block_doc(self.doc())))
+        for k in ("sheet_add", "sheet_dup"):
+            if is_tb_doc(self.doc()):
+                a[k].setEnabled(False)
         for key, on in (("xref_freeze", bool(has and not on_tb and v.sheet().xref_frozen)),
                         ("xref_auto", bool(has and p.settings.get("xref_auto", True)))):
             a[key].blockSignals(True)

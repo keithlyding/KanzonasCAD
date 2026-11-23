@@ -223,10 +223,15 @@ Both are always there: any sheet can hold a schematic, a panel layout, or both.<
 
 <h2>The title block</h2>
 <p>The title block is a small drawing of its own, the same on every sheet of the project.
-<b>Edit title block</b> (Sheets menu and Sheets tab) shows it by itself: draw, move, trim,
-erase and type text there with the usual commands, or <b>Import DXF or DWG into this sheet...</b>
-to bring in your company's title block and move it into the lower right corner. Click
-<b>Edit title block</b> again (or click a sheet in the Sheets panel) to go back.</p>
+<b>Edit title block</b> (Sheets menu and Sheets tab) opens it in a tab of its own, as Edit
+block opens a block, with the <b>Title block</b> ribbon tab: draw, move, trim, erase and type
+text there with the usual commands, or <b>Import DXF or DWG into this sheet...</b> to bring in
+your company's title block and move it into the lower right corner. Your drawing stays as it
+was in its own tab meanwhile. <b>Save title block</b> (the Title block tab and the Sheets menu,
+or Ctrl+S) puts it in the project as one step (Undo in the drawing takes it back), closes the
+tab and goes back to the drawing, on the Sheets tab. <b>Close title block</b> (or closing its
+tab) leaves the project's title block as it was, asking first if you changed anything: Save,
+Discard or Cancel. Edit title block again while its tab is open shows that tab.</p>
 <p>A text that contains a field name in braces shows that field's value on every sheet:</p>
 <ul>
 <li><code>{{Customer}}</code>, <code>{{Project}}</code>, <code>{{Drawing number}}</code>,
