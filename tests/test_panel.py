@@ -35,7 +35,7 @@ class PanelSheetTest(unittest.TestCase):
         self.assertAlmostEqual(self.v.text_height(), self.p.settings["text_height"] * 4)
         # the title block grows with the border and says the scale
         rect = sheetframe.title_block_rect(self.p, self.s)
-        self.assertAlmostEqual(rect[2] - rect[0], 6.5 * 4, places=6)
+        self.assertAlmostEqual(rect[2] - rect[0], sheetframe.TB_WIDTH * 4, places=6)
         self.assertEqual(sheetframe.field_values(self.p, self.s)["Scale"], "1:4")
         # one undo puts the scale and the text back
         self.p.undo()
