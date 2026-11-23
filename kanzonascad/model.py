@@ -3918,7 +3918,12 @@ class Project:
         if bb is None:
             return None
         x0, y0, x1, _y1 = self.title_block.frame()
-        size = (x1 - bb[0]) if pos == "right" else (bb[3] - y0)
+        # (from the frame's edge to the title block's far side, but never more than the title
+        # block is across: one drawn away from its corner, an imported drawing used as a title
+        # block, made the strip take nearly the whole sheet and a report sheet's table a
+        # sliver; the battery, 0.22.4, seed 41)
+        size = min(x1 - bb[0], bb[2] - bb[0]) if pos == "right" else \
+            min(bb[3] - y0, bb[3] - bb[1])
         return (pos, max(0.0, size)) if size > 1e-6 else None
 
     def sync_reserve(self):
