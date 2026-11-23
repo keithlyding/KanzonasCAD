@@ -2011,7 +2011,8 @@ is found again when the stick gets another drive letter on another PC (E: here, 
 <li><b>PortableApps.com version</b> (KanzonasCAD Portable, for the PortableApps.com Platform):
 the same, with your files in the package's <b>Data</b> folder. The PortableApps.com Platform
 updates it, so KanzonasCAD doesn't check for updates by itself unless you tick Help &gt;
-<b>Check for updates automatically</b>, and then it only opens the release page.</li>
+<b>Check for updates automatically</b>, and then its notice has no Update now: Download
+opens the release page.</li>
 <li><b>Linux</b>: <b>KanzonasCAD-x86_64.AppImage</b> (64-bit PC; Ubuntu 22.04, Debian 12, Fedora
 36 or newer). Make it executable (right-click &gt; Properties &gt; Permissions &gt; Allow
 executing file as program, or <code>chmod +x KanzonasCAD-x86_64.AppImage</code>) and
@@ -2029,37 +2030,50 @@ run KanzonasCAD/KanzonasCAD (it doesn't update itself).</li>
 
 <h2>Updates</h2>
 <p>KanzonasCAD asks GitHub for new versions by itself, at most once a day (also while it stays
-open), quietly: nothing shows unless there is one. Then a box tells you what changed in every
-version since yours, with three buttons: <b>Update now</b>, <b>Skip this version</b> (you're
-not told about it again; a newer one still shows) and <b>Later</b>. While Update now
-downloads, its window shows a progress bar with how much has come (48.3 of 75.2 MB, 64%), and
-<b>Cancel</b> stops the download; once it's done (or failed) the button is <b>Close</b>.
-When you finish the update, every other KanzonasCAD you have running closes first, as Quit
-would (each asks to save its changes); if you cancel in one, it stays open and the update
-stops until you close it. With <b>Open the files that were open...</b> on (Options), the new
-version opens the files all of them had open.</p>
+open), quietly: nothing shows unless there is one. Then a notice at the bottom of the window
+(the status bar) says <b>KanzonasCAD 0.23 is available</b> (you have 0.22), with five buttons:
+<b>What's new</b> (what changed since your version), <b>Update now</b> (updates this copy; not
+there when it can't update itself), <b>Download</b> (opens the release page in your browser),
+<b>Skip this version</b> (you're not told about it again; a newer one still shows) and
+<b>Later</b>. Nothing pops up, and nothing is downloaded or installed until you click a
+button.</p>
+<p><b>Check for updates...</b> (Help menu), or What's new, opens the update box: what's new
+since your version, the notes of every version newer than yours, newest first (a version
+without notes has a link to its release page), what Update now does for your copy, and the
+buttons <b>Update now</b>, <b>Download</b> and <b>Later</b>. With nothing newer, a box says
+<b>You have the latest version</b>; if GitHub can't be reached, it says why.</p>
+<p>While Update now downloads, a window says <b>Downloading the new KanzonasCAD...</b> with a
+progress bar; <b>Cancel</b> stops the download. If the download fails (or doesn't match the
+release), a warning says why, and you can still download the new version from the release
+page. Before KanzonasCAD closes for the update, every other KanzonasCAD you have running closes
+first, as Quit would (each asks to save its changes); if you cancel in one, it stays open and
+the update stops until you close it. With <b>Open the files that were open...</b> on
+(Options), the new version opens the files all of them had open. If the setup ran but
+KanzonasCAD is still the old version when it starts again, a warning says the update didn't
+finish and offers to run the setup again, which shows what's in the way.</p>
 <ul>
 <li>Run from source (the README's way): Update now gets the new version (git pull) and what it
-needs, shows what it did, and offers to start the new version.</li>
+needs, closes KanzonasCAD and starts it again. If a step fails, a warning says which, with its
+messages under Show Details.</li>
 <li>Installed with the setup (KanzonasCAD-v&lt;version&gt;-setup.exe): Update now downloads
 the new setup, uses it only if it matches the release exactly (its sha256), closes
-KanzonasCAD and installs the new version over this one, then starts it again. No
-administrator rights are needed for a copy installed for you; a copy installed for all users
-updates for all users too, and Windows asks for administrator rights first.</li>
+KanzonasCAD and installs the new version over this one; KanzonasCAD starts again when it's
+done. No administrator rights are needed for a copy installed for you; a copy installed for
+all users updates for all users too, and Windows asks for administrator rights first.</li>
 <li>The Windows zip (unzipped by hand): Update now downloads the new zip, checks it the same
-way, and replaces this copy when KanzonasCAD closes, then starts it again.</li>
+way, closes KanzonasCAD, replaces the program files in this folder and starts it again.</li>
 <li>The portable version: Update now downloads the new portable zip, checks it the same way,
-and replaces the program files in the same folder when KanzonasCAD closes, then starts it
-again; the data folder (settings, library, recovery copies) is kept. Or close KanzonasCAD and
-unzip the new download over the same folder, replacing the files.</li>
-<li>The PortableApps.com version: the PortableApps.com Platform updates it; Update now opens the
-release page.</li>
+closes KanzonasCAD, replaces the program files in this folder and starts it again; the data
+folder (settings, library, recovery copies) is kept. Or close KanzonasCAD and unzip the new
+download over the same folder, replacing the files.</li>
+<li>The PortableApps.com version: the PortableApps.com Platform updates it; there is no Update
+now, and Download opens the release page.</li>
 <li>The Linux AppImage: Update now downloads the new KanzonasCAD-x86_64.AppImage, checks it the
 same way, puts it in place of the old file (same name and place), closes KanzonasCAD and starts
-the new version. If you keep it open, the new version starts the next time you open
+the new version. If you keep a project open, the new version starts the next time you open
 KanzonasCAD. If the AppImage is in a folder you can't change, the release page opens instead:
-download the new file and replace the old one yourself. The Linux folder (tar.gz) only opens
-the release page.</li>
+download the new file and replace the old one yourself. The Linux folder (tar.gz) has no
+Update now: Download opens the release page.</li>
 <li>Either way you're asked to save any changes first, and your projects and library are never
 touched.</li>
 </ul>

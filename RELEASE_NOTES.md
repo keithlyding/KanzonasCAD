@@ -6,6 +6,19 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.6
+
+**New**
+- A new version is now announced as in KanzonasPDF: a notice at the bottom of the window (no
+  window pops up) with What's new, Update now, Download, Skip this version and Later.
+- Help > Check for updates... (and What's new) shows what's new since your version, what Update
+  now does for your copy, and the buttons Update now, Download and Later.
+- While the new version downloads, a window shows its progress, with Cancel.
+
+**Fixed**
+- If an update with the setup didn't finish, KanzonasCAD now says so the next time it starts
+  and offers to run the setup again.
+
 ## 0.22.3
 
 **Fixed**
