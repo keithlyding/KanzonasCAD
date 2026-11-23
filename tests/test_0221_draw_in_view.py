@@ -65,12 +65,13 @@ class DrawInViewTest(unittest.TestCase):
         seen = []
         reds = 0
         try:
-            # (each view centered on something drawn there on any computer: a note's start,
-            # a picture's middle; fonts differ, so not a spot a text may or may not reach.
-            # Zoomed in at 900, a note turned 60 degrees drew nothing on the Windows build,
-            # culled or not: an unturned one there)
+            # (each view centered on something drawn there: a note's start, a picture. The
+            # Windows build runs these tests offscreen, where Qt has no fonts and draws no text
+            # at all (the whole sheet: 7,542 pixels lit there, 29,408 here), so the 900 view is
+            # on a picture's edge, drawn everywhere; the texts are checked where there are
+            # fonts, pixel for pixel in every view)
             for scale, cx, cy in ((25.0, 8.5, 5.5), (120.0, 4.0, 3.0), (400.0, 4.5, 4.15),
-                                  (400.0, 1.1, 1.04), (900.0, 1.1, 9.14), (60.0, 15.0, 2.0)):
+                                  (400.0, 1.1, 1.04), (900.0, 4.25, 4.1), (60.0, 15.0, 2.0)):
                 render.visible_rect = real
                 got = draw(s, p, scale, cx, cy)
                 render.visible_rect = lambda painter: None        # (every one drawn)
