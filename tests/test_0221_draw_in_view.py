@@ -65,14 +65,16 @@ class DrawInViewTest(unittest.TestCase):
         seen = []
         reds = 0
         try:
-            for scale, cx, cy in ((25.0, 8.5, 5.5), (120.0, 4.0, 3.0), (400.0, 6.3, 4.4),
-                                  (400.0, 1.0, 1.0), (900.0, 9.0, 9.4), (60.0, 15.0, 2.0)):
+            # (each view centered on something drawn there on any computer: a note's start,
+            # a picture's middle; fonts differ, so not a spot a text may or may not reach)
+            for scale, cx, cy in ((25.0, 8.5, 5.5), (120.0, 4.0, 3.0), (400.0, 4.5, 4.15),
+                                  (400.0, 1.1, 1.04), (900.0, 9.1, 9.14), (60.0, 15.0, 2.0)):
                 render.visible_rect = real
                 got = draw(s, p, scale, cx, cy)
                 render.visible_rect = lambda painter: None        # (every one drawn)
                 want = draw(s, p, scale, cx, cy)
                 self.assertTrue(got == want, (scale, cx, cy))
-                seen.append(sum(1 for x in range(0, 400, 7) for y in range(0, 300, 7)
+                seen.append(sum(1 for x in range(400) for y in range(300)
                                 if got.pixel(x, y) != 0xff000000))
                 reds += sum(1 for x in range(0, 400, 3) for y in range(0, 300, 3)
                             if QColor(got.pixel(x, y)).red() > 200 and
