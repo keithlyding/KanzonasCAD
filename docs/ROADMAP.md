@@ -86,6 +86,22 @@ nobody understands).
   today), AutomationDirect T1/T1E duct sizes (actual sizes from AD's spec sheets, waiting on
   the owner's look at the table).
 
+- 0.22 (owner, Nov 2026: "the ability to not just do grid style cross references but also the
+  line by line ones"; "Let's do ladder references as an option"): ladders (Draw > Ladder) and
+  References Grid or Ladder for the project and per sheet; rungs numbered from the page (600,
+  601... by default; 6-01 as the other style), a second ladder carrying on from the first.
+  Not yet (offer): device tags and wire numbers from the rung (CR603, 603-1), as AutoCAD
+  Electrical can. X Zones (columns only, IEC) not planned (owner: "Who uses just the x grid?").
+
+## Owner's list after 0.21.4 (Nov 2026), in order
+1. Ladder references (0.22, above).
+2. Auto wire layer: a wire started on a PLC I/O pin or a motor/drive terminal takes its
+   voltage's layer (mapping to confirm with the owner; per-pin defaults in the block editor).
+3. Terminal strips: strips, jumpers, a strip editor, a terminal plan report.
+4. Panel wiring: from/to lists, then point-to-point wiring diagrams (which form: to confirm).
+5. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints
+   (families to confirm). Templates library: not now.
+
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,
 cross-references, wire numbers, off-sheet connectors, more symbols), then the panel.

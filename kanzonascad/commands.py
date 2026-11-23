@@ -2051,6 +2051,11 @@ class BusCmd(Command):
         then = getattr(self.ctx, "_bus_k", None)
         if then:
             self.spacing *= self.ctx.sheet().k() / then
+        # (the spacing kept for the next bus: the one chosen (typed, or kept from before), not
+        # one taken from the pins or wires a bus started on: 1/2" between a drive's pins on a
+        # 1:58 sheet, carried to a 1:1 one as the same on paper, put the next bus's wires
+        # 0.0086" apart, the battery's seed 4421)
+        self.chosen = self.spacing
         self.layers = list(getattr(self.ctx, "_bus_layers", ["WIRES"]))
         self.straight = bool(getattr(self.ctx, "_bus_straight", False))
         self.blocked = None             # (the symbol a click couldn't go round: _around)
@@ -2149,7 +2154,7 @@ class BusCmd(Command):
 
     def _ask_start(self):
         self.step = "path"
-        self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.spacing
+        self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.chosen
         self.ctx._bus_k = self.ctx.sheet().k()
         if self.points:
             self.ctx.prompt("Specify next %s (Enter ends the bus)" % (
@@ -2171,7 +2176,7 @@ class BusCmd(Command):
         if self.step == "spacing":
             if v <= 0:
                 return False
-            self.spacing = v
+            self.spacing = self.chosen = v
             self._ask_start()
             return True
         return False
@@ -3449,6 +3454,148 @@ class DashBoxCmd(Command):
                 abs(p[1] - self.first[1]) < 1e-9:
             return []
         return [M.DashBox.from_corners(self.first, p, height=self._height())]
+
+
+class LadderCmd(Command):
+    """LADDER: a ladder (the owner, 0.22: ladder references): the top of its left rail, the
+    top of its right rail (or its width typed), then its bottom (or how many rungs, or Enter: to
+    the bottom of the sheet's room). Its rungs are numbered from the page (600, 601... on page
+    6; Project properties sets 6-01 instead), carrying on from the ladder to its left; F sets a
+    first number of its own, S the rungs' spacing."""
+    name, title = "LADDER", "Ladder"
+
+    def begin(self):
+        k = self.ctx.sheet().k()
+        self.spacing = float(getattr(self.ctx, "_ladder_spacing", None) or
+                             self.ctx.project.settings.get("ladder_spacing", 0.5)) * k
+        self.first = None
+        self.a = self.b = None
+        self.asking = None
+        self._ask()
+
+    def _ask(self):
+        if self.asking == "first":
+            self.ctx.prompt("First rung number (Enter: worked out from the page)")
+        elif self.asking == "spacing":
+            self.ctx.prompt("Rungs this far apart, inches on paper <%s>" % _fmt(
+                self.spacing / self.ctx.sheet().k()))
+        elif self.a is None:
+            self.ctx.prompt("Specify top of the left rail", [("First number", "F"),
+                                                             ("Spacing", "S")])
+        elif self.b is None:
+            self.ctx.prompt("Specify top of the right rail (or type the width)")
+        else:
+            self.ctx.prompt("Specify bottom of the ladder (or type how many rungs; Enter: %d)"
+                            % self._fill())
+
+    def _fill(self):
+        """How many rungs reach the bottom of the sheet's room from the top rung."""
+        from .scalefit import room
+        k = self.ctx.sheet().k()
+        bottom = room(self.ctx.project, self.ctx.sheet())[0][1] * k
+        return max(1, int((self.a[1] - bottom) / self.spacing + 1e-9) + 1)
+
+    def _ladder(self, rungs):
+        k = self.ctx.sheet().k()
+        return M.Ladder(self.a, self.b, rungs, self.spacing, self.first,
+                        height=float(self.ctx.project.settings.get("tag_height", 0.1)) * k)
+
+    def text(self, s):
+        k = s.strip().upper()
+        if self.asking == "first":
+            self.asking = None
+            if k:
+                try:
+                    self.first = int(k)
+                except ValueError:
+                    self.ctx.message("Type a whole number (603), or Enter")
+                    self.asking = "first"
+            self._ask()
+            return True
+        if self.a is None and k in ("F", "S"):
+            self.asking = {"F": "first", "S": "spacing"}[k]
+            self._ask()
+            return True
+        return False
+
+    def number(self, v):
+        if self.asking == "spacing":
+            if v <= 0:
+                return False
+            self.spacing = v * self.ctx.sheet().k()
+            self.ctx._ladder_spacing = v
+            self.asking = None
+            self._ask()
+            return True
+        if self.asking == "first":
+            if int(v) != v:
+                return False
+            self.first = int(v)
+            self.asking = None
+            self._ask()
+            return True
+        if self.a is not None and self.b is None and v > 0:
+            self.point((self.a[0] + v * self.ctx.sheet().k(), self.a[1]))
+            return True
+        if self.b is not None and v >= 1 and int(v) == v:
+            self._make(int(v))
+            return True
+        return False
+
+    def point(self, p):
+        if self.asking:
+            return
+        if self.a is None:
+            self.a = self.base = self.last = p
+        elif self.b is None:
+            if p[0] - self.a[0] <= 1e-9:
+                self.ctx.message("The right rail goes to the right of the left one")
+                return
+            # (square: the rails' tops level)
+            self.b = self.last = (p[0], self.a[1])
+        else:
+            down = self.a[1] - p[1]
+            self._make(max(1, int(round(down / self.spacing)) + 1))
+            return
+        self._ask()
+
+    def enter(self):
+        if self.asking:
+            self.asking = None
+            self._ask()
+            return
+        if self.b is not None:
+            self._make(self._fill())
+            return
+        Command.enter(self)
+
+    def _make(self, rungs):
+        lad = self._ladder(rungs)
+        project = self.ctx.project
+        with self.ctx.edit("Ladder") as ed:
+            if lad.layer not in project.layers:
+                ed.layer(lad.layer, None, M.Layer(lad.layer, M.ADAPTIVE).to_dict())
+            lad = ed.add(self.ctx.sheet(), lad)
+        lad = self.ctx.sheet().entities.get(lad.id, lad)
+        nums = lad.numbers()
+        note = ""
+        if project.referencing(self.ctx.sheet()) != "ladder":
+            note = " (places still read by grid: Project properties, References, Ladder)"
+        self.ctx.message("Ladder, rungs %s to %s%s" % (nums[0], nums[-1], note))
+        self.finish()
+
+    def preview(self, p):
+        if self.asking or self.a is None:
+            return []
+        if self.b is None:
+            if p[0] - self.a[0] <= 1e-9:
+                return []
+            self.b = (p[0], self.a[1])
+            try:
+                return [self._ladder(self._fill())]
+            finally:
+                self.b = None
+        return [self._ladder(max(1, int(round((self.a[1] - p[1]) / self.spacing)) + 1))]
 
 
 def _add_box(ctx, sheet_id, box, text, device):
@@ -5682,6 +5829,7 @@ COMMANDS = {
     "USETITLEBLOCK": (UseTitleBlockCmd, ["USETB", "TBUSE"]),
     "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
     "DASHBOX": (DashBoxCmd, ["DB", "DBOX", "BOX"]),
+    "LADDER": (LadderCmd, ["LAD", "LADR"]),
     "ARRAY": (ArrayCmd, ["AR", "ARRAYRECT", "ARRAYPOLAR"]),
     "ARRAYEDIT": (ArrayEditCmd, ["AE"]),
     "OFFSET": (OffsetCmd, ["O"]),

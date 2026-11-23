@@ -165,6 +165,16 @@ def sheet_properties(parent, project, sheet):
     worder.setToolTip("The order wire numbers go in on this sheet: the tags' numbering order "
                       "(along the wires too), or across and down")
     form.addRow("Wire numbers in", worder)
+    srefs = QComboBox()
+    srefs.setObjectName("sheet_referencing")
+    srefs.addItem("As the project (%s)" % ("ladder" if project.settings.get("referencing") ==
+                                          "ladder" else "grid"), None)
+    srefs.addItem("Grid (6-D1)", "grid")
+    srefs.addItem("Ladder (the rung: 603)", "ladder")
+    srefs.setCurrentIndex(max(srefs.findData(sheet.referencing), 0))
+    srefs.setToolTip("How places on this sheet are given in cross-references and reports: as "
+                     "Project properties says, or by grid or by ladder on this sheet")
+    form.addRow("References", srefs)
     from . import wirelayers
     wlay = QComboBox()
     wlay.setObjectName("sheet_wire_layer")
@@ -241,6 +251,7 @@ def sheet_properties(parent, project, sheet):
                    own_layout=own.isChecked(), fields=fields, kind=kind.currentData(),
                    number_order=order.currentData(), location=loc.text().strip(),
                    wire_order_tags=worder.currentData(),
+                   referencing=srefs.currentData(),
                    wire_layer=wlay.currentData() if wlay.currentData() != own_wl
                    else sheet.wire_layer,
                    show_border=shows["show_border"].currentData(),
@@ -371,6 +382,32 @@ def project_properties(parent, project, tab=0):
     zf = QLineEdit(project.zone_format)
     zf.setToolTip("{sheet}, {row} and {col} are replaced: {sheet}-{row}{col} gives 6-D1")
     form.addRow("Grid reference format", zf)
+    # (by grid or by ladder, 0.22: the owner, "Let's do ladder references as an option")
+    refs = QComboBox()
+    refs.setObjectName("referencing")
+    refs.addItem("Grid (6-D1)", "grid")
+    refs.addItem("Ladder: the rung a device is on (603)", "ladder")
+    refs.setCurrentIndex(max(refs.findData(st.get("referencing", "grid")), 0))
+    refs.setToolTip("How cross-references, reports and the status bar give a device's place. "
+                    "Ladder: the number of the rung it is on (Draw > Ladder); off every "
+                    "ladder, its grid zone. A sheet can choose otherwise (Sheet properties).")
+    form.addRow("References", refs)
+    rung_nums = QComboBox()
+    rung_nums.setObjectName("ladder_numbers")
+    rung_nums.addItem("The page times 100 on (page 6: 600, 601, 602...)", "hundreds")
+    rung_nums.addItem("The page, a dash, the rung (6-01, 6-02...)", "prefix")
+    rung_nums.setCurrentIndex(max(rung_nums.findData(st.get("ladder_numbers", "hundreds")), 0))
+    rung_nums.setToolTip("How ladders number their rungs (a ladder can be given a first "
+                         "number of its own: double-click it)")
+    form.addRow("Rung numbers", rung_nums)
+    rung_sp = QDoubleSpinBox()
+    rung_sp.setObjectName("ladder_spacing")
+    rung_sp.setDecimals(4)
+    rung_sp.setRange(0.0625, 10)
+    rung_sp.setSuffix(" in")
+    rung_sp.setValue(float(st.get("ladder_spacing", 0.5)))
+    rung_sp.setToolTip("How far apart a new ladder's rungs are, on paper")
+    form.addRow("Rung spacing (new ladders)", rung_sp)
     text_h = QDoubleSpinBox()
     text_h.setDecimals(4)
     text_h.setRange(0.01, 5)
@@ -707,6 +744,9 @@ def project_properties(parent, project, tab=0):
         settings[key] = [float(k), name]
     settings["text_height"] = text_h.value()
     settings["tb_position"] = tbpos.currentData()
+    settings["referencing"] = refs.currentData()
+    settings["ladder_numbers"] = rung_nums.currentData()
+    settings["ladder_spacing"] = rung_sp.value()
     settings["show_border"] = show_border.isChecked()
     settings["show_title_block"] = show_tb.isChecked()
     settings["tag_height"] = tag_h.value()
@@ -2630,3 +2670,42 @@ def assign_part_dialog(parent, parts, brand):
     if dlg.exec() != QDialog.Accepted or lst.currentItem() is None:
         return None
     return lst.currentItem().data(Qt.UserRole), brand_box.text().strip()
+
+
+def ladder_dialog(parent, lad, k):
+    """A ladder's first rung number (blank: worked out from the page and the ladders before
+    it), how many rungs, and their spacing on paper: (first or None, rungs, spacing) or
+    None."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Ladder")
+    form = QFormLayout(dlg)
+    first = QLineEdit("" if lad.first is None else str(lad.first))
+    first.setObjectName("ladder_first")
+    first.setPlaceholderText("worked out: %s" % (lad.number(0) or "from the page"))
+    first.setToolTip("Blank: carries on from the page (600 on page 6) and the ladder to its "
+                     "left. A number: this ladder's first rung, whatever the page")
+    form.addRow("First rung number", first)
+    rungs = QSpinBox()
+    rungs.setObjectName("ladder_rungs")
+    rungs.setRange(1, 999)
+    rungs.setValue(lad.rungs)
+    form.addRow("Rungs", rungs)
+    spacing = QDoubleSpinBox()
+    spacing.setObjectName("ladder_spacing_one")
+    spacing.setDecimals(4)
+    spacing.setRange(0.0625, 10)
+    spacing.setSuffix(" in")
+    spacing.setValue(lad.spacing / k)
+    form.addRow("Rung spacing (on paper)", spacing)
+    form.addRow(_buttons(dlg))
+    while True:
+        if dlg.exec() != QDialog.Accepted:
+            return None
+        t = first.text().strip()
+        if not t:
+            return None, rungs.value(), spacing.value()
+        try:
+            return int(t), rungs.value(), spacing.value()
+        except ValueError:
+            QMessageBox.warning(parent, "Ladder", "Type the first rung number as a whole "
+                                                  "number (603), or leave it blank.")

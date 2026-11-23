@@ -39,6 +39,13 @@ BUDGET = {
     "pdf_in": 4.0,              # a PDF page of 6,000 lines and 2,000 texts read (Import PDF)
     "lasso_move": 0.03,         # a mouse move dragging a lasso around half that sheet (average)
     "lasso_pick": 1.0,          # what the lasso caught, worked out when the button is let go
+    # (0.22: ladders, as a new kind of object must be measured) a sheet of 100 ladders of 40
+    # rungs (4,000 rung numbers):
+    "ladders_open": 2.0,        # added, numbered and drawn
+    "ladders_zoom": 2.0,        # ten zoomed repaints
+    "ladders_move": 1.0,        # all moved in one edit (renumbered), then drawn
+    "ladders_undo": 1.0,        # that undone, then drawn
+    "ladder_refs": 0.5,         # 2,000 places read by rung (cross-references, reports)
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
                                 # 2,000 devices, half of them in the field
 }
@@ -795,6 +802,60 @@ def run(log_path):
                 "DXF of 1,000 blocks imported %.2f s (%d objects), BOM %.3f s"
                 % (do, dz, dl * 1000, caught, dp, dm, du, di, got["count"], db))
     log.check("speed budget (notes, hatches, leaders, imports)", notes_sheet)
+
+    def ladder_sheet():
+        w = state["win"]
+        p = M.Project.new()
+        s = p.sheets[0]
+        t = time.perf_counter()
+        with p.edit("Ladders") as ed:
+            ed.layer("LADDER", None, M.Layer("LADDER", M.ADAPTIVE).to_dict())
+            ed.project_settings({"referencing": "ladder"})
+            for i in range(100):
+                x, y = 1.0 + (i % 10) * 1.5, 30.0 + (i // 10) * 21.0
+                ed.add(s, M.Ladder((x, y), (x + 1.2, y), rungs=40, spacing=0.5, height=0.1))
+        d = w.add_document(p)
+        v = d.view
+        v.zoom("extents")
+        v.repaint()
+        app.processEvents()
+        do = time.perf_counter() - t
+        lads = s.ladders()
+        assert len(lads) == 100 and lads[-1].number(39), "the ladders aren't numbered"
+        assert do < BUDGET["ladders_open"], "100 ladders added and drawn in %.2f s" % do
+        t = time.perf_counter()
+        for _k in range(10):
+            v.zoom_at(1.25, None)
+            v._moving_until = 0.0
+            v.repaint()
+        dz = time.perf_counter() - t
+        assert dz < BUDGET["ladders_zoom"], "ten zoomed repaints took %.2f s" % dz
+        t = time.perf_counter()
+        hits = 0
+        for i in range(2000):
+            lad = lads[i % 100]
+            q = (lad.a[0] + 0.6, lad.a[1] - (i % 40) * 0.5)
+            hits += p.zone_text(s, *q) == lad.number(i % 40)
+        dr = time.perf_counter() - t
+        assert hits == 2000, "%d of 2,000 places read their rung" % hits
+        assert dr < BUDGET["ladder_refs"], "2,000 places read by rung in %.2f s" % dr
+        t = time.perf_counter()
+        with p.edit("Move") as ed:
+            for lad in list(s.ladders()):
+                ed.change(s, s.entities[lad.id].moved(0.25, 0.0))
+        v.repaint()
+        dm = time.perf_counter() - t
+        assert dm < BUDGET["ladders_move"], "100 ladders moved in %.2f s" % dm
+        t = time.perf_counter()
+        p.undo()
+        v.repaint()
+        du = time.perf_counter() - t
+        assert du < BUDGET["ladders_undo"], "the move undone in %.2f s" % du
+        p.saved_at = len(p.undo_stack)
+        w.close_tab(w.tabs.indexOf(d))
+        return ("100 ladders, 4,000 rungs: drawn %.2f s, 10 zooms %.2f s, 2,000 places by rung "
+                "%.3f s, moved %.2f s, undone %.2f s" % (do, dz, dr, dm, du))
+    log.check("speed budget (ladders)", ladder_sheet)
 
     def pull_list():
         from . import pull
