@@ -42,6 +42,10 @@ build fails without them.
   back to how it was), and copies showing their pin names show it so.
 - Pin names on a placed block no longer land on top of each other near a corner (PE2 and T3
   on a drive): a pin on the bottom edge reads as a bottom pin.
+- A bus carried on from its open ends in the direction its ends lie, onto a device's
+  terminals, no longer runs one wire through the next one's end (a dot) or back over its own
+  wire: each wire goes on the way it was heading, then turns. A click that would take the
+  wires straight back over their own is refused with a message.
 
 ## 0.22.1
 

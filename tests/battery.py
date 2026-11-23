@@ -3868,9 +3868,41 @@ def random_editing(log, out, ops, seed, drawing=None):
             m = re.fullmatch(r"(.+?)-\d+[a-z]*", n)
             if m and m.group(1) in nums:
                 tapped.setdefault(m.group(1), set()).add(n)
-        want_t = sum(1 + len(v) for v in tapped.values())
-        want_j = sum(len(v) for v in tapped.values())
         rows, (got_t, got_j) = reports.terminal_count_rows(p)
+        # (a tap that lands on a PLC point, numbered by its address, has no -1 to go by: the
+        # seed 44's O:3/3 tapped by Local:9:O.Data.1. It counts only when it really is the
+        # address of a PLC point on the project, and every other tap is a -1 of its own number)
+        addrs = set()
+        if wirenums.by_io_address(p):
+            for got in wirenums._assemble_all(p)[5].values():
+                addrs.update(got)
+        # each row a family (its number and its taps); which of them heads the row isn't
+        # checked here (two wires each tapping the other: seed 12's 1006A and 1006A-1)
+        want_fams = [{b} | v for b, v in tapped.items()]
+        extra = 0
+        for r in rows:
+            fam = {r[0]} | {t.strip() for t in r[1].split(",") if t.strip()}
+            mine = [f for f in want_fams if f & fam]
+            named = set().union(*mine) if mine else set()
+            other = fam - named
+            assert named <= fam, "Terminal count: %s's family %s left out" % (
+                r[0], sorted(named - fam))
+            # (with no -1 among them, all but one, whichever heads it, are addresses)
+            odd = other - addrs if mine else (set() if len(fam - addrs) <= 1 else fam - addrs)
+            assert not odd, \
+                "Terminal count: %s's taps %s neither -1, -2... nor a PLC address" % (
+                    r[0], sorted(odd))
+            if other:
+                extra += len(other) if mine else len(other) - 1
+                BC.CHECKED["terminal count: a tap numbered by its PLC address"] += 1
+            if not mine:
+                want_fams.append(set())         # (a family of an address tap alone)
+        for f in want_fams:
+            if f and not any(f & ({r[0]} | {t.strip() for t in r[1].split(",")}) for r in rows):
+                raise AssertionError("Terminal count: tapped %s left out" % sorted(f))
+        want_t = sum(len(f) for f in want_fams if f) + extra + \
+            sum(1 for f in want_fams if not f)
+        want_j = sum(len(f) - 1 for f in want_fams if f) + extra
         assert (got_t, got_j) == (want_t, want_j), \
             "Terminal count: %d terminals, %d jumpers; from the numbers %d, %d" % (
                 got_t, got_j, want_t, want_j)
