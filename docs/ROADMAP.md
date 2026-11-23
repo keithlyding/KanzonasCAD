@@ -86,6 +86,13 @@ nobody understands).
   today), AutomationDirect T1/T1E duct sizes (actual sizes from AD's spec sheets, waiting on
   the owner's look at the table).
 
+- 0.22 (owner, Nov 2026: "the ability to not just do grid style cross references but also the
+  line by line ones"; "Let's do ladder references as an option"): ladders (Draw > Ladder) and
+  References Grid or Ladder for the project and per sheet; rungs numbered from the page (600,
+  601... by default; 6-01 as the other style), a second ladder carrying on from the first.
+  Not yet (offer): device tags and wire numbers from the rung (CR603, 603-1), as AutoCAD
+  Electrical can. X Zones (columns only, IEC) not planned (owner: "Who uses just the x grid?").
+
 - 0.22.1 (owner, Nov 2026: "Yes, on the auto wire layer"): a wire takes its layer from the pin
   it starts on (PLC points 24VDC BLU, commons BLU-WHT, motor/drive power 480V BLK, ground 480V
   GRN, transformer X1/X2 120V RED/WHT, power supply L/N/+/-), and a pin's own wire layer in
@@ -94,6 +101,16 @@ nobody understands).
   each footprint terminal labeled with its wire number and where it goes); symbols "lean heavy
   on the Allen Bradley stuff" and "also put in IEC symbols" (IEC 60617 as a per-project symbol
   set: changes AGENTS.md's US-only line when it lands).
+
+## Owner's list after 0.21.4 (Nov 2026), in order
+1. Ladder references (0.22, above).
+2. Auto wire layer (0.22.1, above).
+3. Terminal strips: strips, jumpers, a strip editor, a terminal plan report.
+4. Panel wiring: a per-device wiring list (owner: yes); point-to-point as wire labels on the
+   footprints' terminals, not a drawn diagram (see 0.22.1).
+5. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints: "lean
+   heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates library: not
+   now.
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,

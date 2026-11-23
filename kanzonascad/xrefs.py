@@ -37,7 +37,10 @@ def _signature(project):
                    s.col_start, s.row_start) for s in project.sheets),
             project.zone_format, project.settings.get("xref_height"),
             project.settings.get("xref_device", True),
-            tuple(s.xref_device for s in project.sheets))
+            tuple(s.xref_device for s in project.sheets),
+            # (by ladder or by grid, 0.22: the rung numbers come with the sheets' versions)
+            project.settings.get("referencing"), project.settings.get("ladder_numbers"),
+            tuple(getattr(s, "referencing", None) for s in project.sheets))
 
 
 def shows_device(project, sheet, ins):
