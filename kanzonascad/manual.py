@@ -656,7 +656,7 @@ operator, one line per contact, <b>NO 6-D3</b> or <b>NC 7-B2</b> (in sheet order
 order); under each contact, where its device is (<b>6-D1</b>). They use the project's grid
 reference format and each sheet's zones (or, by ladder, the rung: <b>NC 605</b>, <b>603</b>;
 see Ladders), and go into PDF and DXF exports as text.</li>
-<li><b>Ladders</b> (LADDER, LAD; Draw menu and the Schematic tab, Draw): a ladder's two rails,
+<li><b>Ladders</b> (LADDER, LAD; Draw menu, and the Schematic tab: Draw, the Dashed box button's menu): a ladder's two rails,
 its rungs numbered down the left of the left rail. Click the top of the left rail, then the top
 of the right rail (or type the width; the rails stay level), then the bottom (or type how many
 rungs, or Enter: down to the bottom of the sheet). Before the first click, <b>F</b> gives it a

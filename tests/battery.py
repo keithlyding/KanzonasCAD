@@ -507,6 +507,10 @@ def mouse_drag(v, rnd):
     # 0.19.10, so its box changes size: its place is checked instead)
     was_at = {i: (s.entities[i].pos, s.entities[i].hidden) for i in v.sel
               if isinstance(s.entities[i], M.Insert)}
+    # (a ladder dragged past another is numbered on from it, and its box takes the numbers'
+    # widths: its rails are checked instead, as Move's check, seed 4401)
+    rails = {i: (s.entities[i].a, s.entities[i].b) for i in v.sel
+             if isinstance(s.entities[i], M.Ladder)}
     w0, w1 = v.to_world(QPointF(start)), v.to_world(QPointF(end))
     d = (w1[0] - w0[0], w1[1] - w0[1])
     # wires and symbols with pins are dragged with Snap on, as they are drawn (a freehand drag
@@ -543,6 +547,12 @@ def mouse_drag(v, rnd):
                 "dragged %s by %s, it moved %s" % (e.block, d, (e.pos[0] - pos[0],
                                                                 e.pos[1] - pos[1]))
             BC.CHECKED["drag: a contact block's tag on or off its dashed line"] += 1
+            continue
+        if i in rails:
+            for q0, q1 in zip(rails[i], (e.a, e.b)):
+                assert all(abs(q1[k] - q0[k] - d[k]) <= tol + 1e-9 for k in range(2)), \
+                    "dragged a ladder by %s, its rails moved %s" % (d, (q1[0] - q0[0],
+                                                                       q1[1] - q0[1]))
             continue
         assert all(abs(nb[k] - b[k] - d[k % 2]) <= tol + 1e-9 for k in range(4)), \
             "dragged %s by %s, it moved %s (its box %s to %s)" % (
@@ -1358,6 +1368,10 @@ def random_editing(log, out, ops, seed, drawing=None):
         assert len(new) == want, "Array made %d objects, not %d" % (len(new), want)
         if shifts:
             def key(e):
+                # (a ladder by its left rail's top: its copies are numbered on, their numbers
+                # other widths)
+                if isinstance(e, M.Ladder):
+                    return e.a
                 return e.pos if isinstance(e, M.Insert) else e.bbox()[:2]
             # (matched within a millionth, not rounded to six places: 0.1666625 and a hair
             # under it round apart, a copy's place a trillionth off was taken as wrong, CI
@@ -1608,6 +1622,19 @@ def random_editing(log, out, ops, seed, drawing=None):
                 assert (now.angle, now.mirror, now.scale, now.block) == \
                     (e.angle, e.mirror, e.scale, e.block), "moving %s %d turned or changed it" % (
                         e.block, i)
+                continue
+            if isinstance(e, M.Ladder):
+                # (a ladder by its rails: moved past another, it is numbered on from that one,
+                # and numbers of other widths make its box another width, seed 4401; its rails
+                # moved as typed, its rungs and spacing as they were)
+                for q0, q1 in ((e.a, now.a), (e.b, now.b)):
+                    assert all(abs(q1[j] - q0[j] - d[j]) <= 1e-6 * max(1.0, abs(q0[j]))
+                               for j in range(2)), "Ladder %d moved %s, not %s" % (
+                        i, (q1[0] - q0[0], q1[1] - q0[1]), d)
+                assert (now.rungs, now.spacing) == (e.rungs, e.spacing), \
+                    "moving Ladder %d changed its rungs" % i
+                if now.numbers() != e.numbers():
+                    BC.CHECKED["a ladder moved past another numbered on from it"] += 1
                 continue
             b0, b1 = e.bbox(), now.bbox()
             assert all(abs(b1[j] - b0[j] - d[j % 2]) <= 1e-6 * max(1.0, abs(b0[j]))

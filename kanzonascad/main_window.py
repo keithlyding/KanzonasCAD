@@ -810,8 +810,10 @@ class MainWindow(BlockEditing, QMainWindow):
         # order), Modify, Dimensions; the tab's own groups; then Parts, Layers and Settings at
         # the right end
         r.add_tab("Schematic", [
-            ("Draw", "large", [a["wire"], a["bus"], a["ladder"], a["wire_cross"],
-                               a["dash_box"]]),
+            # (Ladder shares a button with Dashed box: a fifth button made the tab too wide
+            # for a 1000-pixel window on Linux's fonts, 0.22)
+            ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"],
+                               split_button([a["dash_box"], a["ladder"]])]),
             # (the owner, 0.18: "0.17.4's schematic ribbon goes off the screen. Block
             # properties should generally only be visible when editing/creating a block":
             # Edit block here, the rest on the Block tab; a tab too wide for the window
