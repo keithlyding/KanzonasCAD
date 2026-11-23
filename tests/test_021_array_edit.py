@@ -69,7 +69,7 @@ class ArrayEditTest(unittest.TestCase):
     def test_a_source_with_its_tag_hidden_keeps_its_copies(self):
         # (a contact block on a pushbutton's dashed line hides its tag, its copies off the line
         # show theirs: the copies were taken for ones that had left the array, and Edit array
-        # left them where they were; the battery, 0.22.5, seed 469)
+        # left them where they were; the battery, 0.22.4, seed 469)
         aid = self.make()
         copies = sorted(arrays.members(self.s, aid))
         self.assertEqual(len(copies), 2)

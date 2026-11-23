@@ -87,7 +87,7 @@ class BusAlongItsEndsTest(unittest.TestCase):
             self.assertEqual(len(got), 1, x)
 
     def test_not_back_over_its_wires_side_on(self):
-        # (the battery, 0.22.5, seed 468: four ends one above another, their wires coming in
+        # (the battery, 0.22.4, seed 468: four ends one above another, their wires coming in
         # from the right; the bus carried on straight to the right ran each new wire back over
         # its own wire's last leg)
         said = []

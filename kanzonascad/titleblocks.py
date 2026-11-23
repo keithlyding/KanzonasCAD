@@ -1,5 +1,5 @@
 """Title blocks kept in your library: the ready-made ones (in the lower right corner, a right-hand
-strip or a bottom strip) and those you save (the owner, 0.22.5: "I don't want to lose the
+strip or a bottom strip) and those you save (the owner, 0.22.4: "I don't want to lose the
 default title block as an option though. I think I should be able to save as a new title block
 and then select default ones or different variations I've made. I also want to be able to put
 my company's logo in the title block"). One file each in the library folder's "Title blocks"

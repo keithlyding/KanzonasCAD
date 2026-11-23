@@ -6,28 +6,6 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
-## 0.22.5
-
-**New**
-- Title blocks you keep: Save as title block... (in the title block's tab) keeps yours in your
-  library by name; Title blocks... (Sheets) puts one in any project, a ready-made one (corner,
-  right-hand strip or bottom strip) or one of yours. Undo puts the old one back.
-- Your logo in the title block: Picture or SVG is on the Title block tab.
-- Wire colors in the gauge labels on every wire at once (16 AWG BLU): Project properties,
-  Schematic, "...and its color". Wire color label still turns it on or off for single wires.
-
-**Changed**
-- Edit title block opens the title block in a tab of its own, as Edit block opens a block, with
-  a Title block ribbon tab. Save title block (or Ctrl+S) puts it in the project and takes you
-  back to your drawing, on the Sheets tab; Close title block leaves it as it was, asking first
-  if you changed anything.
-
-**Fixed**
-- PLC modules brought in with Import I/O list were lost when the project was saved and opened
-  again.
-- A bus carried on from its ends onto wires side by side could run its wires back over their
-  own; it's refused with a message now.
-
 ## 0.22.4
 
 **New**
@@ -36,9 +14,24 @@ build fails without them.
   (Sheet properties), and so can a single tap (double-click it: Wire number window).
 - A tap off a tap takes the other kind: 2007-1a, 2007a1, 2007-a1. Letters are lowercase, so a
   tap isn't mistaken for a distribution outlet's 2007A.
+- Title blocks you keep: Save as title block... (in the title block's tab) keeps yours in your
+  library by name; Title blocks... (Sheets) puts one in any project, a ready-made one (corner,
+  right-hand strip or bottom strip) or one of yours. Undo puts the old one back.
+- Your logo in the title block: Picture or SVG is on the Title block tab.
+- Wire colors in the gauge labels on every wire at once (16 AWG BLU): Project properties,
+  Schematic, "...and its color". Wire color label still turns it on or off for single wires.
+- A new version is now announced as in KanzonasPDF: a notice at the bottom of the window (no
+  window pops up) with What's new, Update now, Download, Skip this version and Later.
+- Help > Check for updates... (and What's new) shows what's new since your version, what Update
+  now does for your copy, and the buttons Update now, Download and Later.
+- While the new version downloads, a window shows its progress, with Cancel.
 
 **Changed**
 - A tap three levels down is now 2007-1a1 (it was 2007-1aa).
+- Edit title block opens the title block in a tab of its own, as Edit block opens a block, with
+  a Title block ribbon tab. Save title block (or Ctrl+S) puts it in the project and takes you
+  back to your drawing, on the Sheets tab; Close title block leaves it as it was, asking first
+  if you changed anything.
 
 **Fixed**
 - Footprint label color (Project properties, Panel) works again: a footprint's tag and other
@@ -46,6 +39,14 @@ build fails without them.
 - Switching the title block to a strip and back to the corner (Replace the title block with
   one made for this position) gives you back the title block you had there, with your edits,
   instead of a ready-made one.
+- PLC modules brought in with Import I/O list were lost when the project was saved and opened
+  again.
+- A bus carried on from its ends onto wires side by side could run its wires back over their
+  own; it's refused with a message now.
+- If an update with the setup didn't finish, KanzonasCAD now says so the next time it starts
+  and offers to run the setup again.
+- Edit array moved only some copies of a contact block sitting on a pushbutton's dashed line;
+  it moves them all now.
 
 ## 0.22.3
 

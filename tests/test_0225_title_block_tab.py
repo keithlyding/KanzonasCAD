@@ -1,4 +1,4 @@
-"""The title block edited in a tab of its own, as a block is (the owner, 0.22.5: "when editing the
+"""The title block edited in a tab of its own, as a block is (the owner, 0.22.4: "when editing the
 title block, the tab goes back to schematic, and it's not intuitive on how to save the title
 block and get back to the main screen ... the title block should be edited in its own
 window/tab, just like editing a block"): Edit title block opens it with the Title block ribbon

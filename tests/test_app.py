@@ -397,7 +397,7 @@ class TitleBlockTest(unittest.TestCase):
         self.assertAlmostEqual(y1, h - s.MARGIN - s.STRIP)
 
     def test_edit_title_block_in_its_own_tab(self):
-        # (0.22.5: a tab of its own, as a block's; tests/test_0225_title_block_tab.py)
+        # (0.22.4: a tab of its own, as a block's; tests/test_0225_title_block_tab.py)
         w, v = window()
         try:
             w.acts["edit_tb"].trigger()

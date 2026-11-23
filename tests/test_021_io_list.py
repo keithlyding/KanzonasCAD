@@ -76,7 +76,7 @@ class IoListTest(unittest.TestCase):
 
     def test_modules_kept_when_saved_and_opened(self):
         # (the module's block wasn't put in the project: after saving and opening, the sheet
-        # showed nothing where the module was; the battery, 0.22.5, seed 44)
+        # showed nothing where the module was; the battery, 0.22.4, seed 44)
         made = self.win.import_io_list(self.path)
         for s in made:
             for e in s.inserts():

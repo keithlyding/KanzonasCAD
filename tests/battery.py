@@ -136,7 +136,7 @@ class Log:
 def blocks_known(project, sheet):
     """Every block copy on the sheet has its block in the project (saved with it): Import I/O
     list put modules on new sheets without theirs, gone once the project was opened again (the
-    battery, 0.22.5, seed 44)."""
+    battery, 0.22.4, seed 44)."""
     for e in sheet.inserts():
         assert e.block in project.blocks, \
             "%s on sheet %s isn't one of the project's blocks" % (e.block, sheet.id)
@@ -2522,7 +2522,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         if not ws:
             return
         if rnd.random() < 0.2:
-            # (0.22.5: the project's "...and its color" turned on or off: every wire without a
+            # (0.22.4: the project's "...and its color" turned on or off: every wire without a
             # choice of its own follows it)
             with p.edit("wire colors") as ed:
                 ed.project_settings({"wire_color_shown": not p.settings.get("wire_color_shown")})
@@ -2752,7 +2752,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         finish()
 
     def op_title_block():
-        # (0.22.5) Edit title block in a tab of its own: a line drawn there, then Save title
+        # (0.22.4) Edit title block in a tab of its own: a line drawn there, then Save title
         # block (in the project, one step, back to the drawing) or Close title block and
         # Discard (the project's as it was)
         from unittest import mock
@@ -2787,7 +2787,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 t.cancel()
         drawn = lines(d.project) != before
         if rnd.random() < 0.3:
-            # (0.22.5: Save as title block: kept in the library by name, the tab still open)
+            # (0.22.4: Save as title block: kept in the library by name, the tab still open)
             from kanzonascad import titleblocks as TBL
             name = "Battery %d" % rnd.randint(1, 3)
             with mock.patch.object(win, "ask_title_block_name", return_value=name), \
@@ -2812,7 +2812,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert lines(p) == before, "a title block closed without saving changed"
             BC.CHECKED["title block closed without saving"] += 1
         if rnd.random() < 0.3:
-            # (0.22.5: Title blocks...: a ready-made one or one of the library's put in the
+            # (0.22.4: Title blocks...: a ready-made one or one of the library's put in the
             # project, where it sits; checked against the library's own copy)
             from kanzonascad import titleblocks as TBL
             name = rnd.choice([n for n, _b in TBL.names(win.library)])

@@ -50,7 +50,7 @@ def _shape(e):
     its id and, for a symbol, its tag and links (a copy has a tag of its own) and which of them
     are hidden (a contact block on a pushbutton's dashed line hides its tag, its copies off the
     line show theirs: they were taken for copies that had left the array, and Edit array left
-    them where they were; the battery, 0.22.5, seed 469)."""
+    them where they were; the battery, 0.22.4, seed 469)."""
     d = e.to_dict()
     d.pop("id", None)
     if isinstance(e, M.Insert):

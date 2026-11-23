@@ -3,6 +3,7 @@ project, the Sheets panel, the command line and the status bar with the drafting
 
 import json
 import os
+import sys
 
 from PySide6.QtCore import Qt, QMimeData, QTimer, QByteArray, QPoint
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QGuiApplication
@@ -10,7 +11,7 @@ from PySide6.QtWidgets import (QMainWindow, QTabWidget, QDockWidget, QListWidget
                                QListWidgetItem, QFileDialog, QMessageBox, QLabel, QToolBar,
                                QToolButton, QComboBox, QMenu, QApplication,
                                QDialog, QVBoxLayout, QTextBrowser, QDialogButtonBox, QWidget,
-                               QTabBar, QAbstractItemView)
+                               QTabBar, QAbstractItemView, QSizePolicy)
 
 from . import __version__
 from . import commands as C
@@ -951,7 +952,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
     def _build_status(self):
         sb = self.statusBar()
         self.coords = QLabel()
-        self.coords.setMinimumWidth(300)
+        self.coords.setMinimumWidth(300)      # (0 while the update notice shows)
         sb.addWidget(self.coords)
         for key in ("grid", "snap", "ortho", "polar", "osnap"):
             b = QToolButton()
@@ -3938,7 +3939,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
                                    app_title())
         self.setWindowTitle(title)
 
-    # ---- updates ---------------------------------------------------------------------------
+    # ---- updates (shown and worded as KanzonasPDF's) ----------------------------------------
     def _checker(self):
         if getattr(self, "_update_checker", None) is None:
             from .updates import UpdateChecker
@@ -3955,7 +3956,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         return self.settings.value("update_check", default) not in (False, "false")
 
     def start_update_check(self):
-        """At start-up, and every few hours while it stays open: at most once a day."""
+        """At start-up, and every few hours while it stays open: at most once a day. First,
+        after Update now ran a setup, says if the update didn't take."""
+        self._update_outcome()
         self._checker().check_if_due()
         if getattr(self, "_update_timer", None) is None:
             self._update_timer = QTimer(self, interval=6 * 3600 * 1000)
@@ -3970,203 +3973,309 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         self.settings.setValue("update_check", "true" if on else "false")
 
     def _update_found(self, release, since):
-        from . import updates
-        v = str(release["tag_name"]).lstrip("vV")
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Update available")
-        dlg.resize(560, 460)
-        lay = QVBoxLayout(dlg)
-        lay.addWidget(QLabel("<b>KanzonasCAD %s is available.</b> You have %s." %
-                             (v, __version__)))
-        notes = QTextBrowser()
-        notes.setOpenExternalLinks(True)
-        md = []
-        for ver, text, page in since:
-            md.append("### %s\n\n%s\n\n[Release page](%s)" % (
-                ver, text or "(no notes)", page))
-        notes.setMarkdown("\n\n".join(md))
-        lay.addWidget(notes, 1)
-        how = updates.how()
-        hint = {"source": "Update now gets the new version (git pull) and what it needs, then "
-                          "starts KanzonasCAD again. Your projects and library aren't touched.",
-                "installer": "Update now downloads the new setup, checks it against the "
-                             "release, closes KanzonasCAD (you'll be asked to save first) and "
-                             "installs it over this copy, which then starts again. Your "
-                             "projects, library and settings aren't touched."
-                             + (" Installed for all users: Windows asks for administrator "
-                                "rights." if updates.how() == "installer"
-                                and updates.for_all_users(updates.app_folder()) else ""),
-                "windows": "Update now downloads it, checks it against the release, and "
-                           "replaces this copy when KanzonasCAD closes (you'll be asked to save "
-                           "first). Your projects and library aren't touched.",
-                "portable": "Update now downloads the new portable version, checks it against "
-                            "the release, and replaces the program files in this folder when "
-                            "KanzonasCAD closes (you'll be asked to save first). The data "
-                            "folder (settings, library, recovery copies) is kept.",
-                "appimage": "Update now downloads the new AppImage, checks it against the "
-                            "release, puts it in place of this one (same name and place), "
-                            "closes KanzonasCAD (you'll be asked to save first) and starts the "
-                            "new version. Your projects, library and settings aren't touched.",
-                "tell": "Update now opens the release page to download it."}[how]
-        h = QLabel(hint)
-        h.setWordWrap(True)
-        h.setStyleSheet("color: gray;")
-        lay.addWidget(h)
-        box = QDialogButtonBox()
-        now = box.addButton("Update now", QDialogButtonBox.AcceptRole)
-        skip = box.addButton("Skip this version", QDialogButtonBox.DestructiveRole)
-        box.addButton("Later", QDialogButtonBox.RejectRole)
-        lay.addWidget(box)
-        choice = []
-        box.clicked.connect(lambda b: (choice.append(b), dlg.accept()))
-        dlg.exec()
-        if not choice:
-            return
-        if choice[0] is skip:
-            self.settings.setValue("update_skip", v)
-        elif choice[0] is now:
-            self.update_now(release, how)
-
-    def update_now(self, release, how):
-        from . import updates
-        from PySide6.QtGui import QDesktopServices
+        """A newer release (as KanzonasPDF's). Asked for (Help > Check for updates...): the
+        update box. Found by the automatic check: a notice in the status bar with What's new,
+        Update now, Download, Skip this version and Later; nothing pops up."""
         from PySide6.QtCore import QUrl
-        v = str(release["tag_name"]).lstrip("vV")
-        if how == "source":
-            self._run_source_update(updates.source_folder())
-        elif how == "windows":
-            got = updates.asset(release, updates.windows_asset_name(v))
-            if got is None:
-                QMessageBox.warning(self, "Update", "This release has no checked Windows "
-                                    "download. Opening the release page instead.")
-                QDesktopServices.openUrl(QUrl(updates.page(release)))
-                return
-            self._run_zip_update(got[0], got[1], updates.app_folder())
-        elif how == "portable":
-            got = updates.asset(release, updates.portable_asset_name(v))
-            if got is None:
-                QMessageBox.warning(self, "Update", "This release has no checked portable "
-                                    "download. Opening the release page instead.")
-                QDesktopServices.openUrl(QUrl(updates.page(release)))
-                return
-            self._run_zip_update(got[0], got[1], updates.app_folder())
-        elif how == "appimage":
-            self._run_appimage_update(release)
-        elif how == "installer":
-            got = updates.asset(release, updates.setup_asset_name(v))
-            if got is None:
-                QMessageBox.warning(self, "Update", "This release has no checked setup. "
-                                    "Opening the release page instead.")
-                QDesktopServices.openUrl(QUrl(updates.page(release)))
-                return
-            self._run_zip_update(got[0], got[1], updates.app_folder(), setup=True)
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtWidgets import QHBoxLayout, QPushButton
+        from . import updates
+        if self._checker().manual:
+            self._update_box(release, since)
+            return
+        version = str(release["tag_name"]).lstrip("vV")
+        url = updates.page(release)
+        self._close_update_notice()
+        bar = QWidget()
+        bar.setObjectName("update_notice")
+        h = QHBoxLayout(bar)
+        h.setContentsMargins(0, 0, 0, 0)
+        text = QLabel("<b>KanzonasCAD %s is available</b> (you have %s)."
+                      % (version, __version__))
+        h.addWidget(text)
+        news = QPushButton("What's new")
+        news.setToolTip("What changed since your version")
+        get = QPushButton("Download")
+        get.setToolTip("Open the release page to download the installer or portable zip"
+                       if sys.platform == "win32" else
+                       "Open the release page to download the new version")
+        how = self._update_now_text()
+        upd = QPushButton("Update now") if how else None
+        if upd is not None:
+            upd.setToolTip(how)
+        skip = QPushButton("Skip this version")
+        later = QPushButton("Later")
+        done = self._close_update_notice
+        get.clicked.connect(lambda: (QDesktopServices.openUrl(QUrl(url)), done()))
+        skip.clicked.connect(lambda: (self.settings.setValue("update_skip", version), done()))
+        later.clicked.connect(lambda: done())
+        if upd is not None:
+            upd.clicked.connect(lambda: (done(), self.update_now(release)))
+        news.clicked.connect(lambda: self._update_box(release, since))
+        for b in (news, upd, get, skip, later):
+            if b is not None:
+                h.addWidget(b)
+        self._update_bar = bar
+        self._coords_room(False)    # (the coordinates make room for it: the drafting aids stay)
+        self.statusBar().clearMessage()      # (a status message would keep the notice hidden)
+        self.statusBar().addWidget(bar)
+        bar.show()
+        text.ensurePolished()               # (measured in the status bar's font: never cut off)
+        text.setMinimumWidth(text.sizeHint().width())
+
+    def _close_update_notice(self):
+        """Take the update notice out of the status bar (if it is there)."""
+        bar = getattr(self, "_update_bar", None)
+        self._update_bar = None
+        if bar is not None:
+            self.statusBar().removeWidget(bar)
+            bar.deleteLater()
+            self._coords_room(True)
+
+    def _coords_room(self, full):
+        """The cursor's coordinates in the status bar: 300 pixels wide (full), or what the
+        update notice leaves (it is never cut off, the drafting aids stay)."""
+        sb, c = self.statusBar(), self.coords
+        sb.removeWidget(c)
+        c.setMinimumWidth(300 if full else 0)
+        c.setSizePolicy(QSizePolicy.Preferred if full else QSizePolicy.Ignored,
+                        QSizePolicy.Preferred)
+        sb.insertWidget(0, c, 0 if full else 1)
+        c.show()
+
+    def _update_box(self, release, since):
+        """The update box (as KanzonasPDF's): the notes of every version newer than this one
+        (what changed since your version), then Update now / Download / Later. Update now or
+        Download also closes the notice in the status bar."""
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from . import updates
+        version = str(release["tag_name"]).lstrip("vV")
+        dlg = QDialog(self)
+        dlg.setObjectName("update_box")
+        dlg.setWindowTitle("Check for updates")
+        lay = QVBoxLayout(dlg)
+        first = QLabel("KanzonasCAD %s is available (you have %s)." % (version, __version__))
+        first.setTextFormat(Qt.PlainText)
+        lay.addWidget(first)
+        lay.addWidget(QLabel("<b>What's new since your version</b>"))
+        notes = QTextBrowser()
+        notes.setObjectName("update_notes")
+        notes.setOpenExternalLinks(True)
+        parts = []
+        for v, text, page in since:
+            parts.append("### Version %s" % v)
+            parts.append(text or "[What's new in %s](%s)" % (v, page))
+        notes.setMarkdown("\n\n".join(parts))
+        lay.addWidget(notes)
+        how = self._update_now_text()
+        info = QLabel((how + "\n\n" if how else "")
+                      + "Download opens the release page in your browser.")
+        info.setObjectName("update_how")
+        info.setTextFormat(Qt.PlainText)
+        info.setWordWrap(True)
+        lay.addWidget(info)
+        box = QDialogButtonBox()
+        upd = box.addButton("Update now", QDialogButtonBox.AcceptRole) if how else None
+        get = box.addButton("Download", QDialogButtonBox.AcceptRole)
+        box.addButton("Later", QDialogButtonBox.RejectRole)
+        chosen = []
+        box.clicked.connect(lambda b: (chosen.append(b), dlg.accept()))
+        lay.addWidget(box)
+        dlg.resize(600, 520)
+        dlg.exec()
+        if not chosen or chosen[0] not in [b for b in (upd, get) if b is not None]:
+            return
+        self._close_update_notice()
+        if chosen[0] is upd:
+            self.update_now(release)
         else:
             QDesktopServices.openUrl(QUrl(updates.page(release)))
 
-    def _progress_dialog(self, title, download=False):
-        """The update window: what is happening, and (download) a progress bar with how much
-        has come (the owner: "can it show a progress bar, like KanzonasPDF does? Right now, it
-        just says downloading": the progress went to the status bar behind this window) and a
-        Cancel button while it downloads (Close once it's done)."""
-        dlg = QDialog(self)
-        dlg.setWindowTitle(title)
-        dlg.resize(620, 360)
-        lay = QVBoxLayout(dlg)
-        out = QTextBrowser()
-        lay.addWidget(out, 1)
-        box = QDialogButtonBox(QDialogButtonBox.Close)
-        box.rejected.connect(dlg.reject)
-        if download:
-            from PySide6.QtWidgets import QProgressBar
-            dlg.resize(560, 260)
-            bar = QProgressBar()
-            bar.setObjectName("download_progress")
-            bar.setRange(0, 0)                  # (moving until the size is known)
-            bar.setFormat("Starting the download...")
-            bar.setTextVisible(True)
-            lay.addWidget(bar)
-            box.button(QDialogButtonBox.Close).setText("Cancel")
-            dlg.bar = bar
+    def _update_now_text(self):
+        """What Update now does, in one sentence for how this copy is installed (as
+        KanzonasPDF's); None when this copy can't update itself (Download only)."""
+        from . import updates
+        how = updates.how()
+        if how == "portable":
+            return ("Update now downloads it, closes KanzonasCAD, replaces the program files "
+                    "in this folder (your data folder is kept) and starts it again.")
+        if how == "windows":
+            return ("Update now downloads it, closes KanzonasCAD, replaces the program files "
+                    "in this folder and starts it again. Your projects and library are kept.")
+        if how == "appimage":
+            return ("Update now downloads the new AppImage, checks it, closes KanzonasCAD (after "
+                    "asking to save your work), puts it in place of %s and starts it again. "
+                    "Your projects, library and settings are kept."
+                    % os.path.basename(updates.running_appimage() or updates.APPIMAGE))
+        if how == "installer":
+            text = ("Update now downloads the new setup, checks it, closes KanzonasCAD (after "
+                    "asking to save your work) and installs the new version over this one; "
+                    "KanzonasCAD starts again when it's done. Your projects, library and "
+                    "settings are kept.")
+            if updates.for_all_users(updates.app_folder()):
+                text += " Installed for all users: Windows asks for administrator rights."
+            return text
+        if how == "source":
+            return ("Update now gets the new version (git pull) and what it needs, closes "
+                    "KanzonasCAD (after asking to save your work) and starts it again. Your "
+                    "projects, library and settings are kept.")
+        return None
+
+    def update_now(self, release):
+        """Update now: the way this copy is installed (updates.how)."""
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from . import updates
+        if getattr(self, "_update_download", None) is not None:
+            QMessageBox.information(self, "Update", "The new version is already downloading.")
+            return
+        how = updates.how()
+        v = str(release["tag_name"]).lstrip("vV")
+        if how == "source":
+            self._run_source_update(updates.source_folder())
+            return
+        if how == "appimage":
+            self._run_appimage_update(release)
+            return
+        name, what = {"windows": (updates.windows_asset_name(v), "Windows download"),
+                      "portable": (updates.portable_asset_name(v), "portable download"),
+                      "installer": (updates.setup_asset_name(v), "setup")}.get(how, (None, ""))
+        got = updates.asset(release, name) if name else None
+        if got is None:
+            if name:
+                QMessageBox.warning(self, "Update", "This release has no checked %s. Opening "
+                                    "the release page instead." % what)
+            QDesktopServices.openUrl(QUrl(updates.page(release)))
+            return
+        self._run_zip_update(got[0], got[1], updates.app_folder(), name,
+                             version=v if how == "installer" else None)
+
+    def _update_progress(self, cancel=None):
+        """The window an update shows while it downloads (as KanzonasPDF's): titled Update,
+        "Downloading the new KanzonasCAD...", a progress bar, and Cancel, which calls cancel
+        (no Cancel without it)."""
+        from PySide6.QtWidgets import QProgressDialog
+        prog = QProgressDialog("Downloading the new KanzonasCAD...", "Cancel", 0, 0, self)
+        prog.setObjectName("update_progress")
+        prog.setWindowTitle("Update")
+        prog.setWindowModality(Qt.WindowModal)
+        prog.setAutoClose(False)
+        prog.setAutoReset(False)
+        prog.setMinimumDuration(0)
+        if cancel is None:
+            prog.setCancelButton(None)
         else:
-            box.setEnabled(False)
-        lay.addWidget(box)
-        return dlg, out, box
+            prog.canceled.connect(cancel)
+        prog.show()
+        return prog
 
-    @staticmethod
-    def _show_download(dlg, got, total):
-        """A download's progress on the update window's bar: how many MB of how many."""
-        bar = dlg.bar
-        if total > 0:
-            bar.setRange(0, 1000)
-            bar.setValue(int(1000 * min(got, total) / total))
-            bar.setFormat("%.1f of %.1f MB (%d%%)" % (got / 1e6, total / 1e6,
-                                                     int(100 * got / total)))
-        else:
-            bar.setFormat("%.1f MB" % (got / 1e6))
+    def _follow_download(self, up, tail):
+        """A download (ZipUpdater, AppImageUpdater) and its progress window: the bar follows
+        it, Cancel stops it, a failure closes the window and says why, then tail (where else
+        to get the new version). Returns the window."""
+        self._update_download = up
 
-    @staticmethod
-    def _download_over(dlg, box, ok):
-        """The download done (ok) or stopped: the bar full or kept as it stopped, Close."""
-        bar = dlg.bar
-        if ok:
-            bar.setRange(0, 1)
-            bar.setValue(1)
-            bar.setFormat("Downloaded and checked")
-        elif bar.maximum() == 0:
-            bar.setRange(0, 1)
-            bar.setValue(0)
-            bar.setFormat("Stopped")
-        box.button(QDialogButtonBox.Close).setText("Close")
-        box.setEnabled(True)
+        def cancel():
+            self._update_download = None
+            up.cancel()
+        prog = self._update_progress(cancel)
 
-    def _run_source_update(self, root):
-        from .updates import SourceUpdater
-        dlg, out, box = self._progress_dialog("Updating KanzonasCAD")
-        up = SourceUpdater(root, dlg)
-        up.line.connect(lambda t: t and out.append(t))
-
-        def done(ok, text):
-            out.append("\n" + text)
-            box.setEnabled(True)
-            if ok and QMessageBox.question(
-                    dlg, "Updated", "KanzonasCAD is updated. Start the new version now? (You'll "
-                    "be asked to save any changes first.)") == QMessageBox.Yes:
-                dlg.accept()
-                if self.close_other_copies():
-                    self._restart()
-        up.finished.connect(done)
-        up.start()
-        dlg.exec()
-
-    def _run_zip_update(self, url, sha, app_dir, setup=False):
-        from .updates import ZipUpdater, start_setup, start_swap
-        dlg, out, box = self._progress_dialog("Updating KanzonasCAD", download=True)
-        out.append("Downloading...")
-        up = ZipUpdater(url, sha, app_dir, dlg, setup=setup)
-        up.progress.connect(lambda a, b: self._show_download(dlg, a, b))
-
-        def ready(new):
-            out.append("Downloaded and checked.")
-            self._download_over(dlg, box, True)
-            if QMessageBox.question(dlg, "Update", "Close KanzonasCAD and finish the update "
-                                    "now? (You'll be asked to save any changes first.)"
-                                    ) == QMessageBox.Yes:
-                dlg.accept()
-                if self.close_other_copies() and self.close():
-                    if setup:
-                        start_setup(new, app_dir)
-                    else:
-                        start_swap(new, app_dir)
-                    QApplication.instance().quit()
+        def progress(got, total):
+            if total > 0:
+                prog.setMaximum(total)
+                prog.setValue(min(got, total))
 
         def failed(text):
-            out.append(text)
-            self._download_over(dlg, box, False)
-        up.ready.connect(ready)
+            self._update_download = None
+            prog.close()
+            QMessageBox.warning(self, "Update", text + "\n\n" + tail)
+        up.progress.connect(progress)
         up.failed.connect(failed)
-        box.rejected.connect(up.cancel)
+        return prog
+
+    def _close_for_update(self):
+        """Close every KanzonasCAD window before an update: the other copies running, then
+        this one's family (each asks to save its changes). False: one was kept open."""
+        main = self.family[0] if self.family else self
+        return self.close_other_copies() and main.close()
+
+    def _update_outcome(self):
+        """After Update now ran a setup (as KanzonasPDF's): when the version running is still
+        the old one, the quiet setup stopped (something kept its files in use, or it was
+        refused): say so once, and offer to run that setup with its windows, which say what's
+        in the way."""
+        from . import updates
+        out = updates.update_outcome(self.settings)
+        if out is None or out["ok"]:
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("Update")
+        box.setText("The update to KanzonasCAD %s didn't finish: this is still %s. Windows may "
+                    "have kept one of its files in use." % (out["version"], __version__))
+        run = None
+        if out["setup"] and os.path.exists(out["setup"]):
+            box.setInformativeText("Run the setup now to finish it: it shows what's in the way "
+                                   "and can close it.")
+            run = box.addButton("Run the setup", QMessageBox.AcceptRole)
+        else:
+            box.setInformativeText("Download the setup from the release page and run it.")
+        box.addButton(QMessageBox.Close)
+        box.exec()
+        if run is not None and box.clickedButton() is run:
+            import subprocess
+            subprocess.Popen([out["setup"]], close_fds=True)
+
+    def _run_source_update(self, root):
+        """Run from source: git pull and pip install (SourceUpdater), then close (asking to
+        save) and start the new version."""
+        from .updates import SourceUpdater
+        prog = self._update_progress()
+        log = []
+        up = self._update_download = SourceUpdater(root, self)
+        up.line.connect(lambda t: t and log.append(t))
+
+        def done(ok, text):
+            self._update_download = None
+            prog.close()
+            if not ok:
+                box = QMessageBox(QMessageBox.Warning, "Update", text, parent=self)
+                box.setDetailedText("\n".join(log))
+                box.exec()
+                return
+            if not self._close_for_update():        # a project kept open: not now
+                QMessageBox.information(self, "Update", "The new version is in place. It "
+                                        "starts the next time you open KanzonasCAD.")
+                return
+            self._restart()
+        up.finished.connect(done)
         up.start()
-        dlg.exec()
+
+    def _run_zip_update(self, url, sha, app_dir, name, version=None):
+        """The Windows zip, the portable zip or (version: the release's) the setup: download
+        and check it, close (asking to save), then swap the files or run the setup."""
+        from . import updates
+        setup = version is not None
+        up = updates.ZipUpdater(url, sha, app_dir, self, setup=setup)
+        prog = self._follow_download(up, (
+            "You can still download the setup from the release page and run it." if setup else
+            "You can still download %s from the release page and unzip it over this folder."
+            % name))
+
+        def ready(new):
+            self._update_download = None
+            prog.close()
+            if not self._close_for_update():        # a project kept open: not now
+                return
+            if setup:
+                updates.remember_update(self.settings, version, new)
+                updates.start_setup(new, app_dir)
+            else:
+                updates.start_swap(new, app_dir)
+            QApplication.instance().quit()
+        up.ready.connect(ready)
+        up.start()
 
     def _run_appimage_update(self, release):
         """Linux AppImage (as KanzonasPDF's): download the new one next to it and check it,
@@ -4191,34 +4300,30 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
                                     "yourself." % (target, why, updates.APPIMAGE))
             QDesktopServices.openUrl(QUrl(page))
             return
-        dlg, out, box = self._progress_dialog("Updating KanzonasCAD", download=True)
-        out.append("Downloading...")
-        up = updates.AppImageUpdater(got[0], got[1], target, dlg)
-        up.progress.connect(lambda a, b: self._show_download(dlg, a, b))
+        up = updates.AppImageUpdater(got[0], got[1], target, self)
+        prog = self._follow_download(up, "You can still download %s from the release page "
+                                         "and put it in place of this one." % updates.APPIMAGE)
 
         def ready(new):
-            out.append("Downloaded and checked.")
-            self._download_over(dlg, box, True)
-            # in place first (the running program keeps its own copy open until it ends)
+            self._update_download = None
+            prog.close()
+            # in place first (the running program keeps its own copy open until it ends),
+            # then close: a project kept open just means the new version starts next time
             try:
                 updates.replace_appimage(new, target)
             except OSError as e:
                 try:
                     os.remove(new)
-                except OSError as e2:
-                    out.append("The download couldn't be removed either (%s)." % e2)
-                out.append("The new version couldn't be put in place of %s (%s). Download it "
-                           "from the release page instead." % (target, e))
+                except OSError:
+                    pass    # (in use or already gone: the warning below is what matters)
+                QMessageBox.warning(self, "Update", "The new version couldn't be put in place "
+                                    "of %s (%s). The release page opens so you can download "
+                                    "it yourself." % (target, e))
                 QDesktopServices.openUrl(QUrl(page))
                 return
-            out.append("The new version is in place of %s." % target)
-            if QMessageBox.question(dlg, "Update", "Close KanzonasCAD and start the new "
-                                    "version now? (You'll be asked to save any changes first. "
-                                    "Otherwise it starts the next time you open KanzonasCAD.)"
-                                    ) != QMessageBox.Yes:
-                return
-            dlg.accept()
-            if not self.close_other_copies() or not self.close():
+            if not self._close_for_update():        # a project kept open: not now
+                QMessageBox.information(self, "Update", "The new version is in place. It "
+                                        "starts the next time you open KanzonasCAD.")
                 return
             cwd = os.environ.get("OWD") or os.path.expanduser("~")
             # (started once this process has ended: see updates.appimage_restart_command)
@@ -4229,23 +4334,13 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL)
             QApplication.instance().quit()
-
-        def failed(text):
-            out.append(text + "\n\nYou can still download %s from the release page and put "
-                       "it in place of this one." % updates.APPIMAGE)
-            self._download_over(dlg, box, False)
         up.ready.connect(ready)
-        up.failed.connect(failed)
-        box.rejected.connect(up.cancel)
         up.start()
-        dlg.exec()
 
     def _restart(self):
-        """Close (asking to save), then start KanzonasCAD again."""
+        """Start KanzonasCAD again (once it has closed: see _close_for_update)."""
         from .updates import restart_command
         from PySide6.QtCore import QProcess
-        if not self.close():
-            return
         prog, args = restart_command()
         QProcess.startDetached(prog, args)
         QApplication.instance().quit()

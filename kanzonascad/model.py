@@ -93,7 +93,7 @@ DEFAULT_SETTINGS = {
     # overridden by sheet and by wire")
     "tap_style": "-1",
     # a wire layer's gauge label shows its insulation color too (14 AWG BLU) on every wire that
-    # doesn't say otherwise (Wire color label; the owner, 0.22.5, "These wire colors aren't
+    # doesn't say otherwise (Wire color label; the owner, 0.22.4, "These wire colors aren't
     # showing. None of them have it in the whole project")
     "wire_color_shown": False,
     "ladder_numbers": "hundreds",
@@ -456,7 +456,7 @@ class Wire(Polyline):
         # its insulation color written in its gauge label too (Wire color label: the owner,
         # 0.18.4, "I don't think we need to include the wire color. Maybe that can be a
         # toggle-able option on a per-wire basis?")
-        # (None: as the project, Project properties, Schematic, "...and its color"; 0.22.5)
+        # (None: as the project, Project properties, Schematic, "...and its color"; 0.22.4)
         self.show_color = None if show_color is None else bool(show_color)
         # a second wire on a pin (a double landing) numbered as a tap off the wire already
         # there: as the project numbers taps, or its own same_num / own_num (the owner, 0.18.5:

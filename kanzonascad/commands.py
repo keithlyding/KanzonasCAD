@@ -2880,7 +2880,7 @@ class BusCmd(Command):
             back = hit is None and self._back_over_own(paths)
             if hit is not None or back:
                 # (back over the wires it carries on, whichever way it was drawn: onto wires
-                # side by side too; the battery, 0.22.5, seed 468)
+                # side by side too; the battery, 0.22.4, seed 468)
                 self.ctx.message(_through_message(hit) if hit is not None else BACK_OVER_OWN)
                 if closing:
                     self.finish()               # (Esc: nothing drawn)

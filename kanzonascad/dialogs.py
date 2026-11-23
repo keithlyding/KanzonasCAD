@@ -566,7 +566,7 @@ def project_properties(parent, project, tab=0):
                       "its wire number")
     wgauge.setChecked(bool(st.get("wire_gauge_shown", True)))
     form.addRow("", wgauge)
-    # (the owner, 0.22.5: "These wire colors aren't showing. None of them have it in the whole
+    # (the owner, 0.22.4: "These wire colors aren't showing. None of them have it in the whole
     # project": the color shown everywhere at once; Wire color label still turns it on or off
     # for the wires picked)
     wcolor = QCheckBox("...and its color (14 AWG BLU)")
@@ -2815,7 +2815,7 @@ def ladder_dialog(parent, lad, k):
 def title_blocks_dialog(parent, lib):
     """Title blocks...: the ready-made title blocks and the ones saved in the library; Use
     returns the name of the one picked, Delete takes one of yours out of the library (asked
-    first). None when closed (the owner, 0.22.5: "I should be able to save as a new title block
+    first). None when closed (the owner, 0.22.4: "I should be able to save as a new title block
     and then select default ones or different variations I've made")."""
     from PySide6.QtWidgets import QListWidget, QListWidgetItem
     from . import titleblocks as TB

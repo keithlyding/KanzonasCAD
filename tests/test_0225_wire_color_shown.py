@@ -1,4 +1,4 @@
-"""A wire layer's color shown in its gauge label on every wire at once (the owner, 0.22.5, with
+"""A wire layer's color shown in its gauge label on every wire at once (the owner, 0.22.4, with
 photos of 16 AWG and 14 AWG labels: "These wire colors aren't showing. None of them have it in
 the whole project"; since 0.18.4 it showed only on wires turned on one by one with Wire color
 label): Project properties, Schematic, "...and its color (14 AWG BLU)"; Wire color label still
@@ -61,7 +61,7 @@ class WireColorShownTest(unittest.TestCase):
         self.assertEqual(self.labels(), ["16 AWG", "16 AWG BLU"])
 
     def test_old_projects_and_the_three_choices_saved(self):
-        # (a wire saved before 0.22.5 has show_color true or none: none follows the project,
+        # (a wire saved before 0.22.4 has show_color true or none: none follows the project,
         # which starts off, so it looks as it did)
         w = M.Wire.from_dict({"kind": "wire", "points": [[0, 0], [1, 0]], "id": 1})
         self.assertIsNone(w.show_color)
