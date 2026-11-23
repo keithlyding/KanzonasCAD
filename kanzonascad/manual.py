@@ -1129,7 +1129,15 @@ order: its size and color (its layer's, or its own), what it lands on, each with
 pin), and the sheets it is on. Off-sheet connectors and source and destination arrows carry a
 wire on, so they are not landings. <b>Terminal strip list...</b> lists every terminal, strip
 by strip in number order, with the wire numbers on its left and right pins and where it is.
-Both are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
+<b>Terminal count...</b> (the same places; on the ribbon, the Terminals button's menu) says
+how many terminals and jumpers the tapped wires need: every wire number tapped off (6001 with
+6001-1, 6001-2... and a tap off a tap, 6001-1a), its taps, and one terminal for the number and
+one for each tap, bridged by one jumper fewer than terminals (6001 tapped three times: 4
+terminals, 3 jumpers), with the sheets they are on and the totals at the bottom. It counts one
+wire on each terminal side, the most you can need: multi-level terminals, or two wires on a
+side, need fewer. It counts taps numbered -1, -2... (or with numbers of their own: Project
+properties, Schematic, Tap numbers); taps that keep the wire's number aren't told apart, and
+it says so. All three are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
 writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workbook" as the
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 <p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints

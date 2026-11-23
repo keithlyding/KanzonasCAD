@@ -487,6 +487,10 @@ class MainWindow(BlockEditing, QMainWindow):
           icon="terminal_list", label="Terminals",
           tip="Every terminal strip, terminal by terminal, with the wires on each side and "
               "where it is (save as CSV)")
+        A("terminal_count", "Terminal &count...", self.show_terminal_count,
+          icon="terminal_count", label="Terminal count",
+          tip="How many terminals and jumpers the tapped wires need: a wire number and each of "
+              "its taps (-1, -2...) one terminal, bridged by jumpers (save as CSV)")
         A("report_sheet", "Report s&heet...", lambda: self.report_sheet(), icon="bom",
           label="Report sheet",
           tip="A report (bill of materials, wire list, terminals, pull list, panel materials) "
@@ -730,7 +734,7 @@ class MainWindow(BlockEditing, QMainWindow):
         for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
-                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "materials",
+                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_count", "materials",
                   "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb", "use_tb",
@@ -872,7 +876,9 @@ class MainWindow(BlockEditing, QMainWindow):
             ("Print", "large", [a["print"]]),
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
             ("Import", "large", [a["import_dxf"], a["import_pdf"], a["import_picture"]]),
-            ("Reports", "large", [a["bom"], a["cables"], a["wire_list"], a["terminal_list"],
+            # (Terminal count on the Terminals button's menu: the tab as wide as before)
+            ("Reports", "large", [a["bom"], a["cables"], a["wire_list"],
+                                  split_button([a["terminal_list"], a["terminal_count"]]),
                                   a["materials"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
         ])
@@ -3104,6 +3110,25 @@ class MainWindow(BlockEditing, QMainWindow):
                               "Each terminal with the wire numbers on its left and right pins, "
                               "as drawn; a terminal with no number yet shows ?.")
 
+    def show_terminal_count(self):
+        v = self.view()
+        if v is None:
+            return
+        from . import reports
+        from . import wirenums
+        rows, (terms, jumpers) = reports.terminal_count_rows(v.project)
+        if rows:
+            rows = rows + [["Total", "", str(terms), str(jumpers), ""]]
+        empty = ("Taps are numbered with the wire they tap (Project properties, Schematic: Tap "
+                 "numbers): choose -1, -2... (or numbers of their own) to count them."
+                 if wirenums.tap_mode(v.project) == "same" else
+                 "No tapped wires yet: a wire tapped off another (-1, -2...) is counted here.")
+        dialogs.report_dialog(self, "Terminal count", reports.COUNT_HEAD, rows,
+                              self._last_dir(), "terminal count.csv", empty,
+                              "One wire on each terminal side: a wire number and each of its "
+                              "taps a terminal, bridged by one jumper fewer. Multi-level "
+                              "terminals, or two wires on a side, need fewer.")
+
     def show_materials(self):
         v = self.view()
         if v is None:
@@ -3720,7 +3745,7 @@ class MainWindow(BlockEditing, QMainWindow):
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",
-                  "rail", "duct", "materials", "bom", "cables", "wire_list", "terminal_list", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "rail", "duct", "materials", "bom", "cables", "wire_list", "terminal_list", "terminal_count", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",

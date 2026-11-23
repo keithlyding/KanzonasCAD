@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.4
+
+**New**
+- Terminal count... (Sheets menu; Output tab, Reports: on the Terminals button) adds up the
+  terminals and jumpers your tapped wires need: a wire number and each of its taps (-1, -2...)
+  one terminal, bridged by jumpers, with the totals. It counts one wire per terminal side, the
+  most you can need; multi-level terminals or two wires on a side need fewer.
+
 ## 0.22
 
 **New**
