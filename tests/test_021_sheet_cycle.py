@@ -1,6 +1,7 @@
-"""Ctrl+Tab through the sheets, the last shown first (the owner, 0.21.2: "Kind of like how AB's
+"""Ctrl+` through the sheets, the last shown first (the owner, 0.21.2: "Kind of like how AB's
 Studio 5000 cycles through? It defaults to the last page you were on, but I can keep holding
-ctrl and tapping tab to go through the rest of the sheets")."""
+ctrl and tapping tab to go through the rest of the sheets"; 0.22.7: on Ctrl+` now, Ctrl+Tab
+goes in page order), and Ctrl+Tab and Ctrl+Shift+Tab in page order."""
 import unittest
 
 from PySide6.QtCore import Qt
@@ -33,12 +34,12 @@ class SheetCycleTest(unittest.TestCase):
         self.win.close()
         self.assertTrue(APP)
 
-    # (real keys, through Qt's shortcuts and the application: the window's Ctrl+Tab starts it,
+    # (real keys, through Qt's shortcuts and the application: the window's Ctrl+` starts it,
     # the filter put on while cycling takes the rest)
     def tab(self, n=1, back=False):
         for _k in range(n):
             # (a press with Ctrl held: keyClick lets Ctrl go after it, which ends it)
-            QTest.keyPress(self.v, Qt.Key_Backtab if back else Qt.Key_Tab,
+            QTest.keyPress(self.v, Qt.Key_AsciiTilde if back else Qt.Key_QuoteLeft,
                            Qt.ControlModifier | (Qt.ShiftModifier if back else
                                                  Qt.NoModifier))
 
@@ -95,6 +96,76 @@ class SheetCycleTest(unittest.TestCase):
         self.let_go()
         self.assertEqual(self.v.sheet_id, self.p.sheets[0].id)
         self.assertIsInstance(self.p.sheets[0], M.Sheet)
+
+
+
+class PageOrderTest(unittest.TestCase):
+    """The owner, 0.22.7: "if I'm on sheet 13 of 15 and hit ctrl + tab, the next sheet is 14,
+    then 15, then 1. If I hit shift + ctrl + tab, it would go 12, 11, 10"."""
+
+    def setUp(self):
+        self.win, self.v = window()
+        self.win.show()
+        self.win.activateWindow()
+        self.v.setFocus()
+        APP.processEvents()
+        self.assertTrue(self.win.isActiveWindow())
+        self.p = self.v.project
+        with self.p.edit("sheets") as ed:
+            for k in range(2, 16):
+                ed.add_sheet(self.p.make_sheet("Page %d" % k))
+        self.ids = [s.id for s in self.p.sheets]
+        self.assertEqual(len(self.ids), 15)
+        for i in (4, 0, 12):                # (seen in another order: 5, 1, then 13)
+            self.v.show_sheet(self.ids[i])
+
+    def tearDown(self):
+        self.p.saved_at = len(self.p.undo_stack)
+        self.win.close()
+        self.assertTrue(APP)
+
+    def press(self, back=False):
+        mods = Qt.ControlModifier | (Qt.ShiftModifier if back else Qt.NoModifier)
+        QTest.keyPress(self.v, Qt.Key_Backtab if back else Qt.Key_Tab, mods)
+        QTest.keyRelease(self.v, Qt.Key_Control)
+
+    def page(self):
+        return self.ids.index(self.v.sheet_id) + 1
+
+    def test_ctrl_tab_goes_on_and_round(self):
+        got = []
+        for _k in range(3):
+            self.press()
+            got.append(self.page())
+        self.assertEqual(got, [14, 15, 1])          # (not 1, then 5: the ones seen before)
+        self.assertFalse(self.win.sheet_cycler.list.isVisible())
+
+    def test_ctrl_shift_tab_goes_back_and_round(self):
+        got = []
+        for _k in range(3):
+            self.press(back=True)
+            got.append(self.page())
+        self.assertEqual(got, [12, 11, 10])
+        self.v.show_sheet(self.ids[0])
+        self.press(back=True)
+        self.assertEqual(self.page(), 15)
+
+    def test_held_ctrl_steps_each_tab(self):
+        QTest.keyPress(self.v, Qt.Key_Tab, Qt.ControlModifier)
+        QTest.keyPress(self.v, Qt.Key_Tab, Qt.ControlModifier)
+        self.assertEqual(self.page(), 15)           # (each Tab shows the next at once)
+        QTest.keyRelease(self.v, Qt.Key_Control)
+        self.assertEqual(self.page(), 15)
+
+    def test_back_and_forth_meets(self):
+        self.press()
+        self.press(back=True)
+        self.assertEqual(self.page(), 13)
+
+    def test_ctrl_backtick_still_goes_to_the_last_sheet(self):
+        QTest.keyPress(self.v, Qt.Key_QuoteLeft, Qt.ControlModifier)
+        QTest.keyRelease(self.v, Qt.Key_Control)
+        self.assertEqual(self.page(), 1)            # (the one shown before 13)
 
 
 if __name__ == "__main__":
