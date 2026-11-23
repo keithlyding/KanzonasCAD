@@ -794,7 +794,8 @@ def join_at(ed, sheet, points):
         if len(merged) < 2 or doubles_back(merged):
             continue
         ed.remove(sheet, b.id)
-        ed.change(sheet, a.copy(points=merged, show_color=a.show_color or b.show_color,
+        ed.change(sheet, a.copy(points=merged, show_color=a.show_color if a.show_color is not
+                                None else b.show_color,
                                 labels=_joined_labels(a, ia != -1, b, ib != 0)))
         n += 1
     return n

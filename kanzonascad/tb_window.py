@@ -108,6 +108,66 @@ class TitleBlockEditing:
             self._close_tb(d)
         return True
 
+    def ask_title_block_name(self, start=""):
+        """The name to save a title block under, or None (a test replaces it)."""
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "Save as title block",
+                                        "Name (your title blocks are kept in your library, "
+                                        "for any project):", text=start)
+        return name.strip() if ok and name.strip() else None
+
+    def save_title_block_as(self):
+        """Save as title block: the title block drawn in this tab kept in your library under a
+        name, with where it sits (Title blocks... puts it in any project). The tab stays."""
+        d = self.doc()
+        if not is_tb_doc(d):
+            self._say("Save as title block works in the title block's tab (Edit title block "
+                      "opens it)")
+            return None
+        from . import titleblocks as TB
+        name = self.ask_title_block_name()
+        if not name:
+            return None
+        if name in TB.saved(self.library) and QMessageBox.question(
+                self, TITLE, "You have a title block called %s. Replace it?" % name,
+                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return None
+        pos = d.tb_source.project.settings.get("tb_position", "corner")
+        try:
+            TB.save(self.library, name, d.project, pos)
+        except (OSError, ValueError) as ex:
+            QMessageBox.warning(self, TITLE, "Couldn't save the title block:\n%s" % ex)
+            return None
+        self._say("Title block %s saved in your library: Title blocks... (Sheets) puts it in "
+                  "any project" % name)
+        return name
+
+    def ask_title_block(self):
+        """Title blocks...: the name of the title block picked, or None (a test replaces
+        it)."""
+        from .dialogs import title_blocks_dialog
+        return title_blocks_dialog(self, self.library)
+
+    def title_blocks(self):
+        """Title blocks...: a ready-made title block or one of yours put in the project, where
+        it sits (one step; Undo puts the old one back)."""
+        d = self.doc()
+        if d is None or is_tb_doc(d):
+            return
+        name = self.ask_title_block()
+        if not name:
+            return
+        from . import titleblocks as TB
+        p = d.project
+        try:
+            with p.edit("Title block: %s" % name) as ed:
+                TB.use(ed, p, self.library, name)
+        except (OSError, ValueError) as ex:
+            QMessageBox.warning(self, TITLE, "Couldn't use the title block %s:\n%s"
+                                % (name, ex))
+            return
+        self._say("Title block: %s (Undo puts the old one back)" % name)
+
     def close_title_block(self):
         """Close title block: the title block's tab closed (asking to save its changes), back
         to the drawing it was opened from."""

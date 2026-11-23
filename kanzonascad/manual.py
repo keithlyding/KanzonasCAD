@@ -169,8 +169,11 @@ height</b>, 0.06" to start); <b>Show a wire layer's gauge beside its wires</b> t
 off for the whole project, and a layer's <b>Gauge shown</b> in <b>Layers...</b> (click it: Yes
 or No) for that layer's wires only: control power all of one gauge and color (24VDC BLU,
 BLU-WHT), say, where the label would only crowd a breaker. A wire given a gauge of its own still
-shows it. <b>Wire color label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) writes the
-color too, on the wires you select or click (<b>10 AWG BRN</b>); again, and it stops. Wires
+shows it. The label shows the wire's insulation color too (<b>10 AWG BRN</b>) on every wire
+when <b>...and its color</b> under that setting is ticked (off to start). <b>Wire color
+label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) turns the color the other way
+on the wires you select or click: on where the project leaves it off, off where it shows it;
+again, and it goes back. A wire keeps that choice whatever the project setting says. Wires
 side by side of one gauge (within 3/4" of each other on paper, running along each other: a
 starter's conductors to its drive, a bus) show it <b>once</b>: a thin oval drawn across them
 where they run side by side, with a leader out at 45 degrees to the label, level; where there
@@ -232,6 +235,18 @@ or Ctrl+S) puts it in the project as one step (Undo in the drawing takes it back
 tab and goes back to the drawing, on the Sheets tab. <b>Close title block</b> (or closing its
 tab) leaves the project's title block as it was, asking first if you changed anything: Save,
 Discard or Cancel. Edit title block again while its tab is open shows that tab.</p>
+<p><b>Title blocks you keep.</b> In the title block's tab, <b>Save as title block...</b> keeps the
+title block you drew in your library under a name of your own (your company's, a customer's),
+with where it sits on the sheet, for any project; the tab stays open. <b>Title blocks...</b>
+(Sheets menu and Sheets tab) puts one in the project: the ready-made ones (<b>Standard, lower
+right corner</b>; <b>Standard, right-hand strip</b>; <b>Standard, bottom strip</b>), always there
+whatever you save, or one of yours. It goes where it was made for, and Undo puts the old one
+back. <b>Delete</b> there takes one of yours out of the library (projects using it keep their
+copy). They are kept in the <code>Title blocks</code> folder of your library folder (both library
+folders are read, so a shared folder can hold your company's).</p>
+<p><b>A logo</b>: in the title block's tab, <b>Picture or SVG</b> (Title block tab) brings in your
+logo (PNG, JPEG...); place it and drag a corner to size it. It is kept in the project (and in a
+title block you save), and shows on every sheet, printed and in PDFs.</p>
 <p>A text that contains a field name in braces shows that field's value on every sheet:</p>
 <ul>
 <li><code>{{Customer}}</code>, <code>{{Project}}</code>, <code>{{Drawing number}}</code>,
@@ -1320,8 +1335,8 @@ object, only the piece a click there would cut away lights up. U undoes the last
 then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>
 <tr><td>Aligned dimension</td><td>DIMALIGNED, DAL</td><td>The same, measured along the line
 between the two points (slanted too).</td></tr>
-<tr><td>Wire color label</td><td>WIRECOLOR, WCL</td><td>The selected (or clicked) wires write
-their color in their gauge label too, or stop.</td></tr>
+<tr><td>Wire color label</td><td>WIRECOLOR, WCL</td><td>The selected (or clicked) wires show
+their color in their gauge label, or stop (the other way from how they show it now).</td></tr>
 <tr><td>Dimension units</td><td>DIMUNITS, DU</td><td>The selected (or clicked) dimensions:
 D decimal, F fractional, or 1/8, 1/16, 1/32, 1/64.</td></tr>
 <tr><td>Hatch</td><td>HATCH, H, BHATCH, BH, FILL</td><td>Click inside a closed shape to fill it

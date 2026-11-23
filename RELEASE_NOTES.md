@@ -6,6 +6,28 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.5
+
+**New**
+- Title blocks you keep: Save as title block... (in the title block's tab) keeps yours in your
+  library by name; Title blocks... (Sheets) puts one in any project, a ready-made one (corner,
+  right-hand strip or bottom strip) or one of yours. Undo puts the old one back.
+- Your logo in the title block: Picture or SVG is on the Title block tab.
+- Wire colors in the gauge labels on every wire at once (16 AWG BLU): Project properties,
+  Schematic, "...and its color". Wire color label still turns it on or off for single wires.
+
+**Changed**
+- Edit title block opens the title block in a tab of its own, as Edit block opens a block, with
+  a Title block ribbon tab. Save title block (or Ctrl+S) puts it in the project and takes you
+  back to your drawing, on the Sheets tab; Close title block leaves it as it was, asking first
+  if you changed anything.
+
+**Fixed**
+- PLC modules brought in with Import I/O list were lost when the project was saved and opened
+  again.
+- A bus carried on from its ends onto wires side by side could run its wires back over their
+  own; it's refused with a message now.
+
 ## 0.22.4
 
 **New**

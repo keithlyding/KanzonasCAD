@@ -66,6 +66,19 @@ class ArrayEditTest(unittest.TestCase):
         self.p.undo()
         self.assertEqual(sorted(e.pos[0] for e in self.coils()), [2.0, 4.0, 6.0])
 
+    def test_a_source_with_its_tag_hidden_keeps_its_copies(self):
+        # (a contact block on a pushbutton's dashed line hides its tag, its copies off the line
+        # show theirs: the copies were taken for ones that had left the array, and Edit array
+        # left them where they were; the battery, 0.22.5, seed 469)
+        aid = self.make()
+        copies = sorted(arrays.members(self.s, aid))
+        self.assertEqual(len(copies), 2)
+        with self.p.edit("hidden") as ed:
+            ed.change(self.s, self.s.entities[self.coil.id].copy(hidden=["TAG"]))
+        self.assertEqual(sorted(arrays.members(self.s, aid)), copies)
+        self.edit(None, None, None, "3")
+        self.assertEqual([e.pos[0] for e in self.coils()], [2.0, 5.0, 8.0])
+
     def test_more_and_fewer(self):
         self.make()
         tags = {e.attrs["TAG"] for e in self.coils()}

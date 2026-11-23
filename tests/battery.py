@@ -133,6 +133,16 @@ class Log:
 
 
 # ---- invariants ------------------------------------------------------------------------------
+def blocks_known(project, sheet):
+    """Every block copy on the sheet has its block in the project (saved with it): Import I/O
+    list put modules on new sheets without theirs, gone once the project was opened again (the
+    battery, 0.22.5, seed 44)."""
+    for e in sheet.inserts():
+        assert e.block in project.blocks, \
+            "%s on sheet %s isn't one of the project's blocks" % (e.block, sheet.id)
+    BC.CHECKED["block copies' blocks in the project"] += 1
+
+
 def check_sheet(sheet):
     """The model holds together: every entity is found by the spatial index where it is, ids
     are unique and numeric, wires have two or more distinct finite points, and everything
@@ -2511,8 +2521,14 @@ def random_editing(log, out, ops, seed, drawing=None):
         ws = s.wires()
         if not ws:
             return
+        if rnd.random() < 0.2:
+            # (0.22.5: the project's "...and its color" turned on or off: every wire without a
+            # choice of its own follows it)
+            with p.edit("wire colors") as ed:
+                ed.project_settings({"wire_color_shown": not p.settings.get("wire_color_shown")})
         pick = rnd.sample(ws, min(len(ws), rnd.randint(1, 3)))
-        want = any(not w.show_color for w in pick)
+        dflt = bool(p.settings.get("wire_color_shown"))
+        want = any(not (w.show_color if w.show_color is not None else dflt) for w in pick)
         v.set_selection({w.id for w in pick})
         v.run(C.WireColorLabelCmd)
         finish()
@@ -2749,8 +2765,16 @@ def random_editing(log, out, ops, seed, drawing=None):
         d = win.doc()
         assert d is not src and d.view.sheet() is d.project.title_block, \
             "Edit title block didn't open a tab of its own"
-        a = (round(rnd.uniform(0.5, 4.0), 3), round(rnd.uniform(0.1, 1.0), 3))
-        b = (a[0] + 0.5, a[1])
+        # (inside the title block's outline, as anyone draws in one: a line far from it made
+        # it, and a strip title block, span the sheet, the room left for the drawing a sliver;
+        # seed 469's report and I/O sheets)
+        bb = None
+        for e in d.project.title_block.entities.values():
+            bb = G.bbox_union(bb, e.bbox())
+        if bb is None or bb[2] - bb[0] < 1.0:
+            bb = (0.5, 0.1, 4.5, 1.0)
+        a = (round(rnd.uniform(bb[0], bb[2] - 0.6), 3), round(rnd.uniform(bb[1], bb[3]), 3))
+        b = (round(a[0] + 0.5, 3), a[1])
         t = d.view
         t.snap_on = t.osnap_on = t.ortho_on = t.polar_on = False
         t.run(C.LineCmd)
@@ -2762,6 +2786,16 @@ def random_editing(log, out, ops, seed, drawing=None):
             if t.cmd is not None:
                 t.cancel()
         drawn = lines(d.project) != before
+        if rnd.random() < 0.3:
+            # (0.22.5: Save as title block: kept in the library by name, the tab still open)
+            from kanzonascad import titleblocks as TBL
+            name = "Battery %d" % rnd.randint(1, 3)
+            with mock.patch.object(win, "ask_title_block_name", return_value=name), \
+                    mock.patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                win.acts["save_tb_as"].trigger()
+            assert (name, False) in TBL.names(win.library) and win.doc() is d, \
+                "Save as title block didn't keep %s in the library" % name
+            BC.CHECKED["title block saved in the library"] += 1
         save = rnd.random() < 0.6
         if save:
             win.acts["save_tb"].trigger()
@@ -2777,6 +2811,18 @@ def random_editing(log, out, ops, seed, drawing=None):
         elif not save:
             assert lines(p) == before, "a title block closed without saving changed"
             BC.CHECKED["title block closed without saving"] += 1
+        if rnd.random() < 0.3:
+            # (0.22.5: Title blocks...: a ready-made one or one of the library's put in the
+            # project, where it sits; checked against the library's own copy)
+            from kanzonascad import titleblocks as TBL
+            name = rnd.choice([n for n, _b in TBL.names(win.library)])
+            with mock.patch.object(win, "ask_title_block", return_value=name):
+                win.acts["title_blocks"].trigger()
+            pos, ents, _lays, _blocks = TBL.load(win.library, name, p)
+            texts = lambda es: sorted(e.text for e in es if isinstance(e, M.Text))
+            assert texts(p.title_block.entities.values()) == texts(ents) and \
+                p.settings.get("tb_position") == pos, "Title blocks... didn't put %s in" % name
+            BC.CHECKED["title block from the library"] += 1
 
     fps = sorted(n for n, d in lib.blocks("footprint")[0].items() if d.builtin)
 
@@ -3747,10 +3793,14 @@ def random_editing(log, out, ops, seed, drawing=None):
         keep = {e.id: (e.pos, e.attrs.get("TAG")) for e in s.inserts() if e.block == name}
         saved = QMessageBox.question
         QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
+        # ("the same as the library's", when nothing changed: a box nobody would close here)
+        told = QMessageBox.information
+        QMessageBox.information = staticmethod(lambda *a, **k: QMessageBox.Ok)
         try:
             win.update_blocks_from_library()
         finally:
             QMessageBox.question = saved
+            QMessageBox.information = told
         assert p.blocks[name].same_as(lib.get("symbol", name)), "%s not updated" % name
         now = {e.id: (e.pos, e.attrs.get("TAG")) for e in s.inserts() if e.block == name}
         assert now == keep, "updating %s moved or retagged its copies" % name
@@ -4022,10 +4072,12 @@ def random_editing(log, out, ops, seed, drawing=None):
             s = v.sheet()
             v.set_selection(set())
             check_sheet(s)
+            blocks_known(p, s)
             BC.check_index(s, crnd)
             if i % 25 == 24:
                 for other in p.sheets:
                     check_sheet(other)
+                    blocks_known(p, other)
                 BC.footprints_follow(p)
                 BC.arrows_follow(p)
             if i % 50 == 49:

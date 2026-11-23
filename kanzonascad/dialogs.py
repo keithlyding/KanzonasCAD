@@ -561,10 +561,22 @@ def project_properties(parent, project, tab=0):
     wclean.setChecked(bool(st.get("wire_cleanup", True)))
     form.addRow("", wclean)
     wgauge = QCheckBox("Show a wire layer's gauge beside its wires")
-    wgauge.setToolTip("Layers: AWG and Wire color. Each run of wire on such a layer shows "
-                      "them (10 AWG BRN), under its wire number.")
+    wgauge.setObjectName("wire_gauge_shown")
+    wgauge.setToolTip("Layers: AWG. Each run of wire on such a layer shows it (10 AWG), under "
+                      "its wire number")
     wgauge.setChecked(bool(st.get("wire_gauge_shown", True)))
     form.addRow("", wgauge)
+    # (the owner, 0.22.5: "These wire colors aren't showing. None of them have it in the whole
+    # project": the color shown everywhere at once; Wire color label still turns it on or off
+    # for the wires picked)
+    wcolor = QCheckBox("...and its color (14 AWG BLU)")
+    wcolor.setObjectName("wire_color_shown")
+    wcolor.setToolTip("Layers: Wire color. On every wire, unless Wire color label (Schematic "
+                      "tab) turned it otherwise for that wire")
+    wcolor.setChecked(bool(st.get("wire_color_shown", False)))
+    wcolor.setEnabled(wgauge.isChecked())
+    wgauge.toggled.connect(wcolor.setEnabled)
+    form.addRow("", wcolor)
     wgroup = QComboBox()
     wgroup.setObjectName("wire_gauge_each")
     wgroup.addItem("Once for wires side by side of one gauge and color", "group")
@@ -813,6 +825,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_around"] = waround.isChecked()
     settings["wire_clear"] = wclear.value()
     settings["wire_gauge_shown"] = wgauge.isChecked()
+    settings["wire_color_shown"] = wcolor.isChecked()
     settings["wire_gauge_each"] = wgroup.currentData()
     settings["wire_gauge_height"] = wgh.value()
     settings["footprint_label"] = fp_show.currentData()
@@ -2797,3 +2810,81 @@ def ladder_dialog(parent, lad, k):
         except ValueError:
             QMessageBox.warning(parent, "Ladder", "Type the first rung number as a whole "
                                                   "number (603), or leave it blank.")
+
+
+def title_blocks_dialog(parent, lib):
+    """Title blocks...: the ready-made title blocks and the ones saved in the library; Use
+    returns the name of the one picked, Delete takes one of yours out of the library (asked
+    first). None when closed (the owner, 0.22.5: "I should be able to save as a new title block
+    and then select default ones or different variations I've made")."""
+    from PySide6.QtWidgets import QListWidget, QListWidgetItem
+    from . import titleblocks as TB
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Title blocks")
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel("Pick a title block for this project: a ready-made one, or one you "
+                         "saved (Edit title block, Save as title block...). It goes where it "
+                         "was made for: the corner, a strip down the right or along the bottom. "
+                         "Undo puts the old one back."))
+    lst = QListWidget()
+    lst.setObjectName("title_block_list")
+    lay.addWidget(lst)
+    got = {}
+
+    def fill():
+        lst.clear()
+        for name, built in TB.names(lib):
+            it = QListWidgetItem(name + ("  (ready-made)" if built else ""))
+            it.setData(Qt.UserRole, (name, built))
+            lst.addItem(it)
+        lst.setCurrentRow(0)
+    fill()
+    row = QHBoxLayout()
+    use = QPushButton("Use")
+    use.setObjectName("use")
+    delete = QPushButton("Delete")
+    delete.setObjectName("delete")
+    close = QPushButton("Close")
+    for b in (use, delete):
+        row.addWidget(b)
+    row.addStretch(1)
+    row.addWidget(close)
+    lay.addLayout(row)
+
+    def picked():
+        it = lst.currentItem()
+        return it.data(Qt.UserRole) if it is not None else None
+
+    def on_use():
+        p = picked()
+        if p is not None:
+            got["name"] = p[0]
+            dlg.accept()
+
+    def on_delete():
+        p = picked()
+        if p is None or p[1]:
+            return
+        if QMessageBox.question(dlg, "Title blocks", "Delete the title block %s from your "
+                                "library? Projects using it keep their copy." % p[0],
+                                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        try:
+            TB.delete(lib, p[0])
+        except (OSError, ValueError) as ex:
+            QMessageBox.warning(dlg, "Title blocks", "Couldn't delete it:\n%s" % ex)
+        fill()
+
+    def on_row(_i):
+        p = picked()
+        delete.setEnabled(bool(p and not p[1]))
+    use.clicked.connect(on_use)
+    delete.clicked.connect(on_delete)
+    close.clicked.connect(dlg.reject)
+    lst.currentRowChanged.connect(on_row)
+    lst.itemDoubleClicked.connect(lambda _it: on_use())
+    on_row(0)
+    dlg.resize(520, 380)
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return got.get("name")

@@ -103,6 +103,9 @@ nobody understands).
   each footprint terminal labeled with its wire number and where it goes); symbols "lean heavy
   on the Allen Bradley stuff" and "also put in IEC symbols" (IEC 60617 as a per-project symbol
   set: changes AGENTS.md's US-only line when it lands).
+- 0.22.5 (owner, Nov 23 2026: "I think it should actually have its own tab, kind of like editing
+  a block"): the title block edited in a tab of its own, Save title block and Close title
+  block on its own ribbon tab.
 - 0.22.4 (owner, Nov 23 2026: "In addition to -1, can we add a, b, c, etc for wire taps? Also
   -a, -b, -c, etc. This would be a project wide setting, able to be overridden by sheet and by
   wire"; asked: a tap off a tap alternates, letters lowercase): Tap numbers end in -1, a or -a,

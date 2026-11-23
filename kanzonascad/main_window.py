@@ -570,6 +570,14 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
           icon="save_block", label="Save title block",
           tip="Put the title block drawn in this tab in its project (Undo there takes it "
               "back) and go back to the drawing")
+        A("save_tb_as", "Save as title b&lock...", lambda: self.save_title_block_as(),
+          icon="save_block", label="Save as title block",
+          tip="Keep the title block drawn in this tab in your library under a name of your "
+              "own, for any project (Title blocks... puts it in one)")
+        A("title_blocks", "Title bloc&ks...", lambda: self.title_blocks(), icon="title_block",
+          label="Title blocks",
+          tip="Put a title block in this project: a ready-made one (in the corner, a strip "
+              "down the right or along the bottom) or one you saved")
         A("close_tb", "Close title &block", self.close_title_block, icon="close_window",
           label="Close title block",
           tip="Close the title block's tab (asking to save its changes) and go back to the "
@@ -749,7 +757,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
                   "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb",
-                  "save_tb", "close_tb", "use_tb",
+                  "save_tb", "save_tb_as", "close_tb", "title_blocks", "use_tb",
                   "layers", "wire_layers",
                   None, "new_revision", "revisions"):
             m.addSeparator() if k is None else m.addAction(a[k])
@@ -881,7 +889,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
             ("Order", "small", [a["sheet_up"], a["sheet_down"]]),
             ("Rotate", "small", [a["sheet_cw"], a["sheet_ccw"]]),
             ("Properties", "large", [a["sheet_props"], a["project_props"], a["layers"]]),
-            ("Title block", "large", [a["edit_tb"], a["use_tb"]]),
+            ("Title block", "large", [a["edit_tb"], a["title_blocks"], a["use_tb"]]),
             ("Revisions", "large", [a["new_revision"], a["revisions"]]),
         ])
         r.add_tab("Output", [
@@ -906,8 +914,10 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         # a block's own tools: shown in a block's tab (Edit block), or always (View, Block tab)
         # the title block's own tools: shown in its tab only (Edit title block)
         r.add_tab("Title block", [
-            ("Title block", "large", [a["save_tb"], a["close_tb"]]),
-            ("Draw", "large", [a["line"], a["rect"], a["text"], a["mtext"]]),
+            ("Title block", "large", [a["save_tb"], a["save_tb_as"], a["close_tb"]]),
+            # (a company logo: a picture kept in the project, on every sheet)
+            ("Draw", "large", [a["line"], a["rect"], a["text"], a["mtext"],
+                               a["import_picture"]]),
             ("Modify", "small", [a["move"], a["copy"], a["stretch"], a["erase"], a["trim"]]),
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
         ])
@@ -3859,9 +3869,10 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         # saves the block)
         in_tb = is_tb_doc(self.doc())
         a["save"].setEnabled(bool(has and (in_block or p.is_modified())))
-        for k in ("save_tb", "close_tb"):
+        for k in ("save_tb", "save_tb_as", "close_tb"):
             a[k].setEnabled(in_tb)
             a[k].setVisible(in_tb)
+        a["title_blocks"].setEnabled(bool(has and not in_tb and not in_block))
         a["save_block"].setEnabled(in_block)
         a["save_block"].setVisible(in_block)
         for k in ("save_block_as", "add_pin", "pins", "add_attr"):

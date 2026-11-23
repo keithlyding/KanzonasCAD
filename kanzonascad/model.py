@@ -92,6 +92,10 @@ DEFAULT_SETTINGS = {
     # for wire taps? Also -a, -b, -c, etc. This would be a project wide setting, able to be
     # overridden by sheet and by wire")
     "tap_style": "-1",
+    # a wire layer's gauge label shows its insulation color too (14 AWG BLU) on every wire that
+    # doesn't say otherwise (Wire color label; the owner, 0.22.5, "These wire colors aren't
+    # showing. None of them have it in the whole project")
+    "wire_color_shown": False,
     "ladder_numbers": "hundreds",
     "ladder_spacing": 0.5,
     # new dimensions read decimal (12.50") or fractional to the nearest 1/16 (1-9/16"): "decimal",
@@ -428,7 +432,7 @@ class Wire(Polyline):
                  "pin_tap", "tap_style")
 
     def __init__(self, points, closed=False, num=None, num_lock=False, own_num=False,
-                 labels=(), awg="", same_num=False, show_color=False, pin_tap=False,
+                 labels=(), awg="", same_num=False, show_color=None, pin_tap=False,
                  tap_style="", **kw):
         kw.setdefault("layer", "WIRES")
         super().__init__(points, False, **kw)
@@ -452,7 +456,8 @@ class Wire(Polyline):
         # its insulation color written in its gauge label too (Wire color label: the owner,
         # 0.18.4, "I don't think we need to include the wire color. Maybe that can be a
         # toggle-able option on a per-wire basis?")
-        self.show_color = bool(show_color)
+        # (None: as the project, Project properties, Schematic, "...and its color"; 0.22.5)
+        self.show_color = None if show_color is None else bool(show_color)
         # a second wire on a pin (a double landing) numbered as a tap off the wire already
         # there: as the project numbers taps, or its own same_num / own_num (the owner, 0.18.5:
         # "Give me the option each time, and changeable")
@@ -474,8 +479,8 @@ class Wire(Polyline):
             d["labels"] = list(self.labels)
         if self.awg:
             d["awg"] = self.awg
-        if self.show_color:
-            d["show_color"] = True
+        if self.show_color is not None:
+            d["show_color"] = self.show_color
         if self.pin_tap:
             d["pin_tap"] = True
         if self.tap_style:
@@ -486,7 +491,7 @@ class Wire(Polyline):
     def _from(cls, d):
         return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
                    d.get("own_num", False), d.get("labels") or (), d.get("awg", ""),
-                   d.get("same_num", False), d.get("show_color", False),
+                   d.get("same_num", False), d.get("show_color"),
                    d.get("pin_tap", False), d.get("tap_style", ""),
                    layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
 

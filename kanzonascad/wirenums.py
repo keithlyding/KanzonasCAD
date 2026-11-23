@@ -1169,7 +1169,8 @@ def gauge_labels(project, sheet):
     h = float(project.settings.get("wire_number_height", 0.08)) * sheet.k()
     gh = float(project.settings.get("wire_gauge_height", 0.06)) * sheet.k()
     every = project.settings.get("wire_gauge_each", "group") == "each"
-    sig = (sheet.version, sheet.scale, h, gh, tuple(sorted(shown.items())), every,
+    colors = bool(project.settings.get("wire_color_shown", False))
+    sig = (sheet.version, sheet.scale, h, gh, tuple(sorted(shown.items())), every, colors,
            tuple(sorted((n, lay.wire_color) for n, lay in project.layers.items())))
     got = getattr(sheet, "_gauge_labels", None)
     if got is not None and got[0] == sig:
@@ -1183,7 +1184,8 @@ def gauge_labels(project, sheet):
             continue
         lay = project.layers.get(w.layer)
         g = str(w.awg or (lay.awg if lay is not None else "")).strip()
-        color = lay.wire_color if lay is not None and w.show_color else ""
+        on = w.show_color if w.show_color is not None else colors
+        color = lay.wire_color if lay is not None and on else ""
         if g or color:
             labeled.append((w, gauge_text(g) if g else "", color or ""))
     if not labeled:

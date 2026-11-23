@@ -74,6 +74,22 @@ class IoListTest(unittest.TestCase):
         self.p.undo()
         self.assertEqual(len(self.p.sheets), n)
 
+    def test_modules_kept_when_saved_and_opened(self):
+        # (the module's block wasn't put in the project: after saving and opening, the sheet
+        # showed nothing where the module was; the battery, 0.22.5, seed 44)
+        made = self.win.import_io_list(self.path)
+        for s in made:
+            for e in s.inserts():
+                self.assertIn(e.block, self.p.blocks)
+        path = os.path.join(self.dir, "io.kzcad")
+        self.p.save(path, backups=0)
+        q = M.Project.load(path)
+        for s in made:
+            got = [e for e in q.sheet_by_id(s.id).inserts()]
+            self.assertEqual(len(got), 1)
+            self.assertIsNotNone(got[0].defn)
+            self.assertEqual(dict(got[0].pin_points()), dict(s.inserts()[0].pin_points()))
+
     def test_columns_by_name_any_order(self):
         path = os.path.join(self.dir, "b.csv")
         with open(path, "w", encoding="utf-8") as f:
