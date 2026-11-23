@@ -74,7 +74,8 @@ class WireLockXrefTest(unittest.TestCase):
         finally:
             dialogs.QDialog.exec = real
         self.assertTrue(got["ticked"])
-        self.assertEqual(out, ("1077", "", True))
+        # (number, tap choice, locked, and since 0.22.4 its tap style: "" as its sheet's)
+        self.assertEqual(out, ("1077", "", True, ""))
 
     def test_source_puts_connectors_on_both(self):
         other = self.num(self.s2, self.b)

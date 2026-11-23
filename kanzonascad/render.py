@@ -441,8 +441,12 @@ class SheetRenderer:
                     w for w in (e.world_entities() if isinstance(e, M.Insert) else e.parts())
                     if isinstance(w, M.Text)]
                 solids = solid_fills(e)
-                if texts:
-                    ch.texts.setdefault(key, []).extend(text_item(t) for t in texts)
+                for t in texts:
+                    # (each in its own color: the block's, but a footprint's labels in the
+                    # color Panel settings gives them; all in the block's, the owner's labels
+                    # never showed it: "Footprint label color didn't work either", 0.22.4)
+                    k = key if t.color == e.color else self.pal.color(self.project, t).rgba()
+                    ch.texts.setdefault(k, []).append(text_item(t))
                 if solids:
                     # a hatch's fill under the lines; a leader's arrowhead with its text
                     hatch = isinstance(e, M.Hatch)

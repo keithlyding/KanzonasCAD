@@ -18,6 +18,10 @@ build fails without them.
 **Changed**
 - A tap three levels down is now 2007-1a1 (it was 2007-1aa).
 
+**Fixed**
+- Footprint label color (Project properties, Panel) works again: a footprint's tag and other
+  labels are drawn, printed and saved to PDF in that color. They had kept the footprint's.
+
 ## 0.22.3
 
 **Fixed**
