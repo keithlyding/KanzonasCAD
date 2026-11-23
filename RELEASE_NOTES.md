@@ -6,6 +6,22 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.6
+
+**New**
+- Editing a text where it is: Left, Center and Right just above the edit box justify it, and
+  More... opens its full window (height, angle and the rest).
+- The Block tab has Linear and Aligned dimensions to measure a block as you draw it; they
+  aren't saved into the block.
+
+**Fixed**
+- Block properties... on the Block tab works in a block's own tab, on the block you are
+  editing.
+- A pin name's justification set in a block's tab is kept when the block is saved (it went
+  back to how it was), and copies showing their pin names show it so.
+- Pin names on a placed block no longer land on top of each other near a corner (PE2 and T3
+  on a drive): a pin on the bottom edge reads as a bottom pin.
+
 ## 0.22.1
 
 **New**

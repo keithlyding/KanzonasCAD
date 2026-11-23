@@ -891,6 +891,8 @@ class MainWindow(BlockEditing, QMainWindow):
                                 a["dup_block"]]),
             ("Pins", "large", [a["add_pin"], a["pins"]]),
             ("Attributes", "large", [a["add_attr"]]),
+            # (measuring the block as it is drawn: not saved into it, block_editor.to_block)
+            ("Measure", "large", [a["dim_linear"], a["dim_aligned"]]),
             ("Library", "large", [a["edit_block"], a["update_blocks"]]),
         ])
         tb = self.ribbon_bar = QToolBar("Ribbon")
@@ -2152,13 +2154,18 @@ class MainWindow(BlockEditing, QMainWindow):
             from . import text_edit
             sheet = v.sheet()
 
-            def done(text, ent=ent, sheet=sheet):
+            def done(text, side=None, ent=ent, sheet=sheet):
                 now = sheet.entities.get(ent.id)
-                new = text_edit.changed(now, text) if now is not None else None
+                new = text_edit.changed(now, text, side) if now is not None else None
                 if new is not None:
                     with v.project.edit("Edit text") as ed:
                         ed.change(sheet, new)
-            v.in_place = text_edit.InPlace(v, ent, done)
+
+            def more(ent=ent, sheet=sheet):
+                now = sheet.entities.get(ent.id)
+                if now is not None and v.sheet() is sheet:
+                    self.text_properties(now)
+            v.in_place = text_edit.InPlace(v, ent, done, more)
             return
         self.text_properties(ent)
 

@@ -314,6 +314,75 @@ class BlockWindowTest(unittest.TestCase):
             self.assertEqual(json.load(f), fp.to_dict())
         d.view.repaint()                                    # (the pin rings drawn)
 
+    def test_properties_in_the_blocks_own_tab(self):
+        # (the owner, 0.22.5: "There's a selection for it in the block tab but I can't do
+        # anything with it": the block being edited, nothing selected)
+        self.lib.save_block(coil())
+        d = self.win.edit_block("symbol", "Test coil")
+        self.assertIs(self.win.doc(), d)
+        seen = []
+
+        def details(parent, library, kind_hint="symbol", defn=None, on_help=None):
+            seen.append(defn.name)
+            return {"kind": "symbol", "name": "Test coil", "category": "Relays",
+                    "description": "Its own tab", "role": defn.role, "contact": defn.contact,
+                    "prefix": defn.prefix, "wiring": defn.wiring,
+                    "pin_names": [q["name"] for q in defn.pins],
+                    "manufacturer": "Allen-Bradley", "family": "", "series": ""}
+        with mock.patch.object(LP, "block_details_dialog", details):
+            new = self.win.block_properties()
+        self.assertEqual(seen, ["Test coil"])
+        self.assertIsNotNone(new)
+        self.assertEqual(self.lib.get("symbol", "Test coil").manufacturer, "Allen-Bradley")
+        self.assertEqual(d.block_session.defn.description, "Its own tab")
+        self.win.acts["save_block"].trigger()            # (saving keeps them)
+        self.assertEqual(self.lib.get("symbol", "Test coil").description, "Its own tab")
+
+    def test_a_pin_names_justification_is_kept(self):
+        # (the owner, 0.22.6: "when I edit text justification for a block's pins, it just goes
+        # back to where it was after saving")
+        self.lib.save_block(coil())
+        d = self.win.edit_block("symbol", "Test coil")
+        s = d.view.sheet()
+        a1 = next(e for e in s.entities.values()
+                  if isinstance(e, M.Text) and e.layer == BE.LAYER_PINS and e.text == "A1")
+        self.assertEqual(a1.align, "right")                 # (left of the base point)
+        with d.project.edit("justify") as ed:
+            ed.change(s, a1.copy(align="center", valign="middle"))
+        self.win.acts["save_block"].trigger()
+        saved = self.lib.get("symbol", "Test coil")
+        pins = {q["name"]: q for q in saved.pins}
+        self.assertEqual((pins["A1"].get("align"), pins["A1"].get("valign")),
+                         ("center", "middle"))
+        self.assertNotIn("align", pins["A2"])               # (worked out: nothing kept)
+        # opened again: as set
+        p2, sess2 = BE.open_block(saved)
+        again = next(e for e in p2.sheets[0].entities.values()
+                     if isinstance(e, M.Text) and e.layer == BE.LAYER_PINS and e.text == "A1")
+        self.assertEqual((again.align, again.valign), ("center", "middle"))
+        # a copy showing its pin names shows it so
+        shown = M.BlockDef.from_dict(dict(saved.to_dict(), show_pins=True))
+        ins = M.Insert(shown.name, (5.0, 5.0), defn=shown)
+        texts = {t.text: t for t in ins.pin_texts()}
+        self.assertEqual((texts["A1"].align, texts["A1"].valign), ("center", "middle"))
+        self.assertEqual(texts["A1"].pos, (4.75, 5.0))
+
+    def test_dimensions_in_the_tab_measure_and_stay_out(self):
+        # (the owner, 0.22.5: "I need linear measurement inside of the block edit tab": the
+        # Block tab's Measure group; a dimension drawn there isn't saved into the block)
+        self.lib.save_block(coil())
+        d = self.win.edit_block("symbol", "Test coil")
+        self.assertTrue(self.win.acts["dim_linear"].isEnabled())
+        sess = d.block_session
+        s = d.view.sheet()
+        ox, oy = sess.offset
+        with d.project.edit("dim") as ed:
+            ed.add(s, M.Dimension((ox - 0.25, oy), (ox + 0.25, oy), (ox, oy + 0.4)))
+        res = BE.to_block(d.project, sess)
+        self.assertFalse(any(isinstance(e, M.Dimension) for e in res.defn.entities))
+        self.assertTrue(any("measurements" in w for w in res.warnings))
+        self.assertEqual(len(res.defn.entities), len(coil().entities))
+
     def test_edit_geometry_and_pins_then_save_and_update(self):
         self.lib.save_block(coil())
         a = self.place(self.lib.get("symbol", "Test coil"), (5, 5), {"TAG": "CR1"})

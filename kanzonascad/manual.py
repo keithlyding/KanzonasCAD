@@ -31,8 +31,11 @@ buttons become small ones with their names beside them, then icons alone (the na
 when you hold the mouse over one); widen the window and they grow back. Only a tab that
 still doesn't fit as icons scrolls sideways (the mouse wheel over it).</li>
 <li><b>The Block tab</b> holds a block's own tools: <b>Save block</b>, <b>Save block as...</b>,
-<b>Block properties...</b>, <b>Duplicate block...</b>, <b>Add pin</b>, <b>Pins...</b>, <b>Add attribute</b>,
-<b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
+<b>Block properties...</b> (in a block's tab, that block's: nothing to select), <b>Duplicate
+block...</b>, <b>Add pin</b>, <b>Pins...</b>, <b>Add attribute</b>, <b>Linear dimension</b> and
+<b>Aligned dimension</b> (Measure: to measure the block as you draw it; a dimension drawn in
+a block's tab isn't saved into the block, so its copies don't carry it; one the block already
+had stays), <b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
 in a block's tab (Edit block..., on the Schematic tab's Symbols group and the Panel tab's
 Footprints group, opens one), and goes away when you leave it. To have it all the time, turn
 on <b>Block tab</b> (View menu, and the View tab's Ribbon group). The same commands are always
@@ -509,7 +512,11 @@ on them wire for wire, and the order Properties... lists them); <b>Delete</b> ta
 <b>Find</b> selects it on the drawing and puts it in the middle of the view; <b>Wire layer</b>
 (double-click it) gives a pin a wire layer of its own: a wire started on that pin goes on that
 layer when the project has it (blank: worked out from the block, as Layers describes). OK makes
-all of it one step (Undo takes it back); two pins with the same name are refused. The blue text on BLOCK TAG is where the tag goes, and texts on
+all of it one step (Undo takes it back); two pins with the same name are refused. A pin's name in a block's tab is a text you can justify like any other
+(double-click it: Left, Center, Right, or More... for top, middle or bottom too); the block
+keeps it, and a copy showing its pin names shows it so; left as it opened, it follows the
+pin's side: the side its lead line comes in from (or the nearest edge of the block), so a pin
+on the bottom edge near a corner (PE2 beside T3 on a drive) reads as a bottom pin. The blue text on BLOCK TAG is where the tag goes, and texts on
 BLOCK ATTRIBUTES are where a terminal's number, a PLC address or a rating shows; their
 alignment and angle (Edit text: middle center, say, so a rating sits in the middle of a fuse
 whichever way it is turned) are kept with the block. <b>Add attribute</b> (ADDATTR, ATTDEF,
@@ -1209,7 +1216,10 @@ on the text, as in AutoCAD: TL, TC, TR (top), ML, MC, MR (middle), BL, BC, BR (b
 C, R (on the baseline). All three are kept for the next texts.
 <b>Double-click a text</b> to change its wording where it is: an edit box opens over it,
 Enter keeps what you typed (one Undo), Esc leaves it as it was, and clicking elsewhere keeps it
-too. Right-click it and pick <b>Text properties...</b> for its wording, height, angle and
+too. Just above the box, <b>Left</b>, <b>Center</b> and <b>Right</b> justify it (kept with
+what you typed, the same Undo; a multi-line note keeps its top, middle or bottom), and
+<b>More...</b> keeps what you typed and opens its window. Right-click it and pick <b>Text
+properties...</b> (or More...) for its wording, height, angle and
 justification (a new justification moves the text around its insertion point; tick "Keep the
 text where it is", unticked to start, to move only the insertion point instead, which is where
 it snaps and turns around).</td></tr>
