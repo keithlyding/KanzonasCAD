@@ -277,7 +277,11 @@ references (6-D1) still follow the zones when the border is off.</p>
 <p><b>Title block position</b> (Project properties, General) says where the title block sits:</p>
 <ul>
 <li><b>Lower right corner</b> (to start): the zones run the full width and height of the
-sheet, and the title block sits over the lower right corner.</li>
+sheet, and the title block sits over the lower right corner. The ready-made one is 5" wide and
+1-1/16" tall: SHEET TITLE; CUSTOMER and PROJECT; DRAWN BY, DRAWN, CHECKED BY and REV DATE;
+DRAWING NO., REV, SCALE and SHEET. A project made before 0.22.3 keeps its bigger one (6-1/2"
+by 1-3/8", no SCALE): choose Lower right corner and tick <b>Replace the title block with one
+made for this position</b> to get the new one.</li>
 <li><b>Right-hand strip</b>: the title block takes the whole right-hand column of the sheet.
 The zones stop at it (a line divides them from the strip) and are spread over the room left,
 so grid references (6-D1) never point into the title block.</li>
@@ -1439,7 +1443,8 @@ marked as drawing-sized).</li>
 <li>Footprints aren't scaled by hand on a panel sheet (Scale leaves them out and says so):
 bring a manufacturer's drawing to real size with Scale, Reference before it becomes a
 footprint.</li>
-<li><b>{{Scale}}</b> in the title block shows the sheet's scale (Edit title block to add it).</li>
+<li><b>{{Scale}}</b> in the title block shows the sheet's scale (the ready-made title blocks
+have a SCALE cell; Edit title block adds it to one of your own).</li>
 <li><b>Align objects</b> (ALIGNOBJ, ALO; Modify menu; Panel tab: Arrange; Schematic tab:
 Modify) lines up footprints, DIN rail, duct, symbols or anything else: select them, choose <b>Left</b>, <b>Center</b>, <b>Right</b>,
 <b>Top</b>, <b>Middle</b> or <b>Bottom</b> (L, C, R, T, M, B), then click the one to line

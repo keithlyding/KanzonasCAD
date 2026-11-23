@@ -116,15 +116,15 @@ class SheetScaleWindowTest(unittest.TestCase):
             b.setValue(x)
         self.assertTrue(d.fit_btn.isEnabled())
         d.fit()
-        # (48" x 48" with its side: 8" x 8" at 1:6 beside the title block; 9.6" at 1:5 fits
-        # neither beside nor above it; 1:8 until 1:6 was a preset, 0.15.9)
-        self.assertEqual(d.combo.currentText(), "1:6")
-        self.assertEqual(d.words.text(), "1 inch on paper = 6 inches of panel")
+        # (48" x 48" with its side: 9.6" x 9.6" at 1:5 beside the 5" title block of 0.22.3;
+        # beside the 6-1/2" one before it only 1:6 fitted; 1:8 until 1:6 was a preset, 0.15.9)
+        self.assertEqual(d.combo.currentText(), "1:5")
+        self.assertEqual(d.words.text(), "1 inch on paper = 5 inches of panel")
         self.assertIn("front and side", d.usage.text())
         self.assertEqual(d.state(d.scale()), "good")
         d.grab()                                            # the preview paints
         d._ok()
-        self.assertEqual(self.s.scale_text(), "1:6")
+        self.assertEqual(self.s.scale_text(), "1:5")
         self.assertEqual(self.s.cabinet, [30.0, 48.0, 12.0])
 
     def test_closed_window_goes_at_once(self):

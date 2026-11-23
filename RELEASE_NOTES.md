@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.3
+
+**Changed**
+- The standard title block in the lower right corner is smaller (5" by 1-1/16", was 6-1/2"
+  by 1-3/8") and shows the sheet's SCALE. New projects get it. To use it in a project you
+  already have: Project properties, Title block position: Lower right corner, and tick
+  "Replace the title block with one made for this position" (Undo puts the old one back).
+
 ## 0.22
 
 **New**
