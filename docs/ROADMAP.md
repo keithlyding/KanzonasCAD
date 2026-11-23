@@ -93,14 +93,24 @@ nobody understands).
   Not yet (offer): device tags and wire numbers from the rung (CR603, 603-1), as AutoCAD
   Electrical can. X Zones (columns only, IEC) not planned (owner: "Who uses just the x grid?").
 
+- 0.22.1 (owner, Nov 2026: "Yes, on the auto wire layer"): a wire takes its layer from the pin
+  it starts on (PLC points 24VDC BLU, commons BLU-WHT, motor/drive power 480V BLK, ground 480V
+  GRN, transformer X1/X2 120V RED/WHT, power supply L/N/+/-), and a pin's own wire layer in
+  Pins.... Owner's answers the same day: panel wiring as a per-device wiring list ("yes, a per
+  device wiring list"); a drawn point-to-point diagram "seems extremely busy" (offered instead:
+  each footprint terminal labeled with its wire number and where it goes); symbols "lean heavy
+  on the Allen Bradley stuff" and "also put in IEC symbols" (IEC 60617 as a per-project symbol
+  set: changes AGENTS.md's US-only line when it lands).
+
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).
-2. Auto wire layer: a wire started on a PLC I/O pin or a motor/drive terminal takes its
-   voltage's layer (mapping to confirm with the owner; per-pin defaults in the block editor).
+2. Auto wire layer (0.22.1, above).
 3. Terminal strips: strips, jumpers, a strip editor, a terminal plan report.
-4. Panel wiring: from/to lists, then point-to-point wiring diagrams (which form: to confirm).
-5. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints
-   (families to confirm). Templates library: not now.
+4. Panel wiring: a per-device wiring list (owner: yes); point-to-point as wire labels on the
+   footprints' terminals, not a drawn diagram (see 0.22.1).
+5. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints: "lean
+   heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates library: not
+   now.
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,
