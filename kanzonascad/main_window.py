@@ -1976,7 +1976,7 @@ class MainWindow(BlockEditing, QMainWindow):
                                                "PDF (*.pdf)")
         if not path:
             return
-        if not self._fits_or_go_on(d.project, d.project.sheets, "Export"):
+        if self._fits_or_go_on(d.project, d.project.sheets, "Export") != "go":
             return
         try:
             n = fileio.export_pdf(d.project, path, mono=not self.pdf_colors())
@@ -1985,17 +1985,77 @@ class MainWindow(BlockEditing, QMainWindow):
             return
         self.statusBar().showMessage("Exported %d sheet(s) to %s" % (n, path), 5000)
 
-    def _fits_or_go_on(self, p, sheets, what):
-        """True unless a scaled sheet's drawing doesn't fit on it and the user goes back."""
+    def _misfits(self, p, sheets):
+        """[(sheet, [(entity, why)])] of the sheets chosen whose drawing doesn't fit at their
+        scale (a panel sheet, or one not 1:1), with what doesn't (scalefit.culprits)."""
         from . import scalefit
-        bad = ["%s (%s, %s)" % (p.sheet_number(s), s.title, why) for s, why in
-               ((s, scalefit.outside(p, s)) for s in sheets
-                if s.kind == "panel" or abs(s.scale - 1.0) > 1e-12) if why]
-        return not bad or QMessageBox.question(
-            self, APP, "The drawing doesn't fit on sheet(s) %s at their scale: it would "
-            "print cut off or under the title block.\n\n%s anyway? (No: go back and "
-            "use Fit, in the status bar's Scale or Sheet scale...)" % (", ".join(bad), what)) \
-            == QMessageBox.Yes
+        out = []
+        for s in sheets:
+            if (s.kind == "panel" or abs(s.scale - 1.0) > 1e-12) and scalefit.outside(p, s):
+                out.append((s, scalefit.culprits(p, s)))
+        return out
+
+    def _misfit_text(self, p, bad, what):
+        """The question for _fits_or_go_on: each sheet by its number and title, and what on it
+        doesn't fit (up to five things a sheet, then how many more)."""
+        from . import scalefit
+        lines = []
+        for s, found in bad:
+            head = 'Sheet %s "%s"' % (p.sheet_number(s), s.title) if s.title else \
+                "Sheet %s" % p.sheet_number(s)
+            whys = sorted({why for _e, why in found}) or ["past the border"]
+            names = [scalefit.describe(e) for e, _why in found[:5]]
+            more = len(found) - len(names)
+            lines.append("%s, %s: %s%s" % (head, " and ".join(whys), ", ".join(names) or
+                                           "its drawing", (" and %d more" % more)
+                                           if more > 0 else ""))
+        back = "the Print window again" if what == "Print" else "nothing is exported"
+        return ("These don't fit on their sheet at its scale: they would print cut off or "
+                "under the title block.\n\n%s\n\n%s anyway? Go back: %s (Fit, in the status "
+                "bar's Scale or Sheet scale..., makes a drawing fit). Show them: goes to the "
+                "sheet with them selected." % ("\n".join(lines), what, back))
+
+    def ask_fit(self, text, what):
+        """The doesn't-fit question: "go" (print or export anyway), "back" or "show" (a test
+        replaces it)."""
+        box = QMessageBox(QMessageBox.Question, APP, text, QMessageBox.NoButton, self)
+        go = box.addButton("%s anyway" % what, QMessageBox.AcceptRole)
+        back = box.addButton("Go back", QMessageBox.RejectRole)
+        show = box.addButton("Show them", QMessageBox.ActionRole)
+        box.setDefaultButton(back)
+        box.setEscapeButton(back)
+        box.exec()
+        got = box.clickedButton()
+        return "go" if got is go else "show" if got is show else "back"
+
+    def show_misfits(self, p, bad):
+        """Show them: the first sheet that doesn't fit, everything on it in view, what doesn't
+        fit selected and listed on the command line."""
+        d = self.doc()
+        if d is None or d.project is not p or not bad:
+            return
+        s, found = bad[0]
+        v = d.view
+        v.show_sheet(s.id)
+        v.zoom("extents")
+        v.set_selection({e.id for e, _why in found})
+        from . import scalefit
+        self.cmdline.add_history("Sheet %s: %d object(s) don't fit (selected): %s" % (
+            p.sheet_number(s), len(found), ", ".join(scalefit.describe(e)
+                                                     for e, _why in found[:10])))
+
+    def _fits_or_go_on(self, p, sheets, what):
+        """"go" when every scaled sheet's drawing fits or the user prints anyway; "back" or
+        "show" (shown already) otherwise. The owner, 0.22.2: "if this message pops up and the
+        user clicks no, it needs to go back to the [Print] dialog box. Also, the drawing(s)
+        that cause this notification need to be identified"."""
+        bad = self._misfits(p, sheets)
+        if not bad:
+            return "go"
+        got = self.ask_fit(self._misfit_text(p, bad, what), what)
+        if got == "show":
+            self.show_misfits(p, bad)
+        return got
 
     def print_sheets(self):
         """Print... (Ctrl+P): this sheet, all of them or those picked (in the Print window,
@@ -2009,14 +2069,19 @@ class MainWindow(BlockEditing, QMainWindow):
                           display=(w0[0], w0[1], w1[0], w1[1]))
         while True:
             r = dlg.exec()
-            if r != PrintDialog.PICK:
+            if r == PrintDialog.PICK:
+                dlg.set_window(self.pick_print_window(v))     # (Window: two corners, then back)
+                continue
+            if r != QDialog.Accepted:
+                return None
+            if dlg.area()[0] != "sheet":
                 break
-            dlg.set_window(self.pick_print_window(v))     # (Window: two corners, then back)
-        if r != QDialog.Accepted:
-            return None
-        if dlg.area()[0] == "sheet" and \
-                not self._fits_or_go_on(v.project, dlg.sheets(), "Print"):
-            return None
+            got = self._fits_or_go_on(v.project, dlg.sheets(), "Print")
+            if got == "go":
+                break
+            if got == "show":
+                return None
+            # (Go back: the Print window again, as it was left)
         n = dlg.run(self._last_dir())
         if n:
             self.statusBar().showMessage("Printed %d sheet(s)" % n, 5000)

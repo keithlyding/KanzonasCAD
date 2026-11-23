@@ -1422,8 +1422,8 @@ while nothing is drawn on it changes its scale to the project's for that kind (s
 Scale box before you press OK, so you can pick another); a sheet with a drawing on it keeps its
 scale.</li>
 <li>When the drawing runs past the border or over the title block at the sheet's scale, the
-status bar says <b>doesn't fit</b> (in amber), and Export to PDF asks before printing it cut
-off.</li>
+status bar says <b>doesn't fit</b> (in amber), and Export to PDF and Print ask before printing
+it cut off, naming what doesn't fit (see Printing).</li>
 <li>The border, zones and title block are drawn around the real-size drawing, enlarged by the
 scale, so the sheet prints at its paper size (PDF) with the drawing at that scale. DXF
 exports hold the real-size drawing with the border enlarged around it, as AutoCAD drawings
@@ -1845,8 +1845,13 @@ the page; past the printer's paper is cut off at the page's edges (its middle sh
 colors.</li>
 </ul>
 <p>When a scaled sheet's drawing doesn't fit on it (the status bar's <b>doesn't fit</b>),
-printing the whole sheet asks first, as Export to PDF does. {{Print date}} in the title block
-is when you printed.</p>
+printing the whole sheet asks first, as Export to PDF does. The question names each sheet that
+doesn't fit by its number and title, says whether its drawing runs past the border or over the
+title block, and names what does (a symbol by its tag, a text by what it says, up to five a
+sheet). <b>Print anyway</b> prints; <b>Go back</b> opens the Print window again as you left it;
+<b>Show them</b> goes to the first of those sheets with everything on it in view and what
+doesn't fit selected (the command line lists it), so you can move it or use Fit. {{Print
+date}} in the title block is when you printed.</p>
 
 <h2>Windows and two screens</h2>
 <p>Any sheet can have a window of its own, to put on another screen: the schematic on one

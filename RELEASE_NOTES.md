@@ -6,6 +6,14 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.22.2
+
+**Fixed**
+- When a drawing doesn't fit its sheet and you print, the question now names each sheet (its
+  number and title) and what on it doesn't fit (a symbol by its tag, a text by what it says).
+  Go back opens the Print window again instead of stopping; Show them goes to that sheet with
+  those objects selected.
+
 ## 0.22
 
 **New**

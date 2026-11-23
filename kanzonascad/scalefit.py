@@ -256,6 +256,40 @@ def outside(project, sheet):
     return None
 
 
+def culprits(project, sheet):
+    """[(entity, why)] of what makes a sheet not fit (outside()): each object past the border
+    or over the title block, by the same measure, in the sheet's order. The owner, 0.22.2:
+    "the drawing(s) that cause this notification need to be identified"."""
+    k = sheet.k()
+    area, tb = room(project, sheet)
+    tol = 0.01
+    out = []
+    t = (tb[0] + MARGIN, tb[1] + MARGIN, tb[2] - MARGIN, tb[3] - MARGIN) if tb else None
+    for e in sheet.entities.values():
+        b = tuple(c / k for c in e.bbox())
+        if b[0] < area[0] - MARGIN - tol or b[1] < area[1] - MARGIN - tol or \
+                b[2] > area[2] + MARGIN + tol or b[3] > area[3] + MARGIN + tol:
+            out.append((e, "past the border"))
+        elif t is not None and b[0] < t[2] - tol and b[2] > t[0] + tol and \
+                b[1] < t[3] - tol and b[3] > t[1] + tol:
+            out.append((e, "over the title block"))
+    return out
+
+
+def describe(e):
+    """A few words naming an object for a message: a symbol by its tag (or its block), a
+    text by what it says, anything else by its kind."""
+    if isinstance(e, M.Insert):
+        tag = (e.attrs.get("TAG") or "").strip()
+        return ("%s (%s)" % (tag, e.block)) if tag else e.block
+    text = getattr(e, "text", None)
+    if isinstance(text, str) and text.strip():
+        line = text.strip().splitlines()[0]
+        return 'text "%s"' % (line if len(line) <= 30 else line[:27] + "...")
+    return {"wire": "a wire", "line": "a line", "polyline": "a polyline", "circle": "a circle",
+            "arc": "an arc"}.get(e.kind, "a %s" % e.kind.replace("_", " "))
+
+
 # A move of the whole drawing (Fit, turning a sheet, a DWG placed on the page) goes by whole
 # inches when it can, else by the biggest of these steps that keeps it where it must be: a
 # drawing moved by an odd amount (0.53229", -0.00375") is off the snap grid after it, and a
