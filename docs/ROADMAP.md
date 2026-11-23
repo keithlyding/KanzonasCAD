@@ -110,7 +110,8 @@ nobody understands).
   properties in a block's tab, pin name justification kept, pin names near corners, Ctrl+Tab
   in page order (the last-shown cycle on Ctrl+`). Unit tests in parallel (tools/run_tests.py), and main's build
   skips the tests already passed on the same files (the owner: "Don't re-run the tests on main
-  for code the PR build already passed"; tools/already_tested.py).
+  for code the PR build already passed"; tools/already_tested.py), and nightly tests on main at
+  midnight EST to make up for it (.github/workflows/nightly.yml; failures in a `nightly` issue).
 
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).

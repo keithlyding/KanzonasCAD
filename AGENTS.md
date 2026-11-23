@@ -152,6 +152,15 @@ machine-written changes leave behind:
 
 Fix what it finds; a line may opt out only with a `slop-ok: <why>` comment on it.
 
+## Nightly tests
+- `.github/workflows/nightly.yml` runs every night on main at 05:00 UTC (midnight EST; the owner,
+  Nov 2026: "a daily battery of tests to run every night at 12am eastern to overcome what we're
+  giving up", main's build skipping tests already passed): the unit tests on Windows and Linux
+  and the long battery on four seeds new each night (the date and the part, 202611241 ...).
+- A failure goes into one open issue labeled `nightly`. Act on it like a battery failure: rerun
+  the seed it names, fix the cause on a branch with a unit test of its own, and close the issue
+  once the fix is on main.
+
 ## Security updates
 - `.github/workflows/security-check.yml` runs every Monday (and by hand): pip-audit on
   `constraints.txt`, and `tools/check_dependencies.py` for newer ezdxf, ezdwg and PySide6
