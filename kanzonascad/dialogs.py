@@ -437,6 +437,7 @@ def project_properties(parent, project, tab=0):
     text_h.setValue(float(st["text_height"]))
     form.addRow("Text height (new text)", text_h)
     tbpos = QComboBox()
+    tbpos.setObjectName("tb_position")
     for key, label in (("corner", "Lower right corner"),
                        ("right", "Right-hand strip (the zones stop at it)"),
                        ("bottom", "Bottom strip (the zones stop at it)")):
@@ -444,9 +445,11 @@ def project_properties(parent, project, tab=0):
     tbpos.setCurrentIndex(max(tbpos.findData(st.get("tb_position", "corner")), 0))
     form.addRow("Title block position", tbpos)
     swap = QCheckBox("Replace the title block with one made for this position")
-    swap.setToolTip("A ready-made title block for the strip (or the corner), with the same "
-                    "fields; edit it afterward with Sheets > Edit title block. Undo puts the old "
-                    "one back.")
+    swap.setObjectName("tb_replace")
+    swap.setToolTip("The title block you had for this position, if you have been here before "
+                    "(the one you leave is kept for when you come back); else a ready-made one "
+                    "for the strip (or the corner), with the same fields. Edit it afterward with "
+                    "Sheets > Edit title block. Undo puts the old one back.")
     tbpos.currentIndexChanged.connect(lambda _i: swap.setChecked(False))
     form.addRow("", swap)
     show_border = QCheckBox("Border and zones (the zone letters and numbers)")
@@ -843,11 +846,29 @@ def project_properties(parent, project, tab=0):
             from .sheetframe import strip_title_block, default_title_block
             tb = project.title_block
             pos = tbpos.currentData()
+            was = st.get("tb_position", "corner")
+            # (the title block of the position left is kept, and one kept for the position
+            # chosen comes back: the owner, 0.22.4, "it goes back to the old one if I change to
+            # right hand strip then back to lower right hand corner", their edits lost. The same
+            # position chosen again: a fresh ready-made one, as before)
+            kept = dict(st.get("tb_kept") or {})
+            if pos != was:
+                kept[was] = [e.to_dict() for e in tb.entities.values()]
+            back = kept.pop(pos, None) if pos != was else None
             for eid in list(tb.entities):
                 ed.remove(tb, eid)
-            for e in (strip_title_block(tb, pos) if pos in ("right", "bottom")
-                      else default_title_block(tb)):
+            if back:
+                new = []
+                for d in back:
+                    d = dict(d)
+                    d.pop("id", None)
+                    new.append(M.Entity.from_dict(d, project.blocks))
+            else:
+                new = strip_title_block(tb, pos) if pos in ("right", "bottom") \
+                    else default_title_block(tb)
+            for e in new:
                 ed.add(tb, e)
+            settings["tb_kept"] = kept
         if settings != st:
             ed.project_settings(settings)
         if taps_all.isChecked():

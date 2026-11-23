@@ -305,8 +305,11 @@ so grid references (6-D1) never point into the title block.</li>
 </ul>
 <p>The strip's width (or height) is that of the title block you drew. Tick <b>Replace the
 title block with one made for this position</b> to swap in a ready-made one, with the same
-fields, that fills the strip (or the corner); Undo puts your old one back. On a panel sheet
-with a scale the strip stays its size on paper.</p>
+fields, that fills the strip (or the corner); Undo puts your old one back. The title block you
+leave is kept with the project: choose its position again with the box ticked and you get it
+back, edits and all, not a ready-made one (going to the strip and back to the corner gives you
+your own corner title block). Ticking the box without changing the position gives a fresh
+ready-made one. On a panel sheet with a scale the strip stays its size on paper.</p>
 
 <h2>Symbols, footprints and parts (the library)</h2>
 <p>Your <b>library</b> is a folder of its own (<code>Documents\\KanzonasCAD Library</code> to

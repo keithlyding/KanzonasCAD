@@ -21,6 +21,9 @@ build fails without them.
 **Fixed**
 - Footprint label color (Project properties, Panel) works again: a footprint's tag and other
   labels are drawn, printed and saved to PDF in that color. They had kept the footprint's.
+- Switching the title block to a strip and back to the corner (Replace the title block with
+  one made for this position) gives you back the title block you had there, with your edits,
+  instead of a ready-made one.
 
 ## 0.22.3
 
