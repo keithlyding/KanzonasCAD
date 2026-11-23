@@ -66,9 +66,11 @@ class DrawInViewTest(unittest.TestCase):
         reds = 0
         try:
             # (each view centered on something drawn there on any computer: a note's start,
-            # a picture's middle; fonts differ, so not a spot a text may or may not reach)
+            # a picture's middle; fonts differ, so not a spot a text may or may not reach.
+            # Zoomed in at 900, a note turned 60 degrees drew nothing on the Windows build,
+            # culled or not: an unturned one there)
             for scale, cx, cy in ((25.0, 8.5, 5.5), (120.0, 4.0, 3.0), (400.0, 4.5, 4.15),
-                                  (400.0, 1.1, 1.04), (900.0, 9.1, 9.14), (60.0, 15.0, 2.0)):
+                                  (400.0, 1.1, 1.04), (900.0, 1.1, 9.14), (60.0, 15.0, 2.0)):
                 render.visible_rect = real
                 got = draw(s, p, scale, cx, cy)
                 render.visible_rect = lambda painter: None        # (every one drawn)
