@@ -2064,6 +2064,11 @@ class BusCmd(Command):
         then = getattr(self.ctx, "_bus_k", None)
         if then:
             self.spacing *= self.ctx.sheet().k() / then
+        # (the spacing kept for the next bus: the one chosen (typed, or kept from before), not
+        # one taken from the pins or wires a bus started on: 1/2" between a drive's pins on a
+        # 1:58 sheet, carried to a 1:1 one as the same on paper, put the next bus's wires
+        # 0.0086" apart, the battery's seed 4421)
+        self.chosen = self.spacing
         self.layers = list(getattr(self.ctx, "_bus_layers", ["WIRES"]))
         self.straight = bool(getattr(self.ctx, "_bus_straight", False))
         self.blocked = None             # (the symbol a click couldn't go round: _around)
@@ -2162,7 +2167,7 @@ class BusCmd(Command):
 
     def _ask_start(self):
         self.step = "path"
-        self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.spacing
+        self.ctx._bus_count, self.ctx._bus_spacing = self.count, self.chosen
         self.ctx._bus_k = self.ctx.sheet().k()
         if self.points:
             self.ctx.prompt("Specify next %s (Enter ends the bus)" % (
@@ -2184,7 +2189,7 @@ class BusCmd(Command):
         if self.step == "spacing":
             if v <= 0:
                 return False
-            self.spacing = v
+            self.spacing = self.chosen = v
             self._ask_start()
             return True
         return False

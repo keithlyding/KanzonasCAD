@@ -771,6 +771,10 @@ def random_editing(log, out, ops, seed, drawing=None):
         a = {"left": (bb[2] + 2.0 * k, pin[1] + off), "right": (bb[0] - 2.0 * k, pin[1] + off),
              "bottom": (pin[0] + off, bb[3] + 2.0 * k),
              "top": (pin[0] + off, bb[1] - 2.0 * k)}[side]
+        # (the far end on the quarter-inch grid, as clicked with Snap on: the outline's edge
+        # isn't on it, as Bus around's seed 4421)
+        g = 0.25 * k
+        a = (round(a[0] / g) * g, round(a[1] / g) * g)
         before = set(s.entities)
         v.run(C.WireCmd)
         type_in(v, fmt(a), fmt(pin))
@@ -824,8 +828,12 @@ def random_editing(log, out, ops, seed, drawing=None):
         e = got[0]
         bb = wires.body_box(e)
         cy = (bb[1] + bb[3]) / 2
-        a = (bb[0] - 3.0 * k, cy + rnd.choice([-1, 1]) * 0.25 * k)
-        b = (bb[2] + 3.0 * k, a[1])
+        # (clicked on the quarter-inch grid, as with Snap on: worked out from the symbol's
+        # outline, the bus started at x.19444, and a wire moved later passed 0.0087" from it,
+        # the near-miss check's seed 4421: that slop was the battery's, not the program's)
+        g = 0.25 * k
+        a = (round((bb[0] - 3.0 * k) / g) * g, round((cy + rnd.choice([-1, 1]) * 0.25 * k) / g) * g)
+        b = (round((bb[2] + 3.0 * k) / g) * g, a[1])
         before = set(s.entities)
         said = []
         v.message = lambda text: said.append(text)
@@ -1000,7 +1008,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             # bus takes one of theirs)
             side = C.pin_side(s, a)
         else:
-            for t in (str(rnd.randint(2, 4)), "0.5"):
+            # (the spacing 1/2" on paper, as a user types it: 0.5 on a 1:87 sheet is 0.0057" on
+            # paper, and carried to the next bus, the same on paper, made a 1:1 one's wires
+            # 0.0057" apart, the near-miss check's seed 4442: the battery's own slop)
+            for t in (str(rnd.randint(2, 4)), "%r" % (0.5 * s.k())):
                 if v.cmd is not None:
                     v.input_text(t)
             a = pt()

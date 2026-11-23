@@ -28,6 +28,11 @@ build fails without them.
   under a coil, 603 beside its contact. Arrows, reports and the status bar follow. A device
   off every ladder still gives its grid zone.
 
+**Fixed**
+- A bus started on a symbol's pins or on wires side by side no longer changes the spacing of
+  the next bus you draw: that one keeps the spacing you chose. (On a sheet of another scale,
+  the next bus could come out with its wires almost on top of each other.)
+
 ## 0.21.4
 
 **Changed**
