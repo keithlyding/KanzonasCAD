@@ -1313,6 +1313,10 @@ def random_editing(log, out, ops, seed, drawing=None):
         s = v.sheet()
         v.set_selection({e.id})
         win.acts["trace"].trigger()                     # (Ctrl+E)
+        t0 = time.perf_counter()
+        while win.trace_busy():                         # (it works in the event loop's turns)
+            APP.processEvents()
+            assert time.perf_counter() - t0 < 60, "Trace never finished"
         rows = win.trace_panel.rows()
         head = win.trace_panel.header.text()
         assert rows, "Trace listed nothing for %r: %s" % (e, head)

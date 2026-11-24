@@ -64,9 +64,23 @@ class TraceTest(unittest.TestCase):
         self.fp = [e for e in panel.inserts() if e.attrs.get("TAG") == self.tag][0]
         self.v.show_sheet(self.s1.id)
 
+    def settle(self):
+        """The event loop run until Trace has nothing left to do (it works in its turns)."""
+        for _i in range(5000):
+            if not self.win.trace_busy():
+                return
+            QTest.qWait(2)
+        self.fail("Trace never finished")
+
+    def trace(self):
+        got = self.win.trace()
+        self.settle()
+        return got
+
     def select(self, sheet, *ents):
         self.v.show_sheet(sheet.id)
         self.v.set_selection({e.id for e in ents})
+        self.settle()
 
     def rows(self):
         return self.win.trace_panel.rows()
@@ -75,7 +89,7 @@ class TraceTest(unittest.TestCase):
     def test_a_device_its_contacts_and_footprint(self):
         self.relay()
         self.select(self.s1, self.coil)
-        self.assertTrue(self.win.trace())
+        self.assertTrue(self.trace())
         self.assertTrue(self.win.trace_dock.isVisible())
         self.assertEqual(self.win.trace_panel.header.text(), "%s — 4 places" % self.tag)
         got = [(r.sheet_id, r.ids, r.role, r.name) for r in self.rows()]
@@ -91,7 +105,7 @@ class TraceTest(unittest.TestCase):
         # (a contact, or the footprint, picked: its device's places, the same list)
         for s, e in ((self.s2, self.nc), (self.panel, self.fp)):
             self.select(s, e)
-            self.assertTrue(self.win.trace())
+            self.assertTrue(self.trace())
             self.assertEqual([x.ids for x in self.rows()], [x[1] for x in got])
 
     def test_by_ladder_the_place_is_the_rung(self):
@@ -100,7 +114,7 @@ class TraceTest(unittest.TestCase):
             ed.add(self.s1, M.Ladder((2.0, 10.0), (12.0, 10.0), 20))
             ed.project_settings({"referencing": "ladder"})
         self.select(self.s1, self.coil)
-        self.win.trace()
+        self.trace()
         r = self.rows()[0]
         self.assertEqual(r.where, self.p.zone_text(self.s1, *self.coil.pos))
         self.assertTrue(r.where.isdigit(), r.where)         # (a rung number: 102...)
@@ -112,7 +126,7 @@ class TraceTest(unittest.TestCase):
             ed.change(self.s2, other.copy(attrs=dict(other.attrs, TAG=self.tag,
                                                      TAG_LOCK="1")))
         self.select(self.s1, self.coil)
-        self.win.trace()
+        self.trace()
         mine = [r for r in self.rows() if (r.sheet_id, r.ids) == (self.s2.id, (other.id,))]
         self.assertEqual(len(mine), 1)
         self.assertIn("not linked", mine[0].desc)
@@ -140,7 +154,7 @@ class TraceTest(unittest.TestCase):
         self.assertTrue(num)
         self.assertEqual(self.s2.entities[self.w2.id].num, num)    # (carried on)
         self.select(self.s2, self.s2.entities[self.w2.id])
-        self.win.trace()
+        self.trace()
         self.assertEqual(self.win.trace_panel.header.text(), "Wire %s — 6 places" % num)
         got = [(r.sheet_id, r.role, r.name) for r in self.rows()]
         self.assertEqual(sorted(got), sorted([
@@ -153,7 +167,7 @@ class TraceTest(unittest.TestCase):
         self.assertEqual(arrow.desc, "to " + self.p.zone_text(self.s2, *self.dst.pos))
         # (the arrow picked: its wire's places)
         self.select(self.s1, self.s1.entities[self.src.id])
-        self.win.trace()
+        self.trace()
         self.assertEqual(len(self.rows()), 6)
 
     def test_another_wire_given_the_same_number(self):
@@ -165,7 +179,7 @@ class TraceTest(unittest.TestCase):
             w3 = ed.add(self.s2, M.Wire([(1.0, 1.0), (4.0, 1.0)], num=num, num_lock=True))
         self.assertEqual(self.s2.entities[w3.id].num, num)
         self.select(self.s1, self.s1.entities[self.w1.id])
-        self.win.trace()
+        self.trace()
         self.assertIn((self.s2.id, (w3.id,)), [(r.sheet_id, r.ids) for r in self.rows()])
 
     def test_a_plc_point(self):
@@ -182,7 +196,7 @@ class TraceTest(unittest.TestCase):
         # the point under the cursor, nothing selected
         self.v.set_selection(set())
         self.v.cursor = q
-        self.assertTrue(self.win.trace())
+        self.assertTrue(self.trace())
         self.assertEqual(self.win.trace_panel.header.text(),
                          "PLC input I:3/2 — 3 places")
         rows = self.rows()
@@ -193,11 +207,11 @@ class TraceTest(unittest.TestCase):
         self.assertEqual({r.role for r in rows}, {"PLC input", "Wire", "Device"})
         # the module selected: itself and its wired point
         self.select(self.s1, self.s1.entities[mod.id])
-        self.win.trace()
+        self.trace()
         self.assertEqual([r.role for r in self.rows()], ["PLC module", "PLC input"])
         # the wire: lands on the pushbutton and the PLC input
         self.select(self.s1, self.s1.wires()[0])
-        self.win.trace()
+        self.trace()
         self.assertIn(("PLC input", "%s pin 2" % mod.attrs["TAG"]),
                       [(r.role, r.name) for r in self.rows()])
 
@@ -210,14 +224,14 @@ class TraceTest(unittest.TestCase):
                                    0.0, "right", layer="PLC I/O"))
             ed.add(self.s1, M.Wire([(q[0] - 3.0, q[1]), q]))
         self.v.cursor = q
-        self.win.trace()
+        self.trace()
         self.assertIn("PB101  START", self.rows()[0].desc)
 
     # ---- going there ------------------------------------------------------------------------
     def test_going_to_a_row(self):
         self.relay()
         self.select(self.s1, self.coil)
-        self.win.trace()
+        self.trace()
         r = [x for x in self.rows() if x.role == "NC contact"][0]
         self.v.scale = 0.5                              # (zoomed far out)
         self.assertTrue(self.win.trace_go(r))
@@ -233,7 +247,7 @@ class TraceTest(unittest.TestCase):
     def test_enter_and_double_click(self):
         self.relay()
         self.select(self.s1, self.coil)
-        self.win.trace()
+        self.trace()
         t = self.win.trace_panel.table
         self.assertTrue(t.hasFocus() or not self.win.isActiveWindow())
         t.setCurrentItem(t.topLevelItem(0))
@@ -248,11 +262,12 @@ class TraceTest(unittest.TestCase):
     def test_an_erased_object_is_said_and_listed_again(self):
         self.relay()
         self.select(self.s1, self.coil)
-        self.win.trace()
+        self.trace()
         r = [x for x in self.rows() if x.role == "NC contact"][0]
         with self.p.edit("erase") as ed:
             ed.remove(self.s2, self.nc.id)
         self.assertFalse(self.win.trace_go(r))
+        self.settle()
         self.assertIn("isn't there any more", self.win.cmdline.history.toPlainText())
         self.assertEqual(len(self.rows()), 3)
         self.assertNotEqual(self.v.sheet_id, self.s2.id)
@@ -262,6 +277,7 @@ class TraceTest(unittest.TestCase):
                 ed.remove(self.s1, e.id)
             ed.remove(self.panel, self.fp.id)
         self.win._trace_refresh()
+        self.settle()
         self.assertEqual(self.rows(), [])
         self.assertIn("no longer in the project", self.win.trace_panel.header.text())
 
@@ -269,7 +285,7 @@ class TraceTest(unittest.TestCase):
         with self.p.edit("line") as ed:
             ln = ed.add(self.s1, M.Line((1, 1), (2, 2)))
         self.select(self.s1, ln)
-        self.assertFalse(self.win.trace())
+        self.assertFalse(self.trace())
         self.assertTrue(self.win.trace_dock.isVisible())
         self.assertEqual(self.rows(), [])
         self.assertTrue(self.win.trace_panel.header.text().startswith("Select a device"))
@@ -287,47 +303,56 @@ class TraceTest(unittest.TestCase):
         self.win.activateWindow()
         self.v.setFocus()
         QTest.keyClick(self.v, Qt.Key_E, Qt.ControlModifier)
+        self.settle()
         self.assertTrue(self.win.trace_dock.isVisible())
         self.assertEqual(len(self.rows()), 4)
 
     def test_it_follows_the_selection_only_while_open(self):
         self.relay()
         calls = []
-        real = WU.lookup
+        real = WU.Trace.__init__
 
-        def counted(*a):
-            calls.append(a[1])
-            return real(*a)
-        WU.lookup = counted
+        def counted(job, project, subject):
+            calls.append(subject)
+            real(job, project, subject)
+        WU.Trace.__init__ = counted
         try:
             self.select(self.s1, self.coil)
             self.assertEqual(calls, [])                 # (closed: nothing done)
-            self.win.trace()
+            self.trace()
             self.select(self.s1, self.no)               # (the same device: kept as it is)
             n = len(calls)
             with self.p.edit("w") as ed:
                 w = ed.add(self.s1, M.Wire([(1.0, 2.0), (4.0, 2.0)]))
-            self.select(self.s1, self.s1.entities[w.id])
+            self.settle()
+            n = len(calls)
+            # (several picks in a row: only the last one looked up)
+            self.v.set_selection({self.coil.id})
+            self.v.set_selection({w.id})
+            self.settle()
             self.assertEqual(len(calls), n + 1)
+            self.assertEqual(calls[-1][0], "wire")
             self.assertEqual(self.rows()[0].role, "Wire")
             self.v.set_selection(set())                 # (nothing: the list stays)
+            self.settle()
             self.assertEqual(self.rows()[0].role, "Wire")
             self.win.trace_dock.close()
             n = len(calls)
             self.select(self.s1, self.coil)
             self.assertEqual(len(calls), n)
+            self.assertFalse(self.win.trace_busy())
         finally:
-            WU.lookup = real
+            WU.Trace.__init__ = real
 
-    def test_the_index_is_made_again_only_when_asked_after_a_change(self):
+    def test_each_sheet_indexed_again_only_when_it_changed(self):
         self.relay()
         made = []
-        real = WU.Index.__init__
+        real = WU.SheetIndex.__init__
 
-        def counted(idx, project):
-            made.append(project)
-            real(idx, project)
-        WU.Index.__init__ = counted
+        def counted(ix):
+            made.append(ix)
+            real(ix)
+        WU.SheetIndex.__init__ = counted
         try:
             for i in range(5):                          # (edits, the panel closed)
                 with self.p.edit("w") as ed:
@@ -335,12 +360,81 @@ class TraceTest(unittest.TestCase):
             APP.processEvents()
             self.assertEqual(made, [])
             self.select(self.s1, self.coil)
-            self.win.trace()
+            self.trace()
+            self.assertEqual(len(made), 3)              # (each sheet once)
             self.select(self.s1, self.no)
             self.select(self.s2, self.nc)
-            self.assertEqual(len(made), 1)              # (once for three picks)
+            self.assertEqual(len(made), 3)
+            with self.p.edit("w") as ed:                # (one sheet changed: it alone)
+                ed.add(self.s2, M.Line((1, 1), (2, 2)))
+            self.settle()
+            self.assertEqual(len(made), 4)
+            self.assertEqual(len(self.rows()), 4)
         finally:
-            WU.Index.__init__ = real
+            WU.SheetIndex.__init__ = real
+
+    def test_a_click_never_waits_for_the_lookup(self):
+        # (the owner: "make sure that the loading of the cross-references doesn't prevent any
+        # interaction with the sheet itself"): one small step a turn of the event loop
+        from kanzonascad import trace_panel
+        self.relay()
+        with self.p.edit("lines") as ed:
+            for i in range(300):
+                ed.add(self.s2, M.Line((1, i * 0.01), (2, i * 0.01)))
+        self.trace()
+        self.v.set_selection(set())
+        for s in self.p.sheets:
+            s.__dict__.pop("_trace_index", None)
+        slices = (trace_panel.SLICE, WU.SLICE)
+        trace_panel.SLICE, WU.SLICE = 0.0, 10
+        try:
+            self.v.show_sheet(self.s1.id)
+            self.v.set_selection({self.coil.id})
+            # the click handled: nothing looked up yet, nothing indexed
+            self.assertIsNone(self.win._trace_job)
+            self.assertTrue(self.win._trace_wait.isActive())
+            self.assertFalse(any(hasattr(s, "_trace_index") for s in self.p.sheets))
+            self.win._trace_wait.stop()
+            self.win._trace_picked()
+            self.assertTrue(self.win.trace_panel.header.text().startswith("Tracing"))
+            self.win._trace_work()
+            job = self.win._trace_job
+            self.assertIsNotNone(job)
+            self.assertFalse(job.done)
+            self.assertFalse(hasattr(self.s2, "_trace_index"))
+            # the drawing goes on meanwhile: selecting, drawing
+            self.v.set_selection({self.no.id})
+            self.v.repaint()
+            self.win._trace_wait.stop()
+            steps = 0
+            while self.win._trace_job is not None:
+                self.win._trace_work()
+                steps += 1
+            self.assertGreater(steps, 5)
+            self.assertEqual(len(self.rows()), 4)
+            self.assertTrue(self.win.trace_panel.header.text().endswith("4 places"))
+        finally:
+            trace_panel.SLICE, WU.SLICE = slices
+
+    def test_many_rows_go_in_a_batch_at_a_time(self):
+        from kanzonascad import trace_panel
+        self.relay()
+        no = self.lib.get("symbol", "Contact NO")
+        with self.p.edit("many") as ed:
+            for i in range(450):
+                ed.add(self.s2, M.Insert(no.name, (1 + (i % 30) * 0.5, 1 + (i // 30) * 0.3),
+                                         defn=no, attrs={"TAG": self.tag,
+                                                         "PARENT": self.coil.attrs["DEV"]}))
+        self.select(self.s1, self.coil)
+        self.win.trace_dock.show()
+        self.win._trace_begin(self.p, ("device", self.coil.attrs["DEV"], self.tag))
+        counts = []
+        while self.win._trace_job is not None:
+            self.win._trace_work()
+            counts.append(self.win.trace_panel.table.topLevelItemCount())
+        self.assertEqual(counts[-1], 454)
+        self.assertTrue(all(b - a <= trace_panel.ROWS_AT_ONCE
+                            for a, b in zip([0] + counts, counts)), counts)
 
     def test_docked_left_right_or_bottom_and_put_back(self):
         d = self.win.trace_dock
@@ -348,7 +442,7 @@ class TraceTest(unittest.TestCase):
             self.assertTrue(d.isAreaAllowed(area))
         self.assertFalse(d.isAreaAllowed(Qt.TopDockWidgetArea))
         self.assertEqual(self.win.dockWidgetArea(d), Qt.BottomDockWidgetArea)
-        self.win.trace()
+        self.trace()
         self.win.resizeDocks([d], [300], Qt.Vertical)
         APP.processEvents()
         self.win.addDockWidget(Qt.RightDockWidgetArea, d)
@@ -374,9 +468,9 @@ class TraceTest(unittest.TestCase):
         with self.p.edit("many") as ed:
             for i in range(1500):
                 x, y = 1 + (i % 30) * 0.5, 1 + (i // 30) * 0.2
-                c = ed.add(s, M.Insert(coil.name, (x, y), defn=coil,
-                                       attrs={"TAG": "CR%d" % (1000 + i), "DEV": "d%d" % i,
-                                              "TAG_LOCK": "1"}))
+                ed.add(s, M.Insert(coil.name, (x, y), defn=coil,
+                                   attrs={"TAG": "CR%d" % (1000 + i), "DEV": "d%d" % i,
+                                          "TAG_LOCK": "1"}))
                 ed.add(self.s2, M.Insert(no.name, (x, y), defn=no,
                                          attrs={"TAG": "CR%d" % (1000 + i), "PARENT": "d%d" % i}))
                 ed.add(s, M.Wire([(x + 0.5, y), (x + 0.6, y)]))
@@ -384,17 +478,22 @@ class TraceTest(unittest.TestCase):
         wires = list(s.wires())
         self.select(s, devs[0])
         t = time.perf_counter()
-        self.win.trace()
+        self.trace()
         first = time.perf_counter() - t
         self.assertEqual(len(self.rows()), 2)
-        t = time.perf_counter()
-        for i in range(1, 51):
-            self.v.set_selection({devs[i * 20].id})
-            self.v.set_selection({wires[i * 20].id})
-        each = (time.perf_counter() - t) / 100
+        clicks, whole = [], []
+        for i in range(1, 26):
+            for e in (devs[i * 40], wires[i * 40]):
+                t = time.perf_counter()
+                self.v.set_selection({e.id})
+                clicks.append(time.perf_counter() - t)
+                self.settle()
+                whole.append(time.perf_counter() - t)
         self.assertEqual(self.rows()[0].ids, (wires[1000].id,))
         self.assertLess(first, 2.0, "the first lookup (the index made) took %.2f s" % first)
-        self.assertLess(each, 0.03, "a selection followed took %.1f ms" % (each * 1000))
+        self.assertLess(max(clicks), 0.03, "a click took %.1f ms" % (max(clicks) * 1000))
+        self.assertLess(sum(whole) / len(whole), 0.5, "a pick listed in %.2f s" % (
+            sum(whole) / len(whole)))
 
 
 if __name__ == "__main__":

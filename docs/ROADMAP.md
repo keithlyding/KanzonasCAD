@@ -130,8 +130,14 @@ nobody understands).
   the selection while open (no Ctrl+E needed); docks left, right or bottom and is put back
   where it was left, open or closed; speed is a hard requirement: one index of the project,
   rebuilt only when the project changed and the panel is open, a click one lookup, nothing
-  done while the panel is closed. The name "Trace" is a placeholder until the owner picks
-  one (not "Surfer"): it is set in one place, where_used.NAME. Not in this version (asked to
+  done while the panel is closed. The name is **Trace** (the owner's final choice, Nov 2026;
+  set in one place, where_used.NAME). A hard requirement (the owner: "make sure that the
+  loading of the cross-references doesn't prevent any interaction with the sheet itself.
+  That's a big pain point on AutoCAD Electrical. If the properties panel is open, I can't do
+  anything until all of the properties load"): a click only starts a short timer; the
+  look-up runs in slices of a few milliseconds on the event loop (no threads), a newer pick
+  dropping an older one; each sheet's index is kept until that sheet changes; rows go in a
+  batch at a time. Not in this version (asked to
   leave room for them): back/forward through places gone to, Ctrl+click on a drawing's
   cross-reference text to go there, a search box (a tag or wire number typed).
 

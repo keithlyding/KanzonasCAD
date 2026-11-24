@@ -12,9 +12,11 @@ used and shows whether it's an output or input, and some other metadata").
 - A PLC point (a PLC input or output symbol, or one point of a module): the point, its
   module, and all of its wire.
 
-What is found comes from one index of the project (index()), made again only when the
-project has changed since (Project.revision) and someone asks: a click looks up a dictionary,
-it never walks every object. The name the window gives it is NAME, kept here only."""
+What is found comes from an index kept with each sheet (index_steps), made again only for a
+sheet that changed since and only when someone asks; a lookup (Trace) goes in small steps, so
+the window can work them in between its other work (the owner, Nov 2026: "make sure that the
+loading of the cross-references doesn't prevent any interaction with the sheet itself"). The
+name the window gives it is NAME, kept here only."""
 
 import math
 from collections import namedtuple
@@ -24,7 +26,7 @@ from . import wirenums
 from .model import DashBox, Insert, Text, Wire
 from .xrefs import MARK
 
-NAME = "Trace"          # (the owner may name it otherwise: this is the one place it is set)
+NAME = "Trace"          # (the owner's name for it, Nov 2026: the one place it is set)
 
 TOL = wirenums.TOL
 
@@ -34,47 +36,88 @@ TOL = wirenums.TOL
 Row = namedtuple("Row", "sheet_id ids point box where sheet role name desc")
 
 
-class Index:
-    """What a lookup needs, made once per project revision."""
+class SheetIndex:
+    """One sheet's part of the index: its devices and children by hidden id, its symbols by
+    tag, its off-sheet connectors by name and its wires by number."""
 
-    def __init__(self, project):
-        self.by_dev = {}        # DEV -> [(sheet, entity)]: the device, its children, footprints
-        self.by_tag = {}        # TAG (upper case) -> [(sheet, entity)]
-        self.links = {}         # off-sheet connector name -> [(sheet, connector)]
-        self.group_of = {}      # (sheet id, wire id) -> wire group key
-        self.by_num = {}        # wire number -> {group key}
-        self.groups = {}        # group key -> [(sheet, wire)]
-        for s in project.sheets:
-            for e in s.inserts():
-                d = e.defn
-                if d is None:
-                    continue
-                if d.wiring == "link":
-                    name = (e.attrs.get("TAG", "") or "").strip().upper()
-                    if name:
-                        self.links.setdefault(name, []).append((s, e))
-                    continue
-                self._add(s, e)
-            for e in s.entities.values():
-                if isinstance(e, DashBox) and tags.is_linked_box(e):
-                    self._add(s, e)
-        self.groups = wirenums.groups(project)[0]
-        for g, nodes in self.groups.items():
-            for s, w in nodes:
-                self.group_of[(s.id, w.id)] = g
-                if w.num:
-                    self.by_num.setdefault(w.num, set()).add(g)
+    def __init__(self):
+        self.by_dev = {}        # DEV -> [entity]: the device, its children, footprints, boxes
+        self.by_tag = {}        # TAG (upper case) -> [entity]
+        self.links = {}         # off-sheet connector name -> [connector]
+        self.by_num = {}        # wire number -> [wire]
 
-    def _add(self, s, e):
+    def add(self, e):
         dev = e.attrs.get("DEV") if isinstance(e, Insert) and tags.is_device(e) else None
         if dev:
-            self.by_dev.setdefault(dev, []).append((s, e))
+            self.by_dev.setdefault(dev, []).append(e)
         par = e.attrs.get("PARENT")
         if par and par != dev:
-            self.by_dev.setdefault(par, []).append((s, e))
+            self.by_dev.setdefault(par, []).append(e)
         tag = (e.attrs.get("TAG", "") or "").strip().upper()
         if tag:
-            self.by_tag.setdefault(tag, []).append((s, e))
+            self.by_tag.setdefault(tag, []).append(e)
+
+
+SLICE = 2000            # objects looked at between two looks at the clock (index_steps)
+
+
+def index_steps(sheet):
+    """A generator making the sheet's SheetIndex in pieces (it yields every SLICE objects, for
+    the caller to give the event loop its turn) and returning it; kept with the sheet until
+    the sheet changes, so only the sheets an edit touched are looked at again. A change to the
+    sheet between two pieces starts it again."""
+    while True:
+        got = getattr(sheet, "_trace_index", None)
+        if got is not None and got[0] == sheet.version:
+            return got[1]
+        ver, idx = sheet.version, SheetIndex()
+        n = 0
+        for e in list(sheet.inserts()):
+            d = e.defn
+            if d is not None and d.wiring == "link":
+                name = (e.attrs.get("TAG", "") or "").strip().upper()
+                if name:
+                    idx.links.setdefault(name, []).append(e)
+            elif d is not None:
+                idx.add(e)
+            n += 1
+            if n % SLICE == 0:
+                yield
+                if sheet.version != ver:
+                    break
+        else:
+            for w in list(sheet.wires()):
+                if w.num:
+                    idx.by_num.setdefault(w.num, []).append(w)
+                n += 1
+                if n % SLICE == 0:
+                    yield
+                    if sheet.version != ver:
+                        break
+            else:
+                for e in list(sheet.entities.values()):
+                    if isinstance(e, DashBox) and tags.is_linked_box(e):
+                        idx.add(e)
+                    n += 1
+                    if n % SLICE == 0:
+                        yield
+                        if sheet.version != ver:
+                            break
+                else:
+                    sheet._trace_index = (ver, idx)
+                    return idx
+
+
+class Index:
+    """The sheets' indexes read as one: by_dev.get(DEV), by_tag.get(TAG), links.get(name) and
+    by_num.get(number) give [(sheet, object)] in sheet order."""
+
+    def __init__(self, parts):
+        self.parts = parts                      # [(sheet, SheetIndex)]
+        self.by_dev = _Across(parts, "by_dev")
+        self.by_tag = _Across(parts, "by_tag")
+        self.links = _Across(parts, "links")
+        self.by_num = _Across(parts, "by_num")
 
     def device(self, dev):
         """(sheet, device) of a hidden id, or None."""
@@ -84,21 +127,18 @@ class Index:
         return None
 
 
-def index(project):
-    """The project's Index, made again only when the project has changed since the last one
-    (its revision, which every edit, undo and redo moves on)."""
-    key = (project.revision, len(project.sheets), wirenums.tap_mode(project))
-    got = getattr(project, "_where_used", None)
-    if got is not None and got[0] == key:
-        return got[1]
-    idx = Index(project)
-    project._where_used = (key, idx)
-    return idx
+class _Across:
+    def __init__(self, parts, attr):
+        self.parts, self.attr = parts, attr
+
+    def get(self, key, default=()):
+        out = [(s, e) for s, ix in self.parts for e in getattr(ix, self.attr).get(key, ())]
+        return out or default
 
 
 # ---- what was picked --------------------------------------------------------------------------
 def subject_of(project, sheet, ent, at=None, tol=0.0):
-    """What a picked object stands for, as a key lookup() takes, or None (a line, a text...):
+    """What a picked object stands for, as a key Trace takes, or None (a line, a text...):
     ("device", DEV, tag), ("tag", TAG), ("wire", number, sheet id, wire id) or ("point",
     sheet id, symbol id, pin). at: the point the cursor is on (an object under the cursor):
     a PLC module's point within tol of it stands for that point."""
@@ -106,7 +146,6 @@ def subject_of(project, sheet, ent, at=None, tol=0.0):
         return ("wire", ent.num or "", sheet.id, ent.id)
     if not isinstance(ent, (Insert, DashBox)):
         return None
-    idx = index(project)
     d = getattr(ent, "defn", None)
     if isinstance(ent, Insert):
         if d is None:
@@ -124,7 +163,7 @@ def subject_of(project, sheet, ent, at=None, tol=0.0):
         if tags.is_device(ent) and ent.attrs.get("DEV"):
             return ("device", ent.attrs["DEV"], ent.attrs.get("TAG", ""))
     par = ent.attrs.get("PARENT")
-    if par and idx.device(par) is not None:
+    if par:
         return ("device", par, ent.attrs.get("TAG", ""))
     tag = (ent.attrs.get("TAG", "") or "").strip()
     return ("tag", tag.upper()) if tag else None
@@ -140,24 +179,64 @@ def _wire_on(sheet, ins):
 
 
 # ---- the places -------------------------------------------------------------------------------
-def lookup(project, subject):
-    """(header, [Row]) of a subject (subject_of), in sheet order and, on a sheet, across then
-    down; the subject's own object first on its sheet. The header says what is listed and how
-    many places ("CR101 - 5 places"); a subject that is gone says so, with no rows."""
-    idx = index(project)
-    kind = subject[0]
-    if kind == "device":
-        title, rows = _device(project, idx, subject[1], subject[2])
-    elif kind == "tag":
-        title, rows = _tagged(project, idx, subject[1])
-    elif kind == "wire":
-        title, rows = _wire(project, idx, subject[1], subject[2], subject[3])
-    else:
-        title, rows = _point(project, idx, subject[1], subject[2], subject[3])
-    if not rows:
-        return "%s: no longer in the project" % title, []
-    n = len(rows)
-    return "%s — %d place%s" % (title, n, "" if n == 1 else "s"), rows
+BATCH = 50              # rows made between two looks at the clock
+
+
+class Trace:
+    """Looking a subject (subject_of) up, a small step at a time (step()): first the sheets'
+    indexes brought up to date, then the rows. rows: those found so far, then all of them in
+    sheet order and, on a sheet, across then down, the subject's own object first on its
+    sheet; header: "Tracing..." until done, then what is listed and how many places
+    ("CR101 - 5 places"), or that it is gone (no rows)."""
+
+    def __init__(self, project, subject):
+        self.project, self.subject = project, subject
+        self.revision = project.revision
+        self.rows = []
+        self.header = "Tracing..."
+        self.done = False
+        self._gen = self._run()
+
+    def step(self):
+        """One small step; False once done."""
+        if self.done:
+            return False
+        try:
+            next(self._gen)
+            return True
+        except StopIteration:
+            self.done = True
+            return False
+
+    def _run(self):
+        project, sub = self.project, self.subject
+        sheets = list(project.sheets)
+        parts = []
+        for i, s in enumerate(sheets):
+            self.header = "Tracing... (sheet %d of %d)" % (i + 1, len(sheets))
+            ix = yield from index_steps(s)
+            parts.append((s, ix))
+        idx = Index(parts)
+        self.header = "Tracing..."
+        kind, out = sub[0], self.rows
+        if kind == "device":
+            title, rows = yield from _device(project, idx, out, sub[1], sub[2])
+        elif kind == "tag":
+            title, rows = yield from _tagged(project, idx, out, sub[1])
+        elif kind == "wire":
+            title, rows = yield from _wire(project, idx, out, sub[1], sub[2], sub[3])
+        else:
+            title, rows = yield from _point(project, idx, out, sub[1], sub[2], sub[3])
+        self.rows = rows
+        n = len(rows)
+        self.header = ("%s \u2014 %d place%s" % (title, n, "" if n == 1 else "s") if rows
+                       else "%s: no longer in the project" % title)
+
+
+def _found(out, row):
+    """A row found: kept in out; True every BATCH rows (time to yield)."""
+    out.append(row)
+    return len(out) % BATCH == 0
 
 
 def _sheet_text(project, s):
@@ -252,30 +331,35 @@ def _symbol_row(project, s, e, device=None, note=""):
     return _row(project, s, [e.id], _point_of(e), e.bbox(), role(e), _name(e, tag), desc)
 
 
-def _device(project, idx, dev, tag):
+def _device(project, idx, out, dev, tag):
     got = idx.device(dev)
     dev_ent = got[1] if got else None
     tag = (dev_ent.attrs.get("TAG", "") if dev_ent is not None else tag) or ""
     title = tag or (dev_ent.block if dev_ent is not None else "Device")
-    rows, linked = [], set()
+    rows, linked = out, set()
     for s, e in idx.by_dev.get(dev, ()):
         linked.add((s.id, e.id))
         if isinstance(e, Insert) and wirenums.is_io_point_symbol(e.defn) and e.defn.pins:
-            rows.append(_point_row(project, s, e, e.defn.pins[0]["name"], dev_ent))
-            continue
-        rows.append(_symbol_row(project, s, e, dev_ent))
-        if isinstance(e, Insert) and e.defn is not None and e.defn.prefix == "PLC":
-            rows += _module_points(project, s, e, dev_ent)
+            row = _point_row(project, s, e, e.defn.pins[0]["name"], dev_ent)
+        else:
+            row = _symbol_row(project, s, e, dev_ent)
+            if isinstance(e, Insert) and e.defn is not None and e.defn.prefix == "PLC":
+                rows += _module_points(project, s, e, dev_ent)
+        if _found(rows, row):
+            yield
     if dev_ent is not None or tag:
         for s, e in idx.by_tag.get(tag.strip().upper(), ()):
             if (s.id, e.id) not in linked:
-                rows.append(_symbol_row(project, s, e, dev_ent, "not linked"))
+                if _found(rows, _symbol_row(project, s, e, dev_ent, "not linked")):
+                    yield
     return title, _sorted(project, rows, [dev_ent.id] if dev_ent is not None else ())
 
 
-def _tagged(project, idx, tag):
-    rows = [_symbol_row(project, s, e) for s, e in idx.by_tag.get(tag, ())]
-    return tag, _sorted(project, rows)
+def _tagged(project, idx, out, tag):
+    for s, e in idx.by_tag.get(tag, ()):
+        if _found(out, _symbol_row(project, s, e)):
+            yield
+    return tag, _sorted(project, out)
 
 
 # ---- PLC points -------------------------------------------------------------------------------
@@ -340,7 +424,7 @@ def _module_points(project, s, ins, module):
     return out
 
 
-def _point(project, idx, sid, iid, pin):
+def _point(project, idx, out, sid, iid, pin):
     s = project.sheet_by_id(sid)
     ins = s.entities.get(iid) if s is not None else None
     if not isinstance(ins, Insert) or ins.defn is None or \
@@ -351,39 +435,46 @@ def _point(project, idx, sid, iid, pin):
     rl, addr, _t = _point_info(s, ins, pin, module)
     tag = (ins.attrs.get("TAG", "") or "").strip()
     title = "%s %s" % (rl, addr or ("%s pin %s" % (tag, pin)))
-    rows = [_point_row(project, s, ins, pin, module)]
+    out.append(_point_row(project, s, ins, pin, module))
     if par and idx.device(par) is not None:
         ms, m = idx.device(par)
-        rows.append(_symbol_row(project, ms, m))
+        out.append(_symbol_row(project, ms, m))
     q = dict(ins.pin_points())[pin]
     for w in _wires_at(s, q)[:1]:
-        rows += [r for r in _wire(project, idx, w.num or "", s.id, w.id)[1]
-                 if not (r.sheet_id == s.id and r.ids == (ins.id,) and r.role == rl)]
-    return title, _sorted(project, rows, [ins.id])
+        _t, got = yield from _wire(project, idx, [], w.num or "", s.id, w.id)
+        out += [r for r in got
+                if not (r.sheet_id == s.id and r.ids == (ins.id,) and r.role == rl)]
+    return title, _sorted(project, out, [ins.id])
 
 
 # ---- wires ------------------------------------------------------------------------------------
-def _wire(project, idx, num, sid, wid):
-    keys = set(idx.by_num.get(num, ())) if num else set()
-    seed = idx.group_of.get((sid, wid))
-    if seed is not None:
-        keys.add(seed)
+def _wire(project, idx, out, num, sid, wid):
+    """Every wire of the number on every sheet; a wire with no number (wire numbers turned
+    off), the wires joined to it (its group, carried on by arrows: wirenums.groups)."""
+    if num:
+        found = idx.by_num.get(num, ())
+    else:
+        found = []
+        for nodes in wirenums.groups(project)[0].values():
+            if any(s.id == sid and w.id == wid for s, w in nodes):
+                found = nodes
+                break
     title = "Wire %s" % num if num else "Wire (no number)"
     split = wirenums.tap_mode(project) != "same"
-    rows = []
-    for g in keys:
-        by_sheet = {}
-        for s, w in idx.groups.get(g, ()):
-            by_sheet.setdefault(s.id, (s, []))[1].append(w)
-        for s, ws in by_sheet.values():
-            roots = wirenums._sheet_groups(s, split)
-            pieces = {}
-            for w in ws:
-                pieces.setdefault(roots.get(w.id, w.id), []).append(w)
-            for piece in pieces.values():
-                rows += _piece_rows(project, idx, s, piece)
-    first = {w.id for g in keys for _s, w in idx.groups.get(g, ())}
-    return title, _sorted(project, rows, first)
+    by_sheet = {}
+    for s, w in found:
+        by_sheet.setdefault(s.id, (s, []))[1].append(w)
+    for s, ws in by_sheet.values():
+        roots = wirenums._sheet_groups(s, split)
+        pieces = {}
+        for w in ws:
+            pieces.setdefault(roots.get(w.id, w.id), []).append(w)
+        for piece in pieces.values():
+            n = len(out)
+            out += _piece_rows(project, idx, s, piece)
+            if len(out) // BATCH != n // BATCH:
+                yield
+    return title, _sorted(project, out, {w.id for _s, w in found})
 
 
 def _longest_middle(ws):

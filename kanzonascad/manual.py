@@ -779,6 +779,10 @@ its I/O list text, its module, and every place of its wire.</li>
 <li><b>Double-click</b> a row, or press <b>Enter</b> on it, to go there: its sheet is shown,
 the object selected and centered, zoomed so you can read it. <b>Up</b> and <b>Down</b> move
 through the rows; after Ctrl+E they are ready for the keys.</li>
+<li>It never holds up the drawing: a click is handled at once, and the list is worked out
+in short pieces while you go on panning, zooming, selecting and drawing (the line at the top
+says <b>Tracing...</b> until it is complete; on a big project the rows come in as they are
+found). Picking something else meanwhile drops the older look-up.</li>
 <li>The list follows changes to the drawing. A row whose object was erased says so on the
 command line when you go to it, and the list is made again.</li>
 </ul>

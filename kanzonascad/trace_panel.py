@@ -5,8 +5,15 @@ a row, or Enter on it, to go there: its sheet shown, the object selected and cen
 Down move through the rows.
 
 While it is open it follows the selection: clicking a device, a wire or a PLC point lists
-its places at once (one lookup in where_used's index; nothing at all while it is closed).
-A mixin of MainWindow (main_window.py), as block_window.py is."""
+its places (nothing at all while it is closed). A click never waits for it (the owner, Nov
+2026: "make sure that the loading of the cross-references doesn't prevent any interaction
+with the sheet itself. That's a big pain point on AutoCAD Electrical"): the click only starts
+a short timer; the lookup (where_used.Trace) then runs a few milliseconds at a time on the
+event loop, a newer pick dropping an older one, and the rows go in a batch at a time, so the
+drawing pans, zooms, selects and draws in between. A mixin of MainWindow (main_window.py),
+as block_window.py is."""
+
+import time
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (QDockWidget, QHBoxLayout, QHeaderView, QLabel, QTreeWidget,
@@ -17,6 +24,10 @@ from . import where_used as WU
 COLUMNS = ("Where", "Sheet", "Role", "Name", "Description")
 HINT = "Select a device, wire or PLC point (or point at one) and press Ctrl+E"
 LEAST = (8.0, 5.0)              # paper inches shown around an object gone to, at the least
+FOLLOW_MS = 40                  # a pick followed this long after the last selection change
+REFRESH_MS = 150                # the list made again this long after the last edit
+SLICE = 0.004                   # seconds of lookup at a time, then the event loop's turn
+ROWS_AT_ONCE = 200              # rows put in the table at a time
 
 
 class RowTable(QTreeWidget):
@@ -70,19 +81,39 @@ class TracePanel(QWidget):
         self.table = RowTable()
         lay.addWidget(self.table, 1)
 
-    def show_rows(self, header, rows):
+        self._src = None            # (the rows list being shown, and those shown of it)
+        self._shown = []
+
+    def begin(self, header):
+        """An empty list under header."""
         self.header.setText(header)
-        t = self.table
-        t.clear()
+        self.table.clear()
+        self._src, self._shown = None, []
+
+    def feed(self, header, rows, most=ROWS_AT_ONCE):
+        """header, and up to most more of rows in the table (the list as it stands: a lookup
+        appends to it, then hands over its rows in order, which start the table again unless
+        they start as it does). Returns whether some are still to go in."""
+        self.header.setText(header)
+        if rows is not self._src:
+            n = len(self._shown)
+            if rows[:n] != self._shown:
+                self.table.clear()
+                self._shown = []
+            self._src = rows
+        t, n = self.table, len(self._shown)
+        new = rows[n:n + most]
         items = []
-        for r in rows:
+        for r in new:
             it = QTreeWidgetItem([r.where, r.sheet, r.role, r.name, r.desc])
             it.setData(0, Qt.UserRole, r)
             it.setToolTip(4, r.desc)
             items.append(it)
         t.addTopLevelItems(items)
-        if items:
-            t.setCurrentItem(items[0])
+        self._shown += new
+        if items and t.currentItem() is None:
+            t.setCurrentItem(t.topLevelItem(0))
+        return len(self._shown) < len(rows)
 
     def rows(self):
         t = self.table
@@ -110,8 +141,14 @@ class Tracing:
         dock.dockLocationChanged.connect(self._trace_moved)
         self._trace_subject = None          # (project, subject) listed
         self._trace_going = False           # (a row being gone to: its selection not followed)
-        self._trace_timer = QTimer(self, singleShot=True, interval=150)
+        self._trace_job = None              # (the where_used.Trace under way)
+        self._trace_again = False           # (it makes the list shown again: shown when done)
+        self._trace_timer = QTimer(self, singleShot=True, interval=REFRESH_MS)
         self._trace_timer.timeout.connect(self._trace_refresh)
+        self._trace_wait = QTimer(self, singleShot=True, interval=FOLLOW_MS)
+        self._trace_wait.timeout.connect(self._trace_picked)
+        self._trace_tick = QTimer(self, singleShot=True, interval=0)
+        self._trace_tick.timeout.connect(self._trace_work)
 
     def trace(self):
         """Trace (Ctrl+E): the panel opened (or raised) and filled with the places of the
@@ -120,13 +157,19 @@ class Tracing:
         dock = self.trace_dock
         dock.show()
         dock.raise_()
+        self._trace_wait.stop()
         got = self._trace_pick(self.view(), cursor=True)
         if got is not None:
-            self._trace_list(*got)
+            self._trace_begin(*got)
         elif self._trace_subject is None:
-            self.trace_panel.show_rows(HINT, [])
+            self.trace_panel.begin(HINT)
         self.trace_panel.table.setFocus()
         return got is not None
+
+    def trace_busy(self):
+        """Whether Trace has a pick, a lookup or rows still to come."""
+        return self._trace_job is not None or self._trace_wait.isActive() or \
+            self._trace_timer.isActive()
 
     def _trace_pick(self, v, cursor=False):
         """(project, subject) of the view's selection (the first that stands for something),
@@ -150,17 +193,51 @@ class Tracing:
                     return p, sub
         return None
 
-    def _trace_list(self, project, subject):
+    def _trace_begin(self, project, subject, again=False):
+        """A lookup started (any under way dropped); again: the list shown stays until the new
+        one is done (made again after an edit), else it starts empty."""
         self._trace_subject = (project, subject)
-        self.trace_panel.show_rows(*WU.lookup(project, subject))
+        self._trace_job = WU.Trace(project, subject)
+        self._trace_again = again
+        if not again:
+            self.trace_panel.begin(self._trace_job.header)
+        self._trace_tick.start()
+
+    def _trace_work(self):
+        """A few milliseconds of the lookup, then the rows found so far into the table (a
+        batch), then the event loop's turn until the next."""
+        job = self._trace_job
+        if job is None or not self.trace_dock.isVisible():
+            self._trace_job = None
+            return
+        if job.project.revision != job.revision:        # (changed meanwhile: again)
+            self._trace_begin(job.project, job.subject, True)
+            return
+        t0 = time.perf_counter()
+        while job.step() and time.perf_counter() - t0 < SLICE:
+            pass
+        more = False
+        if job.done or not self._trace_again:
+            more = self.trace_panel.feed(job.header, job.rows)
+        else:
+            self.trace_panel.header.setText(job.header)
+        if job.done and not more:
+            self._trace_job = None
+        else:
+            self._trace_tick.start()
 
     def _trace_follow(self):
-        """The selection changed: listed when the panel is open (nothing done when not)."""
+        """The selection changed: while the panel is open, looked at shortly (a newer change
+        starts the wait again), never while the click is handled; nothing when it is
+        closed."""
         if self._trace_going or not self.trace_dock.isVisible():
             return
+        self._trace_wait.start()
+
+    def _trace_picked(self):
         got = self._trace_pick(self.view())
         if got is not None and got != self._trace_subject:
-            self._trace_list(*got)
+            self._trace_begin(*got)
 
     def _trace_changed(self, project):
         """The project changed: the list made again (once, shortly) while it is shown."""
@@ -183,7 +260,7 @@ class Tracing:
         if self._trace_subject is not None and self.trace_dock.isVisible():
             p, sub = self._trace_subject
             if any(d.project is p for _w, d in self.documents()):
-                self.trace_panel.show_rows(*WU.lookup(p, sub))
+                self._trace_begin(p, sub, True)
 
     def trace_go(self, row):
         """Go to a row's place: its project's tab, its sheet, the object selected and

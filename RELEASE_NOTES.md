@@ -17,6 +17,8 @@ build fails without them.
   selected in the middle of the screen. Up and Down move through the rows.
 - While the panel is open it follows what you click, so you can keep it open while you work.
   Drag it to the left or right side if you like it there; it stays where you put it.
+- Trace never holds up the drawing: it fills in while you keep panning, zooming, selecting
+  and drawing.
 
 ## 0.22.4
 
