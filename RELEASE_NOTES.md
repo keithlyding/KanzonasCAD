@@ -34,6 +34,9 @@ build fails without them.
   the wire its number comes from.
 - Moving a ladder could change its rung spacing by a hair (0.49999999999999994" for 0.5"); it
   now stays exactly as it was.
+- A report sheet with little room (for example on a portrait sheet with a wide title block
+  strip) shrank every column alike, so short columns such as a BOM's Item number could come
+  out empty. Wide columns now give up room first, and short ones keep what they need.
 
 ## 0.22.4
 

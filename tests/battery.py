@@ -1418,15 +1418,19 @@ def random_editing(log, out, ops, seed, drawing=None):
             i = rnd.randrange(lad.rungs)
             q = (lad.a[0] + lad.width() / 2, lad.a[1] - i * lad.spacing)
             # (the first ladder, left to right then top down, that q is on: within a third of
-            # its width past its rails and half a rung past its ends)
+            # its width past its rails and half a rung past its ends, measured along its own
+            # rungs and rails: a ladder turned by an earlier step runs up or sideways, the
+            # long battery's seed 4791, where this read only ladders running down)
             hit = None
             for e in sorted((e for e in s.entities.values() if isinstance(e, M.Ladder)),
                             key=lambda e: (round(e.a[0], 6), -e.a[1])):
-                m = e.width() / 3.0
-                low = e.a[1] - (e.rungs - 1) * e.spacing
-                if e.a[0] - m <= q[0] <= e.b[0] + m and \
-                        low - e.spacing / 2 <= q[1] <= e.a[1] + e.spacing / 2:
-                    hit = e.numbers()[int(round((e.a[1] - q[1]) / e.spacing))]
+                wd = G.dist(e.a, e.b)
+                ux, uy = (e.b[0] - e.a[0]) / wd, (e.b[1] - e.a[1]) / wd
+                along = (q[0] - e.a[0]) * ux + (q[1] - e.a[1]) * uy
+                down = ((q[0] - e.a[0]) * uy - (q[1] - e.a[1]) * ux) / e.spacing
+                m = wd / 3.0
+                if -m <= along <= wd + m and -0.5 <= down <= e.rungs - 0.5:
+                    hit = e.numbers()[int(round(down))]
                     break
             assert p.zone_text(s, *q) == hit, "a point on rung %s reads %s" % (
                 hit, p.zone_text(s, *q))
@@ -2594,14 +2598,22 @@ def random_editing(log, out, ops, seed, drawing=None):
         now = [w for w in sh.wires() if w.touches(src.pin_points()[0][1])]
         if not now or not now[0].num or now[0].num_lock:
             return
-        # (a tap off the source's wire is numbered from it: 1006-1, 1006-1a, 1006a, 1006-a...;
-        # its page is the base number's)
-        got = WN.split(TAP_END.sub("", now[0].num))
+        # (never the number typed on the destination's wire, nor a tap of it)
+        assert now[0].num != foreign and not (now[0].num.startswith(foreign) and TAP_END.fullmatch(
+            now[0].num[len(foreign):])), \
+            "a source arrow's wire on page %s took %s, typed on the destination's page" % (
+                p.sheet_number(sh), now[0].num)
+        # (a wire of its own: a number of its page. A tap is numbered from the wire it taps,
+        # 1006-1, 1006-1a, 1006a..., and that wire may be carried from another page by arrows,
+        # page 1's 1001 tapped on page 2 is 1001-1 there: the long battery's seed 4793)
+        base = TAP_END.sub("", now[0].num)
+        got = WN.split(base)
         if got is None and WN.by_io_address(p):
             return                          # (numbered by a PLC point's address, O:3/0)
-        assert got and got[0] == p.sheet_number(sh), \
-            "a source arrow's wire on page %s took %s from a destination's page" % (
-                p.sheet_number(sh), now[0].num)
+        if base == now[0].num:
+            assert got and got[0] == p.sheet_number(sh), \
+                "a source arrow's wire on page %s took %s from a destination's page" % (
+                    p.sheet_number(sh), now[0].num)
         BC.CHECKED["a source's wire keeps its page's number"] += 1
 
     def op_wire_color():
