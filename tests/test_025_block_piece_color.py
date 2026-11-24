@@ -116,6 +116,8 @@ class BlockPieceColorTest(unittest.TestCase):
         d, rect = self.open_tab()
         self.color_with_ribbon(d, rect)
         self.save()
+        self.win.tabs.setCurrentWidget(self.drawing)    # (the drawing shown, not the block's)
+        APP.processEvents()
         self.v.zoom("sheet")
         e = self.copy()
         b = e.bbox()
