@@ -139,5 +139,23 @@ class LadderTest(unittest.TestCase):
         self.assertEqual(lad.with_grip(0, (3.0, 9.5)).b, (9.0, 9.5))    # (moved)
 
 
+class RungAtEdgeTest(unittest.TestCase):
+    def test_half_a_rung_past_the_last_is_the_last(self):
+        # (0.25, the battery's seed 4902: a destination arrow exactly half a rung under a
+        # ladder's last rung, 762, was placed at rung "763", which isn't there, so the PDF's
+        # link over its source's "5001 / 763" led to a place the PDF hasn't got)
+        lad = M.Ladder((13.0, 9.75), (17.0, 9.75), rungs=8, spacing=0.5, first=755)
+        self.assertEqual(lad.rung_at((14.75, 6.0)), 7)
+        self.assertEqual(lad.number(lad.rung_at((14.75, 6.0))), "762")
+        self.assertEqual(lad.rung_at((14.75, 9.75 + 0.25)), 0)
+        self.assertIsNone(lad.rung_at((14.75, 5.99)))
+        self.assertIsNone(lad.rung_at((14.75, 10.01)))
+        p = M.Project.new()
+        s = p.sheets[0]
+        p.settings["referencing"] = "ladder"
+        s._put(lad)
+        self.assertIn(p.zone_text(s, 14.75, 6.0), lad.numbers())
+
+
 if __name__ == "__main__":
     unittest.main()

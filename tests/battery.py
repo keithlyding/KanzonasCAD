@@ -3897,7 +3897,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         if not devs:
             return
         pick = rnd.sample(devs, min(len(devs), rnd.randint(1, 4)))
-        block = rnd.choice(pick).block
+        # (a part names its symbol as the library does: a symbol kept as "name (symbol)"
+        # beside a footprint of its name is "name", Insert.block_name; 0.25, seed 4902)
+        block = rnd.choice(pick).block_name
         part = Part(manufacturer=rnd.choice(["Allen-Bradley", "Siemens", "ABB"]),
                     catalog="BAT-%d" % rnd.randint(1, 10 ** 6), description="battery part",
                     symbol=block)
@@ -3909,7 +3911,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             n = win.assign_part()
         finally:
             win.__dict__.pop("ask_part", None)
-        want = [i for i in before if s.entities[i].block == block]
+        want = [i for i in before if s.entities[i].block_name == block]
         assert n == len(want), "Assign part put the part on %d devices, not %d" % (n, len(want))
         for i, old in before.items():
             a = s.entities[i].attrs
@@ -4995,6 +4997,14 @@ def random_editing(log, out, ops, seed, drawing=None):
         sides = sorted([(pin[0] - bb[0], (-1, 0)), (bb[2] - pin[0], (1, 0)),
                         (pin[1] - bb[1], (0, -1)), (bb[3] - pin[1], (0, 1))])
         others = [q for n, q in e.pin_points() if G.dist(q, pin) > wires.TOL]
+        # (only out of a side the pin is on: a pin inside the symbol's drawing (an imported
+        # block's pins go anywhere) is reached round the drawing, as Wire goes round symbols,
+        # never straight through it; the long battery, seed 4902 step 2850: a pin half an
+        # inch inside, the way round past another pin, refused as it should be)
+        sides = [(m, d) for m, d in sides if m <= wires.TOL]
+        if not sides:
+            BC.CHECKED["imported symbol's pin inside its drawing: skipped"] += 1
+            return
         ways = [(pin[0] + d[0] * 2.0 * k, pin[1] + d[1] * 2.0 * k) for _m, d in sides]
         ways = [a for a in ways if all(G.dist_to_segment(q, a, pin) > wires.TOL
                                        for q in others)]

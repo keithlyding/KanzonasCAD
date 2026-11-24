@@ -53,6 +53,8 @@ build fails without them.
   I/O list and Save to library as part could still put one in the other's place. Lists,
   reports and labels show the name you gave it, not "name (footprint)". A project where one
   already took the other's place gets the lost one back from your library when it opens.
+- A cross-reference to something exactly half a rung below a ladder's last rung named a rung
+  past the end (763 under a ladder ending at 762); it names the last rung now.
 - Import I/O list no longer puts a module over a large title block: it is moved clear of it,
   or the sheet gets a scale it fits at.
 - One piece of a block in a color of its own (a small rectangle, say) now stays that color

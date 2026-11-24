@@ -104,6 +104,29 @@ class SameNameBlocksTest(unittest.TestCase):
         from kanzonascad import missing_fp
         self.assertEqual([r[2] for r in missing_fp.rows(self.p)], ["Starter"])
 
+    def test_assign_part_to_a_symbol_kept_apart(self):
+        # (a symbol placed after a footprint of its name, kept as "Starter (symbol)": Assign
+        # part finds the parts for "Starter" and puts one on it; up to 0.25 it compared the
+        # project's name, and the battery's part named that: 0 devices, seed 4902)
+        from kanzonascad import partsassign as PA
+        from kanzonascad.library import Part
+        self.insert("footprint", "5,5")
+        s = self.insert("symbol", "3,3")
+        s = self.sch.entities[s.id]
+        self.assertEqual(s.block, "Starter (symbol)")
+        part = Part(manufacturer="AB", catalog="100-C09", description="starter",
+                    symbol="Starter")
+        self.lib.save_part(part)
+        try:
+            self.assertEqual([x.id for x in PA.candidates(self.lib, [s])], [part.id])
+            with self.p.edit("Assign part") as ed:
+                self.assertEqual(PA.assign(ed, self.p, self.sch, [s], part), 1)
+            self.assertEqual(self.sch.entities[s.id].attrs.get("CAT"), "100-C09")
+            self.assertEqual(PA.part_from(self.p, self.sch.entities[s.id])[0].symbol,
+                             "Starter")
+        finally:
+            self.lib.delete_part(part.id)
+
     def test_drawn_both(self):
         s = self.insert("symbol", "3,3")
         f = self.insert("footprint", "5,5")

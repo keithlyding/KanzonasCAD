@@ -1914,7 +1914,9 @@ class Ladder(Composite):
         m = self.width() / 3.0
         if t < -m or t > self.width() + m or s < -0.5 or s > self.rungs - 0.5:
             return None
-        return int(round(s))
+        # (exactly half a rung past the last rounds up, to even: a rung that isn't there, 763
+        # past 762, which the PDF's links couldn't find; the battery, 0.25, seed 4902)
+        return min(max(int(round(s)), 0), self.rungs - 1)
 
     def parts(self):
         if self._parts is not None:
