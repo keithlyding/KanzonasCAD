@@ -1,7 +1,8 @@
 """Library > Import blocks from folder...: the window that lists the blocks found in a folder
 of DWG and DXF files (or one drawing), and puts the ticked ones in the library
 (block_import.py does the reading and writing, without Qt). Files are read one at a time and
-blocks written one at a time on the event loop, under a progress window with Cancel, so the
+blocks written one at a time (each on a thread of its own, the event loop turning meanwhile:
+only the library's files are written there), under a progress window with Cancel, so the
 program never stops answering."""
 
 import os
@@ -51,6 +52,12 @@ class Progress:
         self._t = time.perf_counter()
         return not self.dlg.wasCanceled()
 
+    def turn(self):
+        """A turn of the event loop while work goes on elsewhere (a thread)."""
+        self.longest = max(self.longest, time.perf_counter() - self._t)
+        QApplication.processEvents()
+        self._t = time.perf_counter()
+
     def close(self):
         self.dlg.reset()
         self.dlg.close()
@@ -74,13 +81,30 @@ def scan(parent, paths):
         prog.close()
 
 
+def _beside(prog, fn):
+    """fn() run on a thread of its own while the event loop keeps turning (the window answers
+    and the progress window repaints); its result. For work that only writes files: a block
+    file written to disk safely (flushed, fsync) took 0.22 s at a time on the Windows build,
+    a step that held up the window (the self-test's speed budget, 0.24)."""
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as Late
+    with ThreadPoolExecutor(1) as pool:
+        fut = pool.submit(fn)
+        while True:
+            try:
+                return fut.result(timeout=0.01)
+            except Late:
+                prog.turn()
+
+
 def put_in(parent, importer):
-    """The importer's blocks written one at a time; Cancel puts the library back as it was.
-    Returns (finished, the longest step in seconds)."""
+    """The importer's blocks written one at a time, each on a thread of its own (block_import
+    only writes the library's files: no Qt, no project), the event loop turning meanwhile;
+    Cancel puts the library back as it was. Returns (finished, the longest time the event
+    loop waited, in seconds)."""
     prog = Progress(parent, "Putting %d block%s in the library..." % (
         importer.total(), "" if importer.total() == 1 else "s"), importer.total())
     try:
-        while importer.step():
+        while _beside(prog, importer.step):
             if not prog.tick(importer.at):
                 importer.rollback()
                 return False, prog.longest

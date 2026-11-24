@@ -6,6 +6,7 @@ attributes (X?TERMnn) become pins, its TAG1 the tag spot. Every drawing here is 
 test with ezdxf (or ezdwg)."""
 import os
 import tempfile
+import time
 import unittest
 import unittest.mock
 
@@ -414,6 +415,40 @@ class WindowTest(unittest.TestCase):
         self.assertGreater(len(calls), 5)       # (it was writing when cancelled)
         self.assertEqual(snapshot(self.lib.folder), before)
         self.assertEqual(self.told, ["Cancelled: the library is as it was."])
+
+    def test_a_slow_disk_doesnt_hold_up_the_window(self):
+        # (a block file flushed to disk took 0.22 s at a time on the Windows build: each is
+        # written on a thread of its own, the event loop turning meanwhile, and the longest
+        # wait of the event loop is what the self-test's budget measures; 0.24)
+        from kanzonascad import library as L
+        rows, _step = IB.scan(self.win, BI.drawing_files(self.folder))
+        dlg = IB.ImportBlocksDialog(self.win, self.lib)
+        dlg.folder = self.folder
+        dlg.set_rows(rows)
+        imp = dlg.importer()
+        real = L._write_json
+        turns = []
+        real_turn = IB.Progress.turn
+
+        def slow(path, data):
+            time.sleep(0.3)
+            real(path, data)
+
+        def turn(prog):
+            turns.append(1)
+            real_turn(prog)
+        try:
+            L._write_json = slow
+            IB.Progress.turn = turn
+            done, longest = IB.put_in(self.win, imp)
+        finally:
+            L._write_json = real
+            IB.Progress.turn = real_turn
+        dlg.deleteLater()
+        self.assertTrue(done)
+        self.assertTrue(imp.imported)
+        self.assertGreater(len(turns), 10)          # (the event loop turned while it wrote)
+        self.assertLess(longest, 0.1)
 
     def test_imported_symbol_takes_a_wire(self):
         IB.ImportBlocksDialog.exec = lambda dlg: QDialog.Accepted
