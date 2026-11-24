@@ -829,6 +829,7 @@ def pdf_links_right(project, path, sheets):
         annots = [a.get_object() for a in (page.get("/Annots") or [])]
         rects = [[float(v) for v in a["/Rect"]] for a in annots]
         used = set()
+        unlinked = []
         devs = {e.attrs["DEV"] for e in s.entities.values()
                 if isinstance(e, (M.Insert, M.DashBox)) and e.attrs.get("DEV")}
         parents = {e.attrs["PARENT"] for e in s.entities.values()
@@ -854,8 +855,9 @@ def pdf_links_right(project, path, sheets):
                         if r[0] <= mid[0] <= r[2] and r[1] <= mid[1] <= r[3]]
                 where = places.get(place, [])
                 if not where:
-                    assert not over, "a link over %r (%r), a place not in the PDF" % (
-                        part, item[2])
+                    # (no link of its own; one over it must be another text's, drawn over it
+                    # or under it: looked at once the page's texts have taken theirs)
+                    unlinked.append((part, item[2], over))
                     continue
                 # (texts drawn over each other, contacts stacked by the steps: a link each;
                 # this text's is one of those over it not taken yet, nearest first)
@@ -869,6 +871,10 @@ def pdf_links_right(project, path, sheets):
                                                             why[0])
                 used.add(free[why.index(None)])
                 CHECKED["PDF cross-reference links lead to what they name"] += 1
+        for part, text, over in unlinked:
+            assert all(j in used for j in over), \
+                "a link over %r (%r), a place not in the PDF" % (part, text)
+            CHECKED["PDF: no link of its own on a place not in it"] += 1
         extra = [rects[j] for j in range(len(rects)) if j not in used and
                  annots[j].get("/Subtype") == "/Link"]
         assert not extra, "links over no cross-reference on sheet %s: %s" % (

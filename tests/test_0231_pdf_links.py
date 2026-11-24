@@ -224,6 +224,40 @@ class PdfLinksTest(unittest.TestCase):
         mid = (x0 + (j + 0.5) * cw, y1 - (i + 0.5) * rh)
         self.check_link(reader, 2, self.s3, held, 0, s1, M.Line(mid, mid))
 
+    def test_the_battery_check_with_texts_drawn_over_each_other(self):
+        # (the battery, seeds 41 and 468 after 0.23: a contact's "?", or an arrow's device
+        # line, drawn under another reference; that one's link over it is right, not a link
+        # of its own)
+        from pypdf import PdfReader, PdfWriter
+        from pypdf.generic import ArrayObject, DictionaryObject, FloatObject, NameObject
+        from tests import battery_checks as BC
+        defn = self.lib.get("symbol", "Contact NO")
+        no = self.now(self.s2, self.no)
+        with self.p.edit("a contact on no coil, beside the one on CR") as ed:
+            ed.add(self.s2, M.Insert(defn.name, (no.pos[0] + 0.05, no.pos[1]), defn=defn))
+        lone = self.ref(self.s2, "?")
+        path, reader, _n = self.export()
+        tb = xrefs.text_item(lone).bbox()
+        mid = page_xy(self.s2, (tb[0] + tb[2]) / 2.0, (tb[1] + tb[3]) / 2.0)
+        over = [a for a in self.annots(reader.pages[1])
+                if a["/Rect"][0] <= mid[0] <= a["/Rect"][2] and
+                a["/Rect"][1] <= mid[1] <= a["/Rect"][3]]
+        self.assertEqual(len(over), 1)                  # (the coil's place, beside it)
+        self.assertGreater(BC.pdf_links_right(self.p, path, self.p.sheets), 0)
+        # (a link of its own over the "?" still fails the check)
+        w = PdfWriter(clone_from=reader)
+        w.add_annotation(1, DictionaryObject({
+            NameObject("/Type"): NameObject("/Annot"), NameObject("/Subtype"): NameObject("/Link"),
+            NameObject("/Rect"): ArrayObject(FloatObject(v) for v in (
+                mid[0] - 1, mid[1] - 1, mid[0] + 1, mid[1] + 1)),
+            NameObject("/Dest"): ArrayObject([w.pages[0].indirect_reference,
+                                              NameObject("/Fit")])}))
+        bad = os.path.join(self.tmp, "stray.pdf")
+        with open(bad, "wb") as f:
+            w.write(f)
+        with self.assertRaises(AssertionError):
+            BC.pdf_links_right(self.p, bad, self.p.sheets)
+
     def test_without_pypdf_the_pdf_is_written_without_links(self):
         real = builtins.__import__
 
