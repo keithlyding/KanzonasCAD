@@ -6,6 +6,24 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.24
+
+**New**
+- Import blocks from folder... (Library menu): bring the blocks you made yourself in AutoCAD
+  or AutoCAD Electrical into your KanzonasCAD library in one go. Pick a folder of DWG and DXF
+  files (and its subfolders if you like) or a single drawing.
+- A file saved as one block comes in under the file's name; a drawing holding many named
+  blocks gives each of them.
+- A window lists every block found with a picture of it, whether it is a schematic symbol or a
+  panel footprint (change it if the guess is wrong), how many pins it has and whether its name
+  is already in your library (skip it, replace it, or keep both). Files that can't be read are
+  listed with the reason, and the rest still come in.
+- Pins come from AutoCAD Electrical's wire connection points (X1TERM01...), named by their
+  terminal numbers, and the tag goes where TAG1 was. Drawings in millimeters are scaled to
+  inches.
+- Choose the category (Imported to start) and which library folder they go to. Cancel while
+  they go in leaves your library as it was.
+
 ## 0.23.1
 
 **New**

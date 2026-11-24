@@ -631,6 +631,11 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
               "footprint, saved to your library as a part to use again")
         A("library_folder", "Library &folder...", self.choose_library_folder, icon="open",
           label="Library folder")
+        A("import_blocks", "&Import blocks from folder...", self.import_blocks,
+          icon="library", label="Import blocks",
+          tip="Bring the blocks you made in AutoCAD or AutoCAD Electrical (a folder of DWG and "
+              "DXF files, or one drawing) into your library in one go: pins from their wire "
+              "connection attributes")
         A("library_folder2", "Second library fol&der...", self.choose_second_library,
           icon="open", label="Second library",
           tip="A second library folder, searched with the first (one shared in a synced "
@@ -773,7 +778,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
                   "save_block_as", "add_pin", "pins", "add_attr", "update_blocks", None,
-                  "new_part", "assign_part", "save_as_part", "library_folder",
+                  "new_part", "assign_part", "save_as_part", None, "import_blocks",
+                  "library_folder",
                   "library_folder2", "library_save2"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Window")
@@ -903,7 +909,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         r.add_tab("Output", [
             ("Print", "large", [a["print"]]),
             ("Export", "large", [a["export_pdf"], a["export_dxf"], a["export_dxf_all"]]),
-            ("Import", "large", [a["import_dxf"], a["import_pdf"], a["import_picture"]]),
+            ("Import", "large", [a["import_dxf"], a["import_pdf"], a["import_picture"],
+                                 a["import_blocks"]]),
             # (Terminal count on the Terminals button's menu: the tab as wide as before)
             ("Reports", "large", [a["bom"], a["cables"], a["wire_list"],
                                   split_button([a["terminal_list"], a["terminal_count"]]),
@@ -936,7 +943,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             ("Attributes", "large", [a["add_attr"]]),
             # (measuring the block as it is drawn: not saved into it, block_editor.to_block)
             ("Measure", "large", [a["dim_linear"], a["dim_aligned"]]),
-            ("Library", "large", [a["edit_block"], a["update_blocks"]]),
+            ("Library", "large", [a["edit_block"], a["update_blocks"], a["import_blocks"]]),
         ])
         tb = self.ribbon_bar = QToolBar("Ribbon")
         tb.setObjectName("ribbon")
@@ -3043,6 +3050,20 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         self.settings.setValue("library_folder", folder)
         self.library_panel.refresh()
         self.statusBar().showMessage("Library: %s" % folder, 5000)
+
+    def import_blocks(self):
+        """Library > Import blocks from folder... (import_blocks_window): the Library popup
+        shows what came in."""
+        from . import import_blocks_window
+        imp = import_blocks_window.import_blocks(self, self.library, self._last_dir())
+        self.library_panel.refresh()
+        if imp is not None and imp.imported:
+            # (the popup on the kind brought in, filtered on their category, or on the one)
+            kinds = {r.kind for r, _n in imp.imported}
+            self.library_panel.search.setText(imp.category if len(imp.imported) > 1 else
+                                              imp.imported[0][1])
+            self.show_library(0 if "symbol" in kinds else 1)
+        return imp
 
     def ask_second_library(self):
         """The second library's folder, "" to take it away, or None (a test replaces it)."""

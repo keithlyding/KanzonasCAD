@@ -36,6 +36,10 @@ BUDGET = {
     "import_blocks": 4.0,       # a DXF of 1,000 block references (attributes), 200 dimensions
                                 # and 500 hatches imported
     "bom": 0.5,                 # the bill of materials of 2,000 parts
+    # (0.24) Library > Import blocks from folder...: 200 small block files (DXF) read, listed
+    # in its window (with their pictures) and put in the library
+    "block_folder": 10.0,
+    "block_folder_step": 0.1,   # the longest step between two turns of the event loop
     "pdf_in": 4.0,              # a PDF page of 6,000 lines and 2,000 texts read (Import PDF)
     "lasso_move": 0.03,         # a mouse move dragging a lasso around half that sheet (average)
     "lasso_pick": 1.0,          # what the lasso caught, worked out when the button is let go
@@ -1018,6 +1022,57 @@ def run(log_path):
         return "20 sheets drawn to PDF %.2f s; their 2,000 cross-reference links added %.3f s" % (
             dw, dt)
     log.check("speed budget (cross-reference links in a PDF)", pdf_links)
+
+    def block_folder():
+        import ezdxf
+        from . import block_import as BI
+        from . import import_blocks_window as IB
+        from .library import Library
+        src = os.path.join(tmp, "blocks")
+        os.makedirs(src)
+        for i in range(200):
+            # (a coil as AutoCAD Electrical keeps one: wire connections X4TERM01 and X1TERM02,
+            # their pin numbers, its tag)
+            doc = ezdxf.new()
+            doc.header["$INSUNITS"] = 1
+            m = doc.modelspace()
+            m.add_circle((0.0, 0.0), 0.25)
+            m.add_line((-0.5, 0.0), (-0.25, 0.0))
+            m.add_line((0.25, 0.0), (0.5, 0.0))
+            for tag, at, text in (("X4TERM01", (-0.5, 0.0), ""), ("X1TERM02", (0.5, 0.0), ""),
+                                  ("TERM01", (-0.4, 0.05), "A1"), ("TERM02", (0.4, 0.05), "A2"),
+                                  ("TAG1", (0.0, 0.4), "")):
+                m.add_attdef(tag, at, text=text, dxfattribs={"height": 0.08})
+            doc.saveas(os.path.join(src, "HCR%03d.dxf" % i))
+        lib = Library(os.path.join(tmp, "imported"))
+        w = state["win"]
+        # (the steps timed, not a full garbage collection of the 60,000-line sheets
+        # measured before, which lands in whatever step runs then)
+        import gc
+        gc.collect()
+        t0 = time.perf_counter()
+        rows, read_step = IB.scan(w, BI.drawing_files(src))
+        dlg = IB.ImportBlocksDialog(w, lib)
+        dlg.folder = src
+        dlg.set_rows(rows)
+        listed = dlg.fill_step
+        imp = dlg.importer()
+        done, put_step = IB.put_in(w, imp)
+        dt = time.perf_counter() - t0
+        dlg.deleteLater()
+        assert done and len(imp.imported) == 200, (done, len(imp.imported), imp.failed)
+        got = Library(lib.folder).get("symbol", "HCR117")
+        assert [(q["name"], q["pos"]) for q in got.pins] == [("A1", (-0.5, 0.0)),
+                                                             ("A2", (0.5, 0.0))], got.pins
+        step = max(read_step, put_step, listed)
+        assert dt < BUDGET["block_folder"], "200 block files imported in %.2f s" % dt
+        assert step < BUDGET["block_folder_step"], \
+            "a step of %.3f s (reading %.3f, listing %.3f, writing %.3f)" % (
+                step, read_step, listed, put_step)
+        return ("200 block files read, listed and put in the library %.2f s; longest step "
+                "%.3f s (reading %.3f, listing %.3f, writing %.3f)" % (
+                    dt, step, read_step, listed, put_step))
+    log.check("speed budget (import blocks)", block_folder)
 
     w = state.get("win")
     if w is not None:

@@ -4,6 +4,7 @@ per sheet at its real size)."""
 
 import math
 import os
+import re
 import sys
 
 from . import model as M
@@ -404,13 +405,18 @@ def read_dxf(path, include_paperspace=False, units=None, keep_blocks=True):
     """Entities of a DXF's model space, in inches, plus a report:
     (entities, {"layers": {name: hex color}, "skipped": {dxftype: count}, "units": name}).
     units: the drawing's $INSUNITS when the file's own can't be trusted (a converted DWG)."""
+    return read_doc(dxf_document(path), include_paperspace, units, keep_blocks)
+
+
+def dxf_document(path):
+    """A DXF opened with ezdxf (one it finds damaged: what its recover mode can read)."""
     import ezdxf
     from ezdxf import recover
     try:
-        doc = ezdxf.readfile(path)
+        return ezdxf.readfile(path)
     except ezdxf.DXFStructureError:
         doc, _auditor = recover.readfile(path)
-    return read_doc(doc, include_paperspace, units, keep_blocks)
+        return doc
 
 
 def _drawing_sized(ents):
@@ -503,16 +509,23 @@ def _block_parts(de, k, skipped, depth, blocks):
         blk = de.block()
         if blk is None:
             raise ValueError("block %s is missing" % name)
-        bx, by = blk.block.dxf.base_point[0] * k, blk.block.dxf.base_point[1] * k
-        parts, left = [], {}
-        for sub in blk:
-            if sub.dxftype() == "ATTDEF":
-                continue                # (the empty field of a block, not drawn on its copies)
-            _read(sub, k, parts, left, depth + 1, blocks)
-        got = blocks[name] = ([(e.moved(-bx, -by), e.layer == "0") for e in parts], left)
+        base = (blk.block.dxf.base_point[0] * k, blk.block.dxf.base_point[1] * k)
+        got = blocks[name] = layout_parts(blk, base, k, depth, blocks)
     for t, n in got[1].items():
         skipped[t] = skipped.get(t, 0) + n
     return got[0]
+
+
+def layout_parts(layout, base, k, depth, blocks):
+    """The drawing of a block (or of a drawing's model space taken as one block: a WBLOCK'd
+    file, block_import) around its base point (in inches): ([(entity, its layer was 0)],
+    what was left out {type: count})."""
+    parts, left = [], {}
+    for sub in layout:
+        if sub.dxftype() == "ATTDEF":
+            continue                # (the empty field of a block, not drawn on its copies)
+        _read(sub, k, parts, left, depth + 1, blocks)
+    return [(e.moved(-base[0], -base[1]), e.layer == "0") for e in parts], left
 
 
 # AutoCAD Electrical's attribute names -> KanzonasCAD's (a panel footprint's P_TAG1 is the tag
@@ -673,15 +686,40 @@ def _block_defn(de, k, skipped, depth, blocks):
         return blocks[key]
     parts = [e for e, _on0 in _block_parts(de, k, {}, depth, blocks)]
     blk = de.block()
-    bx, by = blk.block.dxf.base_point[0] * k, blk.block.dxf.base_point[1] * k
+    base = (blk.block.dxf.base_point[0] * k, blk.block.dxf.base_point[1] * k)
+    defn = layout_defn(str(de.dxf.name), blk, base, k, parts, blocks.get("__layers__", {}),
+                       _kz_block(blk))
+    blocks[key] = defn
+    return defn
+
+
+# AutoCAD Electrical's wire connection attributes (X?TERMnn: ? the direction the wire leaves,
+# nn the connection's number) and the pin numbers shown beside them (TERMnn)
+ACE_WIRE = re.compile(r"X(\d)TERM([0-9A-Z]{2})$")
+ACE_TERM = re.compile(r"TERM([0-9A-Z]{2})$")
+# an AutoCAD Electrical symbol's name: H or V (the wire across or up and down), then its
+# family (CR, PB, LS...), the tag prefix of its devices
+ACE_NAME = re.compile(r"[HV]([A-Z]{2})")
+
+
+def layout_defn(name, layout, base, k, parts, layers, own, ace=False):
+    """A BlockDef from a block's (or a model space's) ATTDEFs and its drawing already read
+    (parts, in inches around base). own: _kz_block's reading of a block KanzonasCAD wrote, or
+    None. ace (Library > Import blocks from folder...): AutoCAD Electrical's wire connection
+    attributes become its pins, and its TAG1 its tag spot. None when there is nothing to
+    draw."""
+    bx, by = base
     attrs, seen = [], set()
     tags = set()
     pins = []
     own_texts = []
-    for sub in blk:
+    wires, terms = {}, {}
+    tag_spot = None
+    for sub in layout:
         if sub.dxftype() != "ATTDEF":
             continue
-        if str(sub.dxf.tag).upper().startswith(TEXT_TAG) and _kz_block(blk) is not None:
+        tag = str(sub.dxf.tag).upper().strip()
+        if tag.startswith(TEXT_TAG) and own is not None:
             # (a text of a flipped block KanzonasCAD wrote: a text of its drawing again)
             p, align, valign, rot = _text_place(sub)
             own_texts.append(M.Text((p[0] * k - bx, p[1] * k - by),
@@ -689,37 +727,51 @@ def _block_defn(de, k, skipped, depth, blocks):
                                     sub.dxf.get("height", 0.125) * k, rot, align, valign,
                                     layer="0"))
             continue
-        if str(sub.dxf.tag).upper().startswith(PIN_TAG):
+        if tag.startswith(PIN_TAG):
             # (a pin of a block KanzonasCAD wrote: its name, where it is)
             q = sub.dxf.insert
             pins.append({"name": str(sub.dxf.get("text", "") or ""),
                          "pos": (q[0] * k - bx, q[1] * k - by)})
             continue
-        name = _shown_name(sub.dxf.tag)
-        tags.add(str(sub.dxf.tag).upper())
-        if sub.is_invisible or name in seen or not name:
+        if ace and own is None:
+            m = ACE_WIRE.match(tag)
+            if m:
+                q = sub.dxf.insert          # (where AutoCAD Electrical joins the wire)
+                wires.setdefault(m.group(2), (q[0] * k - bx, q[1] * k - by))
+                continue
+            m = ACE_TERM.match(tag)
+            if m:
+                terms[m.group(1)] = (str(sub.dxf.get("text", "") or "").strip(),
+                                     not sub.is_invisible)
+                continue
+        field = _shown_name(tag)
+        tags.add(tag)
+        if ace and own is None and tag == "TAG1" and tag_spot is None:
+            p = _text_place(sub)[0]
+            tag_spot = ((p[0] * k - bx, p[1] * k - by), sub.dxf.get("height", 0.125) * k)
+        if sub.is_invisible or field in seen or not field:
             continue
-        seen.add(name)
+        seen.add(field)
         p, align, valign, rot = _text_place(sub)
-        attrs.append({"attr": name, "pos": (p[0] * k - bx, p[1] * k - by),
+        attrs.append({"attr": field, "pos": (p[0] * k - bx, p[1] * k - by),
                       "height": sub.dxf.get("height", 0.125) * k, "align": align,
                       "valign": valign, "angle": rot})
     parts = parts + own_texts
-    if not parts and not attrs:
-        blocks[key] = None
+    if not parts and not attrs and not wires:
         return None
     # a schematic symbol (AutoCAD Electrical's carry TAG1) or anything else: a footprint;
-    # one KanzonasCAD wrote says which it was (its block's description, 0.20)
+    # one KanzonasCAD wrote says which it was (its block's description, 0.20); imported into
+    # the library, one with wire connections is a symbol, any other a footprint
     kind = "symbol" if "TAG1" in tags else "footprint"
-    own = _kz_block(blk)
+    if ace:
+        kind = "symbol" if wires else "footprint"
     if own is not None:
         kind = own.get("kind", kind)
     # (its pieces keep their color, or their layer's: as AutoCAD shows the block; white or
     # black ones, the drawing's ink, follow the copy)
-    lay = blocks.get("__layers__", {})
     pieces = []
     for e in parts:
-        c = e.color if e.color is not None else lay.get(e.layer)
+        c = e.color if e.color is not None else layers.get(e.layer)
         if c is not None and str(c).lower() in ("#ffffff", "#000000", M.ADAPTIVE):
             c = None
         pieces.append(e.copy(layer="0", color=c))
@@ -732,10 +784,27 @@ def _block_defn(de, k, skipped, depth, blocks):
             extra.update(tag_pos=tag["pos"], tag_height=tag["height"])
         extra.update(pins=pins, prefix=own.get("prefix", ""), role=own.get("role", "device"),
                      contact=own.get("contact", ""), wiring=own.get("wiring", ""))
-    defn = M.BlockDef(str(de.dxf.name), kind, pieces, attr_texts=attrs, category="Imported",
+    elif ace and wires:
+        # each wire connection a pin, in the order of their numbers, named by the number
+        # shown there (TERMnn), else by the connection's own (01 as 1)
+        made = []
+        for nn in sorted(wires):
+            shown = terms.get(nn, ("", False))[0]
+            made.append({"name": shown or (nn.lstrip("0") or "0"), "pos": wires[nn]})
+        extra.update(pins=made, show_pins=any(terms.get(nn, ("", False))[1] for nn in wires))
+        if tag_spot is not None:
+            attrs = [a for a in attrs if a["attr"] != "TAG"]
+            extra.update(tag_pos=tag_spot[0], tag_height=tag_spot[1])
+        m = ACE_NAME.match(name.upper())
+        if m:
+            extra.update(prefix=m.group(1))
+    if ace and own is None:
+        try:
+            extra["description"] = str(layout.block.dxf.get("description", "") or "")
+        except AttributeError:
+            pass                        # (a model space: no description of its own)
+    return M.BlockDef(name, kind, pieces, attr_texts=attrs, category="Imported",
                       own_colors=True, **extra)
-    blocks[key] = defn
-    return defn
 
 
 def _kz_block(blk):
@@ -1166,6 +1235,18 @@ def _dwg_with_oda(path, folder, program):
 def read_dwg(path):
     """Entities of a DWG's model space, in inches, plus the report read_dxf gives (and
     "reader": which one read it)."""
+    doc, units, left, reader = dwg_document(path)
+    ents, rep = read_doc(doc, units=units)
+    for k, n in left.items():
+        rep["skipped"][k] = rep["skipped"].get(k, 0) + n
+    rep["reader"] = reader
+    return ents, rep
+
+
+def dwg_document(path):
+    """A DWG as an ezdxf document: (document, its $INSUNITS when the document's own can't be
+    trusted, else None, what was left out {type: count}, which reader read it). DwgError
+    when none could."""
     import shutil
     import subprocess
     import tempfile
@@ -1176,22 +1257,14 @@ def read_dwg(path):
             # explodes blocks and loses their scale, attributes and parts
             from . import dwgread
             doc, units, left = dwgread.read(path)
-            ents, rep = read_doc(doc, units=units)
-            for k, n in left.items():
-                rep["skipped"][k] = rep["skipped"].get(k, 0) + n
-            rep["reader"] = "KanzonasCAD"
-            return ents, rep
+            return doc, units, left, "KanzonasCAD"
         except ImportError:
             first = "KanzonasCAD's DWG reader (ezdwg) isn't installed"
         except Exception as ex:         # (told on the command line; the older way next)
             first = "KanzonasCAD's DWG reader couldn't read it (%s)" % ex
         try:
             dxf, units, left = _dwg_with_ezdwg(path, folder)
-            ents, rep = read_dxf(dxf, units=units)
-            for k, n in left.items():
-                rep["skipped"][k] = rep["skipped"].get(k, 0) + n
-            rep["reader"] = "ezdwg (converted to DXF: %s)" % first
-            return ents, rep
+            return dxf_document(dxf), units, left, "ezdwg (converted to DXF: %s)" % first
         except ImportError:
             pass
         except Exception as ex:         # (any failure of the reader: told, then the fallback)
@@ -1202,11 +1275,10 @@ def read_dwg(path):
                            "too; or save the drawing as DXF in the program that made it."
                            % first)
         try:
-            ents, rep = read_dxf(_dwg_with_oda(path, folder, program))
+            doc = dxf_document(_dwg_with_oda(path, folder, program))
         except (OSError, subprocess.SubprocessError, DwgError) as ex:
             raise DwgError("%s, and the ODA File Converter failed too (%s)." % (first, ex))
-        rep["reader"] = "ODA File Converter"
-        return ents, rep
+        return doc, None, {}, "ODA File Converter"
     finally:
         shutil.rmtree(folder, ignore_errors=True)
 
