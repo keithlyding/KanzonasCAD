@@ -455,6 +455,13 @@ def _wire(project, idx, out, num, sid, wid):
         found = idx.by_num.get(num, ())
     else:
         found = []
+        # (each sheet's part worked out first, one sheet a step, as it is kept until the sheet
+        # changes: the whole project's groups are then put together from them without
+        # holding up the drawing; the owner, 0.23)
+        mode = wirenums.tap_mode(project)
+        for s in project.sheets:
+            wirenums._summary(s, wirenums.wire_order(project, s), mode)
+            yield
         for nodes in wirenums.groups(project)[0].values():
             if any(s.id == sid and w.id == wid for s, w in nodes):
                 found = nodes

@@ -416,6 +416,37 @@ class TraceTest(unittest.TestCase):
         finally:
             trace_panel.SLICE, WU.SLICE = slices
 
+    def test_a_wire_with_no_number_is_looked_up_a_sheet_at_a_time(self):
+        # (wire numbers off: the wires joined to it across the project. Each sheet's part is
+        # worked out in a step of its own before they are put together, so the whole
+        # project isn't worked out in one go on a turn of the event loop; 127 ms on 50 sheets
+        # of 200 wires before)
+        from kanzonascad import wirenums
+        with self.p.edit("wires") as ed:
+            ed.project_settings({"wire_numbers": False})
+            for s in (self.s1, self.s2):
+                for i in range(5):
+                    ed.add(s, M.Wire([(1.0, 1.0 + i), (4.0, 1.0 + i)]))
+        w = next(iter(self.s1.wires()))
+        self.assertFalse(w.num)
+        for s in self.p.sheets:
+            s.__dict__.pop("_num_summary", None)
+        seen = []
+        real = wirenums.groups
+
+        def watched(project):
+            seen.append([hasattr(s, "_num_summary") for s in project.sheets])
+            return real(project)
+        try:
+            wirenums.groups = watched
+            self.v.show_sheet(self.s1.id)
+            self.v.set_selection({w.id})
+            self.trace()
+        finally:
+            wirenums.groups = real
+        self.assertEqual(seen, [[True, True]])
+        self.assertEqual(len(self.rows()), 1)
+
     def test_many_rows_go_in_a_batch_at_a_time(self):
         from kanzonascad import trace_panel
         self.relay()
