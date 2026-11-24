@@ -366,6 +366,38 @@ def installer_command(setup_path, app_dir):
             "/RELAUNCH"]
 
 
+PENDING_KEY = "update_pending"
+
+
+def remember_update(settings, version, setup_path):
+    """Update now is about to run the setup for version: kept until the next start, which
+    tells whether it took (update_outcome), as KanzonasPDF does."""
+    settings.setValue(PENDING_KEY, json.dumps({"version": str(version), "setup": setup_path,
+                                               "at": time.time()}))
+
+
+def update_outcome(settings, running=None):
+    """At start-up, after Update now ran a setup: None when there was none (or the record is
+    unreadable), else {"ok": bool, "version", "setup"}. ok: the version running is the one
+    installed, or newer; the setup's folder is then removed. Either way the record goes: the
+    outcome is told once."""
+    raw = settings.value(PENDING_KEY)
+    if not raw:
+        return None
+    settings.remove(PENDING_KEY)
+    try:
+        rec = json.loads(str(raw))
+        want = str(rec["version"])
+    except (ValueError, KeyError, TypeError):
+        return None                     # (a record this version can't read: nothing to tell)
+    ok = _order(version_tuple(running or __version__)) >= _order(version_tuple(want))
+    out = {"ok": ok, "version": want, "setup": str(rec.get("setup") or "")}
+    folder = os.path.dirname(out["setup"])
+    if ok and os.path.basename(folder).startswith("kzcadsetup"):
+        shutil.rmtree(folder, ignore_errors=True)    # (the setup: done with)
+    return out
+
+
 def source_steps(root):
     """The commands a source update runs, in order: (program, arguments)."""
     git = shutil.which("git") or "git"
@@ -452,8 +484,9 @@ def swap_script(pid, new, app_dir):
 
 # ---- checking ----------------------------------------------------------------------------------
 class UpdateChecker(QObject):
-    """found(release, notes_since) when a newer release exists; result(text) after a check the
-    user asked for (nothing newer, or it couldn't check)."""
+    """found(release, notes_since) when a newer release exists (manual: whether the user
+    asked for that check); result(text) after a check the user asked for (nothing newer, or
+    it couldn't check)."""
     found = Signal(object, object)
     result = Signal(str)
 
@@ -462,6 +495,7 @@ class UpdateChecker(QObject):
         self.settings = settings
         self.net = None
         self._reply = None
+        self.manual = False
 
     def enabled(self):
         from . import paths
@@ -524,6 +558,7 @@ class UpdateChecker(QObject):
         v = str(rel["tag_name"]).lstrip("vV")
         if not manual and self.settings.value("update_skip", "") == v:
             return
+        self.manual = manual
         self.found.emit(rel, notes_since(data))
 
 
@@ -556,8 +591,8 @@ class SourceUpdater(QObject):
             "Couldn't run %s (%s). Is it installed?" % (os.path.basename(prog), p.errorString()))
             if err == QProcess.FailedToStart else None)
         p.finished.connect(lambda code, _status: self._next() if code == 0 else self._failed(
-            "%s stopped with an error (code %d): see the messages above. README.md (If "
-            "something goes wrong) explains the usual ones." % (os.path.basename(prog), code)))
+            "%s stopped with an error (code %d): its messages are under Show Details. "
+            "README.md (If something goes wrong) explains the usual ones." % (os.path.basename(prog), code)))
         p.start(prog, args)
 
     def _failed(self, text):

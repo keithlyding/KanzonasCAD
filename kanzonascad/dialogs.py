@@ -15,6 +15,17 @@ from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QSpin
 from . import model as M
 
 
+
+# a tap's suffix styles, as the windows offer them (model.TAP_STYLES; the owner, 0.22.4)
+TAP_STYLE_LABELS = (("-1", "-1, -2, -3 (2007-1; a tap off it 2007-1a)"),
+                    ("a", "a, b, c (2007a; a tap off it 2007a1)"),
+                    ("-a", "-a, -b, -c (2007-a; a tap off it 2007-a1)"))
+
+
+def _tap_style_name(style):
+    return {"-1": "-1, -2, -3", "a": "a, b, c", "-a": "-a, -b, -c"}.get(style, "-1, -2, -3")
+
+
 def _buttons(dlg):
     b = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
     b.accepted.connect(dlg.accept)
@@ -175,6 +186,16 @@ def sheet_properties(parent, project, sheet):
     srefs.setToolTip("How places on this sheet are given in cross-references and reports: as "
                      "Project properties says, or by grid or by ladder on this sheet")
     form.addRow("References", srefs)
+    stap = QComboBox()
+    stap.setObjectName("sheet_tap_style")
+    stap.addItem("As the project (%s)" % _tap_style_name(project.tap_style()), None)
+    for key, label in TAP_STYLE_LABELS:
+        stap.addItem(label, key)
+    stap.setCurrentIndex(max(stap.findData(sheet.tap_style), 0))
+    stap.setToolTip("How the numbers of taps on this sheet end: as Project properties says, or "
+                    "2007-1, 2007a or 2007-a here (a wire's Wire number window can choose "
+                    "otherwise)")
+    form.addRow("Tap numbers end in", stap)
     from . import wirelayers
     wlay = QComboBox()
     wlay.setObjectName("sheet_wire_layer")
@@ -252,6 +273,7 @@ def sheet_properties(parent, project, sheet):
                    number_order=order.currentData(), location=loc.text().strip(),
                    wire_order_tags=worder.currentData(),
                    referencing=srefs.currentData(),
+                   tap_style=stap.currentData(),
                    wire_layer=wlay.currentData() if wlay.currentData() != own_wl
                    else sheet.wire_layer,
                    show_border=shows["show_border"].currentData(),
@@ -415,6 +437,7 @@ def project_properties(parent, project, tab=0):
     text_h.setValue(float(st["text_height"]))
     form.addRow("Text height (new text)", text_h)
     tbpos = QComboBox()
+    tbpos.setObjectName("tb_position")
     for key, label in (("corner", "Lower right corner"),
                        ("right", "Right-hand strip (the zones stop at it)"),
                        ("bottom", "Bottom strip (the zones stop at it)")):
@@ -422,9 +445,11 @@ def project_properties(parent, project, tab=0):
     tbpos.setCurrentIndex(max(tbpos.findData(st.get("tb_position", "corner")), 0))
     form.addRow("Title block position", tbpos)
     swap = QCheckBox("Replace the title block with one made for this position")
-    swap.setToolTip("A ready-made title block for the strip (or the corner), with the same "
-                    "fields; edit it afterward with Sheets > Edit title block. Undo puts the old "
-                    "one back.")
+    swap.setObjectName("tb_replace")
+    swap.setToolTip("The title block you had for this position, if you have been here before "
+                    "(the one you leave is kept for when you come back); else a ready-made one "
+                    "for the strip (or the corner), with the same fields. Edit it afterward with "
+                    "Sheets > Edit title block. Undo puts the old one back.")
     tbpos.currentIndexChanged.connect(lambda _i: swap.setChecked(False))
     form.addRow("", swap)
     show_border = QCheckBox("Border and zones (the zone letters and numbers)")
@@ -496,6 +521,18 @@ def project_properties(parent, project, tab=0):
                     "off a bus. With -1, -2..., in the numbering order; a tap off a tap takes "
                     "a, b... (2007-1a). A number typed on a wire stays.")
     form.addRow("Wires tapped off a wire are numbered", taps)
+    tstyle = QComboBox()
+    tstyle.setObjectName("tap_style")
+    for key, label in TAP_STYLE_LABELS:
+        tstyle.addItem(label, key)
+    tstyle.setCurrentIndex(max(tstyle.findData(st.get("tap_style", "-1")), 0))
+    tstyle.setToolTip("How a tap's number ends when taps take the wire's number with a suffix: "
+                      "2007-1, 2007a or 2007-a; a tap off a tap takes the other kind (2007-1a, "
+                      "2007a1, 2007-a1). A sheet (Sheet properties) or a wire (its Wire number "
+                      "window) can choose otherwise.")
+    tstyle.setEnabled(taps.currentData() == "suffix")
+    taps.currentIndexChanged.connect(lambda _i: tstyle.setEnabled(taps.currentData() == "suffix"))
+    form.addRow("Tap numbers end in", tstyle)
     n_own = sum(1 for sh in project.sheets for w in sh.wires() if w.own_num or w.same_num)
     taps_all = QCheckBox("Apply to taps set one by one too (%d)" % n_own)
     taps_all.setObjectName("tap_numbers_all")
@@ -524,10 +561,22 @@ def project_properties(parent, project, tab=0):
     wclean.setChecked(bool(st.get("wire_cleanup", True)))
     form.addRow("", wclean)
     wgauge = QCheckBox("Show a wire layer's gauge beside its wires")
-    wgauge.setToolTip("Layers: AWG and Wire color. Each run of wire on such a layer shows "
-                      "them (10 AWG BRN), under its wire number.")
+    wgauge.setObjectName("wire_gauge_shown")
+    wgauge.setToolTip("Layers: AWG. Each run of wire on such a layer shows it (10 AWG), under "
+                      "its wire number")
     wgauge.setChecked(bool(st.get("wire_gauge_shown", True)))
     form.addRow("", wgauge)
+    # (the owner, 0.22.4: "These wire colors aren't showing. None of them have it in the whole
+    # project": the color shown everywhere at once; Wire color label still turns it on or off
+    # for the wires picked)
+    wcolor = QCheckBox("...and its color (14 AWG BLU)")
+    wcolor.setObjectName("wire_color_shown")
+    wcolor.setToolTip("Layers: Wire color. On every wire, unless Wire color label (Schematic "
+                      "tab) turned it otherwise for that wire")
+    wcolor.setChecked(bool(st.get("wire_color_shown", False)))
+    wcolor.setEnabled(wgauge.isChecked())
+    wgauge.toggled.connect(wcolor.setEnabled)
+    form.addRow("", wcolor)
     wgroup = QComboBox()
     wgroup.setObjectName("wire_gauge_each")
     wgroup.addItem("Once for wires side by side of one gauge and color", "group")
@@ -767,6 +816,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_label_ends"] = ends.value()
     settings["wire_order_tags"] = worder.isChecked()
     settings["tap_numbers"] = taps.currentData()
+    settings["tap_style"] = tstyle.currentData()
     settings["wire_crossing"] = cross.currentData()
     settings["wire_jump"] = jump.currentData()
     settings["wire_cleanup"] = wclean.isChecked()
@@ -775,6 +825,7 @@ def project_properties(parent, project, tab=0):
     settings["wire_around"] = waround.isChecked()
     settings["wire_clear"] = wclear.value()
     settings["wire_gauge_shown"] = wgauge.isChecked()
+    settings["wire_color_shown"] = wcolor.isChecked()
     settings["wire_gauge_each"] = wgroup.currentData()
     settings["wire_gauge_height"] = wgh.value()
     settings["footprint_label"] = fp_show.currentData()
@@ -808,11 +859,29 @@ def project_properties(parent, project, tab=0):
             from .sheetframe import strip_title_block, default_title_block
             tb = project.title_block
             pos = tbpos.currentData()
+            was = st.get("tb_position", "corner")
+            # (the title block of the position left is kept, and one kept for the position
+            # chosen comes back: the owner, 0.22.4, "it goes back to the old one if I change to
+            # right hand strip then back to lower right hand corner", their edits lost. The same
+            # position chosen again: a fresh ready-made one, as before)
+            kept = dict(st.get("tb_kept") or {})
+            if pos != was:
+                kept[was] = [e.to_dict() for e in tb.entities.values()]
+            back = kept.pop(pos, None) if pos != was else None
             for eid in list(tb.entities):
                 ed.remove(tb, eid)
-            for e in (strip_title_block(tb, pos) if pos in ("right", "bottom")
-                      else default_title_block(tb)):
+            if back:
+                new = []
+                for d in back:
+                    d = dict(d)
+                    d.pop("id", None)
+                    new.append(M.Entity.from_dict(d, project.blocks))
+            else:
+                new = strip_title_block(tb, pos) if pos in ("right", "bottom") \
+                    else default_title_block(tb)
+            for e in new:
                 ed.add(tb, e)
+            settings["tb_kept"] = kept
         if settings != st:
             ed.project_settings(settings)
         if taps_all.isChecked():
@@ -2412,12 +2481,15 @@ def pdf_import_dialog(parent, name, pages, k):
     return {"page": page.value(), "scale": scale.value(), "filled": filled.isChecked()}
 
 
-def wire_number_dialog(parent, num, tap_of=None, own="", locked=False, mode="same"):
+def wire_number_dialog(parent, num, tap_of=None, own="", locked=False, mode="same",
+                       tap_style="", sheet_style="-1"):
     """A wire's number (empty: numbering gives one), whether it is locked (the owner, 0.17.5:
     "should there be a checkbox to check locked or unlocked?": ticked by itself when a number
     is typed), and, for a wire tapped off another (tap_of: that wire's number), how it is
     numbered (own: "" as the project's tap numbers say (mode), "same" that wire's number,
-    "own" a number of its own). Returns (number, own, locked) or None."""
+    "own" a number of its own) and how its tap number ends (tap_style: "" as its sheet's,
+    sheet_style, or "-1", "a", "-a"; 0.22.4). Returns (number, own, locked, tap_style) or
+    None."""
     dlg = QDialog(parent)
     dlg.setWindowTitle("Wire number")
     form = QFormLayout(dlg)
@@ -2445,11 +2517,22 @@ def wire_number_dialog(parent, num, tap_of=None, own="", locked=False, mode="sam
         box.addItem("A number of its own (not %s)" % t, "own")
         box.setCurrentIndex(max(box.findData(own or ""), 0))
         form.addRow("Tapped off %s" % t, box)
+        style = QComboBox()
+        style.setObjectName("wire_tap_style")
+        style.addItem("As the sheet (%s)" % _tap_style_name(sheet_style), "")
+        for key, label in TAP_STYLE_LABELS:
+            style.addItem(label, key)
+        style.setCurrentIndex(max(style.findData(tap_style or ""), 0))
+        style.setToolTip("How this tap's number ends when it takes %s's number with a suffix"
+                         % t)
+        form.addRow("Tap number ends in", style)
     form.addRow(_buttons(dlg))
     if dlg.exec() != QDialog.Accepted:
         return None
     text = edit.text().strip().upper()
-    return text, (box.currentData() if box is not None else own), bool(text) and lock.isChecked()
+    return (text, (box.currentData() if box is not None else own),
+            bool(text) and lock.isChecked(), style.currentData() if box is not None
+            else tap_style)
 
 
 def _sheet_list(project, sheet, some):
@@ -2727,3 +2810,81 @@ def ladder_dialog(parent, lad, k):
         except ValueError:
             QMessageBox.warning(parent, "Ladder", "Type the first rung number as a whole "
                                                   "number (603), or leave it blank.")
+
+
+def title_blocks_dialog(parent, lib):
+    """Title blocks...: the ready-made title blocks and the ones saved in the library; Use
+    returns the name of the one picked, Delete takes one of yours out of the library (asked
+    first). None when closed (the owner, 0.22.4: "I should be able to save as a new title block
+    and then select default ones or different variations I've made")."""
+    from PySide6.QtWidgets import QListWidget, QListWidgetItem
+    from . import titleblocks as TB
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Title blocks")
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel("Pick a title block for this project: a ready-made one, or one you "
+                         "saved (Edit title block, Save as title block...). It goes where it "
+                         "was made for: the corner, a strip down the right or along the bottom. "
+                         "Undo puts the old one back."))
+    lst = QListWidget()
+    lst.setObjectName("title_block_list")
+    lay.addWidget(lst)
+    got = {}
+
+    def fill():
+        lst.clear()
+        for name, built in TB.names(lib):
+            it = QListWidgetItem(name + ("  (ready-made)" if built else ""))
+            it.setData(Qt.UserRole, (name, built))
+            lst.addItem(it)
+        lst.setCurrentRow(0)
+    fill()
+    row = QHBoxLayout()
+    use = QPushButton("Use")
+    use.setObjectName("use")
+    delete = QPushButton("Delete")
+    delete.setObjectName("delete")
+    close = QPushButton("Close")
+    for b in (use, delete):
+        row.addWidget(b)
+    row.addStretch(1)
+    row.addWidget(close)
+    lay.addLayout(row)
+
+    def picked():
+        it = lst.currentItem()
+        return it.data(Qt.UserRole) if it is not None else None
+
+    def on_use():
+        p = picked()
+        if p is not None:
+            got["name"] = p[0]
+            dlg.accept()
+
+    def on_delete():
+        p = picked()
+        if p is None or p[1]:
+            return
+        if QMessageBox.question(dlg, "Title blocks", "Delete the title block %s from your "
+                                "library? Projects using it keep their copy." % p[0],
+                                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        try:
+            TB.delete(lib, p[0])
+        except (OSError, ValueError) as ex:
+            QMessageBox.warning(dlg, "Title blocks", "Couldn't delete it:\n%s" % ex)
+        fill()
+
+    def on_row(_i):
+        p = picked()
+        delete.setEnabled(bool(p and not p[1]))
+    use.clicked.connect(on_use)
+    delete.clicked.connect(on_delete)
+    close.clicked.connect(dlg.reject)
+    lst.currentRowChanged.connect(on_row)
+    lst.itemDoubleClicked.connect(lambda _it: on_use())
+    on_row(0)
+    dlg.resize(520, 380)
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return got.get("name")

@@ -204,7 +204,7 @@ def break_under(ed, sheet, ins, skip=()):
         # (both pieces keep its number to start: numbering gives the second its own)
         keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
                     own_num=w.own_num, same_num=w.same_num, awg=w.awg,
-                    show_color=w.show_color, pin_tap=w.pin_tap)
+                    show_color=w.show_color, pin_tap=w.pin_tap, tap_style=w.tap_style)
         ed.remove(sheet, w.id)
         if lo > TOL:
             ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, lo),
@@ -696,7 +696,7 @@ def trim_wire(sheet, w, click):
     hi = min([s for s in cuts if s0 + TOL < s < total - TOL], default=total)
     keep = dict(layer=w.layer, color=w.color, num=w.num, num_lock=w.num_lock,
                 own_num=w.own_num, same_num=w.same_num, awg=w.awg,
-                    show_color=w.show_color, pin_tap=w.pin_tap)
+                    show_color=w.show_color, pin_tap=w.pin_tap, tap_style=w.tap_style)
     out, ends = [], []
     if lo > TOL:
         piece = _poly_piece(pts, cum, 0.0, lo)
@@ -794,7 +794,8 @@ def join_at(ed, sheet, points):
         if len(merged) < 2 or doubles_back(merged):
             continue
         ed.remove(sheet, b.id)
-        ed.change(sheet, a.copy(points=merged, show_color=a.show_color or b.show_color,
+        ed.change(sheet, a.copy(points=merged, show_color=a.show_color if a.show_color is not
+                                None else b.show_color,
                                 labels=_joined_labels(a, ia != -1, b, ib != 0)))
         n += 1
     return n
@@ -889,7 +890,7 @@ def split_corner_taps(ed, sheet, ws):
             at = cum[i]
             keep = dict(layer=o.layer, color=o.color, num=o.num, num_lock=o.num_lock,
                         own_num=o.own_num, same_num=o.same_num, awg=o.awg,
-                        show_color=o.show_color, pin_tap=o.pin_tap)
+                        show_color=o.show_color, pin_tap=o.pin_tap, tap_style=o.tap_style)
             ed.remove(sheet, o.id)
             a = ed.add(sheet, Wire(_poly_piece(pts, cum, 0.0, at),
                                    labels=_labels_between(o, 0.0, at), **keep))

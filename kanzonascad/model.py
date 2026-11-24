@@ -86,6 +86,16 @@ DEFAULT_SETTINGS = {
     # "hundreds" (the page times 100 on: 600, 601...) or "prefix" (the page, a dash, the rung:
     # 6-01, 6-02...); a new ladder's rungs this far apart (paper inches)
     "referencing": "grid",
+    # a tap's suffix (tap_numbers "suffix"): "-1" (6001-1, 6001-2), "a" (6001a, 6001b) or "-a"
+    # (6001-a, 6001-b); a tap off a tap the other kind (6001-1a, 6001a1, 6001-a1); a sheet and a
+    # wire can choose otherwise (the owner, 0.22.4: "In addition to -1, can we add a, b, c, etc
+    # for wire taps? Also -a, -b, -c, etc. This would be a project wide setting, able to be
+    # overridden by sheet and by wire")
+    "tap_style": "-1",
+    # a wire layer's gauge label shows its insulation color too (14 AWG BLU) on every wire that
+    # doesn't say otherwise (Wire color label; the owner, 0.22.4, "These wire colors aren't
+    # showing. None of them have it in the whole project")
+    "wire_color_shown": False,
     "ladder_numbers": "hundreds",
     "ladder_spacing": 0.5,
     # new dimensions read decimal (12.50") or fractional to the nearest 1/16 (1-9/16"): "decimal",
@@ -408,6 +418,10 @@ class Polyline(Entity):
         return self.copy(points=[list(fn(p)) for p in self.points])
 
 
+# a tap's suffix styles: 6001-1, 6001a, 6001-a (Project properties, Sheet properties, Wire number)
+TAP_STYLES = ("-1", "a", "-a")
+
+
 @_register
 class Wire(Polyline):
     """A wire: a polyline on layer WIRES whose ends attach to symbol pins, wire ends or other
@@ -415,10 +429,11 @@ class Wire(Polyline):
     it can't go stale; moving a symbol drags the ends that sat on its pins."""
     kind = "wire"
     __slots__ = ("num", "num_lock", "own_num", "labels", "awg", "same_num", "show_color",
-                 "pin_tap")
+                 "pin_tap", "tap_style")
 
     def __init__(self, points, closed=False, num=None, num_lock=False, own_num=False,
-                 labels=(), awg="", same_num=False, show_color=False, pin_tap=False, **kw):
+                 labels=(), awg="", same_num=False, show_color=None, pin_tap=False,
+                 tap_style="", **kw):
         kw.setdefault("layer", "WIRES")
         super().__init__(points, False, **kw)
         # its wire number (every wire of a connected group has the same: wirenums.py) and
@@ -441,11 +456,14 @@ class Wire(Polyline):
         # its insulation color written in its gauge label too (Wire color label: the owner,
         # 0.18.4, "I don't think we need to include the wire color. Maybe that can be a
         # toggle-able option on a per-wire basis?")
-        self.show_color = bool(show_color)
+        # (None: as the project, Project properties, Schematic, "...and its color"; 0.22.4)
+        self.show_color = None if show_color is None else bool(show_color)
         # a second wire on a pin (a double landing) numbered as a tap off the wire already
         # there: as the project numbers taps, or its own same_num / own_num (the owner, 0.18.5:
         # "Give me the option each time, and changeable")
         self.pin_tap = bool(pin_tap)
+        # as a tap, its suffix's style: "-1", "a" or "-a", or "" for its sheet's (TAP_STYLES)
+        self.tap_style = tap_style if tap_style in TAP_STYLES else ""
 
     def _data(self):
         d = super()._data()
@@ -461,18 +479,20 @@ class Wire(Polyline):
             d["labels"] = list(self.labels)
         if self.awg:
             d["awg"] = self.awg
-        if self.show_color:
-            d["show_color"] = True
+        if self.show_color is not None:
+            d["show_color"] = self.show_color
         if self.pin_tap:
             d["pin_tap"] = True
+        if self.tap_style:
+            d["tap_style"] = self.tap_style
         return d
 
     @classmethod
     def _from(cls, d):
         return cls(d["points"], False, d.get("num"), d.get("num_lock", False),
                    d.get("own_num", False), d.get("labels") or (), d.get("awg", ""),
-                   d.get("same_num", False), d.get("show_color", False),
-                   d.get("pin_tap", False),
+                   d.get("same_num", False), d.get("show_color"),
+                   d.get("pin_tap", False), d.get("tap_style", ""),
                    layer=d.get("layer", "WIRES"), color=d.get("color"), id=d.get("id"))
 
     def length(self):
@@ -3179,6 +3199,8 @@ class Sheet:
         self.wire_layer = None              # the layer new wires go on here: None = the
                                             # project's (Project properties, Schematic)
         self.referencing = None             # "grid" or "ladder": None = as the project
+        self.tap_style = None               # a tap's suffix here (TAP_STYLES): None = as the
+                                            # project
         self.xref_device = None             # arrows show the device at the far end: None =
                                             # as the project, True/False this sheet's own
         self.scale = 1.0                    # paper / real (a panel sheet at 1:4: 0.25): the
@@ -3428,6 +3450,7 @@ class Sheet:
              "show_title_block": self.show_title_block,
              "xref_device": self.xref_device,
              "referencing": self.referencing,
+             "tap_style": self.tap_style,
              "wire_layer": self.wire_layer,
              "number": self.number, "fields": dict(self.fields),
              "scale": self.scale, "scale_name": self.scale_name,
@@ -3477,6 +3500,7 @@ class Sheet:
         self.xref_device = d.get("xref_device")
         self.referencing = d.get("referencing") if d.get("referencing") in ("grid",
                                                                               "ladder") else None
+        self.tap_style = d.get("tap_style") if d.get("tap_style") in TAP_STYLES else None
         self.wire_layer = str(d.get("wire_layer") or "").strip() or None
         self.number = d.get("number")
         self.fields = dict(d.get("fields", {}) or {})
@@ -3799,6 +3823,15 @@ class Project:
             return str(sheet.number)
         return str(self.sheets.index(sheet) + 1)
 
+    def tap_style(self, sheet=None, wire=None):
+        """A tap's suffix style (TAP_STYLES): the wire's own, else its sheet's, else the
+        project's."""
+        for got in (getattr(wire, "tap_style", None), getattr(sheet, "tap_style", None),
+                    self.settings.get("tap_style")):
+            if got in TAP_STYLES:
+                return got
+        return "-1"
+
     def referencing(self, sheet):
         """How places on the sheet are given: "grid" or "ladder" (its own, else the
         project's)."""
@@ -3885,7 +3918,12 @@ class Project:
         if bb is None:
             return None
         x0, y0, x1, _y1 = self.title_block.frame()
-        size = (x1 - bb[0]) if pos == "right" else (bb[3] - y0)
+        # (from the frame's edge to the title block's far side, but never more than the title
+        # block is across: one drawn away from its corner, an imported drawing used as a title
+        # block, made the strip take nearly the whole sheet and a report sheet's table a
+        # sliver; the battery, 0.22.4, seed 41)
+        size = min(x1 - bb[0], bb[2] - bb[0]) if pos == "right" else \
+            min(bb[3] - y0, bb[3] - bb[1])
         return (pos, max(0.0, size)) if size > 1e-6 else None
 
     def sync_reserve(self):

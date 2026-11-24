@@ -47,11 +47,15 @@ def place(e, off, center=None):
 
 def _shape(e):
     """What says where and how an object is, not what it is called: its stored form without
-    its id and, for a symbol, its tag and links (a copy has a tag of its own)."""
+    its id and, for a symbol, its tag and links (a copy has a tag of its own) and which of them
+    are hidden (a contact block on a pushbutton's dashed line hides its tag, its copies off the
+    line show theirs: they were taken for copies that had left the array, and Edit array left
+    them where they were; the battery, 0.22.4, seed 469)."""
     d = e.to_dict()
     d.pop("id", None)
     if isinstance(e, M.Insert):
         d.pop("attrs", None)
+        d.pop("hidden", None)
     return d
 
 

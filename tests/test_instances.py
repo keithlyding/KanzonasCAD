@@ -15,6 +15,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 
 from PySide6.QtWidgets import QMessageBox
 
@@ -89,6 +90,40 @@ class InstancesTest(unittest.TestCase):
         b.stop()
         self.made.remove(b)
         self.assertEqual(a.others(), [])
+
+    def test_a_note_is_never_seen_half_written(self):
+        # (a copy starting while another looked: the note was there before its name was in
+        # it, the other read nothing, took the new copy for gone and removed its note; CI,
+        # Nov 2026)
+        import builtins
+        real_open, seen = builtins.open, []
+        note = os.path.join(self.folder, "91005")
+
+        class Watched:
+            def __init__(self, f):
+                self.f = f
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                self.f.close()
+
+            def write(self, text):
+                seen.append(os.path.exists(note))
+                return self.f.write(text)
+
+        def watched_open(path, mode="r", *a, **k):
+            f = real_open(path, mode, *a, **k)
+            return Watched(f) if "w" in mode and str(path).startswith(note) else f
+        with unittest.mock.patch("builtins.open", watched_open):
+            a = self.make(91005)
+        self.assertEqual(seen, [False])
+        b = self.make(91006)
+        self.assertEqual(b.others(), [91005])
+        self.assertEqual(b.running_others(), 1)
+        self.assertEqual(sorted(os.listdir(self.folder)), ["91005", "91006"])
+        self.assertTrue(a.name)
 
     def test_a_real_second_process_closes(self):
         script = (

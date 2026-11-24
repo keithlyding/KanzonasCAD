@@ -84,7 +84,8 @@ every sheet; the type brings up the matching ribbon tab and shows in the Sheets 
 <b>location</b> (the panel or box what it shows is in: MCP, JB-1, FIELD; see Cables between
 panels), page number and, if it differs from the project's, its own revision, and its
 default <b>wire layer</b> (the layer new wires on it go on: as the project, or one of its own;
-see Colors and layers), and its <b>References</b> (as the project, Grid or Ladder: see Ladders).
+see Colors and layers), its <b>References</b> (as the project, Grid or Ladder: see Ladders), and
+how its <b>Tap numbers end in</b> (as the project, -1, a or -a: see Wire numbers).
 Its size and zones are the project's unless you tick "This sheet has its own size and zones";
 then set how many columns run along the top and the first one's number (11 makes a sheet
 continue 11 to 20), and how many rows run down the left and the first one's letter. Grid
@@ -168,8 +169,11 @@ height</b>, 0.06" to start); <b>Show a wire layer's gauge beside its wires</b> t
 off for the whole project, and a layer's <b>Gauge shown</b> in <b>Layers...</b> (click it: Yes
 or No) for that layer's wires only: control power all of one gauge and color (24VDC BLU,
 BLU-WHT), say, where the label would only crowd a breaker. A wire given a gauge of its own still
-shows it. <b>Wire color label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) writes the
-color too, on the wires you select or click (<b>10 AWG BRN</b>); again, and it stops. Wires
+shows it. The label shows the wire's insulation color too (<b>10 AWG BRN</b>) on every wire
+when <b>...and its color</b> under that setting is ticked (off to start). <b>Wire color
+label</b> (WIRECOLOR, WCL; Modify menu, Schematic tab: Edit wires) turns the color the other way
+on the wires you select or click: on where the project leaves it off, off where it shows it;
+again, and it goes back. A wire keeps that choice whatever the project setting says. Wires
 side by side of one gauge (within 3/4" of each other on paper, running along each other: a
 starter's conductors to its drive, a bus) show it <b>once</b>: a thin oval drawn across them
 where they run side by side, with a leader out at 45 degrees to the label, level; where there
@@ -222,10 +226,27 @@ Both are always there: any sheet can hold a schematic, a panel layout, or both.<
 
 <h2>The title block</h2>
 <p>The title block is a small drawing of its own, the same on every sheet of the project.
-<b>Edit title block</b> (Sheets menu and Sheets tab) shows it by itself: draw, move, trim,
-erase and type text there with the usual commands, or <b>Import DXF or DWG into this sheet...</b>
-to bring in your company's title block and move it into the lower right corner. Click
-<b>Edit title block</b> again (or click a sheet in the Sheets panel) to go back.</p>
+<b>Edit title block</b> (Sheets menu and Sheets tab) opens it in a tab of its own, as Edit
+block opens a block, with the <b>Title block</b> ribbon tab: draw, move, trim, erase and type
+text there with the usual commands, or <b>Import DXF or DWG into this sheet...</b> to bring in
+your company's title block and move it into the lower right corner. Your drawing stays as it
+was in its own tab meanwhile. <b>Save title block</b> (the Title block tab and the Sheets menu,
+or Ctrl+S) puts it in the project as one step (Undo in the drawing takes it back), closes the
+tab and goes back to the drawing, on the Sheets tab. <b>Close title block</b> (or closing its
+tab) leaves the project's title block as it was, asking first if you changed anything: Save,
+Discard or Cancel. Edit title block again while its tab is open shows that tab.</p>
+<p><b>Title blocks you keep.</b> In the title block's tab, <b>Save as title block...</b> keeps the
+title block you drew in your library under a name of your own (your company's, a customer's),
+with where it sits on the sheet, for any project; the tab stays open. <b>Title blocks...</b>
+(Sheets menu and Sheets tab) puts one in the project: the ready-made ones (<b>Standard, lower
+right corner</b>; <b>Standard, right-hand strip</b>; <b>Standard, bottom strip</b>), always there
+whatever you save, or one of yours. It goes where it was made for, and Undo puts the old one
+back. <b>Delete</b> there takes one of yours out of the library (projects using it keep their
+copy). They are kept in the <code>Title blocks</code> folder of your library folder (both library
+folders are read, so a shared folder can hold your company's).</p>
+<p><b>A logo</b>: in the title block's tab, <b>Picture or SVG</b> (Title block tab) brings in your
+logo (PNG, JPEG...); place it and drag a corner to size it. It is kept in the project (and in a
+title block you save), and shows on every sheet, printed and in PDFs.</p>
 <p>A text that contains a field name in braces shows that field's value on every sheet:</p>
 <ul>
 <li><code>{{Customer}}</code>, <code>{{Project}}</code>, <code>{{Drawing number}}</code>,
@@ -304,8 +325,11 @@ so grid references (6-D1) never point into the title block.</li>
 </ul>
 <p>The strip's width (or height) is that of the title block you drew. Tick <b>Replace the
 title block with one made for this position</b> to swap in a ready-made one, with the same
-fields, that fills the strip (or the corner); Undo puts your old one back. On a panel sheet
-with a scale the strip stays its size on paper.</p>
+fields, that fills the strip (or the corner); Undo puts your old one back. The title block you
+leave is kept with the project: choose its position again with the box ticked and you get it
+back, edits and all, not a ready-made one (going to the strip and back to the corner gives you
+your own corner title block). Ticking the box without changing the position gives a fresh
+ready-made one. On a panel sheet with a scale the strip stays its size on paper.</p>
 
 <h2>Symbols, footprints and parts (the library)</h2>
 <p>Your <b>library</b> is a folder of its own (<code>Documents\\KanzonasCAD Library</code> to
@@ -1008,7 +1032,15 @@ numbered as Project properties, Schematic, <b>Wires tapped off a wire are number
 2007-1, 2007-2, 2007-3 in the sheet's numbering order, those off 2008 are 2008-1, 2008-2...,
 and a tap off a tap takes a letter, 2007-1a, 2007-1b. The wires past the device a drop lands
 on are numbered as usual. Adding or removing a drop renumbers the others on that wire
-(unless their numbers are locked).</li>
+(unless their numbers are locked). <b>Tap numbers end in</b>, just under it, picks how:
+<b>-1, -2, -3</b> (2007-1), <b>a, b, c</b> (2007a) or <b>-a, -b, -c</b> (2007-a). A tap off a
+tap takes the other kind, without a dash: 2007-1a, 2007a1, 2007-a1, and one off that the first
+kind again (2007-1a1). Letters are lowercase, so a tap is never taken for a distribution
+block outlet's 2007A; after z come aa, ab... A sheet can choose otherwise (Sheet properties,
+<b>Tap numbers end in</b>), and so can a tap (double-click it: the Wire number window's <b>Tap
+number ends in</b>; the choice goes with the whole wire, and copies, cuts and trims keep it).
+The tap's own choice comes first, then its sheet's, then the project's. Changing any of them
+renumbers the taps it touches (Undo puts them back).</li>
 <li><b>The same number as the wire</b> (projects from before 0.18.3 keep this one): a tap is
 one wire with the wire it taps.</li>
 <li><b>A number of its own</b>: each tap takes the next free number of its page.</li>
@@ -1160,9 +1192,9 @@ how many terminals and jumpers the tapped wires need: every wire number tapped o
 one for each tap, bridged by one jumper fewer than terminals (6001 tapped three times: 4
 terminals, 3 jumpers), with the sheets they are on and the totals at the bottom. It counts one
 wire on each terminal side, the most you can need: multi-level terminals, or two wires on a
-side, need fewer. It counts taps numbered -1, -2... (or with numbers of their own: Project
-properties, Schematic, Tap numbers); taps that keep the wire's number aren't told apart, and
-it says so. All three are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
+side, need fewer. It counts taps numbered -1, -2..., a, b... or -a, -b... (or with numbers of
+their own: Project properties, Schematic, <b>Wires tapped off a wire are numbered</b>); taps
+that keep the wire's number aren't told apart, and it says so. All three are worked out from the drawing each time they open; <b>Save as CSV or Excel...</b>
 writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workbook" as the
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 <p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints
@@ -1303,8 +1335,8 @@ object, only the piece a click there would cut away lights up. U undoes the last
 then where the dimension line goes: across or up and down, whichever way you pull it.</td></tr>
 <tr><td>Aligned dimension</td><td>DIMALIGNED, DAL</td><td>The same, measured along the line
 between the two points (slanted too).</td></tr>
-<tr><td>Wire color label</td><td>WIRECOLOR, WCL</td><td>The selected (or clicked) wires write
-their color in their gauge label too, or stop.</td></tr>
+<tr><td>Wire color label</td><td>WIRECOLOR, WCL</td><td>The selected (or clicked) wires show
+their color in their gauge label, or stop (the other way from how they show it now).</td></tr>
 <tr><td>Dimension units</td><td>DIMUNITS, DU</td><td>The selected (or clicked) dimensions:
 D decimal, F fractional, or 1/8, 1/16, 1/32, 1/64.</td></tr>
 <tr><td>Hatch</td><td>HATCH, H, BHATCH, BH, FILL</td><td>Click inside a closed shape to fill it
@@ -2011,7 +2043,8 @@ is found again when the stick gets another drive letter on another PC (E: here, 
 <li><b>PortableApps.com version</b> (KanzonasCAD Portable, for the PortableApps.com Platform):
 the same, with your files in the package's <b>Data</b> folder. The PortableApps.com Platform
 updates it, so KanzonasCAD doesn't check for updates by itself unless you tick Help &gt;
-<b>Check for updates automatically</b>, and then it only opens the release page.</li>
+<b>Check for updates automatically</b>, and then its notice has no Update now: Download
+opens the release page.</li>
 <li><b>Linux</b>: <b>KanzonasCAD-x86_64.AppImage</b> (64-bit PC; Ubuntu 22.04, Debian 12, Fedora
 36 or newer). Make it executable (right-click &gt; Properties &gt; Permissions &gt; Allow
 executing file as program, or <code>chmod +x KanzonasCAD-x86_64.AppImage</code>) and
@@ -2029,37 +2062,50 @@ run KanzonasCAD/KanzonasCAD (it doesn't update itself).</li>
 
 <h2>Updates</h2>
 <p>KanzonasCAD asks GitHub for new versions by itself, at most once a day (also while it stays
-open), quietly: nothing shows unless there is one. Then a box tells you what changed in every
-version since yours, with three buttons: <b>Update now</b>, <b>Skip this version</b> (you're
-not told about it again; a newer one still shows) and <b>Later</b>. While Update now
-downloads, its window shows a progress bar with how much has come (48.3 of 75.2 MB, 64%), and
-<b>Cancel</b> stops the download; once it's done (or failed) the button is <b>Close</b>.
-When you finish the update, every other KanzonasCAD you have running closes first, as Quit
-would (each asks to save its changes); if you cancel in one, it stays open and the update
-stops until you close it. With <b>Open the files that were open...</b> on (Options), the new
-version opens the files all of them had open.</p>
+open), quietly: nothing shows unless there is one. Then a notice at the bottom of the window
+(the status bar) says <b>KanzonasCAD 0.23 is available</b> (you have 0.22), with five buttons:
+<b>What's new</b> (what changed since your version), <b>Update now</b> (updates this copy; not
+there when it can't update itself), <b>Download</b> (opens the release page in your browser),
+<b>Skip this version</b> (you're not told about it again; a newer one still shows) and
+<b>Later</b>. Nothing pops up, and nothing is downloaded or installed until you click a
+button.</p>
+<p><b>Check for updates...</b> (Help menu), or What's new, opens the update box: what's new
+since your version, the notes of every version newer than yours, newest first (a version
+without notes has a link to its release page), what Update now does for your copy, and the
+buttons <b>Update now</b>, <b>Download</b> and <b>Later</b>. With nothing newer, a box says
+<b>You have the latest version</b>; if GitHub can't be reached, it says why.</p>
+<p>While Update now downloads, a window says <b>Downloading the new KanzonasCAD...</b> with a
+progress bar; <b>Cancel</b> stops the download. If the download fails (or doesn't match the
+release), a warning says why, and you can still download the new version from the release
+page. Before KanzonasCAD closes for the update, every other KanzonasCAD you have running closes
+first, as Quit would (each asks to save its changes); if you cancel in one, it stays open and
+the update stops until you close it. With <b>Open the files that were open...</b> on
+(Options), the new version opens the files all of them had open. If the setup ran but
+KanzonasCAD is still the old version when it starts again, a warning says the update didn't
+finish and offers to run the setup again, which shows what's in the way.</p>
 <ul>
 <li>Run from source (the README's way): Update now gets the new version (git pull) and what it
-needs, shows what it did, and offers to start the new version.</li>
+needs, closes KanzonasCAD and starts it again. If a step fails, a warning says which, with its
+messages under Show Details.</li>
 <li>Installed with the setup (KanzonasCAD-v&lt;version&gt;-setup.exe): Update now downloads
 the new setup, uses it only if it matches the release exactly (its sha256), closes
-KanzonasCAD and installs the new version over this one, then starts it again. No
-administrator rights are needed for a copy installed for you; a copy installed for all users
-updates for all users too, and Windows asks for administrator rights first.</li>
+KanzonasCAD and installs the new version over this one; KanzonasCAD starts again when it's
+done. No administrator rights are needed for a copy installed for you; a copy installed for
+all users updates for all users too, and Windows asks for administrator rights first.</li>
 <li>The Windows zip (unzipped by hand): Update now downloads the new zip, checks it the same
-way, and replaces this copy when KanzonasCAD closes, then starts it again.</li>
+way, closes KanzonasCAD, replaces the program files in this folder and starts it again.</li>
 <li>The portable version: Update now downloads the new portable zip, checks it the same way,
-and replaces the program files in the same folder when KanzonasCAD closes, then starts it
-again; the data folder (settings, library, recovery copies) is kept. Or close KanzonasCAD and
-unzip the new download over the same folder, replacing the files.</li>
-<li>The PortableApps.com version: the PortableApps.com Platform updates it; Update now opens the
-release page.</li>
+closes KanzonasCAD, replaces the program files in this folder and starts it again; the data
+folder (settings, library, recovery copies) is kept. Or close KanzonasCAD and unzip the new
+download over the same folder, replacing the files.</li>
+<li>The PortableApps.com version: the PortableApps.com Platform updates it; there is no Update
+now, and Download opens the release page.</li>
 <li>The Linux AppImage: Update now downloads the new KanzonasCAD-x86_64.AppImage, checks it the
 same way, puts it in place of the old file (same name and place), closes KanzonasCAD and starts
-the new version. If you keep it open, the new version starts the next time you open
+the new version. If you keep a project open, the new version starts the next time you open
 KanzonasCAD. If the AppImage is in a folder you can't change, the release page opens instead:
-download the new file and replace the old one yourself. The Linux folder (tar.gz) only opens
-the release page.</li>
+download the new file and replace the old one yourself. The Linux folder (tar.gz) has no
+Update now: Download opens the release page.</li>
 <li>Either way you're asked to save any changes first, and your projects and library are never
 touched.</li>
 </ul>

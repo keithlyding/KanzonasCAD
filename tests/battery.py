@@ -55,6 +55,10 @@ from kanzonascad import block_editor as BE  # noqa: E402
 from kanzonascad import commands as C  # noqa: E402
 from kanzonascad import model as M  # noqa: E402
 from kanzonascad import geometry as G  # noqa: E402
+
+# a tap's ending on the number it taps: -1, a or -a, and off a tap more of the other kind
+# (2007-1a, 2007a1, 2007-a1a; 0.22.4), lowercase (a distribution outlet's 1006A isn't one)
+TAP_END = re.compile(r"(?:-\d+|-?[a-z]+)[a-z0-9]*$")
 from kanzonascad import wires, crossings, wirenums, wirelayers, fileio, templates  # noqa: E402
 from kanzonascad import tags as tags_mod  # noqa: E402
 from kanzonascad import xrefs as XR  # noqa: E402
@@ -129,6 +133,16 @@ class Log:
 
 
 # ---- invariants ------------------------------------------------------------------------------
+def blocks_known(project, sheet):
+    """Every block copy on the sheet has its block in the project (saved with it): Import I/O
+    list put modules on new sheets without theirs, gone once the project was opened again (the
+    battery, 0.22.4, seed 44)."""
+    for e in sheet.inserts():
+        assert e.block in project.blocks, \
+            "%s on sheet %s isn't one of the project's blocks" % (e.block, sheet.id)
+    BC.CHECKED["block copies' blocks in the project"] += 1
+
+
 def check_sheet(sheet):
     """The model holds together: every entity is found by the spatial index where it is, ids
     are unique and numeric, wires have two or more distinct finite points, and everything
@@ -2149,6 +2163,12 @@ def random_editing(log, out, ops, seed, drawing=None):
         if rnd.random() < 0.2:
             with p.edit("tap numbers") as ed:
                 ed.project_settings({"tap_numbers": rnd.choice(["same", "suffix", "own"])})
+        if rnd.random() < 0.2:
+            # (0.22.4: how a tap's number ends, the project's and now and then a sheet's own)
+            with p.edit("tap style") as ed:
+                ed.project_settings({"tap_style": rnd.choice(M.TAP_STYLES)})
+                if rnd.random() < 0.4:
+                    ed.sheet_meta(s, tap_style=rnd.choice(M.TAP_STYLES + (None,)))
         mode = wirenums.tap_mode(p)
         k = s.k()
         o = clear_of_drawing(k)
@@ -2176,9 +2196,25 @@ def random_editing(log, out, ops, seed, drawing=None):
         tap = [x for x in s.wires() if x.touches(to) and x.touches(m)]
         main = s.entities.get(w.id)
         assert len(tap) == 1 and main is not None, "the tap or the wire it taps is gone"
+        if not said and rnd.random() < 0.3:
+            # (0.22.4: the tap's own style, chosen in its Wire number window)
+            pick = rnd.choice(M.TAP_STYLES + ("",))
+            win.ask_wire_number = lambda n, tap_of=None, own="", locked=False: (
+                n, own, locked, pick)
+            try:
+                win.edit_wire_number(tap[0])
+            finally:
+                win.__dict__.pop("ask_wire_number", None)
+            tap = [x for x in s.wires() if x.touches(to) and x.touches(m)]
+            assert len(tap) == 1 and tap[0].tap_style == pick, \
+                "a tap's style not kept: %r, not %r" % (tap and tap[0].tap_style, pick)
+            BC.CHECKED["tap style chosen for one wire"] += 1
         how = {"N": "own", "S": "same"}.get(said, mode)
         if main.num and tap[0].num:
-            want = {"same": main.num, "suffix": main.num + ("a" if "-" in main.num else "-1")}
+            # (the wire just drawn taps nothing: its tap is one level down, the first: -1, a
+            # or -a as the tap's own style says, else its sheet's, else the project's)
+            style = tap[0].tap_style or s.tap_style or p.settings.get("tap_style") or "-1"
+            want = {"same": main.num, "suffix": main.num + style}
             if how == "own":
                 assert tap[0].num != main.num, "a tap with its own number: %s, %s" % (
                     tap[0].num, main.num)
@@ -2187,7 +2223,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                     mode, said, tap[0].num, main.num)
             BC.CHECKED["tap numbered as asked"] += 1
             if how == "suffix":
-                BC.CHECKED["tap numbered -1 off the wire"] += 1
+                BC.CHECKED["tap numbered -1, a or -a off the wire"] += 1
 
     def op_wire_size():
         # (0.18.2: Wire size: a wire clicked given a gauge of its own, or the layer's again;
@@ -2469,9 +2505,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         now = [w for w in sh.wires() if w.touches(src.pin_points()[0][1])]
         if not now or not now[0].num or now[0].num_lock:
             return
-        # (a tap off the source's wire is numbered from it: 1006-1, 1006-1a; its page is the
-        # base number's)
-        got = WN.split(re.sub(r"-\d+[a-z]*$", "", now[0].num))
+        # (a tap off the source's wire is numbered from it: 1006-1, 1006-1a, 1006a, 1006-a...;
+        # its page is the base number's)
+        got = WN.split(TAP_END.sub("", now[0].num))
         if got is None and WN.by_io_address(p):
             return                          # (numbered by a PLC point's address, O:3/0)
         assert got and got[0] == p.sheet_number(sh), \
@@ -2485,8 +2521,14 @@ def random_editing(log, out, ops, seed, drawing=None):
         ws = s.wires()
         if not ws:
             return
+        if rnd.random() < 0.2:
+            # (0.22.4: the project's "...and its color" turned on or off: every wire without a
+            # choice of its own follows it)
+            with p.edit("wire colors") as ed:
+                ed.project_settings({"wire_color_shown": not p.settings.get("wire_color_shown")})
         pick = rnd.sample(ws, min(len(ws), rnd.randint(1, 3)))
-        want = any(not w.show_color for w in pick)
+        dflt = bool(p.settings.get("wire_color_shown"))
+        want = any(not (w.show_color if w.show_color is not None else dflt) for w in pick)
         v.set_selection({w.id for w in pick})
         v.run(C.WireColorLabelCmd)
         finish()
@@ -2708,6 +2750,79 @@ def random_editing(log, out, ops, seed, drawing=None):
         v.set_selection({rnd.choice(imp).id})
         v.run(C.UseTitleBlockCmd)
         finish()
+
+    def op_title_block():
+        # (0.22.4) Edit title block in a tab of its own: a line drawn there, then Save title
+        # block (in the project, one step, back to the drawing) or Close title block and
+        # Discard (the project's as it was)
+        from unittest import mock
+        from PySide6.QtWidgets import QMessageBox
+        src, sheet_id = win.doc(), v.sheet_id
+        lines = lambda pr: sorted(tuple(map(tuple, (e.p1, e.p2))) for e in
+                                  pr.title_block.entities.values() if isinstance(e, M.Line))
+        before = lines(p)
+        win.acts["edit_tb"].trigger()
+        d = win.doc()
+        assert d is not src and d.view.sheet() is d.project.title_block, \
+            "Edit title block didn't open a tab of its own"
+        # (inside the title block's outline, as anyone draws in one: a line far from it made
+        # it, and a strip title block, span the sheet, the room left for the drawing a sliver;
+        # seed 469's report and I/O sheets)
+        bb = None
+        for e in d.project.title_block.entities.values():
+            bb = G.bbox_union(bb, e.bbox())
+        if bb is None or bb[2] - bb[0] < 1.0:
+            bb = (0.5, 0.1, 4.5, 1.0)
+        a = (round(rnd.uniform(bb[0], bb[2] - 0.6), 3), round(rnd.uniform(bb[1], bb[3]), 3))
+        b = (round(a[0] + 0.5, 3), a[1])
+        t = d.view
+        t.snap_on = t.osnap_on = t.ortho_on = t.polar_on = False
+        t.run(C.LineCmd)
+        for q in (a, b):
+            if t.cmd is not None:
+                t.input_text(fmt(q))
+        while t.cmd is not None:
+            t.cmd.enter()
+            if t.cmd is not None:
+                t.cancel()
+        drawn = lines(d.project) != before
+        if rnd.random() < 0.3:
+            # (0.22.4: Save as title block: kept in the library by name, the tab still open)
+            from kanzonascad import titleblocks as TBL
+            name = "Battery %d" % rnd.randint(1, 3)
+            with mock.patch.object(win, "ask_title_block_name", return_value=name), \
+                    mock.patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                win.acts["save_tb_as"].trigger()
+            assert (name, False) in TBL.names(win.library) and win.doc() is d, \
+                "Save as title block didn't keep %s in the library" % name
+            BC.CHECKED["title block saved in the library"] += 1
+        save = rnd.random() < 0.6
+        if save:
+            win.acts["save_tb"].trigger()
+        else:
+            with mock.patch.object(QMessageBox, "question", return_value=QMessageBox.Discard):
+                win.acts["close_tb"].trigger()
+        assert win.doc() is src and v.sheet_id == sheet_id and win.tabs.indexOf(d) < 0, \
+            "Save or Close title block didn't go back to the drawing"
+        if save and drawn:
+            assert (a, b) in lines(p) or (b, a) in lines(p), \
+                "the line drawn in the title block's tab isn't in the project's"
+            BC.CHECKED["title block saved from its tab"] += 1
+        elif not save:
+            assert lines(p) == before, "a title block closed without saving changed"
+            BC.CHECKED["title block closed without saving"] += 1
+        if rnd.random() < 0.3:
+            # (0.22.4: Title blocks...: a ready-made one or one of the library's put in the
+            # project, where it sits; checked against the library's own copy)
+            from kanzonascad import titleblocks as TBL
+            name = rnd.choice([n for n, _b in TBL.names(win.library)])
+            with mock.patch.object(win, "ask_title_block", return_value=name):
+                win.acts["title_blocks"].trigger()
+            pos, ents, _lays, _blocks = TBL.load(win.library, name, p)
+            texts = lambda es: sorted(e.text for e in es if isinstance(e, M.Text))
+            assert texts(p.title_block.entities.values()) == texts(ents) and \
+                p.settings.get("tb_position") == pos, "Title blocks... didn't put %s in" % name
+            BC.CHECKED["title block from the library"] += 1
 
     fps = sorted(n for n, d in lib.blocks("footprint")[0].items() if d.builtin)
 
@@ -3248,7 +3363,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                     BC.CHECKED["wire on a PLC point numbered by its address"] += 1
                 else:
                     assert not nums & addrs and all(
-                        n and wirenums.split(re.sub(r"-\d+[a-z]*$", "", n)) for n in nums), \
+                        n and wirenums.split(TAP_END.sub("", n)) for n in nums), \
                         "with I/O numbering off, a wire on PLC point %s is %s" % (
                             sorted(addrs), nums)
                     BC.CHECKED["wire on a PLC point numbered again when turned off"] += 1
@@ -3678,10 +3793,14 @@ def random_editing(log, out, ops, seed, drawing=None):
         keep = {e.id: (e.pos, e.attrs.get("TAG")) for e in s.inserts() if e.block == name}
         saved = QMessageBox.question
         QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
+        # ("the same as the library's", when nothing changed: a box nobody would close here)
+        told = QMessageBox.information
+        QMessageBox.information = staticmethod(lambda *a, **k: QMessageBox.Ok)
         try:
             win.update_blocks_from_library()
         finally:
             QMessageBox.question = saved
+            QMessageBox.information = told
         assert p.blocks[name].same_as(lib.get("symbol", name)), "%s not updated" % name
         now = {e.id: (e.pos, e.attrs.get("TAG")) for e in s.inserts() if e.block == name}
         assert now == keep, "updating %s moved or retagged its copies" % name
@@ -3864,10 +3983,13 @@ def random_editing(log, out, ops, seed, drawing=None):
         tapped = {}
         for n in nums:
             # (a number by its PLC address too: O:7/4 tapped is O:7/4-1, the quick battery's
-            # seed 11)
-            m = re.fullmatch(r"(.+?)-\d+[a-z]*", n)
-            if m and m.group(1) in nums:
-                tapped.setdefault(m.group(1), set()).add(n)
+            # seed 11; 0.22.4: or 2007a, 2007-a, and off those 2007a1...: the shortest number
+            # it starts with that the rest is a tap's ending of, lowercase, so a distribution
+            # outlet's 1006A is not a tap of 1006)
+            for k in range(1, len(n)):
+                if n[:k] in nums and TAP_END.fullmatch(n[k:]):
+                    tapped.setdefault(n[:k], set()).add(n)
+                    break
         rows, (got_t, got_j) = reports.terminal_count_rows(p)
         # (a tap that lands on a PLC point, numbered by its address, has no -1 to go by: the
         # seed 44's O:3/3 tapped by Local:9:O.Data.1. It counts only when it really is the
@@ -3928,7 +4050,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
              (op_scoot, 4), (op_align, 2), (op_crossing, 2), (op_rail, 2), (op_dim, 2),
              (op_leader, 3), (op_mtext, 2), (op_hatch, 3), (op_import, 1), (op_explode, 1),
-             (op_usetb, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2), (op_stretch, 2), (op_grips, 2), (op_lock_numbers, 2), (op_number_bus, 2),
+             (op_usetb, 1), (op_title_block, 1), (op_footprint, 2), (op_location, 4), (op_cable, 2), (op_attr_vis, 2), (op_ratings, 2), (op_same_name_pins, 1), (op_wire_xref, 2), (op_sig_arrows, 2), (op_update_numbers, 2), (op_stretch, 2), (op_grips, 2), (op_lock_numbers, 2), (op_number_bus, 2),
              (op_fit, 2), (op_run_props, 2), (op_round_trip, 2), (op_world, 1), (op_sheet, 1), (op_new_sheet, 1),
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
@@ -3950,10 +4072,12 @@ def random_editing(log, out, ops, seed, drawing=None):
             s = v.sheet()
             v.set_selection(set())
             check_sheet(s)
+            blocks_known(p, s)
             BC.check_index(s, crnd)
             if i % 25 == 24:
                 for other in p.sheets:
                     check_sheet(other)
+                    blocks_known(p, other)
                 BC.footprints_follow(p)
                 BC.arrows_follow(p)
             if i % 50 == 49:

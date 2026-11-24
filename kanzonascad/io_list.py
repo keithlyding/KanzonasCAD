@@ -135,6 +135,13 @@ def place(ed, project, modules, after=None):
     at = project.sheets.index(after) + 1 if after in project.sheets else len(project.sheets)
     made = []
     for slot, cat, d, points, addrs in modules:
+        # (the module's block in the project, as Insert puts it there: without it the sheet
+        # showed the module until the project was saved and opened again, then nothing (the
+        # battery, 0.22.4, seed 44); placed as the project's copy is drawn, which may differ
+        # from the library's (seed 469: past the frame))
+        if d.name not in project.blocks:
+            ed.block(d)
+        d = project.blocks[d.name]
         s = project.make_sheet(("Slot %s - %s" % (slot, cat)) if slot else cat, "schematic")
         ed.add_sheet(s, at + len(made))
         k = s.k()

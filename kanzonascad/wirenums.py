@@ -117,6 +117,18 @@ def letters(i):
     return out
 
 
+def tap_suffix(style, i, depth=1):
+    """What the i-th tap (from 0) adds to the number it taps, depth taps down (1: off a wire,
+    2: off a tap...), in style "-1", "a" or "-a" (model.TAP_STYLES): the style's kind (a number,
+    or lowercase letters) at depths 1, 3..., the other kind at 2, 4... (the owner, 0.22.4: "In
+    addition to -1, can we add a, b, c, etc for wire taps? Also -a, -b, -c", alternating, in
+    lowercase so a tap isn't taken for a distribution outlet's 6001A). Style -1: 6001-1, 6001-1a,
+    6001-1a1; a: 6001a, 6001a1, 6001a1a; -a: 6001-a, 6001-a1, 6001-a1a."""
+    numbers = (style == "-1") == (depth % 2 == 1)
+    text = "%d" % (i + 1) if numbers else letters(i).lower()
+    return ("-" if depth == 1 and style.startswith("-") else "") + text
+
+
 # ---- groups ---------------------------------------------------------------------------------
 class _Union:
     def __init__(self):
@@ -752,6 +764,22 @@ def sync(ed, project, renumber=None):
         nxt[pg] = n + 1
         want[g] = make(pg, n)
     # distribution outputs: the input's number with a letter (chains follow, in order)
+    def depth(o):
+        # (1 for a tap off a wire, 2 for a tap off that tap...: a distribution outlet starts again)
+        d, seen = 0, set()
+        while o in outputs and len(outputs[o]) == 3 and o not in seen:
+            seen.add(o)
+            d += 1
+            o = outputs[o][0]
+        return d
+
+    def style(o):
+        for _s, ws in gs.get(o, ()):
+            for w in ws:
+                if w.tap_style:
+                    return w.tap_style
+        return project.tap_style(info[o][1] if o in info else None)
+
     for _ in range(len(outputs) + 1):
         changed = False
         for o, how in outputs.items():
@@ -760,9 +788,8 @@ def sync(ed, project, renumber=None):
             src = how[0]
             base = want.get(src)
             if base:
-                if len(how) == 3:               # (a tap: -1, -2...; off a tap: a, b...)
-                    v = base + (letters(how[1]).lower() if "-" in base
-                                else "-%d" % (how[1] + 1))
+                if len(how) == 3:               # (a tap: -1, a or -a...; off a tap the other)
+                    v = base + tap_suffix(style(o), how[1], depth(o))
                 else:
                     v = base + how[1]
                 if want.get(o) != v:
@@ -1142,7 +1169,8 @@ def gauge_labels(project, sheet):
     h = float(project.settings.get("wire_number_height", 0.08)) * sheet.k()
     gh = float(project.settings.get("wire_gauge_height", 0.06)) * sheet.k()
     every = project.settings.get("wire_gauge_each", "group") == "each"
-    sig = (sheet.version, sheet.scale, h, gh, tuple(sorted(shown.items())), every,
+    colors = bool(project.settings.get("wire_color_shown", False))
+    sig = (sheet.version, sheet.scale, h, gh, tuple(sorted(shown.items())), every, colors,
            tuple(sorted((n, lay.wire_color) for n, lay in project.layers.items())))
     got = getattr(sheet, "_gauge_labels", None)
     if got is not None and got[0] == sig:
@@ -1156,7 +1184,8 @@ def gauge_labels(project, sheet):
             continue
         lay = project.layers.get(w.layer)
         g = str(w.awg or (lay.awg if lay is not None else "")).strip()
-        color = lay.wire_color if lay is not None and w.show_color else ""
+        on = w.show_color if w.show_color is not None else colors
+        color = lay.wire_color if lay is not None and on else ""
         if g or color:
             labeled.append((w, gauge_text(g) if g else "", color or ""))
     if not labeled:

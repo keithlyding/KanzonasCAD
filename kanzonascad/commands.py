@@ -2877,8 +2877,11 @@ class BusCmd(Command):
             sheet = self.ctx.sheet()
             project = self.ctx.project
             hit = _through_pins(sheet, paths)
-            if hit is not None:
-                self.ctx.message(_through_message(hit))
+            back = hit is None and self._back_over_own(paths)
+            if hit is not None or back:
+                # (back over the wires it carries on, whichever way it was drawn: onto wires
+                # side by side too; the battery, 0.22.4, seed 468)
+                self.ctx.message(_through_message(hit) if hit is not None else BACK_OVER_OWN)
                 if closing:
                     self.finish()               # (Esc: nothing drawn)
                     return
@@ -5387,7 +5390,9 @@ class WireColorLabelCmd(Command):
     def _apply(self):
         sheet = self.ctx.sheet()
         ws = [sheet.entities[i] for i in self.wires if i in sheet.entities]
-        on = any(not w.show_color for w in ws)
+        # (each as it shows now: its own choice, else the project's; turned the other way)
+        dflt = bool(self.ctx.project.settings.get("wire_color_shown", False))
+        on = any(not (w.show_color if w.show_color is not None else dflt) for w in ws)
         if ws:
             with self.ctx.edit(self.title) as ed:
                 for w in ws:
