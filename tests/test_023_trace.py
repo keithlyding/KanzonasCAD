@@ -508,6 +508,9 @@ class TraceTest(unittest.TestCase):
         devs = [e for e in s.inserts() if e.attrs.get("DEV")]
         wires = list(s.wires())
         self.select(s, devs[0])
+        # (the sheet drawn first: drawing 1,500 coils' cross-references the first time took
+        # 3.7 s on CI and fell inside the time below, which is Trace's alone)
+        self.v.repaint()
         t = time.perf_counter()
         self.trace()
         first = time.perf_counter() - t
@@ -521,7 +524,7 @@ class TraceTest(unittest.TestCase):
                 self.settle()
                 whole.append(time.perf_counter() - t)
         self.assertEqual(self.rows()[0].ids, (wires[1000].id,))
-        self.assertLess(first, 2.0, "the first lookup (the index made) took %.2f s" % first)
+        self.assertLess(first, 0.5, "the first lookup (the index made) took %.2f s" % first)
         self.assertLess(max(clicks), 0.03, "a click took %.1f ms" % (max(clicks) * 1000))
         self.assertLess(sum(whole) / len(whole), 0.5, "a pick listed in %.2f s" % (
             sum(whole) / len(whole)))
