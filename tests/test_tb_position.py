@@ -16,6 +16,21 @@ class TitleBlockPositionTest(unittest.TestCase):
             ed.project_settings({"tb_position": side})
         return p
 
+    def test_a_strip_is_no_wider_than_its_title_block(self):
+        # (a title block drawn away from its corner, an imported drawing used as one: the
+        # strip took nearly the whole sheet, a report sheet's table a sliver; the battery,
+        # 0.22.4, seed 41)
+        p = self.strip("right")
+        normal = p.reserve()
+        with p.edit("away") as ed:
+            tb = p.title_block
+            for e in list(tb.entities.values()):
+                ed.change(tb, e.moved(-2400.0, 1700.0))
+        self.assertEqual(p.reserve()[0], "right")
+        self.assertAlmostEqual(p.reserve()[1], normal[1])
+        s = p.sheets[0]
+        self.assertGreater(s.zone_frame()[2] - s.zone_frame()[0], 0.5 * (s.frame()[2] - s.frame()[0]))
+
     def test_corner_leaves_the_zones_alone(self):
         p = M.Project.new()
         s = p.sheets[0]

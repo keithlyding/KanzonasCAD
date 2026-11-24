@@ -61,6 +61,10 @@ build fails without them.
   and offers to run the setup again.
 - Edit array moved only some copies of a contact block sitting on a pushbutton's dashed line;
   it moves them all now.
+- A title block strip down the right (or along the bottom) is never wider than the title
+  block itself: one drawn away from its corner could take nearly the whole sheet.
+- Check for updates could, rarely, miss another copy of KanzonasCAD that was just starting,
+  and install the update without asking it to close.
 
 ## 0.22.3
 

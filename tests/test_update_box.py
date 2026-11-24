@@ -165,7 +165,9 @@ class NoticeTest(Base):
                 self.assertEqual(n["buttons"], ["What's new"] + (["Update now"] if can else [])
                                  + ["Download", "Skip this version", "Later"])
                 self.assertEqual(n["tips"]["What's new"], "What changed since your version")
-                self.assertEqual(n["tips"]["Download"], DOWNLOAD_TIP)
+                # (the platform's own wording: Windows names its downloads)
+                self.assertEqual(n["tips"]["Download"], DOWNLOAD_TIP_WIN
+                                 if sys.platform == "win32" else DOWNLOAD_TIP)
                 if can:
                     self.assertEqual(n["tips"]["Update now"], TEXTS[mode])
                 APP.processEvents()
