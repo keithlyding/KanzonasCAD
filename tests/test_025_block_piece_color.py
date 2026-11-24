@@ -121,11 +121,19 @@ class BlockPieceColorTest(unittest.TestCase):
         b = e.bbox()
         self.v.center = ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
         self.v.scale = 400.0
+        self.v.set_selection(set())         # (not drawn in the selection's color)
         self.v.repaint()
         APP.processEvents()
         img = self.v.grab().toImage()
-        greens = sum(1 for x in range(0, img.width(), 2) for y in range(0, img.height(), 2)
-                     if QColor(img.pixel(x, y)).name() == GREEN)
+        want = QColor(GREEN)
+        # (every pixel, and green as drawn, smoothing included: a line one pixel wide fell
+        # between every other pixel, or came out a shade off, on the Linux build)
+
+        def greenish(c):
+            return c.green() >= 0.6 * want.green() and c.red() <= 0.4 * c.green() and \
+                c.blue() <= 0.4 * c.green()
+        greens = sum(1 for x in range(img.width()) for y in range(img.height())
+                     if greenish(QColor(img.pixel(x, y))))
         self.assertGreater(greens, 0, "the piece isn't drawn green")
 
     def test_properties_panel_in_the_blocks_tab(self):
