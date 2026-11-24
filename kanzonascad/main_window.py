@@ -413,6 +413,13 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
           tip="Every place the selected device, wire or PLC point is in the project, in a "
               "panel that stays open and follows what you select (Ctrl+E); double-click a "
               "row or press Enter to go there")
+        # (two actions: Ctrl+E only opens, the button toggles; one checkable action with the
+        # shortcut would close the panel on Ctrl+E, which the owner didn't want, Nov 2026)
+        A("trace_panel", "%s panel" % where_used.NAME, None, checkable=True, icon="trace",
+          label=where_used.NAME,
+          tip="Show or hide the %s panel: every place the selected device, wire or PLC point "
+              "is in the project (Ctrl+E always opens it)" % where_used.NAME)
+        self.acts["trace_panel"].triggered.connect(self.toggle_trace)
         A("collapse", "Co&llapse ribbon", self._toggle_collapse, "Ctrl+F1", checkable=True,
           label="Collapse")
         A("group_names", "Ribbon &group names", self._toggle_group_names, checkable=True,
@@ -726,7 +733,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
                   "osnap", "polar", "drafting", None, "black", "command_line", "sheets",
-                  "trace", "collapse", "group_names", "block_tab"):
+                  "trace_panel", "collapse", "group_names", "block_tab"):
             m.addSeparator() if k is None else m.addAction(a[k])
         tm = m.addMenu("&Theme")
         for mode in ("light", "dark", "system"):
@@ -865,7 +872,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Numbering", "large", [a["update_numbers"], a["renumber"], a["lock_numbers"],
                                     a["num_source"]]),
-            ("Cross-references", "large", [a["trace"], a["sig_arrows"], a["xref_update"],
+            ("Cross-references", "large", [a["trace_panel"], a["sig_arrows"], a["xref_update"],
                                            a["xref_freeze"], a["xref_auto"]]),
             ("Layers", "small", [self.sch_layer_box, self.sch_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"],
@@ -914,7 +921,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
             ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["polar"],
                                         a["osnap"], a["drafting"]]),
-            ("Panels", "small", [a["command_line"], a["sheets"], a["trace"], a["black"]]),
+            ("Panels", "small", [a["command_line"], a["sheets"], a["trace_panel"], a["black"]]),
             ("Windows", "large", [a["new_window"], a["move_window"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
             ("Ribbon", "small", [a["collapse"], a["group_names"], a["block_tab"]]),
@@ -3945,6 +3952,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         a["sheets"].blockSignals(True)
         a["sheets"].setChecked(not self.sheet_dock.isHidden())
         a["sheets"].blockSignals(False)
+        self._trace_checked()
         for k in ("make_block", "explode", "wire", "bus"):
             a[k].setEnabled(has)
         d = self.doc()
