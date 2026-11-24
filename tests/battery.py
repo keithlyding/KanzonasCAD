@@ -306,16 +306,72 @@ def _empty_spot(v, rnd, tries=40):
     return None
 
 
-def _send(v, kind, pos, button, buttons):
+def _send(v, kind, pos, button, buttons, mods=None):
     """A mouse event as the system sends one (with the buttons held: QTest's moves don't
-    always say)."""
+    always say); mods: the keys held (none)."""
     from PySide6.QtCore import QEvent, QPointF
     from PySide6.QtGui import QMouseEvent
     kinds = {"press": QEvent.MouseButtonPress, "move": QEvent.MouseMove,
              "release": QEvent.MouseButtonRelease}
     pos = QPointF(pos)
     APP.sendEvent(v, QMouseEvent(kinds[kind], pos, v.mapToGlobal(pos), button, buttons,
-                                 _qt()[0].NoModifier))
+                                 _qt()[0].NoModifier if mods is None else mods))
+
+
+def _click(v, q, mods=None):
+    """A left click at pixel q, keys mods held (Shift: taken out of the selection)."""
+    Qt = _qt()[0]
+    _send(v, "move", q, Qt.NoButton, Qt.NoButton, mods)
+    _send(v, "press", q, Qt.LeftButton, Qt.LeftButton, mods)
+    _send(v, "release", q, Qt.LeftButton, Qt.NoButton, mods)
+    APP.processEvents()
+
+
+def _spot(v, e):
+    """A pixel on the screen where a click picks e (no grip there), or None."""
+    Qt, QPoint, QPointF, QTest = _qt()
+    bb = e.bbox()
+    a, b = v.to_screen((bb[0], bb[3])), v.to_screen((bb[2], bb[1]))
+    for i in range(1, 12):
+        for j in range(1, 12):
+            q = QPointF(a.x() + (b.x() - a.x()) * i / 12, a.y() + (b.y() - a.y()) * j / 12)
+            if not (2 <= q.x() <= v.width() - 2 and 2 <= q.y() <= v.height() - 2):
+                continue
+            got = v.pick_entity(v.to_world(q))
+            if got is not None and got.id == e.id and v.grip_at(q) is None:
+                return q
+    return None
+
+
+def trace_last_picked(p, s, sel, picks):
+    """What Trace must list for the selection sel made by picks (the ids each pick added,
+    oldest first), as the owner chose (Nov 2026, "Last one picked"): in the newest pick holding
+    a device or a wire (still selected), its device, or else its wire, nearest the top left
+    corner of all that pick added; with no device or wire selected, the same among the rest
+    of what stands for something. A device is a symbol whose subject isn't a wire (an arrow on
+    a wire is the wire)."""
+    from kanzonascad import where_used as WU
+    rest = None
+    for ids in reversed(picks):
+        mine = [s.entities[i] for i in sorted(ids) if i in sel and i in s.entities]
+        ranked = []
+        for x in mine:
+            sub = WU.subject_of(p, s, x)
+            if sub is not None:
+                ranked.append((1 if sub[0] == "wire" else 0 if isinstance(x, M.Insert)
+                               else 2, x))
+        if not ranked:
+            continue
+        r0 = min(r for r, _x in ranked)
+        left = min(x.bbox()[0] for x in mine)
+        top = max(x.bbox()[3] for x in mine)
+        best = min((x for r, x in ranked if r == r0), key=lambda x: (
+            math.hypot(x.bbox()[0] - left, x.bbox()[3] - top), x.id))
+        if r0 < 2:
+            return best
+        if rest is None:
+            rest = best
+    return rest
 
 
 def _press(v, q, button=None):
@@ -1295,6 +1351,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         # id or its tag, the wires carrying its number and the arrows on them; then a row gone
         # to: its sheet shown, its object selected and in the middle of the view)
         nonlocal s
+        from kanzonascad import where_used as WU
         devs = [(sh, e) for sh in p.sheets for e in sh.inserts()
                 if tags_mod.is_device(e) and e.attrs.get("DEV")]
         ws = [(sh, w) for sh in p.sheets for w in sh.wires() if w.num]
@@ -1311,15 +1368,113 @@ def random_editing(log, out, ops, seed, drawing=None):
         sh, e = pick
         v.show_sheet(sh.id)
         s = v.sheet()
-        v.set_selection({e.id})
-        win.acts["trace"].trigger()                     # (Ctrl+E)
-        t0 = time.perf_counter()
-        while win.trace_busy():                         # (it works in the event loop's turns)
+        dock, btn = win.trace_dock, win.acts["trace_panel"]
+
+        def settle():
             APP.processEvents()
-            assert time.perf_counter() - t0 < 60, "Trace never finished"
+            t0 = time.perf_counter()
+            while win.trace_busy():                     # (it works in the event loop's turns)
+                APP.processEvents()
+                assert time.perf_counter() - t0 < 60, "Trace never finished"
+
+        def in_sight():
+            return dock.isVisible() and not dock.visibleRegion().isEmpty()
+
+        def toggle():
+            # (0.23.2: the button closes the panel when it is open and in sight, else opens
+            # or raises it and lists what is selected; checked while the panel is open)
+            was_open, seen = not dock.isHidden(), in_sight()
+            btn.trigger()
+            settle()
+            if was_open and seen:
+                assert dock.isHidden() and not btn.isChecked(), "the button didn't close it"
+            else:
+                assert not dock.isHidden() and in_sight() and btn.isChecked(), \
+                    "the button didn't open it"
+            BC.CHECKED["trace: the button toggles the panel"] += 1
+
+        assert btn.isChecked() == (not dock.isHidden()), "the Trace button's check is wrong"
+        if rnd.random() < 0.3:
+            toggle()
+        # several picked (0.23.2): the step's own record of what each pick added
+        v.set_selection({e.id})
+        picks = [{e.id}]
+        how = rnd.random()
+        if how < 0.4:                                   # (e in sight, with room around it)
+            k = s.k()
+            v.zoom_to(e.bbox(), (rnd.uniform(4.0, 12.0) * k, rnd.uniform(3.0, 8.0) * k))
+            APP.processEvents()
+        clicked = []
+        if how < 0.25:                                  # (clicks: each adds one)
+            Qt, QPoint, QPointF, QTest = _qt()
+            c0, c1 = v.to_world(QPointF(0, v.height())), v.to_world(QPointF(v.width(), 0))
+            others = [x for x in s.query((c0[0], c0[1], c1[0], c1[1])) if x.id != e.id]
+            for x in rnd.sample(others, min(len(others), rnd.randint(1, 4))):
+                q = _spot(v, x)
+                if q is None or x.id in v.sel:
+                    continue
+                _click(v, q)
+                assert x.id in v.sel, "a click on %r didn't add it" % (x,)
+                picks.append({x.id})
+                clicked.append(x)
+        elif how < 0.4:                                 # (a window around e: many at once)
+            Qt, QPoint, QPointF, QTest = _qt()
+            bb, k = e.bbox(), s.k()
+            wa = (bb[0] - rnd.uniform(0.2, 3.0) * k, bb[3] + rnd.uniform(0.2, 3.0) * k)
+            wb = (bb[2] + rnd.uniform(0.2, 3.0) * k, bb[1] - rnd.uniform(0.2, 3.0) * k)
+            a_px, b_px = v.to_screen(wa), v.to_screen(wb)
+            inside = all(2 <= q.x() <= v.width() - 2 and 2 <= q.y() <= v.height() - 2
+                         for q in (a_px, b_px))
+            if inside and v.pick_entity(wa) is None and v.grip_at(a_px) is None:
+                before = set(v.sel)
+                _drag_path(v, QPoint(round(a_px.x()), round(a_px.y())),
+                           QPoint(round(b_px.x()), round(b_px.y())), steps=12)
+                wa = v.to_world(QPointF(QPoint(round(a_px.x()), round(a_px.y()))))
+                wb = v.to_world(QPointF(QPoint(round(b_px.x()), round(b_px.y()))))
+                caught = BC.expected_window(v, wa, wb)
+                assert v.sel == before | caught, "the window around %r selected %d, not %d" % (
+                    e, len(v.sel), len(before | caught))
+                picks.append(caught - before)
+                BC.CHECKED["trace: a window's pick"] += 1
+        if dock.isHidden() and rnd.random() < 0.3:
+            toggle()                                    # (the button: opens and lists)
+        else:
+            win.acts["trace"].trigger()                 # (Ctrl+E: opens, never closes)
+            settle()
+        assert not dock.isHidden() and in_sight() and btn.isChecked(), "Ctrl+E didn't open it"
+
+        def traced_right():
+            want = trace_last_picked(p, s, v.sel, picks)
+            got = win._trace_subject[1] if win._trace_subject else None
+            assert want is not None and got == WU.subject_of(p, s, want), \
+                "Trace listed %r, the last picked is %r (%r)" % (got, want, picks)
+            n = len(v.sel) - 1
+            note = "" if n < 1 else " (and %d other%s selected)" % (n, "" if n == 1 else "s")
+            head = win.trace_panel.header.text()
+            assert head.endswith(note), (head, note)
+            if n:
+                BC.CHECKED["trace: the last one picked of several"] += 1
+            return want, head[:len(head) - len(note)]
+
+        want, head = traced_right()
+        if clicked and rnd.random() < 0.5:
+            # (the last click taken out, Shift+click: the one picked before it, live)
+            q = _spot(v, clicked[-1])
+            if q is not None:
+                _click(v, q, _qt()[0].ShiftModifier)
+                assert clicked[-1].id not in v.sel, "Shift+click didn't take it out"
+                settle()
+                want, head = traced_right()
+                BC.CHECKED["trace: the one picked before the last, taken out"] += 1
+        sel_e = (sh, want)
+        if sel_e not in devs and sel_e not in ws:
+            # (something else picked last, a contact, a PLC point, a wire with no number:
+            # listed for it, its places checked by the steps above for devices and wires)
+            e = None
+        else:
+            e = want
         rows = win.trace_panel.rows()
-        head = win.trace_panel.header.text()
-        assert rows, "Trace listed nothing for %r: %s" % (e, head)
+        assert rows, "Trace listed nothing for %r: %s" % (want, head)
         assert head.endswith("%d place%s" % (len(rows), "" if len(rows) == 1 else "s")), head
         got = {(r.sheet_id, i) for r in rows for i in r.ids}
         if isinstance(e, M.Insert):
@@ -1339,7 +1494,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert got == want, "Trace of %s: listed %s, there are %s" % (
                 tag, sorted(got - want), sorted(want - got))
             BC.CHECKED["trace: a device's places"] += 1
-        else:
+        elif e is not None:
             num = e.num
             want = {(o.id, w.id) for o in p.sheets for w in o.wires() if w.num == num}
             wires_got = {(r.sheet_id, i) for r in rows if r.role == "Wire" for i in r.ids}
@@ -1375,8 +1530,15 @@ def random_editing(log, out, ops, seed, drawing=None):
         assert bb[0] - tol <= v.center[0] <= bb[2] + tol and \
             bb[1] - tol <= v.center[1] <= bb[3] + tol, ("not centered on it", v.center, bb)
         BC.CHECKED["trace: gone to a row"] += 1
-        if rnd.random() < 0.5:
-            win.trace_dock.hide()
+        r = rnd.random()
+        if r < 0.25:
+            toggle()                                    # (the button: in sight, so closed)
+            assert dock.isHidden()
+        elif r < 0.5:
+            dock.close()                                # (its X)
+            APP.processEvents()
+            assert not btn.isChecked(), "the Trace button stayed checked after its X"
+            BC.CHECKED["trace: its X unchecks the button"] += 1
 
     def op_ladder():
         # (0.22: a ladder through its command, as the owner would: its rungs numbered from the

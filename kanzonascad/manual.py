@@ -48,9 +48,10 @@ show it, double-click to open its properties, right-click for more (<b>Open in a
 <b>Print...</b>). Ctrl+click and Shift+click select several sheets without changing the one
 shown, for printing them.</li>
 <li><b>Command line</b> along the bottom (Ctrl+9 shows or hides it).</li>
-<li><b>{trace}</b> panel (Ctrl+E): every place the device, wire or PLC point you select is in
-the project (see <b>{trace}: where a device or wire is used</b>). It opens above the command
-line; drag its title to the left or right side of the window if you like it there.</li>
+<li><b>{trace}</b> panel (Ctrl+E opens it; the {trace} button shows or hides it): every place
+the device, wire or PLC point you select is in the project (see <b>{trace}: where a device or
+wire is used</b>). It opens above the command line; drag its title to the left or right side of
+the window if you like it there.</li>
 <li><b>Status bar</b>: the cursor's X and Y in inches and its <b>zone</b> (for example
 6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches.</li>
 </ul>
@@ -804,17 +805,31 @@ alone until you untick Freeze.</li>
 </ul>
 
 <h3>{trace}: where a device or wire is used</h3>
-<p><b>{trace}</b> (Ctrl+E; View menu, Sheets menu, the Schematic tab's Cross-references group
-and the View tab's Panels group) lists every place in the project, on every sheet, that a thing
-appears, as Studio 5000's Cross Reference tab does. Select a device, a wire or a PLC point (or
-just hold the mouse over one) and press <b>Ctrl+E</b>.</p>
+<p><b>{trace}</b> (Ctrl+E; Sheets menu) lists every place in the project, on every sheet, that
+a thing appears, as Studio 5000's Cross Reference tab does. Select a device, a wire or a PLC
+point (or just hold the mouse over one) and press <b>Ctrl+E</b>.</p>
 <ul>
+<li><b>Ctrl+E always opens it</b>, or brings it to the front if it is open (behind another
+panel's tab, say), and lists what is selected. It never closes the panel.</li>
+<li><b>The {trace} button</b> (the Schematic tab's Cross-references group, the View tab's
+Panels group, and <b>{trace} panel</b> in the View menu) shows or hides the panel: clicked
+while the panel is open and in sight, it closes it; clicked while it is closed, it opens it and
+lists what is selected, as Ctrl+E does; clicked while it is open but out of sight (a tab behind
+another panel), it brings it to the front instead of closing it. The button shows checked while
+the panel is open, also after you close the panel with its <b>X</b>.</li>
+<li><b>Several things selected:</b> it lists the one you picked last (the last one clicked).
+A window or a lasso adds many at once: it lists the device nearest the top left of what the
+window caught (or, with no device, the wire nearest the top left). Devices and wires come
+before anything else picked with them (a dashed box, say). Taking the last one out of the
+selection (Shift+click) lists the one picked before it. The line at the top then says how many
+others are selected: <b>CR101 &mdash; 5 places (and 4 others selected)</b>.</li>
 <li>It opens as a panel docked above the command line and stays open while you work. Drag its
 title to dock it on the left or right side instead (or let go of it anywhere to float it); it
 opens where you left it, and open again the next time if it was open when you closed
 KanzonasCAD. Its <b>X</b> closes it.</li>
 <li>While it is open it <b>follows what you select</b>: click a coil, a contact, a wire or a PLC
-point and the list changes at once, no Ctrl+E needed. Clicking empty space, or something that
+point and the list changes at once, no Ctrl+E needed (several selected: the one picked
+last, as above). Clicking empty space, or something that
 isn't one of these (a line, a text), leaves the list as it is.</li>
 <li>Its line at the top says what is listed and how many places: <b>CR101 &mdash; 5 places</b>,
 <b>Wire 6001 &mdash; 3 places</b>, <b>PLC input I:3/0 &mdash; 4 places</b>.</li>
@@ -1821,7 +1836,9 @@ colors".</li>
 <li><b>Theme</b>: Light, Dark or Same as system: the menus, ribbon and panels. Light stays
 light and Dark stays dark whatever Windows is set to; Same as system follows Windows, also when
 it switches while KanzonasCAD is open.</li>
-<li><b>Command line</b> and <b>Sheets panel</b> show or hide those panels.</li>
+<li><b>Command line</b>, <b>Sheets panel</b> and <b>{trace} panel</b> show or hide those
+panels (each shows a check while its panel is open). Ctrl+E (the Sheets menu's <b>{trace}</b>)
+only ever opens the {trace} panel.</li>
 </ul>
 
 <h2>Edit menu</h2>
@@ -2103,8 +2120,9 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>F9</td><td>Snap to grid on/off</td></tr>
 <tr><td>F10</td><td>Polar tracking on/off</td></tr>
 <tr><td>Ctrl+9</td><td>Command line on/off</td></tr>
-<tr><td>Ctrl+E</td><td>{trace}: every place the selected device, wire or PLC point is used;
-Enter or a double-click on a row goes there</td></tr>
+<tr><td>Ctrl+E</td><td>{trace}: opens the {trace} panel (or brings it to the front; it never
+closes it) with every place the selected device, wire or PLC point is used; Enter or a
+double-click on a row goes there</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
 <tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same symbol)</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection (anywhere in the window)</td></tr>

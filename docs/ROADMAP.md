@@ -103,6 +103,14 @@ nobody understands).
   each footprint terminal labeled with its wire number and where it goes); symbols "lean heavy
   on the Allen Bradley stuff" and "also put in IEC symbols" (IEC 60617 as a per-project symbol
   set: changes AGENTS.md's US-only line when it lands).
+- 0.23.2 (owner, Nov 2026: "Don't toggle with ctrl e. That always opens or brings it to
+  forefront. Only clicking the button should toggle it"): the Trace button (Schematic tab, View
+  tab's Panels, View, Trace panel) opens and closes the panel and shows checked while it is
+  open; clicked while the panel is open but out of sight (a tab behind another panel) it raises
+  it. Ctrl+E (a separate, non-checkable action) only opens or raises. Several selected: the
+  owner chose "Last one picked" (the view keeps the order picks were made in, view.pick_batches;
+  a window or lasso: the device, else wire, nearest the top left of what it added), devices and
+  wires before anything else, the header adding "(and N others selected)".
 - 0.23.1 (owner, Nov 2026: "Like for pdf, if I click on a cross reference, will it navigate me
   to that location?"; yes, including the source/destination arrows, which he may drop):
   Export to PDF makes each cross-reference a link to the page and spot it names (/FitR, zoomed

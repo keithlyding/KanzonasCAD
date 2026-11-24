@@ -113,6 +113,11 @@ class CadView(QWidget):
         self.scale = 50.0               # pixels per inch
         self.center = (8.5, 5.5)        # drawing point at the middle of the view
         self.sel = set()
+        # (the order things were picked in, for Trace's "last one picked": each id selected,
+        # the number of the selection change that added it; a window, a lasso or a selection
+        # set by a command adds many under one number)
+        self._pick_seq = {}
+        self._pick_n = 0
         self.cmd = None
         self.last_cmd = None            # what Enter repeats
         self.cursor = None              # raw drawing point under the mouse
@@ -211,8 +216,22 @@ class CadView(QWidget):
     def selection(self):
         return set(self.sel)
 
+    def pick_batches(self):
+        """The selection as it was picked, newest first: lists of ids, each those one selection
+        change added (a click one, a window or lasso all it caught) and still selected."""
+        seq, groups = self._pick_seq, {}
+        for i in self.sel:
+            groups.setdefault(seq.get(i, 0), []).append(i)
+        return [sorted(groups[n]) for n in sorted(groups, reverse=True)]
+
     def set_selection(self, ids):
-        self.sel = set(ids)
+        new = set(ids)
+        old, seq = self.sel, self._pick_seq
+        self._pick_n += 1
+        n = self._pick_n
+        # (one pass over what is selected, not over the sheet: those kept keep their number)
+        self._pick_seq = {i: seq.get(i, n) if i in old else n for i in new}
+        self.sel = new
         self.picked_grips = {g for g in getattr(self, "picked_grips", set()) if g[0] in self.sel}
         self._sel_cache = None
         self.selectionChanged.emit()
