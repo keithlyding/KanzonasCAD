@@ -50,8 +50,12 @@ class Instances(QObject):
             raise OSError("can't listen for the other copies (%s)" % self.server.errorString())
         self.server.newConnection.connect(self._connected)
         self._asking = None
-        with open(self._note(self.pid), "w", encoding="ascii") as f:
+        # (written whole, then put in place: a copy reading a note half written saw no name,
+        # took this copy for gone and removed its note; CI, Nov 2026)
+        tmp = self._note(self.pid) + ".new"
+        with open(tmp, "w", encoding="ascii") as f:
             f.write(self.name)
+        os.replace(tmp, self._note(self.pid))
 
     def _note(self, pid):
         return os.path.join(self.folder, str(pid))
