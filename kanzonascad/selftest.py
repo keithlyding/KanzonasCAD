@@ -48,6 +48,10 @@ BUDGET = {
     "ladder_refs": 0.5,         # 2,000 places read by rung (cross-references, reports)
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
                                 # 2,000 devices, half of them in the field
+    # (0.23: Trace, Ctrl+E) on a sheet of 60,000 lines with 2,000 coils, their 2,000 contacts
+    # on a second sheet and 2,000 wires:
+    "trace_index": 2.0,         # the project's index made (the first pick with the panel open)
+    "trace_pick": 0.03,         # a pick followed by the open panel (per pick, average)
 }
 
 
@@ -885,6 +889,56 @@ def run(log_path):
         assert dt < BUDGET["pull"], "the pull list took %.2f s" % dt
         return "1,000 conductors to pull of 2,000 wires: %.3f s" % dt
     log.check("speed budget (cables between locations)", pull_list)
+
+    def trace():
+        import random
+        from . import where_used
+        w = state["win"]
+        coil, no = w.library.get("symbol", "Relay coil"), w.library.get("symbol", "Contact NO")
+        rnd = random.Random(11)
+        p = M.Project.new()
+        s = p.sheets[0]
+        for i in range(60000):
+            x, y = rnd.uniform(0.7, 16.3), rnd.uniform(0.7, 10.3)
+            s._put(M.Line((x, y), (x + rnd.uniform(-0.2, 0.2), y + rnd.uniform(-0.2, 0.2))))
+        s2 = p.make_sheet("Contacts")
+        p.sheets.append(s2)
+        devs, wires = [], []
+        for i in range(2000):
+            x, y = 1 + (i % 40) * 0.4, 1 + (i // 40) * 0.18
+            tag = "CR%d" % (1000 + i)
+            devs.append(M.Insert(coil.name, (x, y), defn=coil,
+                                 attrs={"TAG": tag, "DEV": "d%d" % i}))
+            wires.append(M.Wire([(x + 0.5, y), (x + 0.6, y)], num="1%03d" % (i % 1000)))
+            s._put(devs[-1])
+            s._put(wires[-1])
+            s2._put(M.Insert(no.name, (x, y), defn=no, attrs={"TAG": tag, "PARENT": "d%d" % i}))
+        d = w.add_document(p)
+        v = d.view
+        w.trace_dock.show()
+        try:
+            t0 = time.perf_counter()
+            v.set_selection({devs[0].id})       # (followed: the index made here)
+            assert w.trace()
+            di = time.perf_counter() - t0
+            assert len(w.trace_panel.rows()) == 2, w.trace_panel.header.text()
+            t0 = time.perf_counter()
+            n = 100
+            for i in range(n // 2):
+                v.set_selection({devs[i * 37].id})
+                v.set_selection({wires[i * 37].id})
+            dp = (time.perf_counter() - t0) / n
+            got = [r.role for r in w.trace_panel.rows()]
+            assert got.count("Wire") == 2, got      # (two wires of each number)
+            assert getattr(p, "_where_used")[1] is where_used.index(p), "index made again"
+        finally:
+            w.trace_dock.hide()
+            p.saved_at = len(p.undo_stack)
+            w.close_tab(w.tabs.indexOf(d))
+        assert di < BUDGET["trace_index"], "Trace's index took %.2f s" % di
+        assert dp < BUDGET["trace_pick"], "a pick followed by Trace took %.1f ms" % (dp * 1000)
+        return "index %.2f s, a pick %.1f ms" % (di, dp * 1000)
+    log.check("speed budget (Trace)", trace)
 
     w = state.get("win")
     if w is not None:

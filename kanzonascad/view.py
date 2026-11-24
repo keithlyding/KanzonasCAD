@@ -452,6 +452,18 @@ class CadView(QWidget):
             self.zoom_at(1 / 1.5, None)
         self.update()
 
+    def zoom_to(self, box, least):
+        """Centered on box (x0, y0, x1, y1), showing at least least (width, height) around
+        it, or the box with room to spare when it is bigger (Trace goes to an object)."""
+        bw = max((box[2] - box[0]) * 1.5, least[0], 1e-3)
+        bh = max((box[3] - box[1]) * 1.5, least[1], 1e-3)
+        vw, vh = max(self.width(), 100), max(self.height(), 100)
+        lo, hi = self.zoom_limits()
+        self.scale = min(max(min(vw / bw, vh / bh), lo), hi)
+        self.center = ((box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0)
+        self._fit = None
+        self.update()
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
         if self._fit is not None:

@@ -120,15 +120,32 @@ nobody understands).
   for code the PR build already passed"; tools/already_tested.py), and nightly tests on main at
   midnight EST to make up for it (.github/workflows/nightly.yml; failures in a `nightly` issue).
 
+- 0.23 (owner, Nov 23 2026: "One thing we still need, and it's very important ... is Cross
+  reference navigation. AutoCAD Electrical has a surfer version ... Not sure it's super
+  intuitive ... I like Allen Bradley's Cross referencing in their Studio 5000 software. I click
+  on a tag and then use control E to go to a cross-references tab which shows all the places
+  that tag is used and shows whether it's an output or input, and some other metadata"):
+  **Trace** (Ctrl+E), a panel docked at the bottom that stays open while you work (the owner's
+  choice over a popup); double-click or Enter on a row goes there. Then (owner): it follows
+  the selection while open (no Ctrl+E needed); docks left, right or bottom and is put back
+  where it was left, open or closed; speed is a hard requirement: one index of the project,
+  rebuilt only when the project changed and the panel is open, a click one lookup, nothing
+  done while the panel is closed. The name "Trace" is a placeholder until the owner picks
+  one (not "Surfer"): it is set in one place, where_used.NAME. Not in this version (asked to
+  leave room for them): back/forward through places gone to, Ctrl+click on a drawing's
+  cross-reference text to go there, a search box (a tag or wire number typed).
+
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).
 2. Auto wire layer (0.22.1, above).
-3. Terminal strips: strips, jumpers, a strip editor, a terminal plan report.
-4. Panel wiring: a per-device wiring list (owner: yes); point-to-point as wire labels on the
-   footprints' terminals, not a drawn diagram (see 0.22.1).
-5. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints: "lean
-   heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates library: not
-   now.
+3. Cross-reference navigation, Trace (0.23, above; put ahead of terminal strips by the
+   owner, Nov 23 2026: "very important").
+4. Terminal strips (0.24): strips, jumpers, a strip editor, a terminal plan report.
+5. Panel wiring (0.25): a per-device wiring list (owner: yes); point-to-point as wire labels on
+   the footprints' terminals, not a drawn diagram (see 0.22.1).
+6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.26):
+   "lean heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates
+   library: not now.
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,

@@ -3,6 +3,7 @@ them: the self-test check "user manual covers every command" fails the build whe
 command is missing here."""
 
 from . import __version__
+from .where_used import NAME as TRACE
 
 _HTML = """
 <h1>KanzonasCAD user manual</h1>
@@ -47,6 +48,9 @@ show it, double-click to open its properties, right-click for more (<b>Open in a
 <b>Print...</b>). Ctrl+click and Shift+click select several sheets without changing the one
 shown, for printing them.</li>
 <li><b>Command line</b> along the bottom (Ctrl+9 shows or hides it).</li>
+<li><b>{trace}</b> panel (Ctrl+E): every place the device, wire or PLC point you select is in
+the project (see <b>{trace}: where a device or wire is used</b>). It opens above the command
+line; drag its title to the left or right side of the window if you like it there.</li>
 <li><b>Status bar</b>: the cursor's X and Y in inches and its <b>zone</b> (for example
 6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches.</li>
 </ul>
@@ -739,6 +743,44 @@ references as they are, for a sheet that has been issued; Update cross-reference
 alone until you untick Freeze.</li>
 <li>While any sheet shows references that aren't what the drawing says, the status bar says
 <b>Cross-references out of date</b>, with the sheets in its tip; click it to update them.</li>
+</ul>
+
+<h3>{trace}: where a device or wire is used</h3>
+<p><b>{trace}</b> (Ctrl+E; View menu, Sheets menu, the Schematic tab's Cross-references group
+and the View tab's Panels group) lists every place in the project, on every sheet, that a thing
+appears, as Studio 5000's Cross Reference tab does. Select a device, a wire or a PLC point (or
+just hold the mouse over one) and press <b>Ctrl+E</b>.</p>
+<ul>
+<li>It opens as a panel docked above the command line and stays open while you work. Drag its
+title to dock it on the left or right side instead (or let go of it anywhere to float it); it
+opens where you left it, and open again the next time if it was open when you closed
+KanzonasCAD. Its <b>X</b> closes it.</li>
+<li>While it is open it <b>follows what you select</b>: click a coil, a contact, a wire or a PLC
+point and the list changes at once, no Ctrl+E needed. Clicking empty space, or something that
+isn't one of these (a line, a text), leaves the list as it is.</li>
+<li>Its line at the top says what is listed and how many places: <b>CR101 &mdash; 5 places</b>,
+<b>Wire 6001 &mdash; 3 places</b>, <b>PLC input I:3/0 &mdash; 4 places</b>.</li>
+<li>Each row gives <b>Where</b> (the zone, 6-D1, or the rung on a sheet by ladder),
+<b>Sheet</b> (its number and title), <b>Role</b>, <b>Name</b> and <b>Description</b>.</li>
+<li><b>A device</b> (a coil, a pushbutton, a terminal strip, a PLC module...): the device
+itself, each of its contacts (Role: <b>NO contact</b>, <b>NC contact</b>), its terminals and
+outlets, its footprints on panel sheets, its dashed boxes, any other symbol showing its tag
+(<i>not linked</i>), and, for a PLC module, each of its points that has a wire on it
+(<b>PLC input</b> or <b>PLC output</b>, with its address, its I/O list text and the wire's
+number). Selecting a contact or a footprint lists its device.</li>
+<li><b>A wire</b> (or an off-sheet arrow on it): every wire of its number on every sheet (the
+wires joined to it, carried on by source and destination arrows, and any other wire you gave
+the same number), the arrows on it (with where their other end is), and what it lands on:
+device pins (<b>CR101 pin A1</b>), terminals (<b>TB1-12</b>) and PLC points (input or output,
+with the address).</li>
+<li><b>A PLC point</b> (a PLC input or PLC output symbol, or one point of a module: hold the
+mouse over its terminal and press Ctrl+E): the point, input or output, with its address and
+its I/O list text, its module, and every place of its wire.</li>
+<li><b>Double-click</b> a row, or press <b>Enter</b> on it, to go there: its sheet is shown,
+the object selected and centered, zoomed so you can read it. <b>Up</b> and <b>Down</b> move
+through the rows; after Ctrl+E they are ready for the keys.</li>
+<li>The list follows changes to the drawing. A row whose object was erased says so on the
+command line when you go to it, and the list is made again.</li>
 </ul>
 
 <h2>Wires</h2>
@@ -1991,6 +2033,8 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>F9</td><td>Snap to grid on/off</td></tr>
 <tr><td>F10</td><td>Polar tracking on/off</td></tr>
 <tr><td>Ctrl+9</td><td>Command line on/off</td></tr>
+<tr><td>Ctrl+E</td><td>{trace}: every place the selected device, wire or PLC point is used;
+Enter or a double-click on a row goes there</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
 <tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same symbol)</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection (anywhere in the window)</td></tr>
@@ -2119,7 +2163,7 @@ def html():
     import re
     out, n = [], 0
     last = 0
-    text = _HTML.format(version=__version__)
+    text = _HTML.format(version=__version__, trace=TRACE)
     for m in re.finditer(r"<h([23])>", text):
         out.append(text[last:m.start()])
         n += 1

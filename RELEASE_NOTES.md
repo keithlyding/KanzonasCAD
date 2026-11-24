@@ -6,6 +6,18 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.23
+
+**New**
+- Trace (Ctrl+E): select a device, a wire or a PLC point and press Ctrl+E to see every place
+  it is in the project, on every sheet, in a panel along the bottom of the window: a coil and
+  each of its contacts (NO or NC), its footprints; a wire on every sheet with its arrows and
+  the pins and terminals it lands on; a PLC point with input or output and its address.
+- Double-click a row, or press Enter on it, to go there: the sheet is shown and the object
+  selected in the middle of the screen. Up and Down move through the rows.
+- While the panel is open it follows what you click, so you can keep it open while you work.
+  Drag it to the left or right side if you like it there; it stays where you put it.
+
 ## 0.22.4
 
 **New**
