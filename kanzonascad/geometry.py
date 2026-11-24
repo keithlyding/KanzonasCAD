@@ -23,9 +23,19 @@ def polar(p, length, angle_deg):
     return (p[0] + length * math.cos(a), p[1] + length * math.sin(a))
 
 
+# (cos, sin) of the quarter turns, exact: math.cos(math.radians(180)) is -1 but its sine is
+# 1.2e-16, which left a symbol turned 180 degrees and placed by a pin with that pin 2e-16 off
+# the point given (the long battery, seed 4773)
+_QUARTER = {0: (1.0, 0.0), 90: (0.0, 1.0), 180: (-1.0, 0.0), 270: (0.0, -1.0)}
+
+
 def rotate_point(p, center, angle_deg):
-    a = math.radians(angle_deg)
-    c, s = math.cos(a), math.sin(a)
+    q = angle_deg % 360.0
+    if q in _QUARTER:
+        c, s = _QUARTER[q]
+    else:
+        a = math.radians(angle_deg)
+        c, s = math.cos(a), math.sin(a)
     x, y = p[0] - center[0], p[1] - center[1]
     return (center[0] + x * c - y * s, center[1] + x * s + y * c)
 

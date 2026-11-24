@@ -6,6 +6,38 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.23
+
+**New**
+- Trace (Ctrl+E): select a device, a wire or a PLC point and press Ctrl+E to see every place
+  it is in the project, on every sheet, in a panel along the bottom of the window: a coil and
+  each of its contacts (NO or NC), its footprints; a wire on every sheet with its arrows and
+  the pins and terminals it lands on; a PLC point with input or output and its address.
+- Double-click a row, or press Enter on it, to go there: the sheet is shown and the object
+  selected in the middle of the screen. Up and Down move through the rows.
+- While the panel is open it follows what you click, so you can keep it open while you work.
+  Drag it to the left or right side if you like it there; it stays where you put it.
+- Trace never holds up the drawing: it fills in while you keep panning, zooming, selecting
+  and drawing.
+
+**Fixed**
+- Use as title block on objects off the sheet's paper made a title block drawn off every
+  sheet, and report sheets and imported I/O lists then came out with empty cells or past
+  their frame. It now says to move the title block onto the sheet first.
+- Dragging a run of wire by its middle grip onto the far end of a short wire ending on it left
+  that wire as a single point; it is now taken away, as Clean up wires does.
+- A symbol turned upside down (180 degrees) and placed by one of its pins could put that pin a
+  hair (0.0000000000000002") off the point you picked. Quarter turns are now exact, so the pin
+  lands exactly on it.
+- Terminal count could list a tap that touches two wires in the other wire's row, not the row of
+  the number it carries (1047a4's row listing 1030b and its taps). Each tap is now in the row of
+  the wire its number comes from.
+- Moving a ladder could change its rung spacing by a hair (0.49999999999999994" for 0.5"); it
+  now stays exactly as it was.
+- A report sheet with little room (for example on a portrait sheet with a wide title block
+  strip) shrank every column alike, so short columns such as a BOM's Item number could come
+  out empty. Wide columns now give up room first, and short ones keep what they need.
+
 ## 0.22.4
 
 **New**

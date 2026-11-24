@@ -45,6 +45,24 @@ class SourceIsMasterTest(unittest.TestCase):
         self.assertEqual(self.num(self.s3, b), self.num(self.s1, a))
         self.assertFalse(self.s3.entities[b.id].num_lock)     # (the stale lock let go)
 
+    def test_a_tap_of_a_carried_wire_keeps_its_base(self):
+        # (page 1's 1001 carried to page 2; a tap off it there is 1001-1, and it keeps that
+        # carried on to page 3 from its own source arrow on page 2: a tap is numbered from the
+        # wire it taps, whatever page that number is of; the long battery, seed 4793)
+        with self.p.edit("w") as ed:
+            ed.add(self.s1, M.Wire([(2.0, 5.0), (6.0, 5.0)]))
+            self.arrow(ed, self.s1, SRC, (6.0, 5.0))
+            ed.add(self.s2, M.Wire([(2.0, 5.0), (9.0, 5.0)]))
+            self.arrow(ed, self.s2, DST, (2.0, 5.0))
+            t = ed.add(self.s2, M.Wire([(5.0, 5.0), (5.0, 2.0)]))
+            ed.add(self.s2, M.Insert(SRC, (5.0, 2.0), 0.0, 1.0, False, {"TAG": "Y"},
+                                     self.lib.get("symbol", SRC), 0.1))
+            c = ed.add(self.s3, M.Wire([(2.0, 5.0), (6.0, 5.0)]))
+            ed.add(self.s3, M.Insert(DST, (2.0, 5.0), 0.0, 1.0, False, {"TAG": "Y"},
+                                     self.lib.get("symbol", DST), 0.1))
+        self.assertEqual(self.num(self.s2, t), "1001-1")
+        self.assertEqual(self.num(self.s3, c), "1001-1")
+
     def test_a_lock_on_the_source_page_holds(self):
         with self.p.edit("joined") as ed:
             a = ed.add(self.s1, M.Wire([(2.0, 5.0), (6.0, 5.0)], num="1050", num_lock=True))

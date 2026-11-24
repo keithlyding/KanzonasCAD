@@ -48,6 +48,12 @@ BUDGET = {
     "ladder_refs": 0.5,         # 2,000 places read by rung (cross-references, reports)
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
                                 # 2,000 devices, half of them in the field
+    # (0.23: Trace, Ctrl+E) on 50 sheets of 1,000 lines, 40 coils, 40 contacts and 40 wires:
+    "trace_index": 2.0,         # the first list, every sheet indexed (50 sheets)
+    "trace_click": 0.005,       # a click (selection change) with the panel open: the lookup
+                                # never runs in it, only starts a timer
+    "trace_step": 0.03,         # one turn of Trace's work on the event loop, at the most
+    "trace_list": 0.5,          # a pick fully listed (typical)
 }
 
 
@@ -885,6 +891,97 @@ def run(log_path):
         assert dt < BUDGET["pull"], "the pull list took %.2f s" % dt
         return "1,000 conductors to pull of 2,000 wires: %.3f s" % dt
     log.check("speed budget (cables between locations)", pull_list)
+
+    def trace():
+        # (Trace, 0.23; the owner: "make sure that the loading of the cross-references doesn't
+        # prevent any interaction with the sheet itself"): 50 sheets of 1,000 lines, 40 coils,
+        # 40 contacts of another sheet's coils and 40 numbered wires each, the panel open
+        import random
+        from PySide6.QtCore import QPointF, QEvent, Qt
+        from PySide6.QtGui import QMouseEvent
+        from . import trace_panel
+        w = state["win"]
+        coil, no = w.library.get("symbol", "Relay coil"), w.library.get("symbol", "Contact NO")
+        rnd = random.Random(11)
+        p = M.Project.new()
+        while len(p.sheets) < 50:
+            p.sheets.append(p.make_sheet("Sheet %d" % (len(p.sheets) + 1)))
+        picks = []
+        for k, s in enumerate(p.sheets):
+            for i in range(1000):
+                x, y = rnd.uniform(0.7, 16.3), rnd.uniform(0.7, 10.3)
+                s._put(M.Line((x, y), (x + rnd.uniform(-0.2, 0.2), y + rnd.uniform(-0.2, 0.2))))
+            for i in range(40):
+                x, y = 1 + (i % 8) * 1.8, 1 + (i // 8) * 1.8
+                n = k * 40 + i
+                c = M.Insert(coil.name, (x, y), defn=coil,
+                             attrs={"TAG": "CR%d" % (1000 + n), "DEV": "d%d" % n})
+                m = (n + 40 * 7) % 2000             # (a contact of a coil 7 sheets on)
+                ct = M.Insert(no.name, (x + 0.8, y), defn=no,
+                              attrs={"TAG": "CR%d" % (1000 + m), "PARENT": "d%d" % m})
+                wr = M.Wire([(x, y - 0.5), (x + 0.6, y - 0.5)], num="%d%03d" % (k % 9 + 1, i))
+                for e in (c, ct, wr):
+                    s._put(e)
+                if i % 10 == 0:
+                    picks.append((s, c))
+                    picks.append((s, wr))
+        d = w.add_document(p)
+        v = d.view
+        app.processEvents()
+        ticks, clicks, whole, moves, heads = [], [], [], [], []
+        real_work = w._trace_work
+
+        def timed():
+            t0 = time.perf_counter()
+            real_work()
+            ticks.append(time.perf_counter() - t0)
+        w._trace_work = timed
+        try:
+            w.trace_dock.show()
+            t0 = time.perf_counter()
+            v.set_selection({picks[0][1].id})
+            assert w.trace()
+            while w.trace_busy():
+                app.processEvents()
+            first = time.perf_counter() - t0
+            assert len(w.trace_panel.rows()) == 2, w.trace_panel.header.text()
+            for n, (s, e) in enumerate(picks[1:41]):
+                v.show_sheet(s.id)
+                app.processEvents()
+                t0 = time.perf_counter()
+                v.set_selection({e.id})
+                clicks.append(time.perf_counter() - t0)
+                while w.trace_busy():
+                    pos = QPointF(200 + n * 3 + len(moves) % 50, 300)
+                    t1 = time.perf_counter()
+                    app.sendEvent(v, QMouseEvent(QEvent.MouseMove, pos, v.mapToGlobal(pos),
+                                                 Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+                    v.repaint()
+                    moves.append(time.perf_counter() - t1)
+                    app.processEvents()
+                whole.append(time.perf_counter() - t0)
+                heads.append(w.trace_panel.header.text())
+            assert sum(h.startswith("Wire") for h in heads) == 20, heads
+        finally:
+            w._trace_work = real_work
+            w.trace_dock.hide()
+            p.saved_at = len(p.undo_stack)
+            w.close_tab(w.tabs.indexOf(d))
+        click, tick, move = max(clicks), max(ticks), max(moves)
+        typical = sorted(whole)[len(whole) // 2]
+        assert first < BUDGET["trace_index"], "Trace's first list took %.2f s" % first
+        assert click < BUDGET["trace_click"], "a click with Trace open took %.1f ms" % (
+            click * 1000)
+        assert tick < BUDGET["trace_step"], "a step of Trace took %.1f ms" % (tick * 1000)
+        assert move < BUDGET["snap_move"], "a mouse move while Trace works took %.1f ms" % (
+            move * 1000)
+        assert typical < BUDGET["trace_list"], "a pick listed in %.2f s" % typical
+        return ("50 sheets: first list %.2f s; a click %.1f ms at most; a step %.1f ms at "
+                "most (slices of %.0f ms); a mouse move meanwhile %.1f ms at most; listed in "
+                "%.3f s typical, %.3f s at most" % (
+                    first, click * 1000, tick * 1000, trace_panel.SLICE * 1000, move * 1000,
+                    typical, max(whole)))
+    log.check("speed budget (Trace)", trace)
 
     w = state.get("win")
     if w is not None:
