@@ -117,6 +117,7 @@ class BlockPieceColorTest(unittest.TestCase):
         self.color_with_ribbon(d, rect)
         self.save()
         self.win.tabs.setCurrentWidget(self.drawing)    # (the drawing shown, not the block's)
+        self.v.resize(800, 600)                         # (a known size on every computer)
         APP.processEvents()
         self.v.zoom("sheet")
         e = self.copy()
@@ -124,19 +125,31 @@ class BlockPieceColorTest(unittest.TestCase):
         self.v.center = ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
         self.v.scale = 400.0
         self.v.set_selection(set())         # (not drawn in the selection's color)
-        self.v.repaint()
-        APP.processEvents()
-        img = self.v.grab().toImage()
         want = QColor(GREEN)
-        # (every pixel, and green as drawn, smoothing included: a line one pixel wide fell
-        # between every other pixel, or came out a shade off, on the Linux build)
+        # (every pixel, and green as drawn, smoothing included; drawn again and looked at a
+        # few times, as a slower computer may show it a moment later: both builds found none
+        # where a run here did)
 
         def greenish(c):
             return c.green() >= 0.6 * want.green() and c.red() <= 0.4 * c.green() and \
                 c.blue() <= 0.4 * c.green()
-        greens = sum(1 for x in range(img.width()) for y in range(img.height())
-                     if greenish(QColor(img.pixel(x, y))))
-        self.assertGreater(greens, 0, "the piece isn't drawn green")
+        greens = 0
+        for _i in range(40):
+            self.v.repaint()
+            APP.processEvents()
+            img = self.v.grab().toImage()
+            greens = sum(1 for x in range(img.width()) for y in range(img.height())
+                         if greenish(QColor(img.pixel(x, y))))
+            if greens:
+                break
+            QTest.qWait(50)
+        from collections import Counter
+        seen = Counter(QColor(img.pixel(x, y)).name() for x in range(0, img.width(), 4)
+                       for y in range(0, img.height(), 4))
+        self.assertGreater(greens, 0, "the piece isn't drawn green: a %dx%d picture, the copy "
+                           "at %s on screen, colors %s" % (
+                               img.width(), img.height(), self.v.to_screen(e.pos),
+                               seen.most_common(6)))
 
     def test_properties_panel_in_the_blocks_tab(self):
         d, rect = self.open_tab()
