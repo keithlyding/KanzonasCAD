@@ -184,6 +184,24 @@ nobody understands).
   the copy to draw it exactly as set; no block-level default for it.
 - 0.25 (owner, Nov 24 2026: "Make all this one release please"; the 0.24.1 work above, never
   published on its own, went out in it):
+  - **File locking** (the owner: "I was able to open two instances of the same file in two
+    different instances of KanzonasCAD. I think we need something to say locked for editing,
+    open as read only?"; the design agreed with the owner): a hidden lock note beside a
+    project open for editing (`.~lock.<file>#`, one name on both platforms), made atomically;
+    a second copy asks: Open read-only (default), Open anyway (warned), Cancel. Decided here:
+    a read-only project can be edited in memory, as AutoCAD allows, and only saving over the
+    file is refused (Save As makes your own, editable, locked copy); stale notes from this
+    computer taken over silently, other computers' asked about; File > Reopen for editing
+    reloads the file once the other copy has closed it (cheap: close and open again).
+  - **A symbol and a footprint with the same name** (the owner: "both having the same name
+    should be ok. Right now, one will supersede the other"): kept apart as since 0.18 under
+    one name key ("name (footprint)"), shown everywhere by their own name; decided here over
+    keying the project's blocks by (kind, name): no format change, nothing to migrate. Make
+    block, Import I/O list and Save to library as part were still going by the plain name.
+  - **A block piece's own color** (the owner: "I want to key it at the same layer but just
+    change the color of ... a little rectangle in the block. Can you also add color to the
+    block editing tab?"): Save block and Make block keep a piece's color and mark the block as
+    keeping its pieces' colors; a block with none draws as before. Color on the Block tab.
   - **Properties panel** (the owner: "Can text properties be in the block panel, so I don't have
     to right click it each time?"; asked what it shows, "Everything of the selection"): a
     docked panel as AutoCAD's Properties palette, Ctrl+1 (opens or raises; the View menu's and

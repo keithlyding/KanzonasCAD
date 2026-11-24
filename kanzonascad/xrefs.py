@@ -110,7 +110,7 @@ def far_device(sheet, c):
     ins, pin = got
     if pull.is_terminal(ins):
         return pull.landing_name(ins, pin)
-    return (ins.attrs.get("TAG", "") or "").strip() or ins.block
+    return (ins.attrs.get("TAG", "") or "").strip() or ins.block_name
 
 
 def arrow_pairs(project, ends):

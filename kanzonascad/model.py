@@ -2329,6 +2329,12 @@ class BlockDef:
                    d.get("own_colors", False), d.get("show_pins", False),
                    d.get("phases", ""), d.get("label_sizes"))
 
+    @property
+    def shown_name(self):
+        """Its name as the library and people know it: a footprint kept in a project as
+        "Starter (footprint)" beside a symbol "Starter" is "Starter" (project_block_name)."""
+        return library_block_name(self.name, self.kind)
+
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
         return a == b
@@ -2469,6 +2475,28 @@ def library_block_name(name, kind):
     """A project block's name in the library (project_block_name's other way)."""
     tail = " (%s)" % kind
     return name[:-len(tail)] if name.endswith(tail) else name
+
+
+def project_block(project, name, kind):
+    """The project's copy of the library block (kind, name), or None: under its own name, or
+    "name (kind)" when a block of the other kind has that name (project_block_name)."""
+    for n in (name, "%s (%s)" % (name, kind)):
+        got = project.blocks.get(n)
+        if got is not None and got.kind == kind and library_block_name(n, kind) == name:
+            return got
+    return None
+
+
+def ensure_block(ed, project, defn):
+    """In edit ed: a library block put in the project, as Insert puts it there (a block of its
+    name and kind already in it stays as it is), under project_block_name. Returns the
+    project's copy, the one to place."""
+    got = project_block(project, defn.name, defn.kind)
+    if got is not None:
+        return got
+    pname = project_block_name(project, defn.name, defn.kind)
+    ed.block(renamed_block(defn, pname))
+    return project.blocks[pname]
 
 
 def renamed_block(defn, name):
@@ -2853,6 +2881,12 @@ class Insert(Entity):
         bb = self._compute_bbox()
         return ((bb[0] + bb[2]) / 2.0, bb[1])
 
+    @property
+    def block_name(self):
+        """Its block's name as people know it (BlockDef.shown_name): what lists, reports and
+        the Properties panel show; e.block is the project's key for it."""
+        return self.defn.shown_name if self.defn is not None else self.block
+
     def label_value(self, key=None):
         """What a footprint's label line for key says (its first one when None): "?" for an
         empty tag, part number or description; None for an empty attribute (no line) or no
@@ -2864,7 +2898,7 @@ class Insert(Entity):
         if key is None or d is None:
             return None
         if key == "name":
-            return d.name
+            return d.shown_name             # (its own name, not "name (footprint)")
         if key in LABELS:
             v = self.attrs.get(LABELS[key], "")
             if not v:
@@ -3876,6 +3910,10 @@ class Edit:
 class Project:
     def __init__(self):
         self.path = None
+        # (open for editing elsewhere: Save refused, Save As makes your own copy; and this
+        # copy's lock note when it is open for editing here: filelock.py, locking.py)
+        self.read_only = False
+        self.lock = None
         self.fields = {k: "" for k in PROJECT_FIELDS}
         self.zone_format = "{sheet}-{row}{col}"
         self.settings = dict(DEFAULT_SETTINGS)

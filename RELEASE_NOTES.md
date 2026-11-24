@@ -37,10 +37,28 @@ build fails without them.
   can take the same sizes in one step. The sizes are on paper, so they print the same on a
   1:4 panel sheet.
 
+- A project open for editing is marked as such. Opening it in a second KanzonasCAD, on your
+  computer or someone else's, says who has it open and since when, and offers Open read-only
+  (the default), Open anyway or Cancel. Read-only, "(read-only)" shows in the tab and title,
+  and everything works but saving over the file: Save As makes your own copy, which you can
+  edit. File > Reopen for editing opens it for editing once the other copy has closed it.
+- A note left by a KanzonasCAD that crashed on this computer is taken over without asking. A
+  project in a folder you can't write to opens read-only, and the command line says why.
+
 **Fixed**
 - Turning a footprint label line (its Angle) now stays: it went back to how the footprint was
   turned. A turned line turns with the footprint and is kept readable (180 is drawn as 0, 270
   as 90); untick Keep readable to draw it exactly at its angle.
+- A symbol and a footprint with the same name now stay apart everywhere: Make block, Import
+  I/O list and Save to library as part could still put one in the other's place. Lists,
+  reports and labels show the name you gave it, not "name (footprint)". A project where one
+  already took the other's place gets the lost one back from your library when it opens.
+- Import I/O list no longer puts a module over a large title block: it is moved clear of it,
+  or the sheet gets a scale it fits at.
+- One piece of a block in a color of its own (a small rectangle, say) now stays that color
+  after Save block: every copy draws it in that color and the rest of the block in the copy's
+  color. It went back to the copy's color. Make block keeps such a color too. The Block tab has
+  Color, and the Properties panel's Color works in a block's tab.
 
 ## 0.24
 

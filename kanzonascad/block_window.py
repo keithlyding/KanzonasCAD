@@ -115,8 +115,10 @@ class BlockEditing:
                    if isinstance(e, M.Insert) and e.defn is not None]
             if len({e.block for e in ins}) == 1:
                 e = ins[0]
-                return e.defn.kind, self.library.get(
-                    e.defn.kind, M.library_block_name(e.block, e.defn.kind)), e.defn
+                # (under its own name: a footprint kept as "name (footprint)" is "name" in
+                # the library, and saved there so when the library hasn't got it)
+                return e.defn.kind, self.library.get(e.defn.kind, e.block_name), \
+                    M.renamed_block(e.defn, e.block_name)
         if self.library_dialog.isVisible():
             got = self.library_panel.current_block()
             if got is not None:
@@ -428,15 +430,17 @@ class BlockEditing:
             return 0
         # (the project's block of that kind: "name (footprint)" beside a symbol named so, and
         # never a block of the other kind with that name, 0.18)
-        pname = M.project_block_name(doc.project, old_name, defn.kind)
-        if pname != old_name:
-            old_name = pname
-            defn = M.renamed_block(defn, M.project_block_name(doc.project, defn.name,
-                                                              defn.kind))
+        shown = old_name
+        got = M.project_block(doc.project, old_name, defn.kind)
+        if got is None:
+            return 0
+        old_name = got.name
+        defn = M.renamed_block(defn, old_name if defn.name == shown else
+                               M.project_block_name(doc.project, defn.name, defn.kind))
         n = len(BE.copies(doc.project, old_name))
         if not n:
             return 0
-        what = "the %d copies of %s" % (n, old_name) if n > 1 else "the copy of %s" % old_name
+        what = "the %d copies of %s" % (n, shown) if n > 1 else "the copy of %s" % shown
         r = QMessageBox.question(self, "Update blocks", "Update %s in %s?" % (what, doc.name()),
                                  QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
         if r != QMessageBox.Yes:
@@ -445,8 +449,8 @@ class BlockEditing:
             return 0
         with doc.project.edit("Update %s" % defn.name) as ed:
             count, stranded = BE.update_copies(ed, doc.project, defn, old_name, pin_map)
-        msg = "Updated %d cop%s of %s in %s" % (count, "ies" if count != 1 else "y", defn.name,
-                                                 doc.name())
+        msg = "Updated %d cop%s of %s in %s" % (count, "ies" if count != 1 else "y",
+                                                 defn.shown_name, doc.name())
         if stranded:
             msg += "; %d wire(s) stay where they were: their pin is gone" % stranded
         self._say(msg)
@@ -475,7 +479,7 @@ class BlockEditing:
             QMessageBox.information(self, "Update blocks", "The blocks in %s are the same as "
                                     "the library's." % d.name())
             return 0
-        names = [b.name for b in changed]
+        names = ["%s (%s)" % (b.shown_name, b.kind) for b in changed]
         r = QMessageBox.question(
             self, "Update blocks", "%d block(s) in %s differ from the library's:\n\n%s\n\n"
             "Update them to the library's? Each copy keeps its tag, attributes and place, "

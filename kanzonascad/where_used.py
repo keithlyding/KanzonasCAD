@@ -313,7 +313,7 @@ def _desc(e, device=None):
         got = (a.get("DESC", "") or "").strip()
         if got:
             return got
-    return e.block if isinstance(e, Insert) else (e.text or "")
+    return e.block_name if isinstance(e, Insert) else (e.text or "")
 
 
 def _name(e, tag):
@@ -324,7 +324,7 @@ def _name(e, tag):
 
 def _symbol_row(project, s, e, device=None, note=""):
     tag = (e.attrs.get("TAG", "") or "").strip() or (
-        e.block if isinstance(e, Insert) else "")
+        e.block_name if isinstance(e, Insert) else "")
     desc = _desc(e, device)
     if note:
         desc = "%s (%s)" % (desc, note) if desc else note
@@ -335,7 +335,7 @@ def _device(project, idx, out, dev, tag):
     got = idx.device(dev)
     dev_ent = got[1] if got else None
     tag = (dev_ent.attrs.get("TAG", "") if dev_ent is not None else tag) or ""
-    title = tag or (dev_ent.block if dev_ent is not None else "Device")
+    title = tag or (dev_ent.block_name if dev_ent is not None else "Device")
     rows, linked = out, set()
     for s, e in idx.by_dev.get(dev, ()):
         linked.add((s.id, e.id))
@@ -398,7 +398,7 @@ def _wires_at(sheet, q):
 def _point_row(project, s, ins, pin, module, nums=None):
     rl, addr, text = _point_info(s, ins, pin, module)
     q = dict(ins.pin_points())[pin]
-    tag = (ins.attrs.get("TAG", "") or "").strip() or ins.block
+    tag = (ins.attrs.get("TAG", "") or "").strip() or ins.block_name
     if nums is None:
         nums = sorted({w.num for w in _wires_at(s, q) if w.num})
     parts = [text or addr]
@@ -541,5 +541,5 @@ def _landing_row(project, idx, s, e, pin, q):
         from .pull import landing_name
         return _row(project, s, [e.id], q, box, "Terminal", landing_name(e, pin),
                     _desc(e, dev[1] if dev else None))
-    return _row(project, s, [e.id], q, box, role(e), "%s pin %s" % (tag or e.block, pin),
+    return _row(project, s, [e.id], q, box, role(e), "%s pin %s" % (tag or e.block_name, pin),
                 _desc(e, dev[1] if dev else None))

@@ -48,7 +48,7 @@ def parts(project, unnumbered=True):
                     desc = "%s, %s" % (desc, got) if desc else got
             rec = {"tag": a.get("TAG", "").strip(), "mfr": a.get("MFR", "").strip() or
                    d.manufacturer, "cat": a.get("CAT", "").strip() or d.catalog,
-                   "desc": desc, "block": d.name, "sheets": {num}}
+                   "desc": desc, "block": d.shown_name, "sheets": {num}}
             if rec["tag"] and not rec["tag"].endswith("?"):
                 got = by_tag.get(rec["tag"])
                 if got is None:

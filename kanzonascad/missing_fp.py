@@ -148,7 +148,7 @@ def rows(project):
     footprint, in page order (the report)."""
     out = []
     for s, e in find(project).missing:
-        out.append([e.attrs.get("TAG", "") or "?", e.attrs.get("DESC", ""), e.block,
+        out.append([e.attrs.get("TAG", "") or "?", e.attrs.get("DESC", ""), e.block_name,
                     str(project.sheet_number(s)),
                     project.zone_text(s, e.pos[0], e.pos[1]) or str(project.sheet_number(s)),
                     location_of(s, e)])

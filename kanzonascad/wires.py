@@ -1202,7 +1202,7 @@ def near_misses(sheet, points, hi=None):
                     if d <= TOL:
                         joined = True
                     elif d < hi and (best is None or d < best[2]):
-                        best = (p, "pin %s of %s" % (n, o.attrs.get("TAG") or o.block), d)
+                        best = (p, "pin %s of %s" % (n, o.attrs.get("TAG") or o.block_name), d)
         if touching >= 2:
             joined = True               # (another wire's end here: joined end to end)
         if best is not None and not joined:

@@ -2318,7 +2318,7 @@ def dash_box_dialog(parent, project, box):
     for s, e in choices:
         where = project.zone_text(s, e.pos[0], e.pos[1]) or ""
         desc = e.attrs.get("DESC", "") or (e.defn.description if e.defn else "")
-        belongs.addItem("%s   %s   %s" % (e.attrs.get("TAG", "?"), where, desc or e.block),
+        belongs.addItem("%s   %s   %s" % (e.attrs.get("TAG", "?"), where, desc or e.block_name),
                         e.attrs.get("DEV"))
     cur = box.attrs.get("PARENT")
     i = belongs.findData(cur) if cur else 0

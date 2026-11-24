@@ -4742,6 +4742,152 @@ def random_editing(log, out, ops, seed, drawing=None):
                 got_t, got_j, want_t, want_j)
         BC.CHECKED["terminal count from the tap numbers"] += 1
 
+    # (0.25: a symbol and a footprint of one name, in the library from the start)
+    lib.save_block(M.BlockDef(BC.TWIN, "symbol", [M.Circle((0.25, 0), 0.1)],
+                              pins=[{"name": "A1", "pos": (0, 0)}, {"name": "A2",
+                                                                    "pos": (0.5, 0)}],
+                              role="device", prefix="M"))
+    lib.save_block(M.BlockDef(BC.TWIN, "footprint",
+                              [M.Polyline([(0, 0), (1.5, 0), (1.5, 2.5), (0, 2.5)], True)]))
+
+    def op_same_name():
+        # (0.25) the symbol or the footprint named BC.TWIN placed from the Library (its insert
+        # signal, as a double-click), or made again with Make block, of the other kind than
+        # the one holding the plain name in the project (up to 0.25 Make block went over it);
+        # each copy marked with the kind it was placed as (TWIN), which BC.twins_apart holds
+        # every copy to through moves, copies, undo, redo and save/open
+        kind = rnd.choice(["symbol", "footprint", "footprint", "make"])
+        held = p.blocks.get(BC.TWIN)
+        if kind == "make" and held is None:
+            kind = rnd.choice(["symbol", "footprint"])
+        before = set(s.entities)
+        if kind == "make":
+            kind = "footprint" if held.kind == "symbol" else "symbol"
+            q = pt()
+            with p.edit("draw") as ed:
+                r = ed.add(s, M.Polyline([q, (q[0] + 1.0, q[1]), (q[0] + 1.0, q[1] + 0.5)],
+                                         True))
+            v.set_selection({r.id})
+            real = win.ask_block_details
+            win.ask_block_details = lambda ents: {
+                "kind": kind, "name": BC.TWIN, "category": "", "description": "",
+                "role": "device", "contact": "", "prefix": "M" if kind == "symbol" else "",
+                "pin_names": ["A1", "A2"] if kind == "symbol" else [], "replace": True}
+            try:
+                v.run(C.MakeBlockCmd)
+                typed = [q] + ([q, (q[0] + 1.0, q[1]), "", (q[0] + 0.5, q[1] + 0.75)]
+                               if kind == "symbol" else [])
+                for t in typed:
+                    if v.cmd is not None:
+                        v.input_text(fmt(t) if t else "")
+                finish()
+            finally:
+                win.ask_block_details = real
+        else:
+            win.library_panel.insertRequested.emit(lib.get(kind, BC.TWIN), {})
+            if v.cmd is not None:
+                v.input_text(fmt(pt()))
+            if v.cmd is not None and rnd.random() < 0.5:
+                v.input_text("N")
+            finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) == 1:
+            with p.edit("mark") as ed:
+                ed.change(s, new[0].copy(attrs=dict(new[0].attrs, TWIN=kind)))
+        BC.twins_apart(p)
+
+    PIECES = "Battery piece color"
+    lib.save_block(M.BlockDef(PIECES, "symbol", [M.Line((0, 0), (0.5, 0)),
+                                                  M.Circle((0.25, 0), 0.1)],
+                              pins=[{"name": "A1", "pos": (0, 0)}, {"name": "A2",
+                                                                    "pos": (0.5, 0)}],
+                              role="device", prefix="CR"))
+
+    def op_block_piece_color():
+        # (0.25) one piece of a block given a color of its own in the block's tab (Edit
+        # block..., the Block tab's Color), saved (Save block, its copies updated): every copy
+        # then draws that piece in that color and the other in the copy's own (the owner: "I
+        # want to key it at the same layer but just change the color of ... a little
+        # rectangle in the block"); ByLayer puts it back to the copy's
+        from PySide6.QtGui import QColor
+        from kanzonascad import no_wheel
+        if not any(e.block_name == PIECES for sh in p.sheets for e in sh.inserts()) or \
+                rnd.random() < 0.3:
+            win.library_panel.insertRequested.emit(lib.get("symbol", PIECES), {})
+            if v.cmd is not None:
+                v.input_text(fmt(pt()))
+            finish()
+        d = win.edit_block("symbol", PIECES)
+        if d is None:
+            return
+        circle = next(e for e in d.view.sheet().entities.values() if isinstance(e, M.Circle))
+        color = rnd.choice(["#00ff00", "#ff00ff", None])
+        d.view.set_selection({circle.id})
+        pick = ("Choose a color...", True) if color else ("ByLayer (the layer's color)", True)
+        real = (no_wheel.get_item, no_wheel.get_color)
+        no_wheel.get_item = lambda *a, **k: pick
+        no_wheel.get_color = lambda *a, **k: QColor(color or "#000000")
+        try:
+            win.acts["object_color"].trigger()
+        finally:
+            no_wheel.get_item, no_wheel.get_color = real
+        got = d.view.sheet().entities[circle.id]
+        assert (got.color, got.layer) == (color, circle.layer), "Color in the block's tab: %r" % (
+            (got.color, got.layer),)
+        from unittest import mock
+        with mock.patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+            assert win.save_block(), "Save block failed"
+        for sh in p.sheets:
+            for e in sh.inserts():
+                if e.block_name != PIECES or e.defn is None:
+                    continue
+                cols = {type(w).__name__: w.color for w in e.world_entities()
+                        if isinstance(w, (M.Line, M.Circle))}
+                assert cols == {"Line": e.color, "Circle": color or e.color}, \
+                    "a copy of %s draws its pieces %r (piece %r, copy %r)" % (
+                        PIECES, cols, color, e.color)
+                BC.CHECKED["a block piece's own color on its copies"] += 1
+
+    def op_lock_file():
+        # (0.25) the battery's project saved and held open for editing by this copy, as Open
+        # holds it; opened in a second copy (a window of its own, someone on another
+        # computer, who picks the question's default, Open read-only): it comes up read-only,
+        # its Save refused with the file left as it was (after an edit in it, some of the
+        # time); closed, it leaves this copy's lock note; and this copy closing it leaves none
+        from kanzonascad import filelock as FL
+        path2 = os.path.join(out, "locked.kzcad")
+        p.save(path2, backups=0)
+        with open(path2, "rb") as f:
+            raw = f.read()
+        mine = FL.acquire(path2, FL.Who("battery", "BATTERY-PC"))
+        w2, _v2 = window()
+        w2.lock_who = FL.Who("someone", "OTHER-PC")
+        asked = []
+        w2.ask_locked = lambda path, info: asked.append(info) or "read_only"
+        try:
+            d2 = w2.open_path(path2)
+            assert d2 is not None and d2.project.read_only, "not opened read-only"
+            assert [a.get("computer") for a in asked] == ["BATTERY-PC"], asked
+            assert "(read-only)" in w2.windowTitle(), w2.windowTitle()
+            if rnd.random() < 0.5:
+                with d2.project.edit("line") as ed:
+                    ed.add(d2.project.sheets[0], M.Line(pt(), pt()))
+            assert not w2.save(), "a read-only project saved"
+            with open(path2, "rb") as f:
+                assert f.read() == raw, "Save wrote over a read-only project's file"
+            d2.project.saved_at = len(d2.project.undo_stack)
+            w2.close_tab(w2.tabs.indexOf(d2))
+            got = FL.read(path2)
+            assert got is not None and got["id"] == mine.info["id"], \
+                "closing the read-only copy took the lock note: %r" % (got,)
+        finally:
+            for _w, o in w2.documents():
+                o.project.saved_at = len(o.project.undo_stack)
+            w2.close()
+            mine.release()
+        assert FL.read(path2) is None, "the lock note stayed after the project closed"
+        BC.CHECKED["a project open elsewhere opened read-only"] += 1
+
     imported = {"symbol": [], "footprint": []}    # (names op_import_blocks brought in)
 
     def op_import_blocks():
@@ -4887,7 +5033,8 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
              (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_fp_label_sizes, 2), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2),
-             (op_import_blocks, 1), (op_props_panel, 3), (op_missing_fp, 2)]
+             (op_import_blocks, 1), (op_props_panel, 3), (op_missing_fp, 2),
+             (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -4913,6 +5060,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 BC.footprints_follow(p)
                 BC.arrows_follow(p)
                 BC.missing_right(win, p)
+                BC.twins_apart(p)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()

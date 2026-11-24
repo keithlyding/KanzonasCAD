@@ -44,7 +44,7 @@ class BackupTest(unittest.TestCase):
     def test_autosave_and_recovery(self):
         w, v = window()
         try:
-            for f, _o, _t in backup.leftovers():
+            for f, _o, _t, _r in backup.leftovers():
                 os.remove(f)
             d = w.doc()
             path = os.path.join(tempfile.mkdtemp(), "Pump.kzcad")
@@ -54,7 +54,7 @@ class BackupTest(unittest.TestCase):
                 ed.add(v.sheet(), M.Line((1, 1), (2, 2)))
             self.assertEqual(w.autosave(), 1)
             left = backup.leftovers()
-            self.assertEqual([o for _f, o, _t in left], [path])
+            self.assertEqual([o for _f, o, _t, _r in left], [path])
             # a later start finds it and recovers it, unsaved, with its path
             from PySide6.QtWidgets import QMessageBox
             old = QMessageBox.question

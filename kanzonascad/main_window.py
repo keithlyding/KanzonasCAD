@@ -24,6 +24,7 @@ from .block_window import BlockEditing, is_block_doc
 from .tb_window import TitleBlockEditing, is_tb_doc
 from .trace_panel import Tracing
 from .props_panel import Properties
+from .locking import Locking, is_read_only, READ_ONLY_SAVE
 from . import where_used
 from .commandline import CommandLine
 from .render import MISSING_COLOR, install_text_measure
@@ -88,6 +89,12 @@ class Document(QWidget):
         if self.project.path:
             return os.path.splitext(os.path.basename(self.project.path))[0]
         return "Untitled"
+
+    def title(self):
+        """Its tab's and window's title: the name, "*" with unsaved changes, "(read-only)"
+        when it is open for editing elsewhere (locking.py)."""
+        return self.name() + ("*" if self.project.is_modified() else "") + (
+            " (read-only)" if is_read_only(self.project) else "")
 
 
 class DetachTabBar(QTabBar):
@@ -194,7 +201,7 @@ def copy_title(title, taken):
     return "%s%s%d" % (base, dash, n)
 
 
-class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWindow):
+class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, QMainWindow):
     def __init__(self, family=None):
         """family: the windows this one opens projects and sheets with (a window from Open
         this sheet in a new window joins its opener's); the first is the main one, which
@@ -358,6 +365,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         A("open", "&Open...", self.open_dialog, "Ctrl+O", label="Open")
         A("save", "&Save", self.save, "Ctrl+S", label="Save")
         A("save_as", "Save &as...", self.save_as, "Ctrl+Shift+S", label="Save as")
+        A("reopen_edit", "Reopen for &editing", self.reopen_for_editing, icon="open",
+          label="Reopen for editing",
+          tip="A read-only project opened again for editing, once the other copy has closed it")
         A("import_dxf", "&Import DXF or DWG into this sheet...", self.import_dxf, icon="dxf_in",
           label="Import DXF/DWG")
         # (no argument: the menu's triggered(False) would come in as the path)
@@ -735,6 +745,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
             m.addAction(a[k])
         self.recent_menu = m.addMenu("Open &recent")
         self.recent_menu.aboutToShow.connect(self._fill_recent)
+        m.addAction(a["reopen_edit"])
         m.addSeparator()
         for k in ("save", "save_as", "save_template"):
             m.addAction(a[k])
@@ -973,7 +984,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
             ("Measure", "large", [a["dim_linear"], a["dim_aligned"]]),
             ("Library", "large", [a["edit_block"], a["update_blocks"], a["import_blocks"]]),
             # (a block placed in the block being edited, exploded there: 0.25)
-            ("Modify", "small", [a["explode"]]),
+            ("Modify", "small", [a["explode"], a["object_color"]]),
         ])
         tb = self.ribbon_bar = QToolBar("Ribbon")
         tb.setObjectName("ribbon")
@@ -1088,7 +1099,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         v.typed.connect(self.cmdline.take_key)
         d.listener = lambda d=d: self._project_changed(d)
         project.listeners.append(d.listener)
-        i = self.tabs.addTab(d, d.name())
+        i = self.tabs.addTab(d, d.title())
         self.tabs.setCurrentIndex(i)
         v.setFocus()
         return d
@@ -1216,7 +1227,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
     def _project_changed(self, d):
         i = self.tabs.indexOf(d)
         if i >= 0:
-            self.tabs.setTabText(i, d.name() + ("*" if d.project.is_modified() else ""))
+            self.tabs.setTabText(i, d.title())
         if d is self.doc():
             self._fill_sheets()
             self._fill_layers()
@@ -1274,6 +1285,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
             if not self._maybe_save(w):
                 return False
             self._drop_autosave(w)
+            if not is_block_doc(w) and not is_tb_doc(w):
+                self.drop_lock(w.project)
         self.tabs.removeTab(index)
         w.view.cancel()
         for f in (getattr(w, "listener", None), w.view._project_changed):
@@ -1385,6 +1398,15 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         if not d.project.is_modified():
             return True
         self.tabs.setCurrentWidget(d)
+        if is_read_only(d.project):
+            # (read-only: its changes can only go to a copy of your own)
+            r = QMessageBox.question(self, APP, "%s is read-only. Save your changes to a copy "
+                                     "of your own (Save As)?" % d.name(),
+                                     QMessageBox.Save | QMessageBox.Discard |
+                                     QMessageBox.Cancel)
+            if r == QMessageBox.Save:
+                return self.save_as()
+            return r != QMessageBox.Cancel
         r = QMessageBox.question(self, APP, "Save changes to %s?" % d.name(),
                                  QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
         if r == QMessageBox.Cancel:
@@ -1533,13 +1555,47 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
                         "scale... changes it." % placed)
                 d.view.zoom("sheet")
             else:
-                p = M.Project.load(path)
+                got = self.lock_for_open(path)
+                if got is None:
+                    return None                 # (open elsewhere, and Cancel chosen)
+                lock, why = got
+                try:
+                    p = M.Project.load(path)
+                except Exception:               # (said below, with the lock taken away first)
+                    if lock is not None:
+                        lock.release()
+                    raise
+                p.lock = lock
                 d = self.add_document(p)
+                if why:
+                    self.set_read_only(d, why)
+                self._put_back_kinds(d)
         except Exception as ex:
             QMessageBox.warning(self, APP, "Couldn't open %s:\n%s" % (path, ex))
             return None
         self._remember(path)
         return d
+
+    def _put_back_kinds(self, d):
+        """A project opened that lost a symbol or footprint to one of the other kind with
+        the same name (before they were kept apart): the lost one brought back from the
+        library, its copies drawn with it again (one step: Undo takes it back), and said."""
+        from . import block_editor as BE
+        found, missing = BE.lost_kinds(d.project, self.library)
+        if found:
+            with d.project.edit("Put back blocks of the same name") as ed:
+                n = BE.put_back_kinds(ed, d.project, found)
+            self._say("%d cop%s of %s drew a block of the other kind with the same name: the "
+                      "library's %s put back for them" % (
+                          n, "ies" if n != 1 else "y", ", ".join(f[0] for f in found),
+                          " and ".join(sorted({f[1] for f in found}))), 12000)
+        for name, kind, n in missing:
+            self._say("%d cop%s of %s on %s sheets draw%s the %s of that name: the library "
+                      "has no %s %s to put back" % (
+                          n, "ies" if n != 1 else "y", name,
+                          "panel" if kind == "footprint" else "schematic",
+                          "" if n != 1 else "s", "symbol" if kind == "footprint" else
+                          "footprint", kind, name), 12000)
 
     def save(self):
         d = self.doc()
@@ -1549,6 +1605,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
             return self.save_block()
         if is_tb_doc(d):
             return self.save_title_block()
+        if self.refuse_read_only_save(d):
+            return False
         if not d.project.path:
             return self.save_as()
         return self._save_to(d, d.project.path)
@@ -1562,6 +1620,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         if is_tb_doc(d):
             return self.save_title_block()
         start = d.project.path or os.path.join(self._last_dir(), d.name() + M.FILE_SUFFIX)
+        if is_read_only(d.project):         # (your own copy: beside it, a name of its own)
+            start = os.path.splitext(start)[0] + " (copy)" + M.FILE_SUFFIX
         path, _f = QFileDialog.getSaveFileName(self, "Save project", start,
                                                "KanzonasCAD project (*.kzcad)")
         if not path:
@@ -1572,11 +1632,20 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
 
     def _save_to(self, d, path):
         path = os.path.abspath(path)        # (C:\\a\\b on Windows, as Open gives it)
+        from .paths import path_key
+        if is_read_only(d.project) and d.project.path and \
+                path_key(path) == path_key(d.project.path):
+            self._say(READ_ONLY_SAVE)       # (never over the original: Save As another name)
+            return False
+        if not self.lock_for_save(d, path):
+            return False
         try:
             d.project.save(path, backups=self.backups_keep())
         except OSError as ex:
+            self.finish_save_lock(d, False)
             QMessageBox.warning(self, APP, "Couldn't save %s:\n%s" % (path, ex))
             return False
+        self.finish_save_lock(d, True)
         self._drop_autosave(d)
         d.autosave_key = path
         self._remember(path)
@@ -1625,9 +1694,11 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
             return 0
         import time
         lines = []
-        for _p, orig, t in left:
+        for _p, orig, t, ro in left:
             when = time.strftime("%Y-%m-%d %H:%M", time.localtime(t))
-            lines.append("%s (autosaved %s)" % (orig or "an unsaved project", when))
+            lines.append("%s (autosaved %s)" % (
+                orig or ("a read-only copy of %s, as an unsaved project" % ro if ro else
+                         "an unsaved project"), when))
         r = QMessageBox.question(
             self, APP, "KanzonasCAD didn't close normally last time. Recover these projects "
             "from their autosave copies?\n\n" + "\n".join(lines) + "\n\nNo deletes the "
@@ -1635,7 +1706,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         if r == QMessageBox.Cancel:
             return 0
         opened = 0
-        for p, orig, _t in left:
+        for p, orig, _t, _ro in left:
             if r == QMessageBox.Yes:
                 try:
                     proj = M.Project.load(p)
@@ -1644,8 +1715,15 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
                     continue
                 proj.path = orig or None
                 proj.saved_at = -1              # recovered: not saved yet
+                # (its file open for editing elsewhere since: recovered read-only, Save As
+                # keeps it; Cancel too, so the work recovered isn't lost)
+                got = self.lock_for_open(orig) if orig else (None, None)
+                lock, why = got if got is not None else (None, "Cancel was chosen")
+                proj.lock = lock
                 d = self.add_document(proj)
                 d.autosave_key = orig or d.autosave_key
+                if why:
+                    self.set_read_only(d, why)
                 self._project_changed(d)
                 opened += 1
             try:
@@ -1975,7 +2053,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         parts = PA.candidates(self.library, ents, brand)
         if not parts:
             self._say("No part in your library uses %s yet (Library > New part..., or Save "
-                      "to library as part)" % ", ".join(sorted({e.block for e in ents})))
+                      "to library as part)" % ", ".join(sorted({e.block_name for e in ents})))
             return 0
         got = self.ask_part(parts, brand)
         if got is None:
@@ -2013,9 +2091,11 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         try:
             for kind, name in (("symbol", part.symbol), ("footprint", part.footprint)):
                 if name and self.library.get(kind, name) is None:
-                    defn = d.project.blocks.get(name)
+                    # (by name and kind: a footprint kept as "name (footprint)" goes in under
+                    # its own name)
+                    defn = M.project_block(d.project, name, kind)
                     if defn is not None:
-                        self.library.save_block(defn)
+                        self.library.save_block(M.renamed_block(defn, name))
             same = [p for p in self.library.parts()
                     if (p.manufacturer.lower(), p.catalog.lower()) ==
                     (part.manufacturer.lower(), part.catalog.lower())]
@@ -3631,7 +3711,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         for s, e in cands:
             where = v.project.zone_text(s, e.pos[0], e.pos[1]) if v else ""
             desc = e.attrs.get("DESC", "")
-            rows.append("%s   %s   %s%s" % (e.attrs.get("TAG", "?"), where, e.block,
+            rows.append("%s   %s   %s%s" % (e.attrs.get("TAG", "?"), where, e.block_name,
                                             ("   " + desc) if desc else ""))
         i = self._pick_row("Contact belongs to", "Pick the coil or device this contact belongs "
                            "to:", rows)
@@ -4040,7 +4120,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         # button needs to be grayed out if the document is already saved". In a block's tab it
         # saves the block)
         in_tb = is_tb_doc(self.doc())
-        a["save"].setEnabled(bool(has and (in_block or p.is_modified())))
+        a["save"].setEnabled(bool(has and (in_block or p.is_modified() or is_read_only(p))))
+        a["reopen_edit"].setEnabled(bool(has and is_read_only(p) and not in_block and
+                                         not in_tb))
         for k in ("save_tb", "save_tb_as", "close_tb"):
             a[k].setEnabled(in_tb)
             a[k].setVisible(in_tb)
@@ -4108,8 +4190,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWind
         d = self.doc()
         title = app_title()
         if d is not None:
-            title = "%s%s - %s" % (d.name(), "*" if d.project.is_modified() else "",
-                                   app_title())
+            title = "%s - %s" % (d.title(), app_title())
         self.setWindowTitle(title)
 
     # ---- updates (shown and worded as KanzonasPDF's) ----------------------------------------

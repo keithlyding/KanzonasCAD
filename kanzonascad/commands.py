@@ -715,7 +715,7 @@ def _cut_under(ctx, ed, sheet, placed, skip=()):
     for e in placed:
         if isinstance(e, M.Insert) and e.defn is not None and e.defn.kind == "symbol" and \
                 break_under(ed, sheet, e, skip):
-            names.append(e.attrs.get("TAG") or e.block)
+            names.append(e.attrs.get("TAG") or e.block_name)
     if names:
         ctx.message("Wire cut to fit %s" % ", ".join(names))
 
@@ -1363,7 +1363,7 @@ def new_wire_layer(ctx, sheet, pts, warn=False, say=None):
                 layer, ins, pin = auto
                 ctx.message("On %s, from %s terminal %s (Project properties: A wire takes its "
                             "layer from the pin it starts on)"
-                            % (layer, ins.attrs.get("TAG") or ins.block, pin))
+                            % (layer, ins.attrs.get("TAG") or ins.block_name, pin))
             return auto[0]
     cur = wire_layer(ctx)
     if len(got) > 1 and warn:
@@ -1795,9 +1795,9 @@ def _through_message(hit, what="bus"):
     e, name = hit
     if what == "wire":
         return ("The wire would run through %s's pin %s (wired to it on the way): click on "
-                "the pin to end there, or elsewhere" % (e.attrs.get("TAG") or e.block, name))
+                "the pin to end there, or elsewhere" % (e.attrs.get("TAG") or e.block_name, name))
     return ("The bus would run through %s's pin %s (wired to it on the way): click elsewhere, "
-            "or U takes the last point back" % (e.attrs.get("TAG") or e.block, name))
+            "or U takes the last point back" % (e.attrs.get("TAG") or e.block_name, name))
 
 
 def _into_symbol(sheet, p, pin, way):
@@ -2408,7 +2408,7 @@ class BusCmd(Command):
                 "The bus can't go round %s from here with its %d wires %s apart (it would run "
                 "through it): click farther from it, or Esc and start again with fewer wires "
                 "(N) or closer ones (D)" % (
-                    e.attrs.get("TAG") or e.block, self.count, _fmt(self.spacing)))
+                    e.attrs.get("TAG") or e.block_name, self.count, _fmt(self.spacing)))
             return
         self.points += new
         self.base = self.last = self.points[-1]
@@ -2809,7 +2809,7 @@ class BusCmd(Command):
         hit = _through_pins(sheet, paths)
         if hit is not None:
             return "it would run through %s's pin %s on the way: click a point that goes " \
-                "round it first" % (hit[0].attrs.get("TAG") or hit[0].block, hit[1])
+                "round it first" % (hit[0].attrs.get("TAG") or hit[0].block_name, hit[1])
         return None
 
     def _why_not_landed(self, sheet, p):
@@ -3019,7 +3019,7 @@ class MakeBlockCmd(Command):
             for q in parts:
                 c = q.moved(-bx, -by)
                 c.id = None
-                c.layer, c.color = "0", None
+                c.layer = "0"           # (its own color kept: own_colors, 0.25)
                 ents.append(c)
         names = d.get("pin_names") or []
         pins = []
@@ -3033,6 +3033,7 @@ class MakeBlockCmd(Command):
                           family=d.get("family", ""), series=d.get("series", ""),
                           catalog=d.get("catalog", ""),
                           show_pins=bool(d.get("show_pins", False)),
+                          own_colors=any(c.color is not None for c in ents),
                           phases=d.get("phases", ""))
         if d["kind"] == "symbol":
             if tag_pt is not None:
@@ -3045,12 +3046,18 @@ class MakeBlockCmd(Command):
             return
         if d.get("replace", True):
             sheet = self.ctx.sheet()
+            project = self.ctx.project
             with self.ctx.edit("Make block") as ed:
-                ed.block(defn)
+                # (the project's block of that name and kind replaced: a symbol of the name a
+                # new footprint has stays a symbol, the footprint kept as "name (footprint)")
+                got = M.project_block(project, defn.name, defn.kind)
+                pname = got.name if got is not None else M.project_block_name(
+                    project, defn.name, defn.kind)
+                ed.block(M.renamed_block(defn, pname))
                 for e in self.ents:
                     ed.remove(sheet, e.id)
-                ins = ed.add(sheet, M.Insert(defn.name, self.base_pt,
-                                             defn=self.ctx.project.blocks[defn.name],
+                ins = ed.add(sheet, M.Insert(pname, self.base_pt,
+                                             defn=project.blocks[pname],
                                              layer=self.ents[0].layer if self.ents else "0"))
             self.ctx.set_selection({ins.id})
         self.ctx.message("Saved %s %s to your library" % (
@@ -3417,11 +3424,8 @@ class InsertCmd(Command):
         with self.ctx.edit("Insert %s" % self.defn.name) as ed:
             # the project keeps its own copy (a block already in it stays as it was), under
             # its name, or "name (footprint)" when a symbol already has that name (0.18)
-            pname = M.project_block_name(project, self.defn.name, self.defn.kind)
-            if pname not in project.blocks:
-                ed.block(M.renamed_block(self.defn, pname))
+            defn = M.ensure_block(ed, project, self.defn)
             from . import tags
-            defn = project.blocks[pname]
             ins = self._make(p, defn, self.placed_mirror).copy(attrs=attrs)
             ins = ins.copy(attrs=tags.new_attrs(project, sheet, defn, ins.attrs))
             if defn.kind == "footprint":
@@ -5181,8 +5185,8 @@ class SignalArrowsCmd(Command):
             self.ctx.message("That is the same wire: click the end of the wire it goes on to")
             return
         lib = getattr(self.ctx.window(), "library", None)
-        defs = [project.blocks.get(n) or (lib.get("symbol", n) if lib is not None else None)
-                for n in wirenums.ARROWS]
+        defs = [M.project_block(project, n, "symbol") or (
+            lib.get("symbol", n) if lib is not None else None) for n in wirenums.ARROWS]
         if None in defs:
             self.ctx.message("The Source arrow and Destination arrow symbols aren't in the "
                              "library")
@@ -5230,7 +5234,7 @@ class NumberSourceCmd(Command):
         with self.ctx.edit(self.title) as ed:
             ed.sheet_meta(self.ctx.sheet(), number_order="wires", number_from=e.id)
         self.ctx.message("Numbering on this sheet follows the wires from %s: Renumber sheet or "
-                         "Update numbers numbers it so" % (e.attrs.get("TAG") or e.block))
+                         "Update numbers numbers it so" % (e.attrs.get("TAG") or e.block_name))
         self.finish()
 
 

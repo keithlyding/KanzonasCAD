@@ -944,3 +944,33 @@ def missing_right(win, project):
         "%d orange marks on the sheet, %d devices without a footprint there" % (
             len(boxes), len(mine))
     CHECKED["devices without a footprint"] += 1
+
+
+TWIN = "Battery twin"           # (a symbol and a footprint of this one name: op_same_name)
+
+
+def twins_apart(project):
+    """(0.25) Every copy placed as the symbol or the footprint named TWIN (its TWIN attribute
+    says which, set where it was placed) still draws a block of that kind, the project's
+    block of its name that kind, shown by the name both share; and the project has one block
+    of each kind for it (never one in the other's place)."""
+    seen = set()
+    for s in project.sheets:
+        for e in s.inserts():
+            want = e.attrs.get("TWIN")
+            if not want:
+                continue
+            d = project.blocks.get(e.block)
+            assert d is not None and e.defn is not None, "a %s copy of %s without its block" % (
+                want, TWIN)
+            assert (d.kind, e.defn.kind) == (want, want), \
+                "a %s copy of %s draws the %s %s (block %r): one took the other's place" % (
+                    want, TWIN, d.kind, d.shown_name, e.block)
+            assert e.block_name == TWIN, "%s shown as %r" % (TWIN, e.block_name)
+            seen.add(want)
+    for kind in seen:
+        got = [n for n, b in project.blocks.items() if b.kind == kind and b.shown_name == TWIN]
+        assert len(got) == 1, "the project has %d %ss named %s: %r" % (len(got), kind, TWIN,
+                                                                       got)
+    if len(seen) == 2:
+        CHECKED["a symbol and a footprint of one name kept apart"] += 1

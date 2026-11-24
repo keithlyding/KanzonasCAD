@@ -281,7 +281,7 @@ def describe(e):
     text by what it says, anything else by its kind."""
     if isinstance(e, M.Insert):
         tag = (e.attrs.get("TAG") or "").strip()
-        return ("%s (%s)" % (tag, e.block)) if tag else e.block
+        return ("%s (%s)" % (tag, e.block_name)) if tag else e.block_name
     text = getattr(e, "text", None)
     if isinstance(text, str) and text.strip():
         line = text.strip().splitlines()[0]

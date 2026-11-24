@@ -216,7 +216,7 @@ def block_fields(win, project, sheet, ents):
     footprint)."""
     from . import missing_fp, tags
     fp = kind_of(ents[0]) == "footprint"
-    out = [Field("block", "Block", "info", lambda e: e.block)]
+    out = [Field("block", "Block", "info", lambda e: e.block_name)]
     names = {"TAG": "Tag", "DESC": "Description", "MFR": "Manufacturer",
              "CAT": "Catalog number"}
 
@@ -853,7 +853,7 @@ def header_for(ents):
     if len(ents) == 1:
         e = ents[0]
         name = kind_name(e)
-        return "%s (%s)" % (name, e.block) if isinstance(e, M.Insert) else name
+        return "%s (%s)" % (name, e.block_name) if isinstance(e, M.Insert) else name
     by = {}
     for e in ents:
         by[kind_name(e)] = by.get(kind_name(e), 0) + 1

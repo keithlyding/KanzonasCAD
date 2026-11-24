@@ -24,6 +24,9 @@ def main(argv=None):
         return run(args.selftest)
 
     from .main_window import MainWindow
+    from . import filelock
+    # (the lock notes of projects still open when it ends without closing them: taken away)
+    app.aboutToQuit.connect(filelock.release_all)
     win = MainWindow()
     # (the other copies running: an update closes them all; see instances.py)
     try:

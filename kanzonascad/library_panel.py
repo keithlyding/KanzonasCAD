@@ -775,7 +775,7 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
     sizes changed go to others too (the other footprints selected with it)."""
     from . import missing_fp, tags
     dlg = QDialog(parent)
-    dlg.setWindowTitle("%s: attributes" % ins.block)
+    dlg.setWindowTitle("%s: attributes" % ins.block_name)
     v = QVBoxLayout(dlg)
     form = QFormLayout()
     edits = {}
@@ -1028,13 +1028,13 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
     kind = ins.defn.kind if ins.defn is not None else "symbol"
     parts = []
     try:
-        parts = library.parts_using(kind, ins.block)
+        parts = library.parts_using(kind, ins.block_name)
     except (OSError, ValueError) as ex:
         v.addWidget(_hint("Couldn't read your library's parts: %s" % ex))
     part_id = [ins.attrs.get("PART", "")]
     if parts:
         v.addWidget(QLabel("Parts in your library for %s (double-click one to use it):"
-                           % ins.block))
+                           % ins.block_name))
         lst = QListWidget()
         for p in parts:
             it = QListWidgetItem(p.label())
@@ -1053,7 +1053,7 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         v.addWidget(lst)
     else:
         v.addWidget(_hint("No part in your library links to %s yet (Library panel, Parts, "
-                          "New part...)." % ins.block))
+                          "New part...)." % ins.block_name))
     v.addWidget(_buttons(dlg))
     if dlg.exec() != QDialog.Accepted:
         return None

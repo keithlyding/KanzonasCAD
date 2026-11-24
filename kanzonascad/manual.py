@@ -38,7 +38,8 @@ block...</b>, <b>Add pin</b>, <b>Pins...</b>, <b>Add attribute</b>, <b>Linear di
 <b>Aligned dimension</b> (Measure: to measure the block as you draw it; a dimension drawn in
 a block's tab isn't saved into the block, so its copies don't carry it; one the block already
 had stays), <b>Edit block...</b> and <b>Update blocks from library...</b>, and <b>Explode</b>
-(Modify: a block placed inside the block you are editing, taken apart there). It shows up and
+and <b>Color</b> (Modify: a block placed inside the block you are editing, taken apart there;
+one piece of the block given a color of its own). It shows up and
 opens by itself in a block's tab (Edit block..., on the Schematic tab's Symbols group and the
 Panel tab's Footprints group, opens one), and goes away when you leave it. <b>Block
 properties...</b> is also beside Edit block... on those two groups, for a block selected in the
@@ -392,11 +393,22 @@ own from its maker's drawing (Make block), or Edit block one of these and save i
 own name. A footprint of yours with the same name replaces a built-in one.</li>
 <li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
 footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
-<li><b>A symbol and a footprint with the same name</b> stay apart in a project: the one
-placed second is kept as "name (footprint)" or "name (symbol)" (its tab in the Library still
-shows its own name), so a footprint never takes a symbol's drawing, or the other way round.
-Edit block..., Update blocks from library... and saving a changed block find each by its own
-name and kind.</li>
+<li><b>A symbol and a footprint with the same name</b> (a starter's schematic symbol and its
+panel footprint, both "Starter") stay apart in a project: placed from the Library, made with
+Make block, brought in by Import I/O list or pasted, the one that comes second is kept as
+"name (footprint)" or "name (symbol)", so a footprint never takes a symbol's drawing, or the
+other way round. Everywhere you read it, it goes by its own name: the Properties panel, the
+bill of materials, Trace, Devices without a footprint, a footprint label showing its block's
+name, the Library. Edit block..., Block properties..., Update blocks from library..., Save to
+library as part and saving a changed block find each by its own name and kind. In a DXF
+export a block name stands for one block only (AutoCAD's names don't say what kind a block
+is), so there the second one keeps its "name (footprint)" (or "name (symbol)") block name;
+opened again in KanzonasCAD it is the same footprint. A project saved by an earlier version
+in which one had already taken the other's place (its symbol copies on schematic sheets
+drawing the footprint, or its footprint copies on panel sheets drawing the symbol) is mended
+when it opens: the lost one comes back from your library, its copies drawn with it again, and
+the command line says so (one step: Undo takes it back). When your library hasn't got it, its
+copies stay as they are and the command line says which.</li>
 </ul>
 <p>The <b>Library</b> opens as a popup window, as AutoCAD Electrical's icon menu does, so the
 drawing keeps the whole width: <b>Insert symbol...</b> (Schematic tab) opens it on its Symbols,
@@ -577,8 +589,15 @@ their stack, so it closes up with them when one above it is empty (a rating's te
 straight down under the stack joins it too); it goes on with the next name until Enter or Esc.
 Each copy of the block then has a box for it in <b>Properties...</b>: an empty one shows
 nothing. HP, VOLTS, AMPS, FLA, VA, PRI and SEC typed as a plain number show their unit (5 shows
-5HP); any other attribute shows as typed. Leaving the block's tab, the ribbon goes
-back to the tab it was on. A footprint has a pink
+5HP); any other attribute shows as typed. <b>Color one piece</b>: select a piece in the
+block's tab (a small rectangle, say) and give it a color with <b>Color</b> (the Block tab's
+Modify group, or the Home tab) or the Properties panel's Color; it stays on its layer. Save
+block keeps it: every copy draws that piece in its color and the rest of the block in the
+copy's own color (its layer's, or one given to the copy), in print, PDF and DXF export too (the
+piece's own color there; the rest by block). ByLayer gives the piece back the copy's color. A
+block whose pieces have no color of their own draws all in the copy's color, as before. Make
+block keeps a color given to a piece before it was made a block in the same way. Leaving the
+block's tab, the ribbon goes back to the tab it was on. A footprint has a pink
 <b>DIN RAIL</b> text on layer BLOCK DIN RAIL: its insertion point (a ring, with a dashed line
 across the part where the rail's centerline runs) is the middle of the part's rail clip. Move
 it to where the rail's center crosses the part (its height on the part is what counts on a
@@ -1209,7 +1228,9 @@ name; each goes on a sheet of its own ("Slot 2 - 1734-IB8") after the sheet show
 shown, its tag of that page, and each point's address, tag and description written beside its
 terminal, where the field wire comes in (layer PLC I/O): an input module a third of the way
 across with the texts to its left, an output module at the left of the sheet with the texts to
-its right. Each point's address is also kept on the module (attributes ADDR0, ADDR1..., not
+its right. When your title block leaves no room there, the module and its texts are moved
+clear of it, or, when they fit nowhere at the sheet's scale, the sheet gets the biggest scale
+they fit at (as Fit does). Each point's address is also kept on the module (attributes ADDR0, ADDR1..., not
 shown), for <b>Number wires on PLC I/O points by their address</b>. A module the library
 hasn't got, or a point a module hasn't got, is left out and named on the command line. One
 Undo takes it all back.</li>
@@ -1971,7 +1992,9 @@ color); a layer it already has keeps its own.</li>
 <h2>Files</h2>
 <ul>
 <li><b>New project</b> (Ctrl+N), <b>Open...</b> (Ctrl+O, a project, or a DXF or DWG drawing),
-<b>Open recent</b>, <b>Save</b> (Ctrl+S), <b>Save as...</b> (Ctrl+Shift+S),
+<b>Open recent</b>, <b>Reopen for editing</b> (see Opening a project someone else has open,
+below), <b>Save</b> (Ctrl+S),
+<b>Save as...</b> (Ctrl+Shift+S),
 <b>Close project</b> (Ctrl+W), <b>Exit</b> (Ctrl+Q). Save is grayed out while the project has
 no unsaved changes (the tab's name shows a * when it has some); Save as... always works. In a
 block's tab, Save saves the block.</li>
@@ -2105,7 +2128,8 @@ General.</li>
 Edit &gt; Options..., Files, says; none turns backups off). <b>Open backups
 folder</b> opens it; to go back to one, open it like any project and Save as.</li>
 <li><b>Autosave</b>: every 5 minutes (Options, Files, changes it or turns it off), projects with unsaved changes are copied to a recovery
-folder (never over your own file; in the portable version, <code>data\\recovery</code> beside
+folder (never over your own file, nor over a read-only project's; in the portable version,
+<code>data\\recovery</code> beside
 the program). If KanzonasCAD doesn't close normally (a crash, a power
 cut), it offers to recover them the next time it starts.</li>
 <li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
@@ -2120,6 +2144,42 @@ that isn't in the PDF has no link. (The links need the pypdf library, part of th
 and portable programs; run from source without it, the PDF is written without links and the
 command line says so.)</li>
 </ul>
+
+<h3>Opening a project someone else has open</h3>
+<p>While a project is open for editing,
+KanzonasCAD keeps a small lock note beside it: a hidden file named <code>.~lock.</code><i>file
+name</i><code>#</code> (for Plant.kzcad, <code>.~lock.Plant.kzcad#</code>; the same name on
+Windows, where it has the hidden attribute, and on Linux, where the dot hides it). It says who
+has it open (user name, computer, the program's process and version, and since when), and goes
+when the project closes: its tab or window closed, Exit, or Update now closing KanzonasCAD.
+Save as... moves it to the new file. Opening a project that someone else has open (on another
+computer, or another KanzonasCAD window on this one) asks first: "<i>Plant.kzcad</i> is open
+on <i>computer</i> by <i>user</i> since <i>time</i>.", with three buttons:</p>
+<ul>
+<li><b>Open read-only</b> (the default): the project opens with "(read-only)" in its tab and
+the window's title. Everything works: looking, printing, exporting, copying out of it, and
+even changing it to try something out, as AutoCAD does with a read-only drawing. Only saving
+over the file is refused: Save and Ctrl+S say "read-only: use Save As..." on the command line.
+<b>Save as...</b> makes a copy of your own (it suggests "<i>name</i> (copy)"), which you can
+then edit and save, and which is locked for you. Closing a read-only project with changes
+offers Save as... for them. Its autosave copy goes to the recovery folder under a name of its
+own, never over the file or the other person's autosave copy; recovered after a crash, it comes
+back as an unsaved project.</li>
+<li><b>Open anyway</b>: after a warning that both copies could save over each other's changes,
+it opens for editing and the lock note becomes yours. If the other copy then saves, it is
+warned that someone opened the file anyway, and can choose not to.</li>
+<li><b>Cancel</b>: it doesn't open.</li>
+</ul>
+<p><b>Reopen for editing</b> (File menu) opens a read-only project again for editing once the
+other copy has closed it: the file as it is saved now (changes you made read-only are lost, and
+it asks first). While the other copy still has it, it says so on the command line.</p>
+<p>A lock note left by a KanzonasCAD on this computer that is no longer running (a crash, a power
+cut) is taken over without asking; one from another computer can't be checked from here, so
+it asks, and Open anyway takes it. Two people opening the same project on a network share at
+the same moment can't both get it: the note is made in one step that fails when one is
+already there. A project in a folder where the note can't be written (a read-only share, no
+permission), or whose file is read-only, opens read-only and the command line says why.
+Opening a project already open in this KanzonasCAD window goes to its tab, as before.</p>
 
 <h2>Printing</h2>
 <p><b>Print...</b> (File menu, Ctrl+P, the Output tab, or right-click in the Sheets panel)

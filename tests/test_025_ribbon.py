@@ -71,7 +71,7 @@ class RibbonButtonsTest(unittest.TestCase):
         self.assertIn(a["block_props"], fp)
         self.assertEqual(fp.index(a["block_props"]), fp.index(a["edit_block"]) + 1)
         i = group_named(w, "Block", "Modify")
-        self.assertEqual(group_actions(w, "Block", i), [a["explode"]])
+        self.assertEqual(group_actions(w, "Block", i), [a["explode"], a["object_color"]])
 
     def test_explode_from_home_with_a_block_selected(self):
         e = self.place("symbol", "Relay coil")
