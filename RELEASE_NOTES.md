@@ -6,6 +6,20 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.23.2
+
+**Changed**
+- The Trace button (Schematic tab, View tab, and Trace panel in the View menu) now shows and
+  hides the Trace panel, and shows checked while the panel is open. If the panel is open but
+  behind another panel's tab, the button brings it to the front instead.
+- Ctrl+E always opens the Trace panel, or brings it to the front; it never closes it.
+
+**New**
+- With several things selected, Trace lists the one you picked last. After a window or a
+  lasso, it lists the device (or else the wire) nearest the top left of what you caught. The
+  line at the top says how many others are selected: "CR101 — 5 places (and 4 others
+  selected)".
+
 ## 0.23.1
 
 **New**
