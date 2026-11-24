@@ -28,6 +28,19 @@ def page_xy(sheet, x, y):
     return x * sheet.scale * 72.0, y * sheet.scale * 72.0
 
 
+
+def draws_text():
+    """Whether this Qt draws text at all (Windows' offscreen platform draws none)."""
+    from PySide6.QtGui import QColor, QImage, QPainter
+    img = QImage(40, 40, QImage.Format_RGB32)
+    img.fill(0)
+    pt = QPainter(img)
+    pt.setPen(QColor("#ffffff"))
+    pt.drawText(5, 30, "X")
+    pt.end()
+    return any(QColor(img.pixel(x, y)).red() for x in range(40) for y in range(40))
+
+
 class PdfLinksTest(unittest.TestCase):
     def setUp(self):
         self.win, self.v = window()
@@ -138,7 +151,9 @@ class PdfLinksTest(unittest.TestCase):
         self.assertAlmostEqual((box[1] + box[3]) / 2.0, ty, delta=0.5)
         self.assertTrue(0.15 * pw < box[2] - box[0] < 0.5 * pw, box)
         self.assertTrue(0.15 * ph < box[3] - box[1] < 0.5 * ph, box)
-        if path is not None:
+        # (ink under the link where this Qt draws text: Windows' offscreen Qt lists fonts but
+        # draws none, so there the link's box, page and destination above are what is checked)
+        if path is not None and draws_text():
             self.assertGreater(self.inked(path, page_i, r), 5, (item, r))
         return r
 
