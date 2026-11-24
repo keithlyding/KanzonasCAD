@@ -302,7 +302,8 @@ on title block changes like on any other.</p>
 drawing from another program (open or import its DXF or DWG), select it on the sheet (the
 block, or its lines and texts) and click Use as title block. It becomes the project's title
 block, shown on every sheet in the same place, and leaves the sheet; the old title block goes
-(Undo brings it back). A block's attributes become fields: AutoCAD Electrical's (through its
+(Undo brings it back). It must be on the sheet's paper: objects reaching past its edge are
+refused (move the title block onto the sheet, where it goes, first). A block's attributes become fields: AutoCAD Electrical's (through its
 WD_TB attribute, or by name: DWGNO and DWGNAM the drawing number, SHEET and SHEETMAX the sheet
 and how many, DWGDESC and TITLE the sheet title, DATE, REV, SCALE, DRAWN, CHECKED, CUSTOMER,
 PROJECT), revision rows (REV1, REV1DET, BY1, RD1: <code>{{Rev 1}}</code>, its description, by and

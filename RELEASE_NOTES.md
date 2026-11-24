@@ -20,6 +20,19 @@ build fails without them.
 - Trace never holds up the drawing: it fills in while you keep panning, zooming, selecting
   and drawing.
 
+**Fixed**
+- Use as title block on objects off the sheet's paper made a title block drawn off every
+  sheet, and report sheets and imported I/O lists then came out with empty cells or past
+  their frame. It now says to move the title block onto the sheet first.
+- Dragging a run of wire by its middle grip onto the far end of a short wire ending on it left
+  that wire as a single point; it is now taken away, as Clean up wires does.
+- A symbol turned upside down (180 degrees) and placed by one of its pins could put that pin a
+  hair (0.0000000000000002") off the point you picked. Quarter turns are now exact, so the pin
+  lands exactly on it.
+- Terminal count could list a tap that touches two wires in the other wire's row, not the row of
+  the number it carries (1047a4's row listing 1030b and its taps). Each tap is now in the row of
+  the wire its number comes from.
+
 ## 0.22.4
 
 **New**

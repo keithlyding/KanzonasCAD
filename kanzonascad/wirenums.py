@@ -713,21 +713,7 @@ def sync(ed, project, renumber=None):
             got = split(locked)
             if got:
                 taken.setdefault(got[0], set()).add(got[1])
-    outputs = {}
-    for src, outs in dist:
-        for i, o in enumerate(outs):
-            if o is not None and o != src:
-                outputs.setdefault(o, (src, letters(i)))
-    # taps (tap_numbers "suffix"): the tapped wire's number with -1, -2... in the numbering
-    # order of where they tap; a tap off a tap, a, b...
-    by_src = {}
-    for src, o, k in sorted(tapped, key=lambda t: t[2]):
-        if o != src and o not in outputs and o not in by_src.get(src, ()):
-            by_src.setdefault(src, []).append(o)
-    for src, outs in by_src.items():
-        for i, o in enumerate(outs):
-            outputs.setdefault(o, (src, i, "tap"))
-    _break_loops(outputs, info)
+    outputs = tap_outputs(dist, tapped, info)
     want = dict(fixed)
     if by_io_address(project):
         # (a group on a PLC point: its address, as a number typed would be; on two points,
@@ -839,6 +825,29 @@ def _follow_numbers(ed, conns, want):
             ins = s.entities.get(iid)
             if ins is not None:
                 ed.change(s, ins.copy(attrs=dict(ins.attrs, TAG=num)))
+
+
+def tap_outputs(dist, tapped, info):
+    """{group: (the group it is numbered from, letter)} for distribution outlets and
+    {group: (that group, index, "tap")} for taps (tap_numbers "suffix": the tapped wire's
+    number with -1, -2... in the numbering order of where they tap; a tap off a tap, a, b...),
+    loops broken: what numbering gives each its number from, and Terminal count its family
+    from (it worked that out its own way, and put a tap with two wires to choose from in the
+    other's row; the long battery, seed 4773)."""
+    outputs = {}
+    for src, outs in dist:
+        for i, o in enumerate(outs):
+            if o is not None and o != src:
+                outputs.setdefault(o, (src, letters(i)))
+    by_src = {}
+    for src, o, _k in sorted(tapped, key=lambda t: t[2]):
+        if o != src and o not in outputs and o not in by_src.get(src, ()):
+            by_src.setdefault(src, []).append(o)
+    for src, outs in by_src.items():
+        for i, o in enumerate(outs):
+            outputs.setdefault(o, (src, i, "tap"))
+    _break_loops(outputs, info)
+    return outputs
 
 
 def _break_loops(outputs, info):

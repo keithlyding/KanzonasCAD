@@ -33,10 +33,11 @@ class BusLandsExactlyTest(unittest.TestCase):
 
     def test_each_wire_ends_exactly_on_its_pin(self):
         self.insert((2.0, 8.0))
-        turned = self.insert((6.0, 0.5), ["R"])
+        # (a pin a hair off where the spacing puts it: once from a quarter turn's rounding,
+        # which is exact since 0.23, so placed a hair off here)
+        turned = self.insert((6.0, 0.5000000000000002), ["R"])
         line = dict(turned.pin_points())
-        # (turned a quarter round, a pin a hair off where the spacing puts it)
-        self.assertNotEqual(line["L3"][1], 0.5)
+        self.assertNotEqual(line["L1"][1], 0.5)
         self.v.run(C.BusCmd)
         type_in(self.v, "2.5,8.0", "6.0,-1.0")
         self.assertIsNotNone(self.v.cmd._landing(self.v.sheet(), (6.0, 0.5)))
