@@ -1970,7 +1970,10 @@ class Ladder(Composite):
         a, b = fn(self.a), fn(self.b)
         w = self.width()
         f = G.dist(a, b) / w if w > 1e-12 else 1.0
-        c = self.copy(a=list(a), b=list(b), spacing=self.spacing * f)
+        # (moved or turned, the width the same but floating point making it 0.9999999999999999
+        # of it: the spacing kept exactly; the long battery, seed 4782)
+        c = self.copy(a=list(a), b=list(b),
+                      spacing=self.spacing if abs(f - 1.0) < 1e-9 else self.spacing * f)
         # (mirrored, the rails ran up: the ladder still runs down from a to b's right)
         if c.rung_point(1)[1] > c.a[1] + 1e-9 and abs(a[1] - b[1]) < 1e-9:
             c = c.copy(a=list(b), b=list(a))

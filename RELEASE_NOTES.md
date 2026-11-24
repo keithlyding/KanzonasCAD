@@ -32,6 +32,8 @@ build fails without them.
 - Terminal count could list a tap that touches two wires in the other wire's row, not the row of
   the number it carries (1047a4's row listing 1030b and its taps). Each tap is now in the row of
   the wire its number comes from.
+- Moving a ladder could change its rung spacing by a hair (0.49999999999999994" for 0.5"); it
+  now stays exactly as it was.
 
 ## 0.22.4
 
