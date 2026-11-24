@@ -23,9 +23,10 @@ from . import theme
 from .block_window import BlockEditing, is_block_doc
 from .tb_window import TitleBlockEditing, is_tb_doc
 from .trace_panel import Tracing
+from .props_panel import Properties
 from . import where_used
 from .commandline import CommandLine
-from .render import install_text_measure
+from .render import MISSING_COLOR, install_text_measure
 from .view import CadView
 
 APP = "KanzonasCAD"
@@ -193,7 +194,7 @@ def copy_title(title, taken):
     return "%s%s%d" % (base, dash, n)
 
 
-class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
+class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, QMainWindow):
     def __init__(self, family=None):
         """family: the windows this one opens projects and sheets with (a window from Open
         this sheet in a new window joins its opener's); the first is the main one, which
@@ -244,6 +245,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, sd)
         self.resizeDocks([sd], [200], Qt.Horizontal)
         self._build_trace()             # (Trace, Ctrl+E: docked, hidden to start)
+        self._build_props()             # (Properties, Ctrl+1: docked at the right, hidden)
 
         from .library import Library
         from .library_panel import LibraryPanel
@@ -420,6 +422,16 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
           tip="Show or hide the %s panel: every place the selected device, wire or PLC point "
               "is in the project (Ctrl+E always opens it)" % where_used.NAME)
         self.acts["trace_panel"].triggered.connect(self.toggle_trace)
+        # (Properties as Trace: Ctrl+1 only opens or raises it, the button toggles it)
+        A("properties", "&Properties", self.properties, "Ctrl+1", icon="properties",
+          label="Properties",
+          tip="Everything about what is selected, in a panel that stays open and follows the "
+              "selection: change a field there and it applies at once (Ctrl+1)")
+        A("props_panel", "P&roperties panel", None, checkable=True, icon="properties",
+          label="Properties",
+          tip="Show or hide the Properties panel: what is selected, its layer, color, tag, "
+              "attributes, text lines... changed right there (Ctrl+1 always opens it)")
+        self.acts["props_panel"].triggered.connect(self.toggle_props)
         A("collapse", "Co&llapse ribbon", self._toggle_collapse, "Ctrl+F1", checkable=True,
           label="Collapse")
         A("group_names", "Ribbon &group names", self._toggle_group_names, checkable=True,
@@ -521,6 +533,11 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
           tip="An I/O list (CSV or Excel: Slot, Catalog, Point, Address, Tag, Description) "
               "brought in as its PLC modules, each on a sheet, every point's tag and "
               "description beside its terminal")
+        A("missing_fp", "Devices &without a footprint...", lambda: self.show_missing_footprints(),
+          icon="missing_fp", label="No footprint",
+          tip="The schematic devices no panel footprint stands for yet (contacts, drawing aids, "
+              "devices in the field and those ticked No footprint needed left out): "
+              "double-click one to go to it; save as CSV or Excel")
         A("materials", "Panel &materials...", self.show_materials, icon="materials",
           label="Materials",
           tip="The DIN rail and wire duct this project takes: lengths, stock pieces and cuts "
@@ -738,7 +755,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
                   "osnap", "polar", "drafting", None, "black", "command_line", "sheets",
-                  "trace_panel", "collapse", "group_names", "block_tab"):
+                  "trace_panel", "props_panel", "collapse", "group_names", "block_tab"):
             m.addSeparator() if k is None else m.addAction(a[k])
         tm = m.addMenu("&Theme")
         for mode in ("light", "dark", "system"):
@@ -757,8 +774,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             else:
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
-        for k in ("move", "copy", "rotate", "scale", "mirror", "stretch", "array", "array_edit",
-                  "offset", "erase", "trim", "number", None,
+        for k in ("properties", None, "move", "copy", "rotate", "scale", "mirror", "stretch",
+                  "array", "array_edit", "offset", "erase", "trim", "number", None,
                   "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "dim_units", "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
@@ -774,7 +791,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
                   "trace", "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_count", "materials",
-                  "report_sheet", "report_update", "io_list", None,
+                  "missing_fp", "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb",
                   "save_tb", "save_tb_as", "close_tb", "title_blocks", "use_tb",
@@ -838,7 +855,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                                a["arc"], a["text"], a["mtext"], a["hatch"], a["number"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
                                  a["stretch"], a["array"], a["array_edit"], a["offset"],
-                                 a["erase"], a["trim"]]),
+                                 a["erase"], a["trim"], a["explode"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
             # (the owner, 0.17.4: "I also need the measuring tool repeated in home and
             # schematic tabs")
@@ -863,8 +880,11 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             # properties should generally only be visible when editing/creating a block":
             # Edit block here, the rest on the Block tab; a tab too wide for the window
             # shows its groups' buttons small, from the right: Ribbon.fit)
+            # (Block properties beside Edit block again: the owner, 0.25, reversing 0.18's
+            # decision; a crowded tab shrinks its groups from the right, Ribbon.fit)
             ("Symbols", "small", [a["insert_symbol"], a["make_block"], a["edit_block"],
-                                  a["explode"], a["attr_vis"], a["del_comp"], a["new_part"]]),
+                                  a["block_props"], a["explode"], a["attr_vis"], a["del_comp"],
+                                  a["new_part"]]),
             # (the owner: "Copy is not included in schematic and needs to be")
             # (Align objects and Distribute objects too: the owner, 0.21.2, "I need alignment
             # and distribution on the schematic sheet too"; wires on a moved symbol's pins
@@ -888,7 +908,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         r.add_tab("Panel", [
             ("Rail and duct", "large", [a["rail"], a["duct"]]),
             ("Footprints", "small", [a["insert_footprint"], a["make_block"], a["edit_block"],
-                                     a["explode"], a["attr_vis"],
+                                     a["block_props"], a["explode"], a["attr_vis"],
                                      split_button([a[k] for k in self.LABEL_KEYS])]),
             # (Align objects and Distribute objects too: the owner, 0.21.2, "I need alignment
             # and distribution on the schematic sheet too"; wires on a moved symbol's pins
@@ -899,7 +919,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                                       a["dim_units"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Arrange", "large", [a["align_obj"], a["distribute"]]),
-            ("Reports", "large", [a["materials"]]),
+            ("Reports", "large", [a["materials"], a["missing_fp"]]),
             ("Parts", "small", [a["new_part"], a["assign_part"], a["save_as_part"]]),
             ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
@@ -921,14 +941,15 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             # (Terminal count on the Terminals button's menu: the tab as wide as before)
             ("Reports", "large", [a["bom"], a["cables"], a["wire_list"],
                                   split_button([a["terminal_list"], a["terminal_count"]]),
-                                  a["materials"]]),
+                                  a["materials"], a["missing_fp"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
         ])
         r.add_tab("View", [
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
             ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["polar"],
                                         a["osnap"], a["drafting"]]),
-            ("Panels", "small", [a["command_line"], a["sheets"], a["trace_panel"], a["black"]]),
+            ("Panels", "small", [a["command_line"], a["sheets"], a["trace_panel"],
+                                 a["props_panel"], a["black"]]),
             ("Windows", "large", [a["new_window"], a["move_window"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
             ("Ribbon", "small", [a["collapse"], a["group_names"], a["block_tab"]]),
@@ -951,6 +972,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             # (measuring the block as it is drawn: not saved into it, block_editor.to_block)
             ("Measure", "large", [a["dim_linear"], a["dim_aligned"]]),
             ("Library", "large", [a["edit_block"], a["update_blocks"], a["import_blocks"]]),
+            # (a block placed in the block being edited, exploded there: 0.25)
+            ("Modify", "small", [a["explode"]]),
         ])
         tb = self.ribbon_bar = QToolBar("Ribbon")
         tb.setObjectName("ribbon")
@@ -1010,6 +1033,16 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         self.xref_warning.clicked.connect(self.update_xrefs)
         self.xref_warning.hide()
         sb.addPermanentWidget(self.xref_warning)
+        # how many devices have no footprint yet (missing_fp.py): click for the list
+        self.missing_fp_button = QToolButton()
+        self.missing_fp_button.setObjectName("missing_fp_count")
+        self.missing_fp_button.setAutoRaise(True)
+        self.missing_fp_button.setStyleSheet("color: %s; font-weight: bold;" % MISSING_COLOR)
+        self.missing_fp_button.setToolTip("Schematic devices no panel footprint stands for yet "
+                                          "(marked orange on the drawing): click for the list")
+        self.missing_fp_button.clicked.connect(lambda: self.show_missing_footprints())
+        self.missing_fp_button.hide()
+        sb.addPermanentWidget(self.missing_fp_button)
 
     # ============================================================================================
     # documents
@@ -1036,6 +1069,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         v.selectionChanged.connect(self._label_checks)
         v.selectionChanged.connect(self._fill_layers)
         v.selectionChanged.connect(self._trace_follow)     # (Trace, while it is open)
+        v.selectionChanged.connect(self._props_follow)     # (Properties, while it is open)
         from . import sheet_cycle
         sheet_cycle.shown(v)
         v.sheetChanged.connect(lambda v=v: sheet_cycle.shown(v))
@@ -1188,7 +1222,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             self._fill_layers()
             self._update_ui()
             self._say_duplicates(d)
+            self._show_missing_fp()
         self._trace_changed(d.project)
+        self._props_changed(d.project)
 
     def _say_duplicates(self, d):
         """A duplicate tag or wire number that wasn't there before the change: said on the
@@ -1223,6 +1259,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         self._fill_layers()
         self._update_ui()
         self._trace_follow()
+        self._props_follow()
+        self._show_missing_fp()
         if v is not None:
             v.setFocus()
 
@@ -3287,6 +3325,60 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                               "taps a terminal, bridged by one jumper fewer. Multi-level "
                               "terminals, or two wires on a side, need fewer.")
 
+    def _show_missing_fp(self):
+        """The status bar's count of devices without a footprint (missing_fp.py: worked out
+        once per change of the project), and the list made again if it is open."""
+        from . import missing_fp
+        d = self.doc()
+        b = self.missing_fp_button
+        if d is None or getattr(d, "block_session", None) is not None or is_tb_doc(d):
+            b.hide()
+            return
+        n = len(missing_fp.find(d.project))
+        b.setText(missing_fp.describe(n))
+        b.setVisible(n > 0)
+        dlg = getattr(self, "missing_fp_dialog", None)
+        if dlg is not None and dlg.isVisible() and dlg.project is d.project:
+            dlg.fill()
+
+    def show_missing_footprints(self):
+        """Devices without a footprint... (the status bar's count, Sheets > Devices without a
+        footprint...): the list, double-click (or Enter on) a row to go to the device; Save as
+        CSV or Excel. Returns the window."""
+        v = self.view()
+        if v is None:
+            return None
+        dlg = getattr(self, "missing_fp_dialog", None)
+        if dlg is None:
+            dlg = self.missing_fp_dialog = dialogs.MissingFootprintsDialog(self)
+            dlg.goRequested.connect(self.go_to_device)
+        dlg.project = v.project
+        dlg.folder = self._last_dir()
+        dlg.fill()
+        dlg.show()
+        dlg.raise_()
+        return dlg
+
+    def go_to_device(self, sheet_id, eid):
+        """A device in the open project shown: its sheet, it selected and centered (as
+        Trace's rows). Returns whether it is there."""
+        v = self.view()
+        s = v.project.sheet_by_id(sheet_id) if v is not None else None
+        e = s.entities.get(eid) if s is not None else None
+        if e is None:
+            self._say("That device isn't there any more")
+            return False
+        if v.cmd is not None:
+            v.cancel()
+        if s.id != v.sheet_id:
+            self._leave_title_block(v)
+            v.show_sheet(s.id)
+        v.set_selection({e.id})
+        from .trace_panel import LEAST
+        k = s.k()
+        v.zoom_to(e.bbox(), (LEAST[0] * k, LEAST[1] * k))
+        return True
+
     def show_materials(self):
         v = self.view()
         if v is None:
@@ -3324,21 +3416,33 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             if ins.id in v.selection() and ins.defn is not None and \
             ins.defn.kind == "footprint" else []
         attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet(), shown, others)
+        if attrs is None:
+            return
+        changes = self.attribute_changes(v.project, v.sheet(), ins, attrs, shown, others)
+        if changes:
+            with v.project.edit("Attributes") as ed:
+                for sh, e in changes:
+                    ed.change(sh, e)
+
+    def attribute_changes(self, project, sheet, ins, attrs, shown, others=()):
+        """[(sheet, changed copy)]: what a placed block's attributes window answers change
+        (attrs, its new attributes; shown, what attributes_dialog puts in it: hidden, angles,
+        a footprint's label, label sizes, line angles, Keep readable, its device's ratings),
+        nothing when nothing changes. The Properties panel's edits go through it too, so the
+        two always change the same things the same way."""
+        from . import tags
         hidden = shown.get("hidden", ins.hidden)
-        if attrs is not None and ins.defn is not None and ins.defn.kind == "footprint" and \
+        if ins.defn is not None and ins.defn.kind == "footprint" and \
                 attrs.get("TAG", "") != ins.attrs.get("TAG", ""):
             # a footprint's tag typed: the device with that tag is the one it is now (none
             # has it: linked to none), so its tag isn't put back by the old link
-            from . import tags
-            got = tags.find_tag(v.project, attrs.get("TAG", ""))
+            got = tags.find_tag(project, attrs.get("TAG", ""))
             attrs = tags.link_footprint(attrs, got[1], ins.defn) if got is not None else \
                 {k: x for k, x in attrs.items() if k != "PARENT"}
-        if attrs is None:
-            return
         new = ins.copy(attrs=attrs, hidden=sorted(hidden))
         if "label" in shown:
             new = new.copy(label=shown["label"], tag_h=ins.tag_h or float(
-                v.project.settings.get("fp_label_height", 0.08)) * v.sheet().k())
+                project.settings.get("fp_label_height", 0.08)) * sheet.k())
         for n, ang in shown.get("angles", {}).items():
             new = new.with_attr_angle(n, ang)
         for n, ang in shown.get("label_angles", {}).items():
@@ -3352,9 +3456,10 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                 more = M.label_sizes_to(others, ins.label_sizes, new.label_sizes)
         # a linked footprint's ratings are its device's: typed here, they go there too (the
         # owner, 0.18.1: asked, edit from either); the device then gives them back to it
-        from . import tags
-        got = tags.parent_of(v.project, ins) if "device" in shown else None
-        dev_new = None
+        got = tags.parent_of(project, ins) if "device" in shown else None
+        out = []
+        if new.to_dict() != ins.to_dict():
+            out.append((sheet, new))
         if got is not None:
             dattrs = dict(got[1].attrs)
             for k, val in shown["device"].items():
@@ -3363,15 +3468,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                 else:
                     dattrs.pop(k, None)
             if dattrs != got[1].attrs:
-                dev_new = got[1].copy(attrs=dattrs)
-        if new.to_dict() != ins.to_dict() or dev_new is not None or more:
-            with v.project.edit("Attributes") as ed:
-                if new.to_dict() != ins.to_dict():
-                    ed.change(v.sheet(), new)
-                if dev_new is not None:
-                    ed.change(got[0], dev_new)
-                for c in more:
-                    ed.change(v.sheet(), c)
+                out.append((got[0], got[1].copy(attrs=dattrs)))
+        out += [(sheet, c) for c in more]
+        return out
 
     # ---- cross-references -----------------------------------------------------------------
     def update_xrefs(self):
@@ -3670,16 +3769,26 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         own = "own" if own is True else "" if own is False else (own or "")
         lock = got[2] if len(got) > 2 else (cur.num_lock if num == (cur.num or "") else
                                             bool(num))
+        self.apply_wire_number(v, cur, num, lock, own, was, style, on_pin)
+
+    def apply_wire_number(self, v, cur, num, lock, own="", was="", style=None, on_pin=False):
+        """A wire's number as the Wire number window answers it (num, locked or not; own:
+        "own", "same" or "" for how it numbers as a tap, was: as it did; style: its tap
+        suffix's), one step; a number another wire has asks whether it is a cross-reference.
+        The Properties panel's Wire number goes through it too. Returns whether it changed."""
+        from . import wirenums
+        if style is None:
+            style = cur.tap_style
         same = num == (cur.num or "") and lock == cur.num_lock and \
             (cur.num_lock or not num or own != was)
         if same and own == was and style == cur.tap_style:
-            return
+            return False
         go_same = False
         if num and num != (cur.num or ""):
             go = self._cross_reference(v, cur, num, lock)
             go_same = go == "lock"
             if not go:
-                return
+                return False
             if go == "lock" and not lock:
                 # (two wires with one number: only a locked one stays, numbering gives an
                 # unlocked one a free number again; the battery, 0.17.5, seed 77)
@@ -3708,6 +3817,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                 kept = list(v.project.settings.get("same_numbers") or [])
                 if num not in kept:
                     ed.project_settings({"same_numbers": kept + [num]})
+        return True
 
     def _cross_reference(self, v, cur, num, lock):
         """A number typed that another wire already has: asked whether this is a cross-
@@ -3916,7 +4026,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",
-                  "rail", "duct", "materials", "bom", "cables", "wire_list", "terminal_list", "terminal_count", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "rail", "duct", "materials", "missing_fp", "bom", "cables", "wire_list", "terminal_list", "terminal_count", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
@@ -3992,6 +4102,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
         a["sheets"].setChecked(not self.sheet_dock.isHidden())
         a["sheets"].blockSignals(False)
         self._trace_checked()
+        self._props_checked()
         for k in ("make_block", "explode", "wire", "bus"):
             a[k].setEnabled(has)
         d = self.doc()

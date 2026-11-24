@@ -58,6 +58,14 @@ BUDGET = {
                                 # never runs in it, only starts a timer
     "trace_step": 0.03,         # one turn of Trace's work on the event loop, at the most
     "trace_list": 0.5,          # a pick fully listed (typical)
+    # (0.25: the Properties panel, Ctrl+1) on a sheet of 20,000 objects (lines, texts,
+    # symbols, wires), the panel open:
+    "props_click": 0.005,       # a click (selection change): the panel only starts a timer
+    "props_fill": 0.2,          # the panel filled with one object (typical)
+    "props_all": 2.0,           # ...with all 20,000 selected (Select all)
+    "props_repaint": 0.01,      # a repaint with it open: no slower than closed, give or take
+    # (0.25: Devices without a footprint) 50 sheets, 2,000 devices, 1,000 footprints:
+    "missing_fp": 0.5,          # the check worked out after a change
     "pdf_links": 2.0,           # (0.23.1) the links of 2,000 cross-references added to the PDF
                                 # of 20 sheets (Export to PDF)
 }
@@ -988,6 +996,177 @@ def run(log_path):
                     first, click * 1000, tick * 1000, trace_panel.SLICE * 1000, move * 1000,
                     typical, max(whole)))
     log.check("speed budget (Trace)", trace)
+
+    def props():
+        # (0.25, the Properties panel; the owner's rule for Trace too: "make sure that the
+        # loading ... doesn't prevent any interaction with the sheet itself") a sheet of
+        # 20,000 objects, the panel open: a click only starts the panel's timer, the panel
+        # fills from the selection alone, and a repaint is no slower with it open
+        import random
+        from PySide6.QtCore import QPointF, QEvent, Qt
+        from PySide6.QtGui import QMouseEvent
+        w = state["win"]
+        coil = w.library.get("symbol", "Relay coil")
+        rnd = random.Random(25)
+        p = M.Project.new()
+        s = p.sheets[0]
+        p.blocks[coil.name] = coil
+        picks = []
+        for i in range(20000):
+            x, y = rnd.uniform(0.7, 16.3), rnd.uniform(0.7, 10.3)
+            k = i % 10
+            if k == 0:
+                e = M.Insert(coil.name, (x, y), defn=coil,
+                             attrs={"TAG": "CR%d" % (1000 + i), "DEV": "d%d" % i})
+            elif k == 1:
+                e = M.Wire([(x, y), (x + 0.3, y)], num="%d" % (1000 + i))
+            elif k == 2:
+                e = M.Text((x, y), "T%d" % i, 0.1)
+            else:
+                e = M.Line((x, y), (x + rnd.uniform(-0.2, 0.2), y + rnd.uniform(-0.2, 0.2)))
+            s._put(e)
+            if k < 3 and i % 50 < 3:
+                picks.append(e)
+        d = w.add_document(p)
+        v = d.view
+        app.processEvents()
+        clicks, fills, rep_closed, rep_open = [], [], [], []
+        real_fill = w.props_fill
+
+        def timed():
+            t0 = time.perf_counter()
+            real_fill()
+            fills.append(time.perf_counter() - t0)
+
+        def repaint(into):
+            v._picture = None           # (the drawing drawn again, not the last picture)
+            t0 = time.perf_counter()
+            v.repaint()
+            into.append(time.perf_counter() - t0)
+        w.props_fill = timed
+        try:
+            w.props_dock.hide()
+            app.processEvents()
+            for e in picks[:30]:
+                v.set_selection({e.id})
+                repaint(rep_closed)
+            w.properties()
+            app.processEvents()
+            fills.clear()
+            import gc
+            gc.collect()        # (the click timed, not a collection of the sheets made before)
+            for e in picks[:60]:
+                bb = e.bbox()
+                pos = v.to_screen(((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2))
+                pos = QPointF(pos)
+                t0 = time.perf_counter()
+                v.set_selection({e.id})
+                clicks.append(time.perf_counter() - t0)
+                assert w.props_busy(), "the panel filled inside the click"
+                while w.props_busy():
+                    app.sendEvent(v, QMouseEvent(QEvent.MouseMove, pos, v.mapToGlobal(pos),
+                                                 Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+                    app.processEvents()
+                assert w.props_panel.header.text().split(" ")[0] in ("Symbol", "Wire", "Text"), \
+                    w.props_panel.header.text()
+                if len(rep_open) < 30:
+                    repaint(rep_open)
+            n_fills = len(fills)
+            t0 = time.perf_counter()
+            v.select_all()
+            w.props_fill()
+            every = time.perf_counter() - t0
+            head = w.props_panel.header.text()
+            assert head.startswith("20000 selected"), head
+        finally:
+            w.props_fill = real_fill
+            w.props_dock.hide()
+            p.saved_at = len(p.undo_stack)
+            w.close_tab(w.tabs.indexOf(d))
+        click = max(clicks)
+        fill = sorted(fills[:n_fills])[n_fills // 2]
+        closed = sorted(rep_closed)[len(rep_closed) // 2]
+        opened = sorted(rep_open)[len(rep_open) // 2]
+        assert click < BUDGET["props_click"], "a click with the panel open took %.1f ms" % (
+            click * 1000)
+        assert fill < BUDGET["props_fill"], "the panel filled in %.3f s" % fill
+        assert every < BUDGET["props_all"], "20,000 selected: the panel filled in %.2f s" % every
+        assert opened < closed * 1.5 + BUDGET["props_repaint"], \
+            "a repaint took %.1f ms with the panel open, %.1f ms closed" % (
+                opened * 1000, closed * 1000)
+        return ("20,000 objects: a click %.2f ms at most; the panel filled in %.1f ms typical "
+                "(%.1f ms at most); all 20,000 selected %.2f s; a repaint %.1f ms open, %.1f "
+                "ms closed (typical)" % (click * 1000, fill * 1000, max(fills[:n_fills]) * 1000,
+                                         every, opened * 1000, closed * 1000))
+    log.check("speed budget (Properties panel)", props)
+
+    def missing_footprints():
+        # (0.25) Devices without a footprint on 50 sheets: 2,000 devices, 1,000 footprints
+        # linked to half of them on 10 panel sheets; worked out again after a change, and a
+        # sheet drawn with the marks on
+        from . import missing_fp, render
+        w = state["win"]
+        coil = w.library.get("symbol", "Relay coil")
+        fpd = w.library.get("footprint", "Breaker 1-pole (DIN)")
+        p = M.Project.new()
+        p.blocks[coil.name] = coil
+        p.blocks[fpd.name] = fpd
+        while len(p.sheets) < 50:
+            p.sheets.append(p.make_sheet("Sheet %d" % (len(p.sheets) + 1),
+                                         "panel" if len(p.sheets) >= 40 else "schematic"))
+        n = 0
+        for k, s in enumerate(p.sheets[:40]):
+            for i in range(50):
+                s._put(M.Insert(coil.name, (1 + (i % 10) * 1.5, 1 + (i // 10) * 1.8),
+                                defn=coil, attrs={"TAG": "CR%d" % (1000 + n), "DEV": "d%d" % n}))
+                n += 1
+        for j in range(1000):
+            s = p.sheets[40 + j // 100]
+            s._put(M.Insert(fpd.name, (1 + (j % 10) * 1.5, 1 + (j % 100 // 10) * 1.0),
+                            defn=fpd, attrs={"TAG": "CR%d" % (1000 + 2 * j),
+                                             "PARENT": "d%d" % (2 * j)}))
+        t0 = time.perf_counter()
+        got = missing_fp.find(p)
+        first = time.perf_counter() - t0
+        assert len(got) == 1000, len(got)
+        s0 = p.sheets[0]
+        with p.edit("one more") as ed:
+            ed.add(s0, M.Insert(coil.name, (15, 9), defn=coil, attrs={"TAG": "CR9999",
+                                                                     "DEV": "x"}))
+        t0 = time.perf_counter()
+        got = missing_fp.find(p)
+        again = time.perf_counter() - t0
+        assert len(got) == 1001, len(got)
+        t0 = time.perf_counter()
+        for _i in range(100):
+            missing_fp.find(p)
+        kept = (time.perf_counter() - t0) / 100
+        from PySide6.QtGui import QImage, QPainter
+        img = QImage(1700, 1100, QImage.Format_ARGB32)
+        times = {}
+        for on in (False, True):
+            p.settings[missing_fp.SETTING] = on
+            r = render.SheetRenderer(p, s0, True)
+            qp = QPainter(img)
+            r.paint(qp)                 # (its caches made)
+            qp.end()
+            t0 = time.perf_counter()
+            for _i in range(10):
+                qp = QPainter(img)
+                qp.scale(100, 100)
+                r.paint(qp)
+                qp.end()
+            times[on] = (time.perf_counter() - t0) / 10
+        worst = max(first, again)
+        assert worst < BUDGET["missing_fp"], "worked out in %.3f s" % worst
+        assert times[True] < times[False] * 1.5 + 0.01, \
+            "a sheet drawn in %.1f ms with the marks, %.1f ms without" % (
+                times[True] * 1000, times[False] * 1000)
+        return ("50 sheets, 2,000 devices, 1,000 footprints: worked out %.1f ms (after a "
+                "change %.1f ms; unchanged %.3f ms); a sheet of 50 drawn %.1f ms with the "
+                "marks, %.1f ms without" % (first * 1000, again * 1000, kept * 1000,
+                                             times[True] * 1000, times[False] * 1000))
+    log.check("speed budget (devices without a footprint)", missing_footprints)
 
     def pdf_links():
         from . import pdf_links as PL, xrefs

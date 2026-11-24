@@ -881,3 +881,66 @@ def pdf_links_right(project, path, sheets):
             project.sheet_number(s), extra)
         n_links += len(used)
     return n_links
+
+
+# ---- devices without a footprint (0.25) --------------------------------------------------------
+def missing_footprints(project):
+    """{(sheet id, entity id)} of the devices that need a footprint and have none, worked out
+    here from every object of every sheet, from the rules (not missing_fp.py's code): a placed
+    schematic symbol that is a device or parent with a tag prefix and isn't an off-sheet link;
+    not ticked NO_FP; not in the field (its LOC, else its sheet's location: FIELD..., or, when a
+    panel sheet names a location, one no panel sheet names); and no footprint on a panel sheet
+    linked to it (PARENT its DEV) nor an unlinked one with its tag."""
+    panels = [s for s in project.sheets if s.kind == "panel"]
+    named = {s.location.strip().upper() for s in panels if s.location.strip()}
+    linked, tagged = set(), set()
+    for s in panels:
+        for e in s.entities.values():
+            if isinstance(e, M.Insert) and e.defn is not None and e.defn.kind == "footprint":
+                if e.attrs.get("PARENT"):
+                    linked.add(e.attrs["PARENT"])
+                elif e.attrs.get("TAG", "").strip():
+                    tagged.add(e.attrs["TAG"].strip().upper())
+    out = set()
+    for s in project.sheets:
+        for e in s.entities.values():
+            d = getattr(e, "defn", None)
+            if not isinstance(e, M.Insert) or d is None or d.kind != "symbol":
+                continue
+            if d.role not in ("device", "parent") or not d.prefix or d.wiring == "link":
+                continue
+            if e.attrs.get("NO_FP") == "1":
+                continue
+            loc = ((e.attrs.get("LOC") or "").strip() or s.location or "").strip().upper()
+            if loc.startswith("FIELD") or (loc and named and loc not in named):
+                continue
+            if e.attrs.get("DEV") and e.attrs["DEV"] in linked:
+                continue
+            if e.attrs.get("TAG", "").strip().upper() in tagged:
+                continue
+            out.add((s.id, e.id))
+    return out
+
+
+def missing_right(win, project):
+    """The check's devices are those worked out here; the status bar counts them; the sheet
+    shown marks each of its own (the marks on) or none (off)."""
+    from kanzonascad import missing_fp
+    want = missing_footprints(project)
+    got = {(s.id, e.id) for s, e in missing_fp.find(project).missing}
+    assert got == want, "devices without a footprint: %d listed, %d worked out (%s more, %s " \
+        "fewer)" % (len(got), len(want), sorted(got - want)[:4], sorted(want - got)[:4])
+    b = win.missing_fp_button
+    if want:
+        assert b.text() == missing_fp.describe(len(want)) and not b.isHidden(), \
+            "the status bar says %r for %d" % (b.text(), len(want))
+    else:
+        assert b.isHidden(), "the status bar shows %r with none" % b.text()
+    v = win.view()
+    s = v.sheet()
+    boxes = missing_fp.marks(project, s)
+    mine = sorted(s.entities[i].bbox() for sid, i in want if sid == s.id)
+    assert sorted(boxes) == (mine if missing_fp.marks_on(project) else []), \
+        "%d orange marks on the sheet, %d devices without a footprint there" % (
+            len(boxes), len(mine))
+    CHECKED["devices without a footprint"] += 1

@@ -6,23 +6,41 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
-## 0.24.1
+## 0.25
 
 **New**
+- Properties panel (Ctrl+1, or View > Properties panel), like AutoCAD's Properties palette: it
+  stays open beside the drawing and shows what you select, so you don't have to double-click
+  or right-click each time. Change a field there and it applies at once (Enter, or click
+  away); Undo takes it back.
+- It shows a symbol's or footprint's tag, description, attributes and each text line (shown
+  or not, its size, its angle, keep readable), a wire's number, lock, gauge and color label,
+  a text's wording and height, a line's length and angle, and for anything its layer, color,
+  position and rotation.
+- Select several and a field they share shows their value, or *varies*; set it and they all
+  take it in one step. It never holds up the drawing: it fills a moment after you click.
+- Devices without a footprint: every schematic device that no panel footprint stands for yet
+  is framed in orange on the drawing, and the status bar counts them ("12 devices without a
+  footprint"). Click the count for the list; double-click a row to go to the device. It is
+  also a report (Sheets menu, Output tab), a report sheet, and saves as CSV or Excel.
+- Contacts, off-sheet arrows and other drawing aids are left out, and so are devices in the
+  field (a Location called FIELD, or one no panel sheet has). Tick "No footprint needed" on a
+  device (double-click it, or in the Properties panel) to leave it out too. Project
+  properties, Panel, turns the orange marks off.
+- Explode is on the Home tab, and on the Block tab while you edit a block (to take apart a
+  block placed inside it). Block properties... is back beside Edit block on the Schematic and
+  Panel tabs.
 - Footprint label text sizes, line by line: in Block properties a footprint has Label text
   sizes, a size for its tag, part number, each rating and the rest. Leave one blank to use
-  the project's Footprint label height.
-- A placed footprint can have its own sizes over its block's: double-click it and set a line's
-  Text size in Shown on it. With other footprints selected, they can take the same sizes in
-  one step.
-- The sizes are on paper, so they print the same on a 1:4 panel sheet. Update blocks from
-  library brings a block's new sizes into a project.
+  the project's Footprint label height. A placed footprint can have its own sizes over its
+  block's (double-click it: Text size in Shown on it); with other footprints selected, they
+  can take the same sizes in one step. The sizes are on paper, so they print the same on a
+  1:4 panel sheet.
 
 **Fixed**
-- Turning a footprint label line (its Angle, double-click the footprint) now stays: it went
-  back to how the footprint was turned. A turned line turns with the footprint and is kept
-  readable (180 is drawn as 0, 270 as 90); untick Keep readable to draw it exactly at its
-  angle.
+- Turning a footprint label line (its Angle) now stays: it went back to how the footprint was
+  turned. A turned line turns with the footprint and is kept readable (180 is drawn as 0, 270
+  as 90); untick Keep readable to draw it exactly at its angle.
 
 ## 0.24
 

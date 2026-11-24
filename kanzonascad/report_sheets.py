@@ -1,7 +1,8 @@
 """Reports drawn on sheets of the project (the roadmap's item 8: "report sheets drawn in the
-project"; the owner wants it): a bill of materials, wire list, terminal strip list, pull list or
-panel materials as a table of lines and texts on sheets of kind Report, as many as it takes, in
-the room the border and title block leave, so it prints and goes to PDF with the drawings.
+project"; the owner wants it): a bill of materials, wire list, terminal strip list, pull list,
+panel materials or the devices without a footprint as a table of lines and texts on sheets of
+kind Report, as many as it takes, in the room the border and title block leave, so it prints
+and goes to PDF with the drawings.
 
 A report sheet remembers which report it shows (Sheet.report); Update report sheets draws them
 all again from the drawing as it is now (they aren't kept up to date as you draw: a table
@@ -21,12 +22,13 @@ PAD = 0.05
 def kinds():
     """{key: title} of the reports a sheet can show, in menu order."""
     return {"bom": "Bill of materials", "wires": "Wire list", "terminals": "Terminal strip list",
-            "pull": "Pull list", "materials": "Panel materials"}
+            "pull": "Pull list", "materials": "Panel materials",
+            "missing_fp": "Devices without a footprint"}
 
 
 def table(project, key):
     """(header, rows) of a report, from the drawing as it is."""
-    from . import bom, materials, pull, reports
+    from . import bom, materials, missing_fp, pull, reports
     if key == "bom":
         return bom.table(project)
     if key == "wires":
@@ -37,6 +39,8 @@ def table(project, key):
         return pull.table(project)
     if key == "materials":
         return materials.table(project)
+    if key == "missing_fp":
+        return missing_fp.table(project)
     raise KeyError(key)
 
 

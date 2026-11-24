@@ -21,7 +21,8 @@ and reports come next.</i></p>
 <b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>, and
 <b>Block</b> while you edit a block; each
 group of buttons has its name under it (Rail and duct, Dimensions, Numbering...). Move, Copy,
-Rotate, Mirror, Stretch and Erase are on the Schematic and Panel tabs too (Modify), not only Home.
+Rotate, Mirror, Stretch and Erase are on the Schematic and Panel tabs too (Modify), not only Home;
+the Home tab's Modify group also has <b>Explode</b>.
 The Schematic and Panel tabs are laid out alike: what you draw first (Wire and Bus; DIN rail and
 Wire duct), then placing parts (Symbols; Footprints: the same buttons in the same order), Modify,
 Dimensions, the tab's own groups, and Parts, Layers and Settings at the right end. Double-click a
@@ -36,9 +37,12 @@ still doesn't fit as icons scrolls sideways (the mouse wheel over it).</li>
 block...</b>, <b>Add pin</b>, <b>Pins...</b>, <b>Add attribute</b>, <b>Linear dimension</b> and
 <b>Aligned dimension</b> (Measure: to measure the block as you draw it; a dimension drawn in
 a block's tab isn't saved into the block, so its copies don't carry it; one the block already
-had stays), <b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
-in a block's tab (Edit block..., on the Schematic tab's Symbols group and the Panel tab's
-Footprints group, opens one), and goes away when you leave it. To have it all the time, turn
+had stays), <b>Edit block...</b> and <b>Update blocks from library...</b>, and <b>Explode</b>
+(Modify: a block placed inside the block you are editing, taken apart there). It shows up and
+opens by itself in a block's tab (Edit block..., on the Schematic tab's Symbols group and the
+Panel tab's Footprints group, opens one), and goes away when you leave it. <b>Block
+properties...</b> is also beside Edit block... on those two groups, for a block selected in the
+drawing. To have it all the time, turn
 on <b>Block tab</b> (View menu, and the View tab's Ribbon group). The same commands are always
 in the Library menu.</li>
 <li><b>Project tabs</b>: each open project has its own tab. Drag a tab away from the tabs and
@@ -52,8 +56,14 @@ shown, for printing them.</li>
 the device, wire or PLC point you select is in the project (see <b>{trace}: where a device or
 wire is used</b>). It opens above the command line; drag its title to the left or right side of
 the window if you like it there.</li>
+<li><b>Properties</b> panel (Ctrl+1 opens it; View, <b>Properties panel</b>, shows or hides
+it): everything about what is selected, changed right there (see <b>The Properties
+panel</b>). It opens at the right; drag its title to the left side or the bottom, or off the
+window to float it. Where it is and whether it is open are kept for next time.</li>
 <li><b>Status bar</b>: the cursor's X and Y in inches and its <b>zone</b> (for example
-6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches.</li>
+6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches; in orange, how
+many devices have no footprint yet (<b>12 devices without a footprint</b>: click it for the
+list; see <b>Devices without a footprint</b>).</li>
 </ul>
 
 <h2>Projects and sheets</h2>
@@ -107,7 +117,9 @@ new ladders, and the height of new text.</li>
 <li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
 uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
 (changing it resizes every tag), and the symbol color.</li>
-<li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors.</li>
+<li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors, and
+<b>Mark devices without a footprint on the drawing</b> (on to start: see Devices without a
+footprint).</li>
 <li><b>Wire layers</b>: <b>New wires go on</b>, the wire layer new wires go on on every sheet
 that hasn't one of its own (WIRES to start), and the project's wire layers in a list, as in
 Layers...: <b>New</b> makes a wire layer of any name (CONTROL, say), <b>Add preset...</b> adds
@@ -677,7 +689,9 @@ CR701 when that's free).</li>
 <li>When a sheet's <b>page number changes</b> (typed in Sheet properties, or by moving sheets
 around), its tags follow: CR601 becomes CR701.</li>
 <li><b>Typing a tag yourself</b> (double-click the device) locks it: automatic numbering never
-changes it. Untick "Lock this tag" there to give it back.</li>
+changes it. Untick "Lock this tag" there to give it back. The same window's <b>No footprint
+needed</b> leaves a device out of Devices without a footprint (one that goes on no
+panel).</li>
 <li><b>Renumber sheet</b> (Schematic tab, Sheets menu) numbers the sheet's unlocked devices
 01, 02... per prefix in the sheet's <b>numbering order</b> (Sheet properties): across then
 down, or down then across, or <b>along the wires</b>. Locked tags stay and their numbers are
@@ -859,6 +873,84 @@ says <b>Tracing...</b> until it is complete; on a big project the rows come in a
 found). Picking something else meanwhile drops the older look-up.</li>
 <li>The list follows changes to the drawing. A row whose object was erased says so on the
 command line when you go to it, and the list is made again.</li>
+</ul>
+
+<h2>The Properties panel</h2>
+<p><b>Properties</b> (Ctrl+1; Modify menu) opens a panel, as AutoCAD's Properties palette,
+showing everything about what is selected, so you don't have to double-click or right-click
+each time. It stays open while you work and follows the selection: click something and it
+shows it. The <b>Properties panel</b> button (View menu, View tab's Panels group) shows or
+hides it, checked while it is open; Ctrl+1 only ever opens it or brings it to the front. It
+docks at the right to start; drag its title to the left side or the bottom, or off the window
+to float it; where it is and whether it is open are kept for next time.</p>
+<ul>
+<li><b>General</b>, for anything: its kind, <b>Layer</b> (a list), <b>Color</b> (ByLayer, a
+few colors, or Other... for any), and where it makes sense its <b>Position X</b> and <b>Y</b>
+(its insertion point, in drawing inches) and <b>Rotation</b> (turned about that point; a symbol
+moved this way takes its wires with it).</li>
+<li><b>Symbol</b> or <b>Footprint</b>: its block, <b>Tag</b> (typed on a device, it is locked,
+as in its attributes window; on a footprint, the device with that tag is the one it is; a
+contact shows the device it <b>Belongs to</b>), Description, Manufacturer, Catalog number, each
+attribute's value (a terminal's number, a PLC point's address, ratings; a linked footprint's
+ratings are its device's, as in its attributes window), a symbol's <b>Location</b>, <b>Lock
+this tag</b> and <b>No footprint needed</b>. Then <b>Text lines</b>: for a symbol, its tag and
+each attribute it can show, with <b>Shown</b>, its text size (read only: a symbol's tag takes
+the project's Tag height, Project properties, and its attributes their block's, Edit block)
+and its <b>Angle</b>; for a footprint, each line it can show (Tag, Part number, Description,
+Block name and its ratings) with <b>Shown</b>, its <b>Text size</b> on paper (blank: its
+block's, else the project's Footprint label height), its <b>Angle</b> and <b>Readable</b> (Keep
+readable), as in its attributes window.</li>
+<li><b>Wire</b>: its <b>Wire number</b> (one wire at a time: typed, it is locked, and a number
+another wire has asks whether it is a cross-reference, as the Wire number window does),
+<b>Lock number</b>, its <b>Gauge</b> (blank: its layer's), <b>Color in its label</b> (as the
+project, shown or off: Wire color label) and its length.</li>
+<li><b>Text</b>: its wording and <b>Height</b> on paper (a multi-line note's lines are shown;
+double-click it to edit them). <b>Line</b>: its <b>Length</b> (kept from its first point) and
+<b>Angle</b>. <b>Circle</b>: its <b>Radius</b>. Other kinds (dimensions, hatches, leaders,
+dashed boxes, ladders, rail, duct, pictures, polylines, arcs) show General; double-click them
+for their own windows.</li>
+<li><b>Several selected</b>: a field they all have shows their one value, or <b>*varies*</b>
+when they differ (a tick half ticked, a list's first item); set it and it is set on all of
+them. Objects of different kinds show General only.</li>
+<li>A change applies at once: a text or number when you press Enter or leave the field (not
+at every key), a tick or a list when you click it. Each is one step: Undo takes it back, and
+the panel shows the drawing as it is after Undo, Redo or a change made anywhere else. A value
+that can't be taken (a gauge that isn't one) is said on the command line and changes nothing.
+The panel changes things through the same steps as the attributes window and the Wire number
+window, which stay (double-click, or right-click).</li>
+<li>It never holds up the drawing: a click is handled at once and the panel fills a moment
+after, from what is selected only; while it is closed it does nothing.</li>
+</ul>
+
+<h2>Devices without a footprint</h2>
+<p>Every schematic device that goes in a panel should have a footprint on a panel sheet. While
+one doesn't, KanzonasCAD marks it on the drawing with an <b>orange frame</b> and a dot at its
+corner (on the screen only: never printed), and the status bar says how many there are, in
+orange: <b>12 devices without a footprint</b>. Click it (or <b>Devices without a
+footprint...</b>, Sheets menu, and the Output and Panel tabs' Reports) for the list: tag,
+description, block, sheet, where and location, in page order. Double-click a row, or press
+Enter on it, to go to the device: its sheet shown, it selected and centered. The list stays
+open while you work and follows the drawing. <b>Save as CSV or Excel...</b> writes it; it is
+also a report sheet (Report sheet..., <b>Devices without a footprint</b>).</p>
+<ul>
+<li><b>Which devices need one</b>: schematic symbols with a tag of their own, devices and
+parents (a coil, an operator, a breaker, a PLC module, a terminal strip). Contacts and the other
+parts of a device (terminals, outlets, a module's continued piece) take their device's
+footprint; off-sheet connectors, source and destination arrows, ground and everything that
+isn't a placed symbol (wire numbers, ladders, rails, title blocks, dashed boxes) need none.</li>
+<li><b>Devices in the field</b> are left out by their location (a device's own Location, else
+its sheet's, as Cables between panels reads it): a location called FIELD (FIELD, FIELD-2...),
+and, once a panel sheet names its location (Sheet properties: MCP...), any location no panel
+sheet has (JB-1 with no JB-1 panel sheet). With no panel sheet naming a location, only FIELD
+tells.</li>
+<li><b>No footprint needed</b> (a device's attributes window, or the Properties panel) leaves
+out one device you know goes on no panel.</li>
+<li><b>Has a footprint</b>: a footprint on a <b>panel sheet</b> (Sheet properties: Type Panel)
+that was placed for the device (it asks which device it is, see Which device a footprint is),
+or one placed for none that carries the device's tag.</li>
+<li>Project properties, Panel, <b>Mark devices without a footprint on the drawing</b> turns the
+orange marks off (the count stays). It is worked out once per change of the project, never
+while you move the mouse.</li>
 </ul>
 
 <h2>Wires</h2>
@@ -1319,7 +1411,7 @@ writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workb
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 <p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints
 and goes into the PDF with the drawings: pick the bill of materials, wire list, terminal strip
-list, pull list or panel materials, and it comes in as a table (lines and texts on layer
+list, pull list, panel materials or devices without a footprint, and it comes in as a table (lines and texts on layer
 REPORT) on report sheets just after the sheet shown, as many as it takes ("Bill of materials (1
 of 3)"), in the room the border and title block leave; a cell too long for its column ends in
 "…". A report sheet isn't kept up to date as you draw (that would slow every change on a big
@@ -1855,9 +1947,11 @@ colors".</li>
 <li><b>Theme</b>: Light, Dark or Same as system: the menus, ribbon and panels. Light stays
 light and Dark stays dark whatever Windows is set to; Same as system follows Windows, also when
 it switches while KanzonasCAD is open.</li>
-<li><b>Command line</b>, <b>Sheets panel</b> and <b>{trace} panel</b> show or hide those
-panels (each shows a check while its panel is open). Ctrl+E (the Sheets menu's <b>{trace}</b>)
-only ever opens the {trace} panel.</li>
+<li><b>Command line</b>, <b>Sheets panel</b>, <b>{trace} panel</b> and <b>Properties
+panel</b> show or hide those panels (each shows a check while its panel is open; the View tab's
+Panels group has them too). Ctrl+E (the Sheets menu's <b>{trace}</b>) only ever opens the
+{trace} panel, and Ctrl+1 (the Modify menu's <b>Properties</b>) only ever opens the Properties
+panel.</li>
 </ul>
 
 <h2>Edit menu</h2>
@@ -2139,6 +2233,8 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>F9</td><td>Snap to grid on/off</td></tr>
 <tr><td>F10</td><td>Polar tracking on/off</td></tr>
 <tr><td>Ctrl+9</td><td>Command line on/off</td></tr>
+<tr><td>Ctrl+1</td><td>Properties: opens the Properties panel (or brings it to the front; it
+never closes it) with what is selected</td></tr>
 <tr><td>Ctrl+E</td><td>{trace}: opens the {trace} panel (or brings it to the front; it never
 closes it) with every place the selected device, wire or PLC point is used; Enter or a
 double-click on a row goes there</td></tr>

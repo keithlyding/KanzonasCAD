@@ -773,7 +773,7 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
     the attributes not to show on this copy (its "Shown on the drawing" boxes); for a
     footprint also "label_sizes", its label lines' own sizes, and "sizes_all": whether the
     sizes changed go to others too (the other footprints selected with it)."""
-    from . import tags
+    from . import missing_fp, tags
     dlg = QDialog(parent)
     dlg.setWindowTitle("%s: attributes" % ins.block)
     v = QVBoxLayout(dlg)
@@ -842,6 +842,7 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
                      "the field drawn on a panel's sheet). Cables between locations uses it.")
         edits["LOC"] = e
         form.addRow("Location", e)
+    nofp = None
     lock = QCheckBox("Lock this tag (automatic numbering leaves it alone)")
     lock.setChecked(ins.attrs.get("TAG_LOCK") == "1")
     listed = None
@@ -853,6 +854,13 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         form.addRow("", lock)
         if ins.defn.role == "parent":
             listed = QCheckBox("List its contacts under it (cross-references)")
+        # (0.25: left out of Devices without a footprint, a device that goes on no panel)
+        nofp = QCheckBox("No footprint needed")
+        nofp.setObjectName("no_footprint")
+        nofp.setChecked(missing_fp.not_needed(ins))
+        nofp.setToolTip("Not listed or marked as a device without a footprint: one that goes "
+                        "on no panel (a device in the field is left out by its Location)")
+        form.addRow("", nofp)
     else:
         form.addRow("", lock)
     if listed is not None:
@@ -1112,4 +1120,6 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         out["TAG_LOCK"] = "1"
     else:
         out.pop("TAG_LOCK", None)
+    if nofp is not None:
+        out = missing_fp.with_flag(out, nofp.isChecked())
     return out

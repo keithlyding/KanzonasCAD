@@ -60,6 +60,8 @@ DEFAULT_SETTINGS = {
     "fp_label_color": "",       # their color ("": the footprint's; the owner, 0.18.7: a
                                 # footprint on layer 0 is white, "I want the tagname to be
                                 # discernible")
+    # devices without a footprint marked orange on the drawing (missing_fp.py; 0.25)
+    "fp_missing_marks": True,
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
