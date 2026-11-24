@@ -29,7 +29,7 @@ MARK = {"NO": "NO", "NC": "NC", "NOTC": "NO", "NOTO": "NO", "NCTO": "NC", "NCTC"
 GAP = 0.05                      # between a symbol's box and its first line
 LINE = 1.35                     # line spacing, as a share of the text height
 
-_cache = {"sig": None, "by_sheet": {}}
+_cache = {"sig": None, "by_sheet": {}, "aims": {}}
 
 
 def _signature(project):
@@ -218,9 +218,34 @@ def _order(project):
 def live_all(project):
     """{sheet id: [(x, y, text, height)]} worked out from the drawing now (kept until the
     project changes)."""
+    return _worked_out(project)[0]
+
+
+def _aim(sheet, e):
+    """Where a reference to e leads (a link in an exported PDF): (sheet id, x, y), the middle
+    of its box."""
+    bb = e.bbox()
+    return (sheet.id, (bb[0] + bb[2]) / 2.0, (bb[1] + bb[3]) / 2.0)
+
+
+def _spans(text, start, parts):
+    """The references in a text as character spans [(first, past last, aim)]: parts is
+    [(the reference as written, its aim)], joined with ", " from start. One reference: the
+    whole text (the line under a coil, an arrow's "2046 / 7-A2"), a bigger thing to click."""
+    if len(parts) == 1:
+        return [(0, len(text), parts[0][1])]
+    out, i = [], start
+    for t, aim in parts:
+        out.append((i, i + len(t), aim))
+        i += len(t) + 2
+    return out
+
+
+def _worked_out(project):
+    """({sheet id: [references]}, {sheet id: [their spans, as _spans, one list each]})."""
     sig = _signature(project)
     if _cache["sig"] == sig:
-        return _cache["by_sheet"]
+        return _cache["by_sheet"], _cache["aims"]
     h = float(project.settings.get("xref_height", 0.08))
     index = tags.devices(project)
     children = {}                                   # parent DEV -> [(sheet, contact)]
@@ -240,6 +265,7 @@ def live_all(project):
                 if dev in index:
                     children.setdefault(dev, []).append((s, e))
     out = {s.id: [] for s in project.sheets}
+    aims = {s.id: [] for s in project.sheets}       # (beside out: where each one leads)
     hk = {s.id: h * s.k() for s in project.sheets}     # (paper height on scaled sheets)
     joined = {s.id: _joined(project, s)[1] for s in project.sheets}
     key = _order(project)
@@ -260,6 +286,7 @@ def live_all(project):
             mark = MARK.get(c.defn.contact, "") if isinstance(c, Insert) else ""
             text = ("%s %s" % (mark, _where(project, cs, c))).strip()
             out[s.id].append((round(x, 6), round(y, 6), text, hh))
+            aims[s.id].append(_spans(text, 0, [(text, _aim(cs, c))]))
             y -= hh * LINE
     # off-sheet connectors: where the same name's other ends are
     from .wirenums import connectors, ARROWS, number_at
@@ -276,6 +303,7 @@ def live_all(project):
                 pair = pairs.get(id(c), [])
             others = [_where(project, os_, oc) for os_, oc in pair]
             text = ", ".join(others) if others else "?"
+            parts = [(t, _aim(os_, oc)) for t, (os_, oc) in zip(others, pair)]
             if c.block not in ARROWS:
                 # (outside the connector, away from its wire, whichever way it is turned: the
                 # owner, 0.18, "Wire cross references need to always be outside the
@@ -285,6 +313,7 @@ def live_all(project):
                     bb = c.bbox()
                     got = ((bb[0] + bb[2]) / 2.0, bb[1] - GAP - hh)
                 out[s.id].append((round(got[0], 6), round(got[1], 6), text, hh))
+                aims[s.id].append(_spans(text, 0, parts))
                 continue
             # a source or destination arrow: its wire's number and the other's place
             # (2046 / 7-A2), past the arrow's far end, away from its wire (the owner, 0.17.5:
@@ -292,8 +321,10 @@ def live_all(project):
             # line, the device at the other end of that wire (the owner, 0.19.3: "I can see
             # that the switch connection goes to page x but also that it goes to device x")
             num = number_at(s, c)
+            start = 0
             if num:
                 text = "%s / %s" % (num, text)
+                start = len(num) + 3
             lines = [text]
             if shows_device(project, s, c):
                 far = []
@@ -303,8 +334,10 @@ def live_all(project):
                         far.append(n)
                 if far:
                     lines.append(", ".join(far))
-            for item in _arrow_lines(s, c, lines, hh):
+            for i, item in enumerate(_arrow_lines(s, c, lines, hh)):
                 out[s.id].append(item)
+                # (the reference line leads to the other half; the device under it doesn't)
+                aims[s.id].append(_spans(text, start, parts) if i == 0 else [])
     for s, c in contacts:
         if tags.number_attr(c) == "TERM":
             continue                    # (a terminal shows its number, not where its strip is;
@@ -318,9 +351,11 @@ def live_all(project):
             # (dragged to a place of its own by its grip: centered there)
             q = c.xref_point()
             out[s.id].append((round(q[0], 6), round(q[1] - 0.35 * hh, 6), text, hh))
-            continue
-        bb = c.bbox()
-        out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - hh, 6), text, hh))
+        else:
+            bb = c.bbox()
+            out[s.id].append((round((bb[0] + bb[2]) / 2.0, 6), round(bb[1] - GAP - hh, 6),
+                              text, hh))
+        aims[s.id].append(_spans(text, 0, [(text, _aim(*got))]) if got is not None else [])
     # beside a dashed box's tag: where its device is ("PDB1  1-B2")
     for s, b in boxes:
         hh = hk[s.id]
@@ -329,8 +364,9 @@ def live_all(project):
         x, y = b.tag_point()
         x += text_width(b.tag(), b.height) + hh * 0.6 + text_width(text, hh) / 2
         out[s.id].append((round(x, 6), round(y, 6), text, hh))
-    _cache["sig"], _cache["by_sheet"] = sig, out
-    return out
+        aims[s.id].append(_spans(text, 0, [(text, _aim(*got))]) if got is not None else [])
+    _cache["sig"], _cache["by_sheet"], _cache["aims"] = sig, out, aims
+    return out, aims
 
 
 LINKED = ("PB", "SS")            # contact blocks drawn joined to their device (xrefs.links)
@@ -596,6 +632,48 @@ def shown(project, sheet):
     if held(project, sheet):
         return list(sheet.xref_shown or [])
     return live(project, sheet)
+
+
+def link_spans(project, sheet):
+    """The references drawn on the sheet with where each leads, for the links of an exported
+    PDF: [(reference, [(first char, past last char, (sheet id, x, y))])]. Live ones lead to
+    the object they name; a held one (a frozen sheet) that isn't what the drawing says now
+    leads to the zone its text names (zone_aims), or nowhere."""
+    refs = shown(project, sheet)
+    if not refs:
+        return []
+    by_sheet, aims = _worked_out(project)
+    known = dict(zip((tuple(t) for t in by_sheet.get(sheet.id, [])), aims.get(sheet.id, [])))
+    zones = None
+    out = []
+    for t in refs:
+        got = known.get(tuple(t))
+        if got is None:
+            if zones is None:
+                zones = zone_aims(project)
+            got, i = [], 0
+            for part in t[2].split(", "):
+                aim = zones.get(part.rsplit(" ", 1)[-1])
+                if aim is not None:
+                    got.append((i, i + len(part), aim))
+                i += len(part) + 2
+        out.append((t, got))
+    return out
+
+
+def zone_aims(project):
+    """{zone as written ("2-F3"): (sheet id, x, y) of its middle} for every sheet's grid."""
+    out = {}
+    for s in project.sheets:
+        x0, y0, x1, y1 = s.layout_zone_frame()
+        cw, rh = (x1 - x0) / s.cols, (y1 - y0) / s.rows
+        num = project.sheet_number(s)
+        for i, row in enumerate(s.row_labels()):
+            for j, col in enumerate(s.col_labels()):
+                x, y = s.turn(x0 + (j + 0.5) * cw, y1 - (i + 0.5) * rh)
+                out.setdefault(project.zone_format.format(sheet=num, row=row, col=col),
+                               (s.id, x, y))
+    return out
 
 
 def out_of_date(project):

@@ -733,3 +733,145 @@ def arrows_follow(project):
             continue
         raise AssertionError("source arrow %s sits on wire %s" % (name, num))
     CHECKED["source arrows follow their wire's number"] += len(srcs)
+
+
+def pdf_links_right(project, path, sheets):
+    """Every cross-reference in an exported PDF (pages: the sheets, in order) that names a
+    place on a sheet in it is a link over that place's text, to that sheet's page, zoomed to
+    what it names; one naming a sheet left out (or "?") has none; no other links (0.23.1).
+    Worked out from the drawing: the places as written ("2-B3", a rung's number) read against
+    every sheet's zones and rungs; the object led to is one whose own place reads the same and
+    that belongs with something on the sheet linking to it (a contact and its device, two
+    connectors of a name), or, on a frozen sheet out of date, the zone named itself."""
+    from pypdf import PdfReader
+    from kanzonascad import xrefs
+    reader = PdfReader(path)
+    assert len(reader.pages) == len(sheets), (len(reader.pages), len(sheets))
+    page_of = {pg.indirect_reference.idnum: i for i, pg in enumerate(reader.pages)}
+    places = {}                     # place as written -> [sheet index in the PDF]
+    for i, s in enumerate(sheets):
+        num = project.sheet_number(s)
+        for r in s.row_labels():
+            for c in s.col_labels():
+                places.setdefault(project.zone_format.format(sheet=num, row=r, col=c),
+                                  []).append(i)
+        places.setdefault("%s-?" % num, []).append(i)       # (outside the zones)
+        for lad in s.ladders():
+            for n in lad.numbers():
+                if n:
+                    places.setdefault(str(n), []).append(i)
+
+    def ref_point(e):
+        return e.pos if isinstance(e, M.Insert) else e.points[0]
+
+    def to_page(s, x, y):
+        return x * s.scale * 72.0, y * s.scale * 72.0
+
+    def belongs(e, devs, parents, names):
+        if not isinstance(e, (M.Insert, M.DashBox)):
+            return False
+        a = e.attrs
+        if a.get("DEV") and a["DEV"] in parents or a.get("PARENT") and a["PARENT"] in devs:
+            return True
+        d = getattr(e, "defn", None)
+        return d is not None and d.wiring == "link" and \
+            a.get("TAG", "").strip().upper() in names
+
+    def wrong(j, place, where, lo, hi):
+        """Why link j isn't right for the place written (over lo..hi on its page), or None."""
+        r = rects[j]
+        if not (r[0] <= lo[0] + 0.01 and r[1] <= lo[1] + 0.01 and
+                r[2] >= hi[0] - 0.01 and r[3] >= hi[1] - 0.01):
+            return "the link over %r doesn't cover it: %s, %s" % (place, r, (lo, hi))
+        dest = annots[j]["/Dest"]
+        to = page_of[dest[0].idnum]
+        if to not in where or dest[1] != "/FitR":
+            return "%r leads to page %d, not %s" % (place, to + 1, [w + 1 for w in where])
+        box = [float(v) for v in dest[2:6]]
+        ts = sheets[to]
+        W = float(reader.pages[to].mediabox.width)
+        H = float(reader.pages[to].mediabox.height)
+        if abs(box[2] - box[0] - W / 3.0) > 0.01 or abs(box[3] - box[1] - H / 3.0) > 0.01:
+            return "a view of %s, not a third of the page" % box
+
+        def aimed(x, y):
+            # (in the box's middle, but for the page's edge it keeps to: then on that side of
+            # the middle, in the box or past the page's edge)
+            px, py = to_page(ts, x, y)
+            for v, a, b, edge in ((px, box[0], box[2], W), (py, box[1], box[3], H)):
+                c = (a + b) / 2.0
+                if abs(c - v) > 0.01 and not (v < c and abs(a) < 0.01 or
+                                              v > c and abs(b - edge) < 0.01):
+                    return False
+            return True
+        unzoned = "%s-?" % project.sheet_number(ts)
+        for e in ts.entities.values():
+            if not belongs(e, devs, parents, names):
+                continue
+            q = ref_point(e)
+            eb = e.bbox()
+            if (project.zone_text(ts, q[0], q[1]) or unzoned) == place and \
+                    aimed((eb[0] + eb[2]) / 2.0, (eb[1] + eb[3]) / 2.0):
+                return None
+        if held:
+            x0, y0, x1, y1 = ts.layout_zone_frame()
+            cw, rh = (x1 - x0) / ts.cols, (y1 - y0) / ts.rows
+            for ri in range(ts.rows):
+                for ci in range(ts.cols):
+                    x, y = ts.turn(x0 + (ci + 0.5) * cw, y1 - (ri + 0.5) * rh)
+                    if project.zone_text(ts, x, y) == place and aimed(x, y):
+                        return None
+        return "leads to nothing named %r: %s" % (place, box)
+
+    n_links = 0
+    for i, s in enumerate(sheets):
+        page = reader.pages[i]
+        annots = [a.get_object() for a in (page.get("/Annots") or [])]
+        rects = [[float(v) for v in a["/Rect"]] for a in annots]
+        used = set()
+        devs = {e.attrs["DEV"] for e in s.entities.values()
+                if isinstance(e, (M.Insert, M.DashBox)) and e.attrs.get("DEV")}
+        parents = {e.attrs["PARENT"] for e in s.entities.values()
+                   if isinstance(e, (M.Insert, M.DashBox)) and e.attrs.get("PARENT")}
+        names = {e.attrs.get("TAG", "").strip().upper() for e in s.inserts()
+                 if e.defn is not None and e.defn.wiring == "link"}
+        held = xrefs.held(project, s)
+        for item in xrefs.shown(project, s):
+            t = xrefs.text_item(item)
+            left = -t.width() / 2.0
+            k = 0
+            for part in item[2].split(", "):
+                place = part.rsplit(" ", 1)[-1]
+                a0 = left + M.text_width(item[2][:k + len(part) - len(place)], t.height)
+                a1 = left + M.text_width(item[2][:k + len(part)], t.height)
+                k += len(part) + 2
+                corners = [G.rotate_point((t.pos[0] + x, t.pos[1] + y), t.pos, t.angle)
+                           for x, y in ((a0, 0.0), (a1, 0.0), (a1, t.height), (a0, t.height))]
+                bb = G.bbox_of(corners)
+                lo, hi = to_page(s, bb[0], bb[1]), to_page(s, bb[2], bb[3])
+                mid = ((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0)
+                over = [j for j, r in enumerate(rects)
+                        if r[0] <= mid[0] <= r[2] and r[1] <= mid[1] <= r[3]]
+                where = places.get(place, [])
+                if not where:
+                    assert not over, "a link over %r (%r), a place not in the PDF" % (
+                        part, item[2])
+                    continue
+                # (texts drawn over each other, contacts stacked by the steps: a link each;
+                # this text's is one of those over it not taken yet, nearest first)
+                free = sorted((j for j in over if j not in used),
+                              key=lambda j: abs((rects[j][0] + rects[j][2]) / 2.0 - mid[0]) +
+                              abs((rects[j][1] + rects[j][3]) / 2.0 - mid[1]))
+                assert free, "%d links over %r of %r on sheet %s, none its own" % (
+                    len(over), part, item[2], project.sheet_number(s))
+                why = [wrong(j, place, where, lo, hi) for j in free]
+                assert None in why, "%r on sheet %s: %s" % (item[2], project.sheet_number(s),
+                                                            why[0])
+                used.add(free[why.index(None)])
+                CHECKED["PDF cross-reference links lead to what they name"] += 1
+        extra = [rects[j] for j in range(len(rects)) if j not in used and
+                 annots[j].get("/Subtype") == "/Link"]
+        assert not extra, "links over no cross-reference on sheet %s: %s" % (
+            project.sheet_number(s), extra)
+        n_links += len(used)
+    return n_links

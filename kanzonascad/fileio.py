@@ -1350,9 +1350,11 @@ def add_drawing(project, sheet, ents, rep, path, at=None, anchor="center"):
 # ============================================================================================
 # PDF
 # ============================================================================================
-def export_pdf(project, path, sheets=None, line_width=0.008, mono=True):
+def export_pdf(project, path, sheets=None, line_width=0.008, mono=True, note=None, links=True):
     """One page per sheet at its real size: black on white paper (mono False keeps the
-    layers' colors). Returns the page count."""
+    layers' colors), each cross-reference a link to the place it names (pdf_links; links
+    False: none). Returns the page count. note(message): told when the links were left out
+    (no pypdf)."""
     from PySide6.QtCore import QMarginsF, QSizeF
     from PySide6.QtGui import QPainter, QPageSize, QPageLayout, QPdfWriter
     from .render import SheetRenderer
@@ -1387,4 +1389,9 @@ def export_pdf(project, path, sheets=None, line_width=0.008, mono=True):
     finally:
         if painter is not None:
             painter.end()
+    from . import pdf_links
+    if links and painter is not None and pdf_links.add_links(project, path, sheets) is None \
+            and note:
+        note("The PDF has no cross-reference links: pypdf isn't installed "
+             "(pip install pypdf).")
     return len(sheets)

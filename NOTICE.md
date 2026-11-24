@@ -13,6 +13,8 @@ and earlier were released under the MIT License. It is built on:
 - pdfminer.six, MIT - Import PDF - https://github.com/pdfminer/pdfminer.six; with
   charset-normalizer (MIT), cryptography (Apache-2.0 or BSD-3-Clause), cffi (MIT) and
   pycparser (BSD-3-Clause), which it asks for
+- pypdf, BSD-3-Clause - the cross-reference links in Export to PDF -
+  https://github.com/py-pdf/pypdf
 
 Artwork and type: the app icon, logo and their cactus and sunflower are the owner's artwork
 (`assets/`). The logo's lettering is set in Roboto Condensed ("Kanzonas"), Saira Condensed

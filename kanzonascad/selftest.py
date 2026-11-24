@@ -48,6 +48,8 @@ BUDGET = {
     "ladder_refs": 0.5,         # 2,000 places read by rung (cross-references, reports)
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
                                 # 2,000 devices, half of them in the field
+    "pdf_links": 2.0,           # (0.23.1) the links of 2,000 cross-references added to the PDF
+                                # of 20 sheets (Export to PDF)
 }
 
 
@@ -885,6 +887,40 @@ def run(log_path):
         assert dt < BUDGET["pull"], "the pull list took %.2f s" % dt
         return "1,000 conductors to pull of 2,000 wires: %.3f s" % dt
     log.check("speed budget (cables between locations)", pull_list)
+
+    def pdf_links():
+        from . import pdf_links as PL, xrefs
+        lib = state["win"].library
+        coil, no = lib.get("symbol", "Relay coil"), lib.get("symbol", "Contact NO")
+        p = M.Project.new()
+        with p.edit("sheets") as ed:
+            for i in range(19):
+                ed.add_sheet(p.make_sheet("S%d" % (i + 2)))
+        # (on each sheet 10 coils, each with 5 contacts on the next sheet: 1,000 contacts,
+        # each a reference under it and a line under its coil)
+        for i, s in enumerate(p.sheets):
+            nxt = p.sheets[(i + 1) % len(p.sheets)]
+            for c in range(10):
+                dev = "D%d-%d" % (i, c)
+                s._put(M.Insert(coil.name, (1.5 + c * 1.5, 9.5), defn=coil,
+                                attrs={"TAG": "CR%d" % (100 * i + c), "DEV": dev}))
+                for k in range(5):
+                    nxt._put(M.Insert(no.name, (1.5 + c * 1.5, 8.0 - k * 1.4), defn=no,
+                                      attrs={"TAG": "CR%d" % (100 * i + c), "PARENT": dev}))
+        n_refs = sum(len(xrefs.shown(p, s)) for s in p.sheets)
+        assert n_refs == 2000, n_refs
+        pdf = os.path.join(tmp, "links.pdf")
+        t0 = time.perf_counter()
+        fileio.export_pdf(p, pdf, links=False)
+        dw = time.perf_counter() - t0
+        t0 = time.perf_counter()
+        n = PL.add_links(p, pdf, p.sheets)
+        dt = time.perf_counter() - t0
+        assert n == 2000, n
+        assert dt < BUDGET["pdf_links"], "2,000 links added in %.2f s" % dt
+        return "20 sheets drawn to PDF %.2f s; their 2,000 cross-reference links added %.3f s" % (
+            dw, dt)
+    log.check("speed budget (cross-reference links in a PDF)", pdf_links)
 
     w = state.get("win")
     if w is not None:
