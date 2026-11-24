@@ -3156,6 +3156,130 @@ def random_editing(log, out, ops, seed, drawing=None):
                         k, f.attrs.get(k), got[1].attrs.get(k))
             BC.CHECKED["linked footprint ratings"] += 1
 
+    def op_fp_label_sizes():
+        # (0.24.1) a footprint's label lines' text sizes and turns, as a user sets them: sizes
+        # in its block (Block properties, Label text sizes: saved to the library and the
+        # copies updated), and on a copy (its attributes window: a size, an angle and Keep
+        # readable per line; with other footprints selected, the sizes changed go to them).
+        # Each line's height and angle are worked out here from what was stored: the copy's
+        # size, else the block's, else the project's (tag_h); a line turned on its own at its
+        # angle with the footprint, kept readable (90 < a <= 270 drawn 180 less) unless unticked
+        from unittest import mock
+        from PySide6.QtWidgets import QDoubleSpinBox, QCheckBox
+        from kanzonascad import library_panel
+        from kanzonascad import tags
+        fs = [e for e in s.inserts() if tags.is_footprint(e) and not v.layer_locked(e.layer)
+              and e.label]
+        if not fs:
+            return
+        f = rnd.choice(fs)
+        keys = [M.label_size_key(k) for k in M.label_keys(f.label)]
+        real = library_panel.QDialog.exec
+        if rnd.random() < 0.35 and lib.get("footprint", M.library_block_name(
+                f.block, "footprint")) is not None:
+            want = {k: rnd.choice([0.0, 0.05, 0.1, 0.15, 0.2]) for k in rnd.sample(
+                keys, rnd.randint(1, len(keys)))}
+
+            def answer(dlg):
+                for k, x in want.items():
+                    b = dlg.findChild(QDoubleSpinBox, "label_size_" + k)
+                    assert b is not None and b.isEnabled(), "Block properties: no size for " + k
+                    b.setValue(x)
+                return QDialog.Accepted
+            library_panel.QDialog.exec = answer
+            try:
+                with mock.patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                    new = win.block_properties("footprint", M.library_block_name(
+                        f.block, "footprint"))
+            finally:
+                library_panel.QDialog.exec = real
+            if new is None:
+                return
+            got = p.blocks[f.block].label_sizes
+            for k, x in want.items():
+                assert got.get(k) == (x or None), "Block properties: %s's size %r, typed %r" % (
+                    k, got.get(k), x)
+            BC.CHECKED["footprint label sizes in its block"] += 1
+        else:
+            f = s.entities[f.id]
+            others = [e for e in fs if e.id != f.id][:rnd.randint(0, 2)]
+            v.set_selection({f.id} | {o.id for o in others})
+            sizes = {k: rnd.choice([0.0, 0.06, 0.12, 0.25]) for k in rnd.sample(
+                keys, rnd.randint(0, len(keys)))}
+            turn = rnd.choice(keys)
+            ang = rnd.choice([0.0, 45.0, 90.0, 180.0, 270.0])
+            keep = rnd.random() < 0.6
+            before = {o.id: dict(o.label_sizes) for o in others}
+
+            def answer(dlg):
+                for k, x in sizes.items():
+                    dlg.findChild(QDoubleSpinBox, "label_size_" + k).setValue(x)
+                dlg.findChild(QDoubleSpinBox, "label_angle_" + turn).setValue(ang)
+                dlg.findChild(QCheckBox, "label_readable_" + turn).setChecked(keep)
+                return QDialog.Accepted
+            had = dict(f.label_sizes)
+            library_panel.QDialog.exec = answer
+            try:
+                win.edit_attributes(f)
+            finally:
+                library_panel.QDialog.exec = real
+            g = s.entities[f.id]
+            want = dict(had)
+            for k, x in sizes.items():
+                if x:
+                    want[k] = x
+                else:
+                    want.pop(k, None)
+            assert g.label_sizes == want, "a copy's sizes %r, typed %r over %r" % (
+                g.label_sizes, sizes, had)
+            assert (turn in g.label_as_set) == (not keep), "Keep readable not kept"
+            for o in others:
+                ow = dict(before[o.id])
+                for k in set(had) | set(want):
+                    if had.get(k) != want.get(k):
+                        if k in want:
+                            ow[k] = want[k]
+                        else:
+                            ow.pop(k, None)
+                assert s.entities[o.id].label_sizes == ow, "the other selected footprint's " \
+                    "sizes %r, not %r" % (s.entities[o.id].label_sizes, ow)
+                BC.CHECKED["footprint label sizes to the selected"] += 1
+            BC.CHECKED["footprint label sizes on a copy"] += 1
+        g = s.entities[f.id]
+        if not g.label_texts():
+            return
+        assert g.label_k is not None, "a labeled footprint with no label_k"
+        blk = g.defn.label_sizes
+        for k, t in g.label_texts():
+            kk = M.label_size_key(k)
+            size = g.label_sizes.get(kk) or blk.get(kk)
+            h = size * g.label_k if size else (g.tag_h or 0.125)
+            assert abs(t.height - h) < 1e-9, "label line %s %r tall, not %r" % (k, t.height, h)
+            r = g.attr_rot.get("@" + kk)
+            if r is None:
+                a = 90.0 if 45.0 <= g.angle % 180.0 < 135.0 else 0.0
+            else:
+                a = (g.angle + (-r if g.mirror else r)) % 360.0
+                if kk not in g.label_as_set and 90.0 + 1e-9 < a <= 270.0 + 1e-9:
+                    a -= 180.0
+            assert abs((t.angle - a + 180.0) % 360.0 - 180.0) < 1e-6, \
+                "label line %s drawn at %r, not %r" % (k, t.angle, a)
+            BC.CHECKED["footprint label line height and angle"] += 1
+        shown = [(k, t.text, t.pos, t.height, t.angle) for k, t in g.label_texts()]
+        # (saved and opened, the same; undone and redone, the same)
+        q = M.Project.from_dict(json.loads(json.dumps(p.to_dict())))
+        e2 = q.sheet_by_id(s.id).entities[g.id]
+        assert [(k, t.text, t.pos, t.height, t.angle) for k, t in e2.label_texts()] == shown, \
+            "a footprint's label lines changed through save and open"
+        if p.undo_stack and p.undo_stack[-1].name in ("Attributes", "Update %s" % g.block):
+            p.undo()
+            p.redo()
+            e3 = s.entities.get(g.id)
+            assert e3 is not None and [(k, t.text, t.pos, t.height, t.angle)
+                                       for k, t in e3.label_texts()] == shown, \
+                "a footprint's label lines not the same undone and redone"
+            BC.CHECKED["footprint label sizes undone and redone"] += 1
+
     def op_location():
         # as Sheet properties and a device's Location do: the sheet's location, or a device's
         # own (LOC), set or cleared
@@ -4444,7 +4568,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2),
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_fp_label_sizes, 2), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2),
              (op_import_blocks, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
@@ -4734,6 +4858,20 @@ def mixed_project(win):
         ed.add(panel, M.Dimension((4, 10), (5.5625, 10), (5, 12), height=0.125 * panel.k(),
                                   units="1/16"))
         ed.sheet_meta(panel, show_title_block=False)
+    # (0.24.1) a footprint whose label lines have sizes of their own, in its block and on the
+    # copy, one turned and drawn as set (Keep readable off), on the 1:4 panel sheet
+    fpn = sorted(n for n, d in lib.blocks("footprint")[0].items() if d.builtin)[0]
+    fpd = M.BlockDef.from_dict(dict(lib.get("footprint", fpn).to_dict(),
+                                    label_sizes={"TAG": 0.12}))
+    with p.edit("a footprint with sized label lines") as ed:
+        ed.block(fpd)
+        fpi = ed.add(panel, M.Insert(fpn, (20, 20), defn=p.blocks[fpn],
+                                     attrs={"TAG": "M9", "CAT": "100-C09", "HP": "5"},
+                                     tag_h=0.08 * panel.k(), label="tag,cat,HP",
+                                     label_sizes={"HP": 0.2}, label_as_set=["CAT"],
+                                     attr_rot={"@CAT": 180.0}))
+    assert {k: t.height for k, t in fpi.label_texts()} == {
+        "tag": 0.12 * panel.k(), "cat": 0.08 * panel.k(), "HP": 0.2 * panel.k()}
     with p.edit("a wire showing its color") as ed:
         w0 = next(iter(p.sheets[0].wires()), None)
         if w0 is not None:

@@ -6,6 +6,24 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.24.1
+
+**New**
+- Footprint label text sizes, line by line: in Block properties a footprint has Label text
+  sizes, a size for its tag, part number, each rating and the rest. Leave one blank to use
+  the project's Footprint label height.
+- A placed footprint can have its own sizes over its block's: double-click it and set a line's
+  Text size in Shown on it. With other footprints selected, they can take the same sizes in
+  one step.
+- The sizes are on paper, so they print the same on a 1:4 panel sheet. Update blocks from
+  library brings a block's new sizes into a project.
+
+**Fixed**
+- Turning a footprint label line (its Angle, double-click the footprint) now stays: it went
+  back to how the footprint was turned. A turned line turns with the footprint and is kept
+  readable (180 is drawn as 0, 270 as 90); untick Keep readable to draw it exactly at its
+  angle.
+
 ## 0.24
 
 **New**

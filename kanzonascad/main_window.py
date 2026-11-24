@@ -3316,7 +3316,14 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             return
         from .library_panel import attributes_dialog
         shown = {}
-        attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet(), shown)
+        ents = v.sheet().entities
+        # (a footprint selected with other footprints: they can take the label sizes changed)
+        others = [ents[i] for i in v.selection() if i in ents and i != ins.id and
+                  isinstance(ents[i], M.Insert) and ents[i].defn is not None and
+                  ents[i].defn.kind == "footprint"] \
+            if ins.id in v.selection() and ins.defn is not None and \
+            ins.defn.kind == "footprint" else []
+        attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet(), shown, others)
         hidden = shown.get("hidden", ins.hidden)
         if attrs is not None and ins.defn is not None and ins.defn.kind == "footprint" and \
                 attrs.get("TAG", "") != ins.attrs.get("TAG", ""):
@@ -3334,6 +3341,15 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                 v.project.settings.get("fp_label_height", 0.08)) * v.sheet().k())
         for n, ang in shown.get("angles", {}).items():
             new = new.with_attr_angle(n, ang)
+        for n, ang in shown.get("label_angles", {}).items():
+            new = new.with_attr_angle(n, ang)       # (a footprint's label line, "@KEY")
+        if "label_as_set" in shown:
+            new = new.copy(label_as_set=sorted(shown["label_as_set"]))
+        more = []
+        if "label_sizes" in shown:
+            new = new.copy(label_sizes=shown["label_sizes"])
+            if shown.get("sizes_all"):
+                more = M.label_sizes_to(others, ins.label_sizes, new.label_sizes)
         # a linked footprint's ratings are its device's: typed here, they go there too (the
         # owner, 0.18.1: asked, edit from either); the device then gives them back to it
         from . import tags
@@ -3348,12 +3364,14 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
                     dattrs.pop(k, None)
             if dattrs != got[1].attrs:
                 dev_new = got[1].copy(attrs=dattrs)
-        if new.to_dict() != ins.to_dict() or dev_new is not None:
+        if new.to_dict() != ins.to_dict() or dev_new is not None or more:
             with v.project.edit("Attributes") as ed:
                 if new.to_dict() != ins.to_dict():
                     ed.change(v.sheet(), new)
                 if dev_new is not None:
                     ed.change(got[0], dev_new)
+                for c in more:
+                    ed.change(v.sheet(), c)
 
     # ---- cross-references -----------------------------------------------------------------
     def update_xrefs(self):

@@ -173,6 +173,14 @@ nobody understands).
   child, could not be confirmed from Autodesk's own documentation: every import is a device,
   fixed in Properties...); dynamic block parameters; AutoCAD Electrical's wire numbering and
   cross-reference behavior. Terminal strips and what followed moved down one number.
+- 0.24.1 (owner, Nov 24 2026: "I need to be able to edit footprint rating font sizes. Both in
+  the footprint block itself and the ability to override individually its instances"): a text
+  size per footprint label line in the block (Block properties, Label text sizes) and on a copy
+  (its attributes window), paper inches; the copy's, then the block's, then the project's
+  Footprint label height. Also fixed: a label line's Angle wasn't kept ("I also reoriented the
+  label 90 degrees and it reverted back"). Decided ("Option 2, but overridable"): a turned line
+  is kept readable (180 drawn as 0, 270 as 90, on its spot), with Keep readable per line on
+  the copy to draw it exactly as set; no block-level default for it.
 
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).

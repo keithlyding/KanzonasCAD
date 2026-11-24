@@ -521,7 +521,8 @@ manufacturer.</p>
 <ul>
 <li><b>Properties...</b> (a button in the Library popup, its right-click menu, or
 <b>Block properties...</b> in the Library menu): the details Make block asked for, filled in:
-name, category, description, manufacturer, family, series and, for a symbol, its part in
+name, category, description, manufacturer, family, series, for a footprint its <b>Label text
+sizes</b> (each label line's size; see Footprint label) and, for a symbol, its part in
 cross-references, contact, tag prefix, wire numbers through it and its pin names in order
 (renaming pins; Edit block adds or removes them). Those last are greyed out on a panel
 footprint (Make block makes one when you are on a panel sheet): change its <b>Kind</b> to
@@ -1674,7 +1675,25 @@ unticked, they take the footprint's color)
 for every footprint in the project (projects made before 0.18.1 take 0.08" when opened; their
 labels were the tag height). An empty tag or description shows "?"; an empty rating shows no
 line. It prints and goes into PDF and DXF exports. Changing the tag, part number or
-description (double-click the footprint) changes the label.</li>
+description (double-click the footprint) changes the label.
+<b>A size for each line:</b> a footprint block can give each of its label lines a text size
+of its own (Block properties..., <b>Label text sizes</b>: a size beside Tag, Part number, each
+rating and the rest, in inches on paper; blank takes the project's Footprint label height),
+and a placed copy can have its own over its block's: double-click it, and in <b>Shown on
+it</b> set a line's <b>Text size</b> (blank: the block's, its size shown greyed, else the
+project's). A line takes its copy's size, then its block's, then the project's: changing the
+project's height changes only the lines with no size of their own. The sizes are on paper, so
+on a 1:4 panel sheet they are drawn four times larger and print the size you typed. With other
+footprints selected too, <b>Also the other selected footprints</b> gives them the sizes you
+changed in one step (their other sizes stay). Lines of different sizes stack without
+overlapping, each line as tall as its own text. Saving the block to your library and <b>Update
+blocks from library</b> bring a block's sizes into a project like its other changes.
+<b>Turning a line:</b> in the same window, each line's <b>Angle</b> turns it on that copy; it
+then turns with the footprint (Rotate). A line is kept readable: turned to 180 it is drawn at
+0, and 270 at 90, on the same spot, so it reads from the bottom or the right, as the
+footprint's own lines do. Untick its <b>Keep readable</b> to draw it exactly at its angle,
+upside down included. (Up to 0.24 a line's Angle wasn't kept: it went back to how the
+footprint was turned.)</li>
 <li><b>Which device a footprint is</b>: placing a footprint (Insert footprint, or a part's
 footprint) asks which schematic device it is, as a contact asks which coil: <b>Enter</b> takes
 the one offered (the next device with no footprint yet, in page order; one with the
