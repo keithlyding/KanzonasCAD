@@ -153,15 +153,37 @@ nobody understands).
   leave room for them): back/forward through places gone to, Ctrl+click on a drawing's
   cross-reference text to go there, a search box (a tag or wire number typed).
 
+- 0.24 (owner, Nov 24 2026: "If someone is an AutoCAD user and wants to switch over but
+  doesn't want to lose AutoCAD's native blocks and any they've created, can they copy their
+  blocks into the KanzonasCAD folder and they'll work?"; asked whether to build a batch import:
+  "Yes. Start it please. People can bring in Autocad's blocks on their own if they wanted to,
+  but we would advertise that it's for blocks people have created on their own"): **Import
+  blocks from folder...** (Library menu; Output tab's Import group; Block tab). A folder of
+  DWG/DXF files (subfolders optional) or one drawing; a WBLOCK'd file is one block named after
+  the file, a drawing of named blocks gives each (anonymous, xref, layout, "_" arrowhead and
+  nested-only blocks left out). A window lists them (picture, kind guessed, pins, file,
+  status: new / name already in the library: skip, replace or keep both as "name (2)", skip to
+  start / can't be read, with why), category (Imported) and library (first or second,
+  writable). Read and written a file or block at a time on the event loop under a progress
+  window; Cancel puts the library back as it was. AutoCAD Electrical's wire connection
+  attributes X?TERMnn become pins (named by TERMnn's value, else nn), TAG1 the tag spot, an
+  H/V + family name (HCR1) the tag prefix (CR). Decided: presented everywhere as importing
+  **your own** blocks (the owner's words); nothing refuses Autodesk's. Not done: the cross-
+  reference role from AutoCAD Electrical's name convention (its fourth character, parent or
+  child, could not be confirmed from Autodesk's own documentation: every import is a device,
+  fixed in Properties...); dynamic block parameters; AutoCAD Electrical's wire numbering and
+  cross-reference behavior. Terminal strips and what followed moved down one number.
+
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).
 2. Auto wire layer (0.22.1, above).
 3. Cross-reference navigation, Trace (0.23, above; put ahead of terminal strips by the
    owner, Nov 23 2026: "very important").
-4. Terminal strips (0.24): strips, jumpers, a strip editor, a terminal plan report.
-5. Panel wiring (0.25): a per-device wiring list (owner: yes); point-to-point as wire labels on
+4. Terminal strips (0.25; was 0.24 until Import blocks from folder... took 0.24): strips,
+   jumpers, a strip editor, a terminal plan report.
+5. Panel wiring (0.26): a per-device wiring list (owner: yes); point-to-point as wire labels on
    the footprints' terminals, not a drawn diagram (see 0.22.1).
-6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.26):
+6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.27):
    "lean heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates
    library: not now.
 

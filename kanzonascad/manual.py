@@ -605,6 +605,63 @@ attributes and place, its wires on its pins. A project keeps its own copy of eve
 uses, so it opens the same anywhere: this is how it takes a newer one.</p>
 
 
+<a name="import-blocks"></a>
+<h3>Bringing in your own blocks</h3>
+<p>Coming from AutoCAD or AutoCAD Electrical, the blocks you made there (your own symbols and
+footprints, each kept as a drawing of its own or many in one drawing) come into your library in
+one go with <b>Import blocks from folder...</b> (Library menu; the Output tab's Import group and
+the Block tab). Copying the files into the library folder isn't enough: the library holds
+KanzonasCAD's own block files, and this makes them.</p>
+<ol>
+<li>Pick the folder that holds them. Every <b>DWG</b> (AutoCAD R13 to 2018 format, which covers
+every AutoCAD version since 2018 too) and <b>DXF</b> file in it is read; tick <b>Include
+subfolders</b> to read its subfolders too, or click <b>One drawing...</b> to read just one
+file (<b>Folder...</b> picks another folder). A file that is one block (saved with WBLOCK, the
+usual way to keep a block: its drawing and attribute definitions in model space) comes in as
+one block named after the file. In a drawing of named blocks, each named block is one; a block
+used only inside another is a part of it, and anonymous blocks, external references and
+AutoCAD's dimension arrowheads (names starting with _) are left out. A drawing with named
+blocks and a drawing of its own besides is listed as the blocks plus the whole drawing (as one
+block, unticked to start).</li>
+<li>The window lists every block found, with a picture of it, its kind, how many pins were
+found, its file and its <b>status</b>: <b>New</b>, <b>Name already in the library</b> (a block
+of that name and kind is in your libraries, or among KanzonasCAD's own, or earlier in the
+list), or <b>Can't be read</b> with the reason (a damaged file is listed this way; the others
+still come in). Untick the ones you don't want (<b>Tick all</b>, <b>Tick none</b>). The
+<b>Kind</b> is a guess: a block with wire connection attributes (below) is a <b>Schematic
+symbol</b>, any other a <b>Panel footprint</b>; change it on a row, or select rows and click
+Schematic symbol or Panel footprint beside <b>Selected rows</b> (all rows when none is
+selected). For a name already in the library choose, on its row or for the selected rows,
+<b>Skip it</b> (to start), <b>Replace it</b> (the imported block takes its place) or <b>Keep
+both</b> (the imported one is saved as "name (2)").</li>
+<li>Choose the <b>Category</b> they go in (Imported to start) and, when you have a second
+library folder, which library they go to (<b>Put them in</b>; a read-only one can't be picked),
+then click <b>Import</b>. A progress window shows them going in; <b>Cancel</b> there leaves your
+library exactly as it was. Afterward a message says how many were imported, skipped and failed,
+and why, and the Library popup opens on them.</li>
+</ol>
+<p><b>Pins from AutoCAD Electrical's wire connection attributes.</b> AutoCAD Electrical marks
+each point of a schematic symbol where a wire connects with an attribute definition named
+X?TERMnn: the ? is the direction the wire leaves (1 right, 2 up, 4 left, 8 down), nn the
+connection's number (X1TERM01, X4TERM02...). Each one becomes a <b>pin</b> of the block, at its
+insertion point, in the order of their numbers, named by the pin number AutoCAD Electrical shows
+there (the default value of the attribute TERMnn with the same number: A1, 13...), else by the
+number itself (1, 2...); the pin names show on the drawing when those numbers were shown. The
+<b>tag</b> goes where its TAG1 is, and a block named in AutoCAD Electrical's way (H or V, then
+its family: HCR1, VPB11) gets that family as its <b>tag prefix</b> (CR, PB). Its description
+lines, maker and catalog number fields (DESC1-3, MFG, CAT) come in as attributes as when a
+drawing is opened; attributes that were hidden stay hidden. A drawing in millimeters (or any
+other unit it names) is scaled to inches, as when one is opened.</p>
+<p><b>What doesn't carry over</b>: AutoCAD Electrical's own cross-reference and wire-numbering
+behavior (its parent and child symbols, contact counts, wire number attributes: every imported
+symbol is a device on its own until you say otherwise), dynamic block parameters (a dynamic
+block comes in as drawn) and anything 3D (seen from above).</p>
+<p><b>Fixing a block afterward</b>: select it in the Library popup and use <b>Properties...</b>
+(Block properties... in the Library menu) to change its kind, its part in cross-references (a
+coil with contacts elsewhere, or a contact), contact type, tag prefix and pin names, or <b>Edit
+block...</b> to change its drawing, move or add pins (Add pin) and move its tag spot. Then
+<b>Save block</b>.</p>
+
 <h2>Device tags</h2>
 <p>Every device you place gets its tag by itself: the symbol's prefix, the page number and a
 two-digit count on that page. On page 6 that's <b>CR601</b>, CR602, <b>M601</b>, PB601...; on

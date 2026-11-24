@@ -4300,6 +4300,132 @@ def random_editing(log, out, ops, seed, drawing=None):
                 got_t, got_j, want_t, want_j)
         BC.CHECKED["terminal count from the tap numbers"] += 1
 
+    imported = {"symbol": [], "footprint": []}    # (names op_import_blocks brought in)
+
+    def op_import_blocks():
+        # (0.24: Library > Import blocks from folder..., through its window as a user would: a
+        # folder of 1-3 block files written here, some names already in the library (each
+        # skipped, replaced or kept both, as picked in the window); the library then holds
+        # what the files say, worked out from what was written: names, kinds, pins and where
+        # they are; then one of the symbols placed, and a wire lands on its pin)
+        from kanzonascad import import_blocks_window as IB
+        folder = tempfile.mkdtemp(dir=out, prefix="blocks-")
+        names = []
+        for _i in range(rnd.randint(1, 3)):
+            old = imported["symbol"] + imported["footprint"]
+            if old and rnd.random() < 0.3:
+                names.append(rnd.choice(old))
+            else:
+                names.append("BAT BLOCK %d" % rnd.randint(1, 10 ** 9))
+        names = list(dict.fromkeys(names))     # (one row a name: a clash with the library)
+        want = block_files(folder, rnd, names)
+        before = {k: {n: b.to_dict() for n, b in lib.blocks(k)[0].items()}
+                  for k in ("symbol", "footprint")}
+        picks = {}
+
+        def answer(dlg):
+            from PySide6.QtWidgets import QComboBox, QPushButton, QTableWidget
+            t = dlg.findChild(QTableWidget, "blocks")
+            for i in range(t.rowCount()):
+                name = t.item(i, 0).text()
+                box = dlg.findChild(QComboBox, "taken_%d" % i)
+                if box.isEnabled():
+                    picks[name] = rnd.choice(["skip", "replace", "both"])
+                    box.setCurrentIndex(box.findData(picks[name]))
+            dlg.findChild(QPushButton, "import").click()
+            return dlg.result()
+        saved = (QFileDialog.getExistingDirectory, IB.ImportBlocksDialog.exec,
+                 QMessageBox.information)
+        told = []
+        QFileDialog.getExistingDirectory = staticmethod(lambda *a, **k: folder)
+        IB.ImportBlocksDialog.exec = answer
+        QMessageBox.information = staticmethod(lambda *a, **k: told.append(a[2]))
+        try:
+            imp = win.import_blocks()
+        finally:
+            (QFileDialog.getExistingDirectory, IB.ImportBlocksDialog.exec,
+             QMessageBox.information) = saved
+            win.library_dialog.hide()
+        after = {k: lib.blocks(k)[0] for k in ("symbol", "footprint")}
+        if imp is None:
+            # (the progress window cancelled: by the battery's dialog closer, on a slow run)
+            assert told and told[-1].startswith("Cancelled"), told
+            assert {k: {n: b.to_dict() for n, b in after[k].items()} for k in after} == \
+                before, "Import blocks cancelled, the library changed"
+            BC.CHECKED["import blocks cancelled: library as it was"] += 1
+            return
+        landed = {}
+        for name, (kind, pins) in want.items():
+            pick = picks.get(name)
+            assert (pick is not None) == (name in before[kind]), \
+                "%s: %s in the library, but %s offered" % (
+                    name, "already" if name in before[kind] else "not", pick)
+            if pick == "skip":
+                assert after[kind][name].to_dict() == before[kind][name], \
+                    "%s skipped, but changed in the library" % name
+                BC.CHECKED["import blocks: a name taken, skipped"] += 1
+                continue
+            got_name = name
+            if pick == "both":
+                made = [n for n in after[kind] if n not in before[kind] and
+                        re.fullmatch(re.escape(name) + r" \((\d+)\)", n)]
+                assert len(made) == 1, "%s kept both: %r" % (name, made)
+                got_name = made[0]
+                assert after[kind][name].to_dict() == before[kind][name], \
+                    "%s kept both, but the one in the library changed" % name
+            b = after[kind].get(got_name)
+            assert b is not None and b.kind == kind, "%s not in the library as a %s" % (
+                got_name, kind)
+            got = [(q["name"], q["pos"]) for q in b.pins]
+            assert len(got) == len(pins) and all(
+                g[0] == w[0] and G.dist(g[1], w[1]) <= 1e-9 for g, w in zip(got, pins)), \
+                "%s's pins %r, written %r" % (got_name, got, pins)
+            if pins:
+                landed[got_name] = b
+            if got_name not in imported[kind]:
+                imported[kind].append(got_name)
+            BC.CHECKED["import blocks: kind and pins as written"] += 1
+        BC.CHECKED["import blocks: %s" % ("a name taken" if picks else "all new")] += 1
+        if not landed:
+            return
+        k = s.k()
+        o = clear_of_drawing(k)
+        if o is None:
+            return
+        defn = landed[rnd.choice(sorted(landed))]
+        before_ids = set(s.entities)
+        v.run(C.InsertCmd, defn, {})
+        v.input_text(fmt(o))
+        finish()
+        got = [e for i, e in s.entities.items() if i not in before_ids and isinstance(e, M.Insert)]
+        assert len(got) == 1, "%s not placed: %r" % (defn.name, got)
+        e = got[0]
+        name, pin = rnd.choice(e.pin_points())
+        # (straight out of the side of the symbol nearest the pin, past none of its other
+        # pins: a wire never runs through a pin, so one that would isn't drawn at all)
+        bb = wires.body_box(e)
+        sides = sorted([(pin[0] - bb[0], (-1, 0)), (bb[2] - pin[0], (1, 0)),
+                        (pin[1] - bb[1], (0, -1)), (bb[3] - pin[1], (0, 1))])
+        others = [q for n, q in e.pin_points() if G.dist(q, pin) > wires.TOL]
+        ways = [(pin[0] + d[0] * 2.0 * k, pin[1] + d[1] * 2.0 * k) for _m, d in sides]
+        ways = [a for a in ways if all(G.dist_to_segment(q, a, pin) > wires.TOL
+                                       for q in others)]
+        if not ways:
+            BC.CHECKED["imported symbol's pin boxed in by its others: skipped"] += 1
+            return
+        a = ways[0]
+        before_ids = set(s.entities)
+        v.run(C.WireCmd)
+        type_in(v, fmt(a), fmt(pin))
+        finish()
+        new = [w for i, w in s.entities.items() if i not in before_ids and isinstance(w, M.Wire)]
+        ends = [q for w in new for q in (w.points[0], w.points[-1])
+                if G.dist(q, pin) <= wires.TOL]
+        assert ends, "a wire to %s's pin %s doesn't end on it" % (defn.name, name)
+        assert any(n == name for x, n in wires.pins_on(s, ends[0]) if x.id == e.id), \
+            "a wire on %s's pin %s isn't on it: %r" % (defn.name, name, wires.pins_on(s, ends[0]))
+        BC.CHECKED["imported symbol takes a wire on its pin"] += 1
+
     def op_undo():
         for _i in range(rnd.randint(1, 4)):
             p.undo()
@@ -4318,7 +4444,8 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2),
+             (op_import_blocks, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -4644,6 +4771,66 @@ def mixed_project(win):
     # (0.21) a picture kept in the project (a logo), on the first sheet
     fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))
     return p
+
+
+def block_files(folder, rnd, names):
+    """1-3 block files written as AutoCAD keeps blocks (op_import_blocks): each a WBLOCK'd
+    block (its drawing and attribute definitions in model space, named after the file), or a
+    drawing of two named blocks placed in model space; random lines and circles, sometimes
+    AutoCAD Electrical wire connections (X?TERMnn, with their pin numbers TERMnn or not), in
+    inches or millimeters, a random base point. names: what to call them, in order. Returns
+    what the library must then hold, worked out here: {name: (kind, [(pin name, (x, y))])}
+    (inches, around the base point)."""
+    import ezdxf
+    want = {}
+    names = list(names)
+    n_file = 0
+    while names:
+        n_file += 1
+        units = rnd.choice([1, 4])
+        u = 25.4 if units == 4 else 1.0         # (drawing units an inch)
+        doc = ezdxf.new()
+        doc.header["$INSUNITS"] = units
+        two = len(names) >= 2 and rnd.random() < 0.4
+        mine = [names.pop(0) for _i in range(2 if two else 1)]
+        for name in mine:
+            if two:
+                bx, by = rnd.randint(-4, 4) * 0.25, rnd.randint(-4, 4) * 0.25
+                lay = doc.blocks.new(name, base_point=(bx * u, by * u))
+            else:
+                bx, by = rnd.randint(-4, 4) * 0.25, rnd.randint(-4, 4) * 0.25
+                doc.header["$INSBASE"] = (bx * u, by * u, 0.0)
+                lay = doc.modelspace()
+            lay.add_line((0.0, 0.0), (u, 0.0))
+            for _i in range(rnd.randint(0, 3)):
+                a = (rnd.randint(0, 8) * 0.125, rnd.randint(0, 8) * 0.125)
+                b = (rnd.randint(0, 8) * 0.125, rnd.randint(0, 8) * 0.125)
+                if a != b:
+                    lay.add_line((a[0] * u, a[1] * u), (b[0] * u, b[1] * u))
+            if rnd.random() < 0.5:
+                lay.add_circle((0.5 * u, 0.5 * u), rnd.choice([0.125, 0.25]) * u)
+            pins = []
+            if rnd.random() < 0.7:
+                spots = rnd.sample([(x * 0.25, y * 0.25) for x in range(5) for y in range(5)],
+                                   rnd.randint(1, 4))
+                numbered = rnd.random() < 0.5
+                for i, q in enumerate(spots):
+                    nn = "%02d" % (i + 1)
+                    lay.add_attdef("X%dTERM%s" % (rnd.choice([1, 2, 4, 8]), nn),
+                                   (q[0] * u, q[1] * u), dxfattribs={"flags": 1})
+                    shown = str(rnd.randint(1, 99)) if numbered else ""
+                    if numbered:
+                        lay.add_attdef("TERM" + nn, ((q[0] + 0.05) * u, (q[1] + 0.05) * u),
+                                       text=shown)
+                    pins.append((shown or str(i + 1), (q[0] - bx, q[1] - by)))
+                lay.add_attdef("TAG1", (0.5 * u, 1.25 * u))
+            want[name] = ("symbol" if pins else "footprint", pins)
+            if two:
+                doc.modelspace().add_blockref(name, (0.0, 3.0 * len(want)))
+        # (a WBLOCK'd block is named after its file)
+        doc.saveas(os.path.join(folder, "%s.%s" % ("blocks %d" % n_file if two else mine[0],
+                                                   rnd.choice(["dxf", "DXF"]))))
+    return want
 
 
 SVG_PIECES = 4             # (svg_file's: a line, a rectangle, a circle and a text)
