@@ -22,6 +22,8 @@ from . import model as M
 from . import theme
 from .block_window import BlockEditing, is_block_doc
 from .tb_window import TitleBlockEditing, is_tb_doc
+from .trace_panel import Tracing
+from . import where_used
 from .commandline import CommandLine
 from .render import install_text_measure
 from .view import CadView
@@ -191,7 +193,7 @@ def copy_title(title, taken):
     return "%s%s%d" % (base, dash, n)
 
 
-class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
+class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
     def __init__(self, family=None):
         """family: the windows this one opens projects and sheets with (a window from Open
         this sheet in a new window joins its opener's); the first is the main one, which
@@ -241,6 +243,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         sd.setWidget(self.sheet_list)
         self.addDockWidget(Qt.LeftDockWidgetArea, sd)
         self.resizeDocks([sd], [200], Qt.Horizontal)
+        self._build_trace()             # (Trace, Ctrl+E: docked, hidden to start)
 
         from .library import Library
         from .library_panel import LibraryPanel
@@ -406,6 +409,10 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         A("command_line", "&Command line", self._toggle_cmdline, "Ctrl+9", checkable=True,
           label="Command line")
         A("sheets", "S&heets panel", self._toggle_sheets, checkable=True, label="Sheets panel")
+        A("trace", where_used.NAME, self.trace, "Ctrl+E", label=where_used.NAME,
+          tip="Every place the selected device, wire or PLC point is in the project, in a "
+              "panel that stays open and follows what you select (Ctrl+E); double-click a "
+              "row or press Enter to go there")
         A("collapse", "Co&llapse ribbon", self._toggle_collapse, "Ctrl+F1", checkable=True,
           label="Collapse")
         A("group_names", "Ribbon &group names", self._toggle_group_names, checkable=True,
@@ -719,7 +726,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         m = mb.addMenu("&View")
         for k in ("zoom_ext", "zoom_sheet", "zoom_in", "zoom_out", None, "grid", "snap", "ortho",
                   "osnap", "polar", "drafting", None, "black", "command_line", "sheets",
-                  "collapse", "group_names", "block_tab"):
+                  "trace", "collapse", "group_names", "block_tab"):
             m.addSeparator() if k is None else m.addAction(a[k])
         tm = m.addMenu("&Theme")
         for mode in ("light", "dark", "system"):
@@ -754,7 +761,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
-                  "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_count", "materials",
+                  "trace", "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_count", "materials",
                   "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb",
@@ -858,8 +865,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
             ("On the wire", "large", [a["scoot"], a["align_dev"]]),
             ("Numbering", "large", [a["update_numbers"], a["renumber"], a["lock_numbers"],
                                     a["num_source"]]),
-            ("Cross-references", "large", [a["sig_arrows"], a["xref_update"], a["xref_freeze"],
-                                           a["xref_auto"]]),
+            ("Cross-references", "large", [a["trace"], a["sig_arrows"], a["xref_update"],
+                                           a["xref_freeze"], a["xref_auto"]]),
             ("Layers", "small", [self.sch_layer_box, self.sch_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"],
                                  a["wire_layers"]]),
@@ -907,7 +914,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
             ("Zoom", "small", [a["zoom_ext"], a["zoom_sheet"], a["zoom_in"], a["zoom_out"]]),
             ("Drafting aids", "small", [a["grid"], a["snap"], a["ortho"], a["polar"],
                                         a["osnap"], a["drafting"]]),
-            ("Panels", "small", [a["command_line"], a["sheets"], a["black"]]),
+            ("Panels", "small", [a["command_line"], a["sheets"], a["trace"], a["black"]]),
             ("Windows", "large", [a["new_window"], a["move_window"]]),
             ("Theme", "small", [a["theme_light"], a["theme_dark"], a["theme_system"]]),
             ("Ribbon", "small", [a["collapse"], a["group_names"], a["block_tab"]]),
@@ -1014,6 +1021,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         v.selectionChanged.connect(self._update_ui)
         v.selectionChanged.connect(self._label_checks)
         v.selectionChanged.connect(self._fill_layers)
+        v.selectionChanged.connect(self._trace_follow)     # (Trace, while it is open)
         from . import sheet_cycle
         sheet_cycle.shown(v)
         v.sheetChanged.connect(lambda v=v: sheet_cycle.shown(v))
@@ -1166,6 +1174,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
             self._fill_layers()
             self._update_ui()
             self._say_duplicates(d)
+        self._trace_changed(d.project)
 
     def _say_duplicates(self, d):
         """A duplicate tag or wire number that wasn't there before the change: said on the
@@ -1199,6 +1208,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, QMainWindow):
         self._fill_sheets()
         self._fill_layers()
         self._update_ui()
+        self._trace_follow()
         if v is not None:
             v.setFocus()
 

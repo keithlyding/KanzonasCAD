@@ -311,6 +311,20 @@ def use_as_title_block(ed, project, sheet, ents):
                                    a["height"] * e.scale, 0.0, "center"))
         else:
             pieces.append(e.copy())
+    # (on the paper: a title block taken from objects off it was drawn off every sheet, and
+    # its box, reaching from the corner to them, left the reports and I/O lists made on the
+    # sheets a sliver of room; the battery, seed 477)
+    w, h = sheet.paper()
+    slack = 0.05 * sheet.k()
+    bb = None
+    for pc in pieces:
+        b = pc.bbox()
+        bb = b if bb is None else (min(bb[0], b[0]), min(bb[1], b[1]),
+                                   max(bb[2], b[2]), max(bb[3], b[3]))
+    if bb is not None and (bb[0] < -slack or bb[1] < -slack or bb[2] > w + slack
+                           or bb[3] > h + slack):
+        raise ValueError("the objects reach past the edge of the sheet: move the title block "
+                         "onto the sheet, where it goes, first")
     tb = project.title_block
     for eid in list(tb.entities):
         ed.remove(tb, eid)

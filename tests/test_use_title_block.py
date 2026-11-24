@@ -89,6 +89,31 @@ class UseTitleBlockTest(unittest.TestCase):
         self.assertIn(ins.id, self.s.entities)
         self.assertEqual(len(self.p.title_block.entities), old_tb)
 
+    def test_off_the_sheet_is_refused(self):
+        # (a title block taken from objects off the paper was drawn off every sheet, and its
+        # box, from the corner to them, left reports and I/O lists made on the sheets a sliver
+        # of room: their cells came out empty; the battery, seed 477)
+        rep = fileio.import_dxf(self.p, self.s, tb_dxf())
+        ins = self.s.entities[rep["ids"][0]]
+        w, _h = self.s.paper()
+        with self.p.edit("away") as ed:
+            ed.change(self.s, ins.moved(w + 40.0, 0.0))
+        before = sorted(e.to_dict()["kind"] for e in self.p.title_block.entities.values())
+        steps = len(self.p.undo_stack)
+        said = []
+        real = self.v.message
+        self.v.message = lambda text, *a, **k: said.append(text)
+        try:
+            self.v.set_selection({ins.id})
+            self.v.run(C.UseTitleBlockCmd)
+        finally:
+            self.v.message = real
+        self.assertIn(ins.id, self.s.entities)
+        self.assertEqual(len(self.p.undo_stack), steps)
+        self.assertEqual(sorted(e.to_dict()["kind"]
+                                for e in self.p.title_block.entities.values()), before)
+        self.assertTrue(any("edge of the sheet" in t for t in said), said)
+
     def test_nothing_selected(self):
         n = len(self.p.title_block.entities)
         self.v.set_selection(set())

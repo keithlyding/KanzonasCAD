@@ -63,8 +63,19 @@ def _widths(head, rows, room):
         cells = [str(h)] + [str(r[i]) for r in rows if i < len(r)]
         want.append(max(M.text_width(c[:60], TEXT_H) for c in cells) + 2 * PAD)
     total = sum(want) or 1.0
-    f = min(1.0, room / total)
-    return [w * f for w in want]
+    if total <= room:
+        return want
+    # (short of room, the wide columns give it up: each column keeps what four characters need,
+    # or less when it wants less; the rest shared out in proportion to what more each wants.
+    # Shrunk all alike, the BOM's Item column came out too narrow for "3", left empty, the
+    # long battery's seed 4792)
+    floor = [min(w, M.text_width("8888", TEXT_H) + 2 * PAD) for w in want]
+    spare = room - sum(floor)
+    if spare <= 0:
+        f = room / (sum(floor) or 1.0)
+        return [w * f for w in floor]
+    more = sum(w - lo for w, lo in zip(want, floor)) or 1.0
+    return [lo + (w - lo) * spare / more for w, lo in zip(want, floor)]
 
 
 def free_box(area, tb):

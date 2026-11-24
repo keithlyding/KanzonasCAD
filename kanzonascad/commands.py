@@ -1083,10 +1083,11 @@ class GripCmd(Command):
             _run_drag(self.ctx, self.ent, self._run(), p, say=True)
         if got:
             from .wires import moved_ends, pull_on
+            # (a wire squeezed to nothing by the drag goes: put_changed; the long battery,
+            # seed 4771)
             ends = moved_ends(sheet, list(got.values()))
             with self.ctx.edit("Stretch") as ed:
-                for e in got.values():
-                    ed.change(sheet, e)
+                put_changed(ed, sheet, got.values())
                 pull_on(ed, sheet, ends)
         self.finish()
 
@@ -4831,8 +4832,7 @@ class ScootCmd(_TwoPoint):
         if got:
             sheet = self.ctx.sheet()
             with self.ctx.edit(self.title) as ed:
-                for e in got.values():
-                    ed.change(sheet, e)
+                put_changed(ed, sheet, got.values())
         self.finish()
 
     def preview(self, p):

@@ -1289,6 +1289,95 @@ def random_editing(log, out, ops, seed, drawing=None):
             nxt = start + lad.rungs
         return out
 
+    def op_trace():
+        # (0.23: Trace, Ctrl+E: a device or a wire picked as a user would, every place it is
+        # listed, worked out here from the objects themselves: the inserts sharing its hidden
+        # id or its tag, the wires carrying its number and the arrows on them; then a row gone
+        # to: its sheet shown, its object selected and in the middle of the view)
+        nonlocal s
+        devs = [(sh, e) for sh in p.sheets for e in sh.inserts()
+                if tags_mod.is_device(e) and e.attrs.get("DEV")]
+        ws = [(sh, w) for sh in p.sheets for w in sh.wires() if w.num]
+        # (half the time a wire with an arrow on it, when there is one)
+        arrowed = [(sh, w) for sh in p.sheets for c in sh.inserts()
+                   if c.defn is not None and c.defn.wiring == "link"
+                   for _n, q in c.pin_points() for w in sh.query_point(q, 1e-6)
+                   if isinstance(w, M.Wire) and w.num and w.touches(q, 1e-6)]
+        if arrowed and rnd.random() < 0.5:
+            ws = arrowed
+        if not devs and not ws:
+            return
+        pick = rnd.choice(devs if devs and (not ws or rnd.random() < 0.5) else ws)
+        sh, e = pick
+        v.show_sheet(sh.id)
+        s = v.sheet()
+        v.set_selection({e.id})
+        win.acts["trace"].trigger()                     # (Ctrl+E)
+        t0 = time.perf_counter()
+        while win.trace_busy():                         # (it works in the event loop's turns)
+            APP.processEvents()
+            assert time.perf_counter() - t0 < 60, "Trace never finished"
+        rows = win.trace_panel.rows()
+        head = win.trace_panel.header.text()
+        assert rows, "Trace listed nothing for %r: %s" % (e, head)
+        assert head.endswith("%d place%s" % (len(rows), "" if len(rows) == 1 else "s")), head
+        got = {(r.sheet_id, i) for r in rows for i in r.ids}
+        if isinstance(e, M.Insert):
+            dev, tag = e.attrs["DEV"], (e.attrs.get("TAG", "") or "").strip().upper()
+            want = set()
+            for o in p.sheets:
+                for x in list(o.inserts()) + [b for b in o.entities.values()
+                                              if isinstance(b, M.DashBox)]:
+                    if isinstance(x, M.Insert) and (x.defn is None or x.defn.wiring == "link"):
+                        continue
+                    if isinstance(x, M.DashBox) and not (x.attrs.get("PARENT") or
+                                                         x.attrs.get("TAG")):
+                        continue
+                    if dev in (x.attrs.get("DEV"), x.attrs.get("PARENT")) or (
+                            tag and (x.attrs.get("TAG", "") or "").strip().upper() == tag):
+                        want.add((o.id, x.id))
+            assert got == want, "Trace of %s: listed %s, there are %s" % (
+                tag, sorted(got - want), sorted(want - got))
+            BC.CHECKED["trace: a device's places"] += 1
+        else:
+            num = e.num
+            want = {(o.id, w.id) for o in p.sheets for w in o.wires() if w.num == num}
+            wires_got = {(r.sheet_id, i) for r in rows if r.role == "Wire" for i in r.ids}
+            assert want <= wires_got, "Trace of wire %s: left out %s" % (
+                num, sorted(want - wires_got))
+            for o_id, i in wires_got - want:        # (only wires joined to one of that number)
+                o = p.sheet_by_id(o_id)
+                assert o.entities[i].num != num and any(
+                    o2.entities[j].num == num for o2_id, j in wires_got
+                    for o2 in [p.sheet_by_id(o2_id)]), (o_id, i)
+            ends = {}
+            for o_id, i in wires_got:
+                ends.setdefault(o_id, []).append(p.sheet_by_id(o_id).entities[i])
+            for o_id, mine in ends.items():
+                o = p.sheet_by_id(o_id)
+                for c in o.inserts():
+                    if c.defn is None or c.defn.wiring != "link":
+                        continue
+                    if any(w.touches(q, 1e-6) for _n, q in c.pin_points() for w in mine):
+                        assert (o_id, c.id) in got, "Trace of wire %s: arrow %s left out" % (
+                            num, c.attrs.get("TAG"))
+                        BC.CHECKED["trace: an arrow on the wire"] += 1
+            BC.CHECKED["trace: a wire's places"] += 1
+        r = rnd.choice(rows)
+        assert win.trace_go(r), "couldn't go to %r" % (r,)
+        s = v.sheet()
+        assert v.sheet_id == r.sheet_id and v.sel == set(r.ids), (v.sheet_id, v.sel, r)
+        o = p.sheet_by_id(r.sheet_id)
+        bb = None
+        for i in r.ids:
+            bb = G.bbox_union(bb, o.entities[i].bbox())
+        tol = 1e-6 * max(1.0, abs(v.center[0]), abs(v.center[1]))
+        assert bb[0] - tol <= v.center[0] <= bb[2] + tol and \
+            bb[1] - tol <= v.center[1] <= bb[3] + tol, ("not centered on it", v.center, bb)
+        BC.CHECKED["trace: gone to a row"] += 1
+        if rnd.random() < 0.5:
+            win.trace_dock.hide()
+
     def op_ladder():
         # (0.22: a ladder through its command, as the owner would: its rungs numbered from the
         # page and the ladders to its left; on a sheet by ladder, a point on a rung reads its
@@ -1329,15 +1418,19 @@ def random_editing(log, out, ops, seed, drawing=None):
             i = rnd.randrange(lad.rungs)
             q = (lad.a[0] + lad.width() / 2, lad.a[1] - i * lad.spacing)
             # (the first ladder, left to right then top down, that q is on: within a third of
-            # its width past its rails and half a rung past its ends)
+            # its width past its rails and half a rung past its ends, measured along its own
+            # rungs and rails: a ladder turned by an earlier step runs up or sideways, the
+            # long battery's seed 4791, where this read only ladders running down)
             hit = None
             for e in sorted((e for e in s.entities.values() if isinstance(e, M.Ladder)),
                             key=lambda e: (round(e.a[0], 6), -e.a[1])):
-                m = e.width() / 3.0
-                low = e.a[1] - (e.rungs - 1) * e.spacing
-                if e.a[0] - m <= q[0] <= e.b[0] + m and \
-                        low - e.spacing / 2 <= q[1] <= e.a[1] + e.spacing / 2:
-                    hit = e.numbers()[int(round((e.a[1] - q[1]) / e.spacing))]
+                wd = G.dist(e.a, e.b)
+                ux, uy = (e.b[0] - e.a[0]) / wd, (e.b[1] - e.a[1]) / wd
+                along = (q[0] - e.a[0]) * ux + (q[1] - e.a[1]) * uy
+                down = ((q[0] - e.a[0]) * uy - (q[1] - e.a[1]) * ux) / e.spacing
+                m = wd / 3.0
+                if -m <= along <= wd + m and -0.5 <= down <= e.rungs - 0.5:
+                    hit = e.numbers()[int(round(down))]
                     break
             assert p.zone_text(s, *q) == hit, "a point on rung %s reads %s" % (
                 hit, p.zone_text(s, *q))
@@ -2505,14 +2598,22 @@ def random_editing(log, out, ops, seed, drawing=None):
         now = [w for w in sh.wires() if w.touches(src.pin_points()[0][1])]
         if not now or not now[0].num or now[0].num_lock:
             return
-        # (a tap off the source's wire is numbered from it: 1006-1, 1006-1a, 1006a, 1006-a...;
-        # its page is the base number's)
-        got = WN.split(TAP_END.sub("", now[0].num))
+        # (never the number typed on the destination's wire, nor a tap of it)
+        assert now[0].num != foreign and not (now[0].num.startswith(foreign) and TAP_END.fullmatch(
+            now[0].num[len(foreign):])), \
+            "a source arrow's wire on page %s took %s, typed on the destination's page" % (
+                p.sheet_number(sh), now[0].num)
+        # (a wire of its own: a number of its page. A tap is numbered from the wire it taps,
+        # 1006-1, 1006-1a, 1006a..., and that wire may be carried from another page by arrows,
+        # page 1's 1001 tapped on page 2 is 1001-1 there: the long battery's seed 4793)
+        base = TAP_END.sub("", now[0].num)
+        got = WN.split(base)
         if got is None and WN.by_io_address(p):
             return                          # (numbered by a PLC point's address, O:3/0)
-        assert got and got[0] == p.sheet_number(sh), \
-            "a source arrow's wire on page %s took %s from a destination's page" % (
-                p.sheet_number(sh), now[0].num)
+        if base == now[0].num:
+            assert got and got[0] == p.sheet_number(sh), \
+                "a source arrow's wire on page %s took %s from a destination's page" % (
+                    p.sheet_number(sh), now[0].num)
         BC.CHECKED["a source's wire keeps its page's number"] += 1
 
     def op_wire_color():
@@ -4055,7 +4156,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
