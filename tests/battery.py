@@ -4200,6 +4200,12 @@ def random_editing(log, out, ops, seed, drawing=None):
                 q = M.Project.load(path)
                 assert norm(q.to_dict()) == norm(p.to_dict()), "save and open differ"
                 roundtrips += 1
+                # (0.23.1: the sheets, or some of them, to PDF: its cross-references links)
+                # (picked with the checks' own random numbers: the steps stay as they were)
+                chosen = [sh for sh in p.sheets if crnd.random() < 0.7] or p.sheets[:1]
+                pdf = os.path.join(out, "random.pdf")
+                fileio.export_pdf(p, pdf, sheets=chosen)
+                BC.pdf_links_right(p, pdf, chosen)
         except Exception:
             errors.append("step %d (%s):\n%s" % (i, name, traceback.format_exc()))
             if v.cmd is not None:
@@ -4551,7 +4557,26 @@ def files(log, out):
     pdf = os.path.join(out, "mixed.pdf")
     n = fileio.export_pdf(p, pdf)
     assert n == len(p.sheets) and open(pdf, "rb").read(4) == b"%PDF"
-    notes.append("PDF (%d pages)" % n)
+    # (0.23.1: each cross-reference a link to what it names; one to a sheet left out, none)
+    links = BC.pdf_links_right(p, pdf, p.sheets)
+    # (and its copy with the contacts on CR1, one more on the panel sheet at 1:4: references
+    # from sheet to sheet; all of it, then the panel alone, its reference's sheet left out)
+    r = M.Project.load(path)
+    s0, panel = r.sheets[0], r.sheets[-1]
+    coil = [e for e in s0.inserts() if e.attrs.get("TAG", "").startswith("CR")][0]
+    dev = coil.attrs["DEV"]
+    with r.edit("contacts on CR1") as ed:
+        for c in [e for e in s0.inserts() if e.block == "Contact NO"]:
+            ed.change(s0, c.copy(attrs=dict(c.attrs, PARENT=dev)))
+        ed.add(panel, M.Insert(c.block, (20.0, 20.0), defn=c.defn,
+                               attrs={"TAG": coil.attrs["TAG"], "PARENT": dev}))
+    two = os.path.join(out, "mixed-linked.pdf")
+    fileio.export_pdf(r, two)
+    links += BC.pdf_links_right(r, two, r.sheets)
+    fileio.export_pdf(r, two, sheets=[panel])
+    BC.pdf_links_right(r, two, [panel])
+    r.saved_at = len(r.undo_stack)
+    notes.append("PDF (%d pages, %d cross-reference links)" % (n, links))
     from kanzonascad import pull, dialogs
     q_runs = pull.runs(q)[0]
     assert [r["name"] for r in q_runs] == [r["name"] for r in pull.runs(p)[0]]

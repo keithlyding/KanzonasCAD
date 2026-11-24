@@ -1923,7 +1923,15 @@ the program). If KanzonasCAD doesn't close normally (a crash, a power
 cut), it offers to recover them the next time it starts.</li>
 <li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
 black on white, or in the layers' colors with Export to PDF in the layers' colors ticked in Edit
-&gt; Options..., General.</li>
+&gt; Options..., General. Each cross-reference in the PDF is a link: click one in your PDF
+reader and it goes to the page of the sheet it names, zoomed in on what it names, with its
+neighbors in view. The line under a coil leads to that contact, the place under a contact to
+its coil, a source or destination arrow's "2046 / 7-A2" to its other half, an off-sheet
+connector's place to the connector there (one link per place where it lists several). A
+frozen sheet's reference that is out of date leads to the zone it says. A reference to a sheet
+that isn't in the PDF has no link. (The links need the pypdf library, part of the installed
+and portable programs; run from source without it, the PDF is written without links and the
+command line says so.)</li>
 </ul>
 
 <h2>Printing</h2>

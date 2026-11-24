@@ -2036,12 +2036,17 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, QMainWindow):
             return
         if self._fits_or_go_on(d.project, d.project.sheets, "Export") != "go":
             return
+        notes = []
         try:
-            n = fileio.export_pdf(d.project, path, mono=not self.pdf_colors())
+            n = fileio.export_pdf(d.project, path, mono=not self.pdf_colors(),
+                                  note=notes.append)
         except Exception as ex:
             QMessageBox.warning(self, APP, "Couldn't write %s:\n%s" % (path, ex))
             return
-        self.statusBar().showMessage("Exported %d sheet(s) to %s" % (n, path), 5000)
+        for msg in notes:
+            self.cmdline.add_history(msg)
+        self.statusBar().showMessage(" ".join(["Exported %d sheet(s) to %s." % (n, path)] +
+                                              notes), 5000)
 
     def _misfits(self, p, sheets):
         """[(sheet, [(entity, why)])] of the sheets chosen whose drawing doesn't fit at their

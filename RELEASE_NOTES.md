@@ -6,6 +6,15 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.23.1
+
+**New**
+- Cross-references are links in an exported PDF: click "NO 2-F3" under a coil, "1-B2" under a
+  contact, or an arrow's "2046 / 7-A2", and your PDF reader goes to that page, zoomed in on the
+  contact, coil or other arrow.
+- A text listing several places (an off-sheet connector's "7-A2, 8-B1") has a link for each.
+- A reference to a sheet left out of the PDF has no link.
+
 ## 0.23
 
 **New**

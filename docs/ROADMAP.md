@@ -103,6 +103,10 @@ nobody understands).
   each footprint terminal labeled with its wire number and where it goes); symbols "lean heavy
   on the Allen Bradley stuff" and "also put in IEC symbols" (IEC 60617 as a per-project symbol
   set: changes AGENTS.md's US-only line when it lands).
+- 0.23.1 (owner, Nov 2026: "Like for pdf, if I click on a cross reference, will it navigate me
+  to that location?"; yes, including the source/destination arrows, which he may drop):
+  Export to PDF makes each cross-reference a link to the page and spot it names (/FitR, zoomed
+  round the object), with pypdf (BSD-3-Clause) added as a dependency; none to a sheet left out.
 - 0.22.4 (owner, Nov 23 2026: "I think it should actually have its own tab, kind of like editing
   a block"): the title block edited in a tab of its own, Save title block and Close title
   block on its own ribbon tab.
