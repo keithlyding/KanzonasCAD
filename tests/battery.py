@@ -5577,6 +5577,20 @@ def files(log, out):
 
 # ---- 4. speed ------------------------------------------------------------------------------
 def speed(log, out):
+    # (what the sections before left alive set aside, so Python's collector doesn't go
+    # through it all on every full collection here: on CI the clean up took 3.27 s after a
+    # 3,000-step run, 1.5-2 s after a short one, the long battery, 0.25, seed 4931; what
+    # these steps make themselves is still collected and timed)
+    import gc
+    gc.collect()
+    gc.freeze()
+    try:
+        return _speed(log, out)
+    finally:
+        gc.unfreeze()
+
+
+def _speed(log, out):
     res = []
     p = M.Project.new()
     s = p.sheets[0]
