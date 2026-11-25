@@ -398,8 +398,22 @@ class PrintDialog(QDialog):
                                                    "PDF (*.pdf)")
             if not path:
                 return None
+        if path is None:
+            try:
+                return self._print_on(self.make_printer(None))
+            except OSError as ex:
+                QMessageBox.warning(self, "Print", "Couldn't print:\n%s" % ex)
+                return None
+        from .dialogs import write_failed
+        from .fileio import written_whole
         try:
-            return self._print_on(self.make_printer(path))
+            # (written beside it, then put in its place: a PDF open in another program is
+            # said, never left as it was without a word, 0.26)
+            with written_whole(path) as tmp:
+                printer = self.make_printer(tmp)
+                n = self._print_on(printer)
+                del printer             # (the file closed before it is put in its place)
         except OSError as ex:
-            QMessageBox.warning(self, "Print", "Couldn't print:\n%s" % ex)
+            write_failed(self, "Print", path, ex)
             return None
+        return n

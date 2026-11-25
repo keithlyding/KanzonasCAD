@@ -22,6 +22,23 @@ TAP_STYLE_LABELS = (("-1", "-1, -2, -3 (2007-1; a tap off it 2007-1a)"),
                     ("-a", "-a, -b, -c (2007-a; a tap off it 2007-a1)"))
 
 
+def write_failed_text(path, ex):
+    """What a box says when a file couldn't be written (0.26, the owner: an Export to PDF over
+    a PDF open in Adobe failed without a word): in use in another program, most likely, for a
+    PermissionError (Windows says no to a file another program has open)."""
+    if isinstance(ex, PermissionError):
+        return ("Couldn't write %s.\n\nIt is probably open in another program (a PDF viewer "
+                "such as Adobe Acrobat, or Excel), or the folder can't be written to. Close it "
+                "there and try again, or choose another name or folder.\n\n(%s)" % (path, ex))
+    return ("Couldn't write %s:\n%s\n\nChoose another name or folder and try again."
+            % (path, ex))
+
+
+def write_failed(parent, title, path, ex):
+    """Say that path couldn't be written (write_failed_text), in a box: never silently."""
+    QMessageBox.warning(parent, title, write_failed_text(path, ex))
+
+
 def _tap_style_name(style):
     return {"-1": "-1, -2, -3", "a": "a, b, c", "-a": "-a, -b, -c"}.get(style, "-1, -2, -3")
 
@@ -1641,7 +1658,7 @@ def report_dialog(parent, title, head, rows, folder, filename, empty_text, note)
         try:
             n = reports.write_csv(path, head, rows, title)
         except OSError as ex:
-            QMessageBox.warning(dlg, title, "Couldn't save %s:\n%s" % (path, ex))
+            write_failed(dlg, title, path, ex)
             return
         QMessageBox.information(dlg, title, "Saved %d line(s) to %s." % (n, path))
     save.clicked.connect(do_save)
@@ -1742,7 +1759,7 @@ class MissingFootprintsDialog(QDialog):
         try:
             n = reports.write_csv(path, head, rows, "Devices without a footprint")
         except OSError as ex:
-            QMessageBox.warning(self, self.windowTitle(), "Couldn't save %s:\n%s" % (path, ex))
+            write_failed(self, self.windowTitle(), path, ex)
             return
         QMessageBox.information(self, self.windowTitle(), "Saved %d line(s) to %s." % (n, path))
 
@@ -1799,7 +1816,7 @@ def bom_dialog(parent, project, folder):
         try:
             n = bom.write_csv(project, path, loose.isChecked())
         except OSError as ex:
-            QMessageBox.warning(dlg, "Bill of materials", "Couldn't save %s:\n%s" % (path, ex))
+            write_failed(dlg, "Bill of materials", path, ex)
             return
         QMessageBox.information(dlg, "Bill of materials", "Saved %d line(s) to %s." % (n, path))
     save.clicked.connect(do_save)
@@ -1851,7 +1868,7 @@ def materials_dialog(parent, project, folder):
         try:
             n = materials.write_csv(project, path)
         except OSError as ex:
-            QMessageBox.warning(dlg, "Panel materials", "Couldn't save %s:\n%s" % (path, ex))
+            write_failed(dlg, "Panel materials", path, ex)
             return
         QMessageBox.information(dlg, "Panel materials", "Saved %d row(s) to %s." % (n, path))
     save.clicked.connect(do_save)
@@ -1881,7 +1898,8 @@ def options_dialog(parent, cur, view, tab=None):
         theme.addItem(label, key)
     theme.setCurrentIndex(max(theme.findData(cur["theme"]), 0))
     form.addRow("Theme", theme)
-    black = QCheckBox("Black drawing area (as AutoCAD; PDFs always print black on white)")
+    black = QCheckBox("Black drawing area (as AutoCAD; PDFs print black on white unless "
+                      "exported in color)")
     black.setChecked(bool(cur["black"]))
     form.addRow("", black)
     upd = QCheckBox("Check for updates automatically (once a day)")
@@ -1897,7 +1915,9 @@ def options_dialog(parent, cur, view, tab=None):
                           "tag, description, maker and catalog number as attributes. Off: as "
                           "plain lines and texts, as before version 0.20")
     form.addRow("", dxf_blocks)
-    pdf_colors = QCheckBox("Export to PDF in the layers' colors (off: black on white)")
+    # (the same setting as the Export to PDF window's Save as type: its last pick, 0.26)
+    pdf_colors = QCheckBox("Export to PDF in the layers' colors (off: black and white; the "
+                           "Export to PDF window picks it too)")
     pdf_colors.setObjectName("pdf_colors")
     pdf_colors.setChecked(bool(cur.get("pdf_colors", False)))
     form.addRow("", pdf_colors)
@@ -2134,8 +2154,7 @@ def cables_dialog(parent, project, folder):
                 write_pull_pdf(project, path, cables)
                 what = "%d run(s)" % len(rs)
         except OSError as ex:
-            QMessageBox.warning(dlg, "Cables between locations", "Couldn't save %s:\n%s"
-                                % (path, ex))
+            write_failed(dlg, "Cables between locations", path, ex)
             return
         QMessageBox.information(dlg, "Cables between locations", "Saved %s to %s." % (what, path))
     csv_b.clicked.connect(lambda: save("csv"))
@@ -2162,7 +2181,7 @@ def cables_dialog(parent, project, folder):
 
 def write_pull_pdf(project, path, cables=None):
     """The pull list as a PDF, a page per run (Letter, portrait). OSError when it can't be
-    written."""
+    written (PermissionError: open in another program)."""
     import os
     from PySide6.QtGui import QPdfWriter, QPageSize, QPageLayout, QTextDocument
     from PySide6.QtCore import QMarginsF
@@ -2171,14 +2190,15 @@ def write_pull_pdf(project, path, cables=None):
         project.path))[0] if project.path else "")
     doc = QTextDocument()
     doc.setHtml(pull.html(project, cables, title))
-    w = QPdfWriter(path)
-    w.setPageSize(QPageSize(QPageSize.Letter))
-    w.setPageLayout(QPageLayout(QPageSize(QPageSize.Letter), QPageLayout.Portrait,
-                                QMarginsF(15, 15, 15, 15), QPageLayout.Millimeter))
-    w.setTitle("Pull list")
-    doc.print_(w)
-    if not os.path.exists(path):
-        raise OSError("the PDF wasn't written")
+    from .fileio import written_whole
+    with written_whole(path) as tmp:        # (a PDF open in another program: said, 0.26)
+        w = QPdfWriter(tmp)
+        w.setPageSize(QPageSize(QPageSize.Letter))
+        w.setPageLayout(QPageLayout(QPageSize(QPageSize.Letter), QPageLayout.Portrait,
+                                    QMarginsF(15, 15, 15, 15), QPageLayout.Millimeter))
+        w.setTitle("Pull list")
+        doc.print_(w)
+        del w                               # (the file closed before it is put in its place)
 
 
 def attribute_visibility(parent, project, sheet, inserts):
@@ -2302,9 +2322,10 @@ def dash_box_dialog(parent, project, box):
     from PySide6.QtWidgets import QPlainTextEdit
     from . import tags
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Dashed box")
+    what = "Dashed polygon" if isinstance(box, M.DashPolygon) else "Dashed box"
+    dlg.setWindowTitle(what)
     lay = QVBoxLayout(dlg)
-    lay.addWidget(QLabel("Note (written inside the box; several lines, or none):"))
+    lay.addWidget(QLabel("Note (written inside it; several lines, or none):"))
     note = QPlainTextEdit()
     note.setPlainText(box.text)
     note.setMinimumHeight(90)
@@ -2357,7 +2378,7 @@ def dash_box_dialog(parent, project, box):
         elif k < 0 and typed:
             got = tags.find_tag(project, typed.split()[0])
             if got is None:
-                QMessageBox.warning(dlg, "Dashed box", "No device is tagged %s." % typed)
+                QMessageBox.warning(dlg, what, "No device is tagged %s." % typed)
                 continue
             device = got[1]
         return {"text": text, "device": device, "pick": False}

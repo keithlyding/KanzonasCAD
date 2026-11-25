@@ -136,6 +136,12 @@ def print_sheets(project, printer, sheets, fit=True, mono=True, area="sheet", re
         return 0
     painter = QPainter()
     if not painter.begin(printer):
+        from PySide6.QtPrintSupport import QPrinter
+        if printer.outputFormat() == QPrinter.PdfFormat:
+            # (a PDF file that can't be opened for writing: open in another program, 0.26)
+            import errno
+            raise PermissionError(errno.EACCES, "the PDF file couldn't be written",
+                                  printer.outputFileName())
         raise OSError("the printer couldn't start printing (is it on and connected?)")
     try:
         dpi = printer.resolution()

@@ -1683,7 +1683,7 @@ class DashBox(Composite):
         its first corner, a little in."""
         if self.note_at is not None:
             return self.note_at
-        a, b, d = self.points[0], self.points[1], self.points[3]
+        a, b, d = self.points[0], self.points[1], self.points[-1]
         m = self.height * 0.6
         ux, uy = self._unit(a, b)
         vx, vy = self._unit(a, d)
@@ -1826,6 +1826,47 @@ class DashBox(Composite):
             c.id = None
             out.append(c)
         return out
+
+
+@_register
+class DashPolygon(DashBox):
+    """A dashed polygon (the owner, 0.26: "Dashed polygon in addition to the dashed box"): a
+    dashed box of any shape, closed through its corners (points, three or more, picked one by
+    one as a polyline's), round a device or a part of a drawing that isn't a rectangle. Its
+    note, the device it belongs to, its height and its window are a dashed box's; dragging a
+    corner moves that corner alone."""
+    kind = "dashpoly"
+    __slots__ = ()
+
+    def _top(self):
+        """Its top left corner (the highest, then the leftmost): always a corner turning in,
+        where its note starts just inside and its tag sits above, as a box's first corner."""
+        return max(range(len(self.points)),
+                   key=lambda i: (self.points[i][1], -self.points[i][0]))
+
+    def note_point(self):
+        if self.note_at is not None:
+            return self.note_at
+        n = len(self.points)
+        i = self._top()
+        a, b, d = self.points[i], self.points[(i + 1) % n], self.points[i - 1]
+        m = self.height * 0.6
+        ux, uy = self._unit(a, b)
+        vx, vy = self._unit(a, d)
+        return (a[0] + (ux + vx) * m, a[1] + (uy + vy) * m)
+
+    def tag_point(self):
+        if self.tag_at is not None:
+            return self.tag_at
+        a = self.points[self._top()]
+        return (a[0], a[1] + self.height * 0.5)
+
+    def with_grip(self, i, p):
+        if i < len(self.points):
+            pts = [list(q) for q in self.points]
+            pts[i] = [p[0], p[1]]
+            return self.copy(points=pts)
+        return DashBox.with_grip(self, i, p)
 
 
 @_register
@@ -2665,7 +2706,10 @@ class Insert(Entity):
             d["label_color"] = self.label_color
         if self.label_sizes:
             d["label_sizes"] = dict(self.label_sizes)
-        if self.label_k and self.label:
+        if self.label_k:
+            # (kept with every line hidden too: shown again, a line is the size it was, not
+            # its sheet's units taken afresh, 0.26: "Footprint tag sizing not consistent
+            # when showing/hiding")
             d["label_k"] = self.label_k
         if self.label_as_set:
             d["label_as_set"] = sorted(self.label_as_set)
@@ -3871,8 +3915,11 @@ class Edit:
         if after.get("fp_label_height") != before.get("fp_label_height"):
             for s in p.sheets:
                 for e in list(s.entities.values()):
-                    if isinstance(e, Insert) and e.label:
-                        # a footprint's label: paper-sized, its own height (0.18.1)
+                    if isinstance(e, Insert) and (e.label or e.tag_h and e.defn is not None
+                                                  and e.defn.kind == "footprint"):
+                        # a footprint's label: paper-sized, its own height (0.18.1); one
+                        # with its lines all hidden too, so they come back at this height
+                        # (0.26: up to 0.25 they came back at the old one)
                         self.change(s, e.copy(tag_h=float(after["fp_label_height"]) * s.k(),
                                               label_k=s.k()))
         if after.get("fp_label_color", "") != before.get("fp_label_color", ""):
@@ -4328,7 +4375,7 @@ class _EditContext:
                     if e is not None and e.defn is not None and e.defn.kind == "footprint" \
                             and e.label_color != want:
                         self.ed.change(s, e.copy(label_color=want))
-            if sheets or "insert" in kinds or "dashbox" in kinds:
+            if sheets or "insert" in kinds or "dashbox" in kinds or "dashpoly" in kinds:
                 # a device added, removed or retagged: its contacts (and dashed boxes) show
                 # its tag
                 from .tags import sync_children

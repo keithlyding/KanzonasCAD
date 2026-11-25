@@ -1123,6 +1123,8 @@ class CadView(QWidget):
         if e.button() == Qt.RightButton:
             if self.cmd is not None and e.modifiers() & Qt.ShiftModifier:
                 self._snap_menu(e.globalPosition().toPoint())      # (AutoCAD's Shift+right)
+            elif self.cmd is not None and getattr(self.cmd, "right_menu", False):
+                self._command_menu(e.globalPosition().toPoint())
             elif self.cmd is not None:
                 self.enter()
             else:
@@ -1843,6 +1845,45 @@ class CadView(QWidget):
         if self.snap is not None and self.snap[0] in ("ext", "par") and self.snap_from:
             p.setPen(QPen(col, 1, Qt.DotLine))
             p.drawLine(self.to_screen(self.snap_from), self.to_screen(self.snap[1]))
+
+    def command_menu_items(self):
+        """[(label, key)] a right-click offers in a command that has a menu (right_menu: Bus):
+        Enter first, as a plain right-click is elsewhere, then the options the command line
+        offers now, then Cancel; key "" is Enter, None Cancel, else what typing it does."""
+        opts = list(self._prompt[1]) if getattr(self, "_prompt", None) else []
+        return [("Enter", "")] + [("%s  (%s)" % (label, key), key) for label, key in opts] + \
+            [("Cancel", None)]
+
+    def command_menu_pick(self, key):
+        """A right-click menu's item picked (command_menu_items)."""
+        if self.cmd is None:
+            return
+        if key is None:
+            self.escape()
+        elif key == "":
+            self.enter()
+        else:
+            self.input_text(key)
+        self.update()
+
+    def _command_menu(self, global_pos):
+        """A right-click in a command with a menu (AutoCAD's shortcut menu in a command): its
+        options, Enter at the top."""
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        menu.setAttribute(Qt.WA_NoMouseReplay)  # (a click off it isn't the next point)
+        for i, (label, key) in enumerate(self.command_menu_items()):
+            if key is None:
+                menu.addSeparator()
+            act = menu.addAction(label)
+            act.setData(key if key is not None else "\x1b")
+            if i == 0:
+                menu.setDefaultAction(act)
+                menu.addSeparator()
+        got = menu.exec(global_pos)
+        if got is not None:
+            key = got.data()
+            self.command_menu_pick(None if key == "\x1b" else key)
 
     def _snap_menu(self, global_pos):
         """Shift + right-click while picking points: a snap for the next point only."""

@@ -47,6 +47,7 @@ KIND_NAMES = {"symbol": "Symbol", "footprint": "Footprint", "block": "Block", "w
               "text": "Text", "mtext": "Multiline text", "line": "Line", "circle": "Circle",
               "arc": "Arc", "polyline": "Polyline", "dimension": "Dimension",
               "hatch": "Hatch", "leader": "Leader", "dashbox": "Dashed box",
+              "dashpoly": "Dashed polygon",
               "ladder": "Ladder", "rail": "DIN rail", "duct": "Wire duct",
               "picture": "Picture", "wirecross": "Wire crossing"}
 

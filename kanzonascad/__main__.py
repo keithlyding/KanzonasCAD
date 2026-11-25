@@ -27,6 +27,9 @@ def main(argv=None):
     from . import filelock
     # (the lock notes of projects still open when it ends without closing them: taken away)
     app.aboutToQuit.connect(filelock.release_all)
+    from . import gcpolicy
+    # (what was set aside given back: collected before Qt is torn down, not during it)
+    app.aboutToQuit.connect(gcpolicy.uninstall)
     win = MainWindow()
     # (the other copies running: an update closes them all; see instances.py)
     try:
