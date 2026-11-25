@@ -291,9 +291,13 @@ def first_difference(a, b, path="project"):
 
 def place_of(e):
     """Where an object is, for comparing a copy with its original: a block reference by its
-    insertion point (its box changes with a new tag), anything else by its box."""
+    insertion point (its box changes with a new tag), a ladder by its rails (its box takes in
+    its rung numbers, which start with its sheet's number: wider on sheet 17 than on sheet 8,
+    the long battery, 0.26, seed 4982), anything else by its box."""
     if isinstance(e, M.Insert):
         return tuple(e.pos)
+    if isinstance(e, M.Ladder):
+        return tuple(e.a) + tuple(e.b)
     return tuple(e.bbox())
 
 
