@@ -231,7 +231,9 @@ their outlines, 2,000 texts, 1,000 leaders, 1,000 multi-line notes, 1,000 pictur
 zoomed repaints < 2 s, 1,000 of them moved < 1 s, undone < 1 s; a DXF of 1,000 block
 references with attributes, 200 dimensions and 500 hatches imported < 4 s (its blocks kept as
 blocks); the bill of materials of its parts < 0.5 s. Typical today: 0.7, 0.6, 0.2, 0.2, 0.7 s,
-a few ms. **A new kind of object gets a line in a speed budget in the same pull request**
+a few ms. "Speed budget (dashed polygons, Join)": 2,000 dashed polygons added and drawn < 2 s,
+ten zoomed repaints < 2 s, moved < 1 s, undone < 1 s; 5,000 lines and polylines joined into
+1,000 polylines < 1 s, undone < 1 s. Typical today: 0.2, 0.1, 0.6, 0.2, 0.7, 0.1 s. **A new kind of object gets a line in a speed budget in the same pull request**
 (the owner's rule, Nov 2026): measure it at scale (thousands) drawn, zoomed, moved and undone
 before calling it done. Text is drawn on screen with QPainter.drawText (render.draw_texts),
 never as one filled outline path: that took 22 s for ten zoom steps on that sheet.

@@ -22,7 +22,7 @@ and reports come next.</i></p>
 <b>Block</b> while you edit a block; each
 group of buttons has its name under it (Rail and duct, Dimensions, Numbering...). Move, Copy,
 Rotate, Mirror, Stretch and Erase are on the Schematic and Panel tabs too (Modify), not only Home;
-the Home tab's Modify group also has <b>Explode</b>.
+the Home tab's Modify group also has <b>Join</b> and <b>Explode</b>.
 The Schematic and Panel tabs are laid out alike: what you draw first (Wire and Bus; DIN rail and
 Wire duct), then placing parts (Symbols; Footprints: the same buttons in the same order), Modify,
 Dimensions, the tab's own groups, and Parts, Layers and Settings at the right end. Double-click a
@@ -797,12 +797,23 @@ and the tag (drag them anywhere). Double-click it to change its note or what it 
 Its text and dashes are paper-sized (the tag height in Project properties), it goes on layer
 NOTES, and it moves, copies, turns, prints and exports to DXF (as dashes and texts) like any
 object.</li>
+<li><b>Dashed polygon</b> (DASHPOLY, DPOLY, DP; Draw menu, beside Dashed box, and the
+Schematic tab: Draw, the Dashed box button's menu): a dashed box of any shape, for a field
+device, an assembly or a part of a drawing that isn't a rectangle. Click its corners one by
+one, as for a polyline (<b>U</b> takes the last one back; the rubber band shows it closed),
+then press Enter or type <b>C</b> to close it: three corners at least, not all in a line. Its
+window is the Dashed box's (<b>Note</b>, <b>Belongs to</b>, <b>Pick on drawing...</b>); the
+note starts inside its top left corner and the tag of the device it belongs to sits above that
+corner. A corner's grip moves that corner alone; the note and tag drag anywhere; double-click
+it to change its note or what it belongs to. Everything else is a dashed box's: paper-sized,
+layer NOTES, listed under its device, and it moves, copies, turns, mirrors, stretches, prints
+and exports like any object.</li>
 <li><b>Cross-references</b> are worked out from the drawing, never typed: under a coil or
 operator, one line per contact, <b>NO 6-D3</b> or <b>NC 7-B2</b> (in sheet order, then zone
 order); under each contact, where its device is (<b>6-D1</b>). They use the project's grid
 reference format and each sheet's zones (or, by ladder, the rung: <b>NC 605</b>, <b>603</b>;
 see Ladders), and go into PDF and DXF exports as text.</li>
-<li><b>Ladders</b> (LADDER, LAD; Draw menu, and the Schematic tab: Draw, the Dashed box button's menu): a ladder's two rails,
+<li><b>Ladders</b> (LADDER, LAD; Draw menu, and the Schematic tab: Draw, the Dashed box button's menu, with Dashed polygon): a ladder's two rails,
 its rungs numbered down the left of the left rail. Click the top of the left rail, then the top
 of the right rail (or type the width; the rails stay level), then the bottom (or type how many
 rungs, or Enter: down to the bottom of the sheet). Before the first click, <b>F</b> gives it a
@@ -906,7 +917,11 @@ to float it; where it is and whether it is open are kept for next time.</p>
 <li><b>General</b>, for anything: its kind, <b>Layer</b> (a list), <b>Color</b> (ByLayer, a
 few colors, or Other... for any), and where it makes sense its <b>Position X</b> and <b>Y</b>
 (its insertion point, in drawing inches) and <b>Rotation</b> (turned about that point; a symbol
-moved this way takes its wires with it).</li>
+moved this way takes its wires with it). For a symbol or footprint, Position X and Y are where
+it is placed: type a value and it moves there, its wires with it, in one step of Undo. The
+status bar shows the same while the mouse is over a symbol or footprint, beside the cursor's
+coordinates: its tag (or its block's name) and its insertion point, <code>CR101  X 6.250
+Y 4.500</code>.</li>
 <li><b>Symbol</b> or <b>Footprint</b>: its block, <b>Tag</b> (typed on a device, it is locked,
 as in its attributes window; on a footprint, the device with that tag is the one it is; a
 contact shows the device it <b>Belongs to</b>), Description, Manufacturer, Catalog number, each
@@ -1053,7 +1068,21 @@ every click turns it 90 degrees, as many times as you need, and all the wires tu
 keeping their spacing. <b>S</b> runs it <b>straight</b> instead: each click goes straight
 across or straight up or down from the last point, with no corner (S again goes back to
 corners; the next bus remembers). The other wires go to the right of the direction you draw (F
-puts them on the other side). <b>L</b> picks each wire's <b>layer</b>, and so its color:
+puts them on the other side). <b>W</b> (<b>Swap 1 and 3</b>) swaps phases 1 and 3 where
+the bus lands on a device's pins, to run a motor backward: L1 lands on its third pin and L3 on
+its first, L2 in the middle as it is. The two wires cross over just before the pins (or before
+the jogs onto pins spaced otherwise) in square steps an eighth of an inch apart on paper: L3
+steps across onto the first pin's line, L1 steps out to a line of its own beside the first,
+then across to the third pin's line, so every crossing is a plain cross, never a joint. The
+rubber band shows it before you click; W again (<b>Phases in order</b>) lands them in order.
+It needs half an inch on paper of straight run before the pins: with less, the click isn't
+taken and the command line says so (click a point farther out first, or W to land in order).
+Each phase is one wire from its pin to the pin it lands on, so its wire number and its layer
+(brown on the third pin, yellow on the first) go with it. A bus that doesn't land on pins
+draws its wires in order. A <b>right-click</b> while drawing a bus opens a menu: <b>Enter</b>
+(ends the bus, as a right-click does elsewhere), then the options the command line offers
+(Straight, Layers, Other side, Swap 1 and 3, Undo...), then <b>Cancel</b>. <b>L</b> picks each
+wire's <b>layer</b>, and so its color:
 <b>Brown, orange, yellow (480 V)</b>, <b>Black, red, blue (208/240 V)</b>, <b>All black</b>,
 <b>Wires</b> (the WIRES layer), or a layer for each wire; the layers it needs are added to the
 project (WIRE BROWN, WIRE ORANGE...; black prints black and shows white on the black drawing
@@ -1559,6 +1588,19 @@ next row down (texts lined up on their insertion points make a column or a row, 
 each is). The number <b>replaces</b> the text, or goes in front of it or after it. The
 window shows what it gives and remembers your choices; one Undo puts the texts back.</td></tr>
 <tr><td>Erase</td><td>ERASE, E, or Delete</td><td>Removes the selected objects.</td></tr>
+<tr><td>Join</td><td>JOIN, J</td><td>As AutoCAD's JOIN: the selected lines, arcs and
+polylines that touch end to end become one object, in one step of Undo. Lines in a line become
+one line; arcs of one circle, one arc (a circle when they go all the way round); any other
+chain of lines and polylines, one polyline (closed when it comes back to where it started), on
+the layer and in the color of the first of them drawn. Ends touch when they are within a
+millionth of an inch, as wires' ends join. Nothing joins where three or more ends meet (a
+branch), where one lies back over the other (an overlap), or an arc to a line (polylines are
+straight here). The command line says what it joined (<code>Joined 4 objects into 1: 1
+polyline</code>) and what it couldn't, with where: ends close but not touching (a gap of up
+to 0.03" on paper, with the widest), overlaps, branches, arcs meeting lines. Wires are left
+out: a wire drawn on from another wire's end already joins it, and <b>Clean up wires</b>
+joins the rest; joining wires changes what is connected, which only the wire tools do. Closed
+polylines, circles and the rest are left out too.</td></tr>
 <tr><td>Trim</td><td>TRIM, TR</td><td>Click the part of an object to cut away: it is trimmed
 back to the nearest crossing objects on either side (every object is a cutting edge, as in
 AutoCAD's quick mode). An object nothing crosses is erased. As the cursor goes over an
@@ -1801,6 +1843,10 @@ footprints selected too, <b>Also the other selected footprints</b> gives them th
 changed in one step (their other sizes stay). Lines of different sizes stack without
 overlapping, each line as tall as its own text. Saving the block to your library and <b>Update
 blocks from library</b> bring a block's sizes into a project like its other changes.
+Lines hidden and shown again (the Footprint label menu, the attributes window's or the
+Properties panel's Shown on it) come back at the size they should be, even with every line
+of a footprint hidden while the project's height or the sheet's scale changed (up to 0.25
+such a footprint's lines came back at the old height, or larger or smaller than the others).
 <b>Turning a line:</b> in the same window, each line's <b>Angle</b> turns it on that copy; it
 then turns with the footprint (Rotate). A line is kept readable: turned to 180 it is drawn at
 0, and 270 at 90, on the same spot, so it reads from the bottom or the right, as the
@@ -2302,6 +2348,8 @@ double-click on a row goes there</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
 <tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same symbol)</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection (anywhere in the window)</td></tr>
+<tr><td>Right-click</td><td>In a command: Enter (Bus: a menu of its options, Enter first); with
+none: the drawing's menu</td></tr>
 <tr><td>Delete</td><td>Erase the selection</td></tr>
 <tr><td>Ctrl+arrows / Ctrl+Shift+arrows</td><td>Move the selection one snap step / a tenth of one</td></tr>
 <tr><td>Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S</td><td>New / Open / Save / Save as</td></tr>

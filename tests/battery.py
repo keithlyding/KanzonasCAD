@@ -1663,6 +1663,327 @@ def random_editing(log, out, ops, seed, drawing=None):
             BC.CHECKED["dashed box belongs to a device"] += 1
         BC.CHECKED["dashed box"] += 1
 
+    def op_dash_poly():
+        # (0.26: a dashed polygon through its command and window: its corners clicked one by
+        # one, closed with C or Enter; a note, belonging to nothing or to a device from the
+        # list). Worked out here from the corners typed: its corners are those typed (one in
+        # a straight run with its neighbors is no corner), every dash lies on its outline, and
+        # three corners in a line make none (the command waits)
+        from kanzonascad import tags
+        pts = []
+        for _i in range(rnd.randint(3, 6)):
+            q = pt()
+            if not pts or G.dist(q, pts[-1]) > 1e-9:
+                pts.append(q)
+        devs = tags.device_choices(p)
+        dev = rnd.choice(devs)[1] if devs and rnd.random() < 0.4 else None
+        text = rnd.choice(["", "BY OTHERS", "FIELD\nDEVICES"])
+        here = s
+        win.ask_dash_box = lambda box: {"text": text, "device": dev, "pick": False}
+        try:
+            before = set(here.entities)
+            v.run(C.DashPolygonCmd)
+            for q in pts:
+                v.input_text("#" + fmt(q))
+            v.input_text(rnd.choice(["C", ""]))
+            waiting = v.cmd is not None
+        finally:
+            del win.ask_dash_box
+            if v.cmd is not None:
+                v.escape()
+        new = [e for i, e in here.entities.items() if i not in before]
+        ring = [q for i, q in enumerate(pts) if i == 0 or G.dist(q, pts[i - 1]) > 1e-9]
+        while len(ring) > 1 and G.dist(ring[0], ring[-1]) <= 1e-9:
+            ring.pop()
+        area = abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(ring, ring[1:] + ring[:1])))
+        scale = max(1.0, max(abs(c) for q in ring for c in q)) ** 2
+        if len(ring) < 3 or area <= 1e-9 * scale:
+            assert not new and waiting, "a dashed polygon with no area: %r" % new
+            BC.CHECKED["dashed polygon: none without area"] += 1
+            return
+        assert len(new) == 1 and isinstance(new[0], M.DashPolygon), \
+            "Dashed polygon made %r" % new
+        e = new[0]
+        sides = list(zip(e.points, e.points[1:] + e.points[:1]))
+        for q in e.points:
+            assert any(G.dist(q, r) <= 1e-9 for r in ring), "a corner %r not clicked" % (q,)
+        for q in ring:
+            assert any(G.dist_to_segment(q, a, b) <= 1e-6 for a, b in sides), \
+                "a corner clicked, %r, not on its outline" % (q,)
+        for a, b in e.dash_pieces():
+            assert any(G.dist_to_segment(a, c, d) <= 1e-6 and G.dist_to_segment(b, c, d) <= 1e-6
+                       for c, d in sides), "a dash off its outline"
+        assert e.text == text
+        if dev is not None:
+            assert e.tag() == dev.attrs.get("TAG"), "the polygon shows %r, not %r" % (
+                e.tag(), dev.attrs.get("TAG"))
+            BC.CHECKED["dashed polygon belongs to a device"] += 1
+        BC.CHECKED["dashed polygon"] += 1
+
+    def op_join():
+        # (0.26: Join, through its command, as a user would: lines drawn end to end with LINE
+        # (and a polyline or an arc carried on from them, an end a hair off now and then),
+        # then those and a few others selected and joined). What Join must do, worked out
+        # from the objects: nothing else changes; the joinable ones selected (lines, arcs,
+        # open polylines) cover the same as before, as long in all; and of what is left no
+        # two straight ones meet end to end alone there (no third end) without one lying back
+        # over the other, nor two arcs of one circle end to start: those should have joined
+        from kanzonascad import join as J
+        before = set(s.entities)
+        q = pt()
+        k = world["k"]
+        v.run(C.LineCmd)
+        type_in(v, fmt(q))
+        for _i in range(rnd.randint(1, 3)):
+            if v.cmd is None:
+                break
+            q = (q[0] + rnd.choice([-1, 0, 1, 2]) * 0.5 * k, q[1] + rnd.choice([-1, 0, 1]) *
+                 0.5 * k)
+            v.input_text(fmt(q))
+        finish()
+        if rnd.random() < 0.4:
+            off = (rnd.choice([0.0, 0.0, 0.003]) * k, 0.0)
+            a = (q[0] + off[0], q[1])
+            v.run(C.PolylineCmd)
+            type_in(v, fmt(a), fmt((a[0] + 0.5 * k, a[1])), fmt((a[0] + 0.5 * k, a[1] + 0.5 * k)))
+            finish()
+        elif rnd.random() < 0.3:
+            v.run(C.ArcCmd)
+            type_in(v, fmt(q), fmt((q[0] + 0.5 * k, q[1] + 0.5 * k)), fmt((q[0] + k, q[1])))
+            finish()
+        drawn = [i for i in s.entities if i not in before]
+        others = [e.id for e in some(rnd.randint(0, 3))]
+        picked = {i for i in drawn + others if i in s.entities and
+                  not v.layer_locked(s.entities[i].layer)}
+        if not picked:
+            return
+        was = {i: e for i, e in s.entities.items()}
+        v.set_selection(picked)
+        n = len(p.undo_stack)
+        v.run(C.JoinCmd)
+        finish()
+        assert len(p.undo_stack) <= n + 1, "Join took more than one step"
+        gone = [i for i in was if i not in s.entities]
+        for i, e in was.items():
+            if i in s.entities and i not in picked:
+                assert s.entities[i].to_dict() == e.to_dict(), "Join changed an object not picked"
+        assert all(i in picked and J.joinable(was[i]) for i in gone), \
+            "Join took away an object it can't join"
+        new = [e for i, e in s.entities.items() if i not in was]
+        olds = [was[i] for i in gone]
+
+        def samples(e):
+            if isinstance(e, M.Arc):
+                sw = G.sweep(e.start, e.end)
+                return [G.polar(e.center, e.radius, e.start + sw * t) for t in (0, .3, .5, 1)]
+            if isinstance(e, M.Circle):
+                return [G.polar(e.center, e.radius, a) for a in (0, 90, 200)]
+            pts_ = [e.p1, e.p2] if isinstance(e, M.Line) else list(e.points)
+            out = list(pts_)
+            for a, b in zip(pts_, pts_[1:]):
+                out.append(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2))
+            return out
+
+        def length(e):
+            if isinstance(e, M.Arc):
+                return math.radians(G.sweep(e.start, e.end)) * e.radius
+            if isinstance(e, M.Circle):
+                return 2 * math.pi * e.radius
+            pts_ = [e.p1, e.p2] if isinstance(e, M.Line) else list(e.points)
+            if isinstance(e, M.Polyline) and e.closed:
+                pts_ = pts_ + pts_[:1]
+            return sum(G.dist(a, b) for a, b in zip(pts_, pts_[1:]))
+        tol = 1e-6 * max(1.0, k)
+        for a in olds:
+            for q in samples(a):
+                assert min((b.distance(q) for b in new), default=1.0) <= tol, \
+                    "Join lost a piece at %r" % (q,)
+        for b in new:
+            for q in samples(b):
+                assert min((a.distance(q) for a in olds), default=1.0) <= tol, \
+                    "Join drew something new at %r" % (q,)
+        assert abs(sum(map(length, olds)) - sum(map(length, new))) <= tol * (len(olds) + 1), \
+            "joined, not as long in all"
+        if gone:
+            BC.CHECKED["Join covers what it joined"] += 1
+        left = [s.entities[i] for i in picked if i in s.entities] + new
+        ends = []
+        for e in left:
+            if not J.joinable(e):
+                continue
+            if isinstance(e, M.Arc):
+                ends += [(e.start_point(), e, 0), (e.end_point(), e, 1)]
+            elif isinstance(e, M.Line):
+                ends += [(e.p1, e, 0), (e.p2, e, 1)]
+            else:
+                ends += [(e.points[0], e, 0), (e.points[-1], e, 1)]
+        for qa, a, ea in ends:
+            here_ = [(qb, b, eb) for qb, b, eb in ends if G.dist(qa, qb) <= 1e-6]
+            if len(here_) != 2:
+                continue
+            (_q1, x, ex), (_q2, y, ey) = here_
+            if x is y:
+                continue
+            if isinstance(x, M.Arc) != isinstance(y, M.Arc):
+                continue
+            if isinstance(x, M.Arc):
+                same = G.dist(x.center, y.center) <= 1e-6 and abs(x.radius - y.radius) <= 1e-6
+                assert not (same and ex != ey and G.sweep(x.start, x.end) +
+                            G.sweep(y.start, y.end) <= 360.0 + 1e-9), \
+                    "two arcs of one circle left end to start at %r" % (qa,)
+                continue
+
+            def leg(e, end):
+                pts_ = [e.p1, e.p2] if isinstance(e, M.Line) else list(e.points)
+                a_, b_ = (pts_[0], pts_[1]) if end == 0 else (pts_[-1], pts_[-2])
+                L = G.dist(a_, b_)
+                return ((b_[0] - a_[0]) / L, (b_[1] - a_[1]) / L)
+            u, w = leg(x, ex), leg(y, ey)
+            back = abs(u[0] * w[1] - u[1] * w[0]) <= 1e-9 and u[0] * w[0] + u[1] * w[1] > 0
+            assert back, "two lines or polylines left end to end alone at %r: not joined" % (qa,)
+        BC.CHECKED["Join leaves nothing it could join"] += 1
+
+    def op_bus_swap():
+        # (0.26: a bus from one symbol's three pins to another's with W, phases 1 and 3
+        # swapped). The same bus without W first, undone: then with W the first wire lands
+        # where the plain bus's third did and the third where its first did, the second as
+        # it did; every pin has its wire; the bus's wires cross only in plain crosses (no end
+        # on another, none lying on another). Or, with no room to cross over, it says so and
+        # draws nothing
+        sides = []
+        for e in s.inserts():
+            for _n, q in e.pin_points():
+                got = C.pin_side(s, q)
+                if got is not None and len(got[0]) == 3 and abs(got[1] - 0.5) < 1e-9:
+                    sides.append((e.id, got[0]))
+        if len(sides) < 2:
+            return
+        (ia, a), (ib, b) = rnd.sample(sides, 2)
+        if ia == ib:
+            return
+        start = rnd.choice(a)
+        a = C.pin_side(s, start)[0]
+        click = rnd.choice(b)
+        b = C.pin_side(s, click)[0]
+
+        def run(swap):
+            before = set(s.entities)
+            n = len(p.undo_stack)
+            msgs = []
+            v.messaged.connect(msgs.append)
+            try:
+                v.run(C.BusCmd)
+                v.input_text(fmt(start))
+                if v.cmd is None:
+                    return None, msgs, False
+                if swap:
+                    v.input_text("W")
+                v.input_text(fmt(click))
+                done = v.cmd is None
+                if not done:
+                    v.escape()
+            finally:
+                v.messaged.disconnect(msgs.append)
+            new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Wire)]
+            if not done or len(p.undo_stack) != n + 1 or len(new) != 3:
+                return None, msgs, done
+            got = {}
+            for w in new:
+                ends = (w.points[0], w.points[-1])
+                fa = [i for i, q in enumerate(a) for r in ends if G.dist(q, r) <= 1e-9]
+                fb = [i for i, q in enumerate(b) for r in ends if G.dist(q, r) <= 1e-9]
+                if len(fa) != 1 or len(fb) != 1:
+                    return None, msgs, done     # (cleanup joined it to another: not checked)
+                got[fa[0]] = fb[0]
+            return (got, new), msgs, done
+        plain, _m, _done = run(False)
+        if plain is None:
+            return
+        p.undo()
+        swapped, msgs, done = run(True)
+        if swapped is None and done:
+            BC.CHECKED["bus swap joined by cleanup: skipped"] += 1
+            return
+        if swapped is None:
+            assert any("Swap 1 and 3" in m or "Not landed" in m or "can't" in m
+                       for m in msgs), "a swapped bus didn't land and said nothing: %r" % msgs
+            BC.CHECKED["bus swap: no room, said"] += 1
+            return
+        got, new = swapped
+        want = {i: plain[0][{0: 2, 2: 0}.get(i, i)] for i in range(3)}
+        assert got == want, "phases 1 and 3 swapped landed %r, the plain bus %r" % (
+            got, plain[0])
+        for w in new:
+            for o in new:
+                if o is w:
+                    continue
+                for q in (w.points[0], w.points[-1]):
+                    assert min(G.dist_to_segment(q, c, d) for c, d in zip(o.points, o.points[1:])) \
+                        > 1e-6, "a swapped bus's wire ends on another at %r" % (q,)
+                for c, d in zip(w.points, w.points[1:]):
+                    for e_, f_ in zip(o.points, o.points[1:]):
+                        u = (d[0] - c[0], d[1] - c[1])
+                        x = (f_[0] - e_[0], f_[1] - e_[1])
+                        if abs(u[0] * x[1] - u[1] * x[0]) > 1e-9 * (1 + abs(u[0]) + abs(u[1])) \
+                                * (1 + abs(x[0]) + abs(x[1])):
+                            continue
+                        if G.dist_to_segment(e_, c, d) > 1e-9 and \
+                                G.dist_to_segment(f_, c, d) > 1e-9 and \
+                                G.dist_to_segment(c, e_, f_) > 1e-9:
+                            continue
+                        uu = u[0] ** 2 + u[1] ** 2
+                        t = sorted(((r[0] - c[0]) * u[0] + (r[1] - c[1]) * u[1]) / uu
+                                   for r in (e_, f_))
+                        assert t[1] <= 1e-9 or t[0] >= 1 - 1e-9, \
+                            "two wires of a swapped bus lie on each other"
+        BC.CHECKED["bus swaps phases 1 and 3"] += 1
+
+    def op_fp_label_hidden():
+        # (0.26: "Footprint tag sizing not consistent when showing/hiding") a footprint's
+        # label lines all hidden (the Footprint label menu's none), Footprint label height or
+        # the sheet's scale changed meanwhile (text kept its size on paper, or not), then
+        # shown again as its attributes window and the Properties panel show them: each line
+        # the height it was; with Footprint label height changed, as that change puts every
+        # footprint's label (on paper, its sheet's scale times its size, else the new height),
+        # worked out here from the heights before and the sizes
+        from kanzonascad import scalefit
+        from kanzonascad import tags
+        fs = [e for e in s.inserts() if tags.is_footprint(e) and not v.layer_locked(e.layer)
+              and e.label_texts() and not e.fixed]
+        if not fs:
+            return
+        f = rnd.choice(fs)
+        label = f.label
+        had = {k: t.height for k, t in f.label_texts()}
+        sizes = {k: f.label_size(k)[0] for k in had}
+        k0 = s.k()
+        v.set_selection({f.id})
+        win.acts["fp_label_none"].trigger()
+        assert not s.entities[f.id].label, "Footprint label, none: still %r" % (
+            s.entities[f.id].label)
+        ho = float(p.settings.get("fp_label_height", 0.08))
+        hn = ho
+        if rnd.random() < 0.5:
+            hn = rnd.choice([0.06, 0.08, 0.1, 0.125])
+            with p.edit("Project properties") as ed:
+                ed.project_settings({"fp_label_height": hn})
+        if rnd.random() < 0.4 and s is not p.title_block:
+            name, val = rnd.choice(scalefit.presets_like(s.scale_name))
+            if 1.0 / val <= MAX_K:
+                scalefit.apply(p, s, name, val, paper_text=False)
+        cur = s.entities[f.id]
+        with p.edit("Attributes") as ed:
+            for sh, e in win.attribute_changes(p, s, cur, dict(cur.attrs), {"label": label}):
+                ed.change(sh, e)
+        now = {k: t.height for k, t in s.entities[f.id].label_texts()}
+        want = dict(had) if hn == ho else {k: (sizes[k] or hn) * k0 for k in had}
+        assert set(now) == set(want), "shown again: lines %r, not %r" % (sorted(now),
+                                                                        sorted(want))
+        for k in want:
+            assert abs(now[k] - want[k]) <= 1e-9 * max(1.0, want[k]), \
+                "footprint label line %s shown again %r tall, not %r" % (k, now[k], want[k])
+        BC.CHECKED["footprint label lines hidden and shown again"] += 1
+
     def op_array():
         # (0.16.5: copies in rows and columns, or round a center: exactly where they go)
         sel = [e for e in some(rnd.randint(1, 3)) if not isinstance(e, (M.Wire, M.WireCross))]
@@ -5044,7 +5365,8 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
              (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_fp_label_sizes, 2), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2),
              (op_import_blocks, 1), (op_props_panel, 3), (op_missing_fp, 2),
-             (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1)]
+             (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1),
+             (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -5068,6 +5390,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                     check_sheet(other)
                     blocks_known(p, other)
                 BC.footprints_follow(p)
+                BC.footprint_label_heights(p)
                 BC.arrows_follow(p)
                 BC.missing_right(win, p)
                 BC.twins_apart(p)
@@ -5363,6 +5686,9 @@ def mixed_project(win):
         ed.add(s, M.Hatch([[(17, 3), (18, 3), (18, 4), (17, 4)]], "SOLID", 0.0, 0.125))
         ed.add(s, M.DashBox.from_corners((20, 1), (24, 4), text="FIELD WIRING\nBY OTHERS",
                                          height=0.1))
+        # (0.26: a dashed polygon, an L round two devices)
+        ed.add(s, M.DashPolygon([(25, 1), (29, 1), (29, 2.5), (27, 2.5), (27, 4), (25, 4)],
+                                text="BY OTHERS", height=0.1))
         # (0.22: a ladder, on its layer as the command puts it; its rungs numbered when the
         # edit closes)
         ed.layer("LADDER", None, M.Layer("LADDER", M.ADAPTIVE).to_dict())

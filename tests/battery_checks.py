@@ -697,6 +697,22 @@ def footprints_follow(project):
                 CHECKED["footprint follows its device"] += 1
 
 
+def footprint_label_heights(project):
+    """Every footprint's label sizing as the project's: its height for lines without a size of
+    their own (tag_h) is Footprint label height times its drawing units per paper inch
+    (label_k), whether its lines are shown or all hidden (0.26: hidden, they were left at the
+    old height when it changed, and shown again took the sheet's units afresh)."""
+    from kanzonascad import tags
+    h = float(project.settings.get("fp_label_height", 0.08))
+    for s in project.sheets:
+        for e in s.inserts():
+            if tags.is_footprint(e) and e.tag_h and e.label_k:
+                assert abs(e.tag_h - h * e.label_k) <= 1e-9 * max(1.0, e.tag_h), \
+                    "footprint %s's label %r tall, not %r x %r" % (
+                        e.attrs.get("TAG"), e.tag_h, h, e.label_k)
+                CHECKED["footprint label height and units agree"] += 1
+
+
 def arrows_follow(project):
     """Every source arrow (and its destinations) goes by the number of the wire it sits on
     (0.18.6), worked out from the wires at its pin: unless that number is the name of other

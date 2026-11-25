@@ -2302,9 +2302,10 @@ def dash_box_dialog(parent, project, box):
     from PySide6.QtWidgets import QPlainTextEdit
     from . import tags
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Dashed box")
+    what = "Dashed polygon" if isinstance(box, M.DashPolygon) else "Dashed box"
+    dlg.setWindowTitle(what)
     lay = QVBoxLayout(dlg)
-    lay.addWidget(QLabel("Note (written inside the box; several lines, or none):"))
+    lay.addWidget(QLabel("Note (written inside it; several lines, or none):"))
     note = QPlainTextEdit()
     note.setPlainText(box.text)
     note.setMinimumHeight(90)
@@ -2357,7 +2358,7 @@ def dash_box_dialog(parent, project, box):
         elif k < 0 and typed:
             got = tags.find_tag(project, typed.split()[0])
             if got is None:
-                QMessageBox.warning(dlg, "Dashed box", "No device is tagged %s." % typed)
+                QMessageBox.warning(dlg, what, "No device is tagged %s." % typed)
                 continue
             device = got[1]
         return {"text": text, "device": device, "pick": False}
