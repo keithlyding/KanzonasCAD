@@ -6,6 +6,32 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.26
+
+**New**
+- Export to PDF asks for color or black and white in its window (Save as type), and remembers
+  your last choice.
+- After Ctrl+V, press Enter instead of clicking and the pasted objects go exactly where they
+  were copied from, even on another sheet.
+- Dashed polygon (Draw menu; Schematic tab, under Dashed box): a dashed outline of any shape.
+  Click its corners, then Enter or C. It has the same note and Belongs to window as a dashed
+  box.
+- Join (Modify menu, Home tab; type J): lines, arcs and polylines that touch end to end become
+  one line, arc or polyline. The command line tells you what couldn't be joined and where:
+  gaps, overlaps and branches.
+- Bus: W (or right-click, Swap 1 and 3) lands phase 1 on the device's third pin and phase 3 on
+  its first, to run a motor backward. The wires cross over just before the pins, and you see
+  it before you click. Right-click in Bus now opens a menu (Enter is first).
+- Point at a symbol or footprint and the status bar shows its tag and its X and Y. In the
+  Properties panel, type a new Position X or Y to move it.
+
+**Fixed**
+- The window no longer freezes for a moment now and then while you work on big projects.
+- Exporting over a PDF that is open in Adobe (or a spreadsheet open in Excel) used to fail
+  without a word. Now a message says the file is probably open in another program, and your
+  old file is left as it was.
+- A footprint's label lines, all hidden and shown again, now come back at the right size.
+
 ## 0.25
 
 **New**

@@ -233,17 +233,40 @@ nobody understands).
     block"): the ribbon now shrinks a crowded tab's groups (Ribbon.fit), so the room it took
     is no longer the worry.
 
+- 0.26 (the owner's handwritten list, Nov 25 2026, from AutoCAD Electrical habits):
+  - **Footprint tag sizing when showing/hiding**: a footprint with every label line hidden
+    kept its label's sizing (tag_h, label_k) up to date no more: Footprint label height
+    changed meanwhile left it at the old height, and label_k was dropped and taken afresh
+    from the sheet when a line was shown again. Now label_k is kept with the lines hidden and
+    the height change reaches every footprint.
+  - **Coordinate display for devices** (the owner's choice: X,Y of the insertion point):
+    the status bar shows the symbol or footprint under the mouse, "CR101  X 6.250  Y 4.500",
+    from the hover the view already finds; the Properties panel's Position X/Y (there since
+    0.25) moves it.
+  - **Dashed polygon** (DASHPOLY): a dashed box of any shape; decided here: the same object
+    as a dashed box (a subclass, kind "dashpoly"), its window, layer and settings, a corner
+    grip moving that corner alone.
+  - **Bus: swap phases 1 and 3** (W, and a right-click menu in Bus: decided here, Enter first
+    so a right-click and a click still ends it): the wires cross over just before the pins
+    in square steps, through a lane of their own beside the first, so no crossing is a
+    joint. Only where the bus lands on pins.
+  - **Join** (J, AutoCAD's JOIN): decided here: wires left out (they join by themselves as
+    drawn, Clean up wires for the rest; joining wires changes connections); nothing joins at
+    a branch (three ends) or an overlap; an arc only with arcs of its circle (polylines are
+    straight); gaps up to 0.03" on paper said.
+
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).
 2. Auto wire layer (0.22.1, above).
 3. Cross-reference navigation, Trace (0.23, above; put ahead of terminal strips by the
    owner, Nov 23 2026: "very important").
-4. Terminal strips (0.26; was 0.24 until Import blocks from folder... took 0.24, then 0.25
-   until the Properties panel and Devices without a footprint took 0.25): strips,
+4. Terminal strips (0.27; was 0.24 until Import blocks from folder... took 0.24, 0.25
+   until the Properties panel and Devices without a footprint took 0.25, then 0.26 until the
+   owner's handwritten list and the collector fix took 0.26, one release): strips,
    jumpers, a strip editor, a terminal plan report.
-5. Panel wiring (0.27): a per-device wiring list (owner: yes); point-to-point as wire labels on
+5. Panel wiring (0.28): a per-device wiring list (owner: yes); point-to-point as wire labels on
    the footprints' terminals, not a drawn diagram (see 0.22.1).
-6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.28):
+6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.29):
    "lean heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates
    library: not now.
 

@@ -201,6 +201,16 @@ def copy_title(title, taken):
     return "%s%s%d" % (base, dash, n)
 
 
+def hover_text(e):
+    """The status bar's words for the object under the mouse: a symbol's or footprint's tag
+    (else its block's name) and its insertion point, X and Y in inches ("CR101  X 6.250
+    Y 4.500"); "" for anything else."""
+    if not isinstance(e, M.Insert) or e.defn is None:
+        return ""
+    name = e.attrs.get("TAG", "").strip() or e.block_name
+    return "%s  X %.3f  Y %.3f" % (name, e.pos[0], e.pos[1])
+
+
 class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, QMainWindow):
     _sweep_due = False      # (a gcpolicy.sweep waits for the event loop: tabs were closed)
 
@@ -497,6 +507,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self._cmd_act("number", "&Number texts", C.NumberCmd, "Number texts")
         self._cmd_act("erase", "&Erase", C.EraseCmd, "Erase")
         self._cmd_act("trim", "&Trim", C.TrimCmd, "Trim")
+        self._cmd_act("join", "&Join", C.JoinCmd, "Join")
         self._cmd_act("scoot", "Sc&oot", C.ScootCmd, "Scoot")
         self._cmd_act("align_dev", "&Align devices", C.AlignDevicesCmd, "Align")
         self._cmd_act("align_obj", "Align ob&jects", C.AlignObjectsCmd, "Align")
@@ -522,6 +533,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self._cmd_act("dim_units", "Dimension &units", C.DimUnitsCmd, "Units")
         self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
         self._cmd_act("dash_box", "Dashed bo&x", C.DashBoxCmd, "Dashed box")
+        self._cmd_act("dash_poly", "Dashed &polygon", C.DashPolygonCmd, "Dashed poly")
         self._cmd_act("ladder", "La&dder", C.LadderCmd, "Ladder")
         self._cmd_act("hatch", "&Hatch", C.HatchCmd, "Hatch")
         self._cmd_act("mtext", "&Multiline text", C.MTextCmd, "Multiline text")
@@ -793,7 +805,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         for k in ("line", "polyline", "rect", "CIRCLE", "arc", "text", "mtext", "hatch", None,
                   "wire", "bus", "ladder",
                   "wire_cross", "sig_arrows", None,
-                  "dim_linear", "dim_aligned", "leader", "dash_box", None, "rail", "duct"):
+                  "dim_linear", "dim_aligned", "leader", "dash_box", "dash_poly", None, "rail",
+                  "duct"):
             if k == "CIRCLE":
                 cm = m.addMenu("&Circle")
                 for ck in self.CIRCLE_KEYS:
@@ -804,7 +817,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                 m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Modify")
         for k in ("properties", None, "move", "copy", "rotate", "scale", "mirror", "stretch",
-                  "array", "array_edit", "offset", "erase", "trim", "number", None,
+                  "array", "array_edit", "offset", "erase", "trim", "join", "number", None,
                   "scoot", "align_dev", "align_obj", "distribute", None, "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot", "clean_wires", "del_comp", None,
                   "dim_units", "object_color", "FPLABEL", None, "lay_off", "lay_iso",
                   "lay_on", "lay_lock", "lay_unlock"):
@@ -884,7 +897,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                                a["arc"], a["text"], a["mtext"], a["hatch"], a["number"]]),
             ("Modify", "small", [a["move"], a["copy"], a["rotate"], a["scale"], a["mirror"],
                                  a["stretch"], a["array"], a["array_edit"], a["offset"],
-                                 a["erase"], a["trim"], a["explode"]]),
+                                 a["erase"], a["trim"], a["join"], a["explode"]]),
             ("Clipboard", "small", [a["cut"], a["copy_clip"], a["paste"], a["select_all"]]),
             # (the owner, 0.17.4: "I also need the measuring tool repeated in home and
             # schematic tabs")
@@ -904,7 +917,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             # (Ladder shares a button with Dashed box: a fifth button made the tab too wide
             # for a 1000-pixel window on Linux's fonts, 0.22)
             ("Draw", "large", [a["wire"], a["bus"], a["wire_cross"],
-                               split_button([a["dash_box"], a["ladder"]])]),
+                               split_button([a["dash_box"], a["dash_poly"], a["ladder"]])]),
             # (the owner, 0.18: "0.17.4's schematic ribbon goes off the screen. Block
             # properties should generally only be visible when editing/creating a block":
             # Edit block here, the rest on the Block tab; a tab too wide for the window
@@ -1027,6 +1040,14 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self.coords = QLabel()
         self.coords.setMinimumWidth(300)      # (0 while the update notice shows)
         sb.addWidget(self.coords)
+        # (the device under the mouse and where it is placed: the owner, 0.26, "Coordinate
+        # display for devices": its tag and insertion point, from the hover the view has
+        # already found, nothing worked out here)
+        self.hover_info = QLabel()
+        self.hover_info.setObjectName("hover_info")
+        self.hover_info.setToolTip("The symbol or footprint under the mouse: its tag and its "
+                                   "insertion point (Properties, Position X and Y, moves it)")
+        sb.addWidget(self.hover_info)
         for key in ("grid", "snap", "ortho", "polar", "osnap"):
             b = QToolButton()
             b.setDefaultAction(self.acts[key])
@@ -3654,7 +3675,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             attrs = {k: x for k, x in cur.attrs.items() if k not in ("PARENT", "TAG")}
             if dev is not None:
                 attrs = tags.link_attrs(attrs, dev)
-            with v.project.edit("Edit dashed box") as ed:
+            with v.project.edit("Edit dashed polygon" if isinstance(cur, M.DashPolygon)
+                                else "Edit dashed box") as ed:
                 ed.change(sheet, cur.copy(text=got["text"], attrs=attrs))
         if got.get("pick"):
             # (Esc while picking leaves the box as it was)
@@ -4130,6 +4152,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
 
     def _cursor_moved(self, x, y, zone):
         self.coords.setText("X %.4f   Y %.4f%s" % (x, y, ("    Zone " + zone) if zone else ""))
+        v = self.sender()
+        self.hover_info.setText(hover_text(getattr(v, "_hover", None)))
 
     def _update_ui(self):
         v = self.view()
@@ -4146,8 +4170,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
-                  "scale", "mirror", "array", "array_edit", "offset", "dash_box", "ladder", "number",
-                  "erase", "trim", "paste",
+                  "scale", "mirror", "array", "array_edit", "offset", "dash_box", "dash_poly", "ladder", "number",
+                  "erase", "trim", "join", "paste",
                   "scoot", "align_dev", "align_obj", "distribute", "trim_wire", "wire_label", "wire_size", "wire_color", "del_wire", "del_dot",
                   "clean_wires", "del_comp", "wire_layers"):
             a[k].setEnabled(has)

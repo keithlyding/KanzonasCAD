@@ -50,6 +50,14 @@ BUDGET = {
     "ladders_move": 1.0,        # all moved in one edit (renumbered), then drawn
     "ladders_undo": 1.0,        # that undone, then drawn
     "ladder_refs": 0.5,         # 2,000 places read by rung (cross-references, reports)
+    # (0.26: dashed polygons, as a new kind of object must be measured; and Join) a sheet of
+    # 2,000 dashed polygons of six corners, with notes:
+    "dpoly_open": 2.0,          # added and drawn
+    "dpoly_zoom": 2.0,          # ten zoomed repaints
+    "dpoly_move": 1.0,          # all moved in one edit, then drawn
+    "dpoly_undo": 1.0,          # that undone, then drawn
+    "join": 1.0,                # 4,000 lines in 1,000 chains (and 1,000 gaps) joined, then drawn
+    "join_undo": 1.0,           # that undone, then drawn
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
                                 # 2,000 devices, half of them in the field
     # (0.23: Trace, Ctrl+E) on 50 sheets of 1,000 lines, 40 coils, 40 contacts and 40 wires:
@@ -975,6 +983,77 @@ def run(log_path):
         return ("100 ladders, 4,000 rungs: drawn %.2f s, 10 zooms %.2f s, 2,000 places by rung "
                 "%.3f s, moved %.2f s, undone %.2f s" % (do, dz, dr, dm, du))
     log.check("speed budget (ladders)", ladder_sheet)
+
+    def dash_polygons():
+        w = state["win"]
+        p = M.Project.new()
+        s = p.sheets[0]
+        t = time.perf_counter()
+        with p.edit("Dashed polygons") as ed:
+            ed.layer("NOTES", None, M.Layer("NOTES", M.ADAPTIVE).to_dict())
+            for i in range(2000):
+                x, y = 1.0 + (i % 50) * 0.32, 1.0 + (i // 50) * 0.24
+                ed.add(s, M.DashPolygon([(x, y), (x + .3, y), (x + .3, y + .1), (x + .15, y + .1),
+                                         (x + .15, y + .2), (x, y + .2)],
+                                        text="F%d" % i if i % 2 else "", height=0.03))
+        d = w.add_document(p)
+        v = d.view
+        v.zoom("extents")
+        v.repaint()
+        app.processEvents()
+        do = time.perf_counter() - t
+        assert do < BUDGET["dpoly_open"], "2,000 dashed polygons added and drawn in %.2f s" % do
+        t = time.perf_counter()
+        for _k in range(10):
+            v.zoom_at(1.25, None)
+            v._moving_until = 0.0
+            v.repaint()
+        dz = time.perf_counter() - t
+        assert dz < BUDGET["dpoly_zoom"], "ten zoomed repaints took %.2f s" % dz
+        v.zoom("extents")
+        t = time.perf_counter()
+        with p.edit("Move") as ed:
+            for e in list(s.entities.values()):
+                ed.change(s, e.moved(0.25, 0.0))
+        v.repaint()
+        dm = time.perf_counter() - t
+        assert dm < BUDGET["dpoly_move"], "2,000 dashed polygons moved in %.2f s" % dm
+        t = time.perf_counter()
+        p.undo()
+        v.repaint()
+        du = time.perf_counter() - t
+        assert du < BUDGET["dpoly_undo"], "the move undone in %.2f s" % du
+        # Join: 1,000 chains of three lines and a polyline, each with a line a hair off
+        with p.edit("Lines") as ed:
+            ids = set()
+            for i in range(1000):
+                x, y = 1.0 + (i % 40) * 0.4, 12.0 + (i // 40) * 0.4
+                for e in (M.Line((x, y), (x + .1, y)), M.Line((x + .1, y), (x + .2, y)),
+                          M.Line((x + .2, y), (x + .2, y + .1)),
+                          M.Polyline([(x + .2, y + .1), (x + .3, y + .1), (x + .3, y + .3)]),
+                          M.Line((x + .301, y + .3), (x + .35, y + .3))):
+                    ids.add(ed.add(s, e).id)
+        v.repaint()
+        v.set_selection(ids)
+        t = time.perf_counter()
+        v.run(C.JoinCmd)
+        v.repaint()
+        dj = time.perf_counter() - t
+        made = [e for e in s.entities.values() if type(e) is M.Polyline]
+        assert len(made) == 1000 and all(len(e.points) == 5 for e in made) and \
+            len(s.entities) == 4000, "Join made %d polylines of 1,000 chains" % len(made)
+        assert dj < BUDGET["join"], "5,000 objects joined in %.2f s" % dj
+        t = time.perf_counter()
+        p.undo()
+        v.repaint()
+        dju = time.perf_counter() - t
+        assert dju < BUDGET["join_undo"], "the join undone in %.2f s" % dju
+        p.saved_at = len(p.undo_stack)
+        w.close_tab(w.tabs.indexOf(d))
+        return ("2,000 dashed polygons: drawn %.2f s, 10 zooms %.2f s, moved %.2f s, undone "
+                "%.2f s; Join of 5,000 objects into 1,000 polylines %.2f s, undone %.2f s"
+                % (do, dz, dm, du, dj, dju))
+    log.check("speed budget (dashed polygons, Join)", dash_polygons)
 
     def pull_list():
         from . import pull

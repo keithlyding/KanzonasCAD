@@ -2062,10 +2062,13 @@ class BusCmd(Command):
     D to change them). Then click the path as for a wire: across and up or down, turning 90
     degrees at each click, all the wires turning together; S runs it straight instead (each
     click straight across or straight up or down from the last, no corner). L picks each
-    wire's layer (brown, orange, yellow...). F puts the other wires on the other side; Enter
-    (or Esc) ends it."""
+    wire's layer (brown, orange, yellow...). F puts the other wires on the other side; W swaps
+    phases 1 and 3 where the bus lands on a device's pins (L1 on its third pin, L3 on its
+    first: a motor run backward), the two wires crossing over just before the pins; Enter (or
+    Esc) ends it. A right-click offers the options in a menu, Enter first."""
     name, title = "BUS", "Bus"
     wire_snaps = True       # (pins and wire ends always pull the point: CadView.snap_modes)
+    right_menu = True       # (a right-click: Enter, the options, Cancel)
 
     def begin(self):
         self.count = int(getattr(self.ctx, "_bus_count", 3))
@@ -2085,6 +2088,8 @@ class BusCmd(Command):
         self.straight = bool(getattr(self.ctx, "_bus_straight", False))
         self.blocked = None             # (the symbol a click couldn't go round: _around)
         self.flip = False
+        self.swap = False               # (W: phases 1 and 3 swapped where it lands on pins)
+        self._fan_leg = None            # (a landing fanned onto pins: its last leg, (a, S))
         self.toward = None              # started on a symbol's pins: where its others are
         self.side_pins = []             # ...and those pins, each wire starting exactly on one
         self.from_wires = []            # started on a bus's open ends: its wires (_back_over_own)
@@ -2101,6 +2106,8 @@ class BusCmd(Command):
     def _options(self):
         opts = [("Straight" if not self.straight else "Corners", "S"), ("Layers", "L"),
                 ("Other side", "F")]
+        if self.count >= 3:
+            opts.append(("Swap 1 and 3" if not self.swap else "Phases in order", "W"))
         if self.points:
             return opts + [("Undo", "U")]
         return [("Pick pins", "P"), ("Wires", "N"), ("Spacing", "D")] + opts
@@ -2430,6 +2437,17 @@ class BusCmd(Command):
         if k == "F":
             self.flip = not self.flip
             return True
+        if k == "W":
+            if self.count < 3:
+                self.ctx.message("Swap 1 and 3: the bus has %d wires (it takes three or more)"
+                                 % self.count)
+                return True
+            self.swap = not self.swap
+            self.ctx.message("Phases 1 and 3 swapped where the bus lands on a device's pins "
+                             "(L1 on its third pin, L3 on its first)" if self.swap else
+                             "Phases land in order (L1 on the first pin)")
+            self._ask_start()
+            return True
         if k == "S":
             self.straight = self.ctx._bus_straight = not self.straight
             self._ask_start()
@@ -2722,6 +2740,7 @@ class BusCmd(Command):
                 continue                # (its last leg isn't square at the side)
             paths = self._paths(self.points + new)
             if len(paths) == n:
+                self._fan_leg = (tuple(last), tuple(new[-1]))   # (for a swap: _swapped)
                 yield paths
 
     def _land_route(self, sheet, p, pins):
@@ -2883,6 +2902,22 @@ class BusCmd(Command):
             paths = fan if fan else self._paths(self.points)
             sheet = self.ctx.sheet()
             project = self.ctx.project
+            # (landed: on the pins it was clicked on, wire for wire, or fanned onto them)
+            landed = bool(fan) or bool(self.land_pins and paths and G.dist(
+                paths[0][-1], self.land_pins[0]) <= 1e-6)
+            if self.swap and landed:
+                got = self._swapped(paths, self._fan_leg if fan else self.points[-2:])
+                if got is None:
+                    self.ctx.message(SWAP_ROOM % _fmt(4 * SWAP_STEP * sheet.k()))
+                    if closing:
+                        self.finish()
+                        return
+                    self._put_back()
+                    return
+                paths = got
+            elif self.swap and not closing:
+                self.ctx.message("Phases 1 and 3 swap only where the bus lands on a device's "
+                                 "pins: these wires are in order")
             hit = _through_pins(sheet, paths)
             back = hit is None and self._back_over_own(paths)
             if hit is not None or back:
@@ -2892,12 +2927,7 @@ class BusCmd(Command):
                 if closing:
                     self.finish()               # (Esc: nothing drawn)
                     return
-                kept = getattr(self, "_kept", None)
-                if kept is not None:
-                    self.points, self.tap_end = list(kept[0]), kept[1]
-                    self.base = self.last = self.points[-1]
-                    self._kept = None
-                self._ask_start()
+                self._put_back()
                 return
             # (left at the WIRES layer: the current wire layer, as a wire's)
             default = self.layers == ["WIRES"]
@@ -2923,6 +2953,62 @@ class BusCmd(Command):
             self.ctx.message("Bus of %d wires" % made)
             _flag_misses(self.ctx, [q for pts in paths for q in (pts[0], pts[-1])])
         self.finish()
+
+    def _put_back(self):
+        """A landing refused: the bus as it was before the click (U and clicks go on)."""
+        kept = getattr(self, "_kept", None)
+        if kept is not None:
+            self.points, self.tap_end = list(kept[0]), kept[1]
+            self.base = self.last = self.points[-1]
+            self._kept = None
+        self.land_pins = []
+        self._ask_start()
+
+    def _swapped(self, paths, leg):
+        """The landing's wires with phases 1 and 3 swapped (W): wire 1 over to the third pin's
+        lane and wire 3 to the first's, just before the pins (or before the jogs onto them),
+        on the last straight leg of the bus (leg: its last two points, the first wire's), in
+        square steps a grid step apart: wire 3 across to the first lane, wire 1 out to a lane
+        of its own beside the first, past it and back across to the third, so no two wires
+        lie on each other and every crossing is a plain cross, no joint. None when the leg
+        is too short for it (it needs four grid steps of straight run)."""
+        if leg is None or len(leg) < 2 or len(paths) < 3:
+            return None
+        c, e = leg[-2], leg[-1]
+        L = G.dist(c, e)
+        g = SWAP_STEP * self.ctx.sheet().k()
+        if L < 1e-9:
+            return None
+        t = ((e[0] - c[0]) / L, (e[1] - c[1]) / L)     # (the way the bus goes)
+        n = (t[1], -t[0])
+
+        def on(path, q):
+            return any(G.dist_to_segment(q, a, b) <= 1e-6 for a, b in zip(path, path[1:]))
+        if not on(paths[1], (e[0] + n[0] * self.spacing, e[1] + n[1] * self.spacing)):
+            n = (-n[0], -n[1])
+
+        def z(lane, h):
+            return (e[0] + n[0] * lane * self.spacing - t[0] * h,
+                    e[1] + n[1] * lane * self.spacing - t[1] * h)
+        top = 4 * g
+        seg = []
+        for i in range(3):
+            p = paths[i]
+            j = next((j for j in range(len(p) - 1)
+                      if G.dist_to_segment(z(i, 0.0), p[j], p[j + 1]) <= 1e-6 and
+                      G.dist_to_segment(z(i, top), p[j], p[j + 1]) <= 1e-6), None)
+            if j is None:
+                return None
+            seg.append(j)
+        a, b = paths[0], paths[2]
+        ja, jb = seg[0], seg[2]
+        one = a[:ja + 1] + [z(0, 3 * g), z(-1, 3 * g), z(-1, g), z(2, g), z(2, 0.0)] + \
+            b[jb + 1:]
+        three = b[:jb + 1] + [z(2, 2 * g), z(0, 2 * g), z(0, 0.0)] + a[ja + 1:]
+        out = list(paths)
+        out[0] = [tuple(q) for q in M._tidy(one)]
+        out[2] = [tuple(q) for q in M._tidy(three)]
+        return out
 
     def preview(self, p):
         if self.step == "pick":
@@ -2954,14 +3040,25 @@ class BusCmd(Command):
             got = pin_side(sheet, at)
             new = self._land_route(sheet, at, got[0]) if got is not None else None
             if new:
-                return [M.Wire(q) for q in self._paths(self.points + new)]
+                main = self.points + new
+                paths = self._paths(main)
+                if self.swap:
+                    paths = self._swapped(paths, main[-2:]) or paths
+                return [M.Wire(q) for q in paths]
         else:
             fan = self._fan(sheet, p)
             if fan is not None:
+                if self.swap:
+                    fan = self._swapped(fan, self._fan_leg) or fan
                 return [M.Wire(q) for q in fan]
         p = land if land is not None else (p[0] + self.offset[0], p[1] + self.offset[1])
         pts = self.points + self._around(self._route(p))
         return [M.Wire(q) for q in self._paths(pts)]
+
+
+SWAP_STEP = 0.125           # (a phase swap's steps apart, on paper: BusCmd._swapped)
+SWAP_ROOM = "Swap 1 and 3: the bus needs %s\" of straight run before the pins to cross its " \
+    "wires over: click a point farther out first, or W to land in order"
 
 
 class MakeBlockCmd(Command):
@@ -3491,20 +3588,7 @@ class DashBoxCmd(Command):
         if abs(p[0] - self.first[0]) < 1e-9 or abs(p[1] - self.first[1]) < 1e-9:
             self.ctx.message("A box needs width and height: pick a corner across from the first")
             return
-        box = M.DashBox.from_corners(self.first, p, height=self._height())
-        host = self.ctx.host
-        got = host.ask_dash_box(box) if host is not None else {"text": "", "device": None}
-        self.finish()
-        if got is None:
-            return
-        if got.get("pick"):
-            # (the device picked on the drawing, on any sheet: the box is made after)
-            sheet_id = self.ctx.sheet().id
-            # (Esc while picking: no box)
-            host.pick_device_for(lambda dev: dev is not None and _add_box(
-                self.ctx, sheet_id, box, got["text"], dev))
-            return
-        _add_box(self.ctx, self.ctx.sheet().id, box, got["text"], got.get("device"))
+        _ask_and_add_box(self, M.DashBox.from_corners(self.first, p, height=self._height()))
 
     def _height(self):
         return float(self.ctx.project.settings.get("tag_height", 0.1)) * self.ctx.sheet().k()
@@ -3514,6 +3598,92 @@ class DashBoxCmd(Command):
                 abs(p[1] - self.first[1]) < 1e-9:
             return []
         return [M.DashBox.from_corners(self.first, p, height=self._height())]
+
+
+class DashPolygonCmd(Command):
+    """DASHPOLY: a dashed polygon (the owner, 0.26: "Dashed polygon in addition to the dashed
+    box"): its corners clicked one by one, as a polyline's (U takes the last back), then Enter
+    or C closes it and its window opens, a dashed box's: a note and the device it belongs to."""
+    name, title = "DASHPOLY", "Dashed polygon"
+
+    def begin(self):
+        self.points = []
+        self.ctx.prompt("Specify first corner of the dashed polygon")
+
+    def _ask(self):
+        n = len(self.points)
+        opts = [("Undo", "U")] + ([("Close", "C")] if n >= 3 else [])
+        self.ctx.prompt("Specify next corner (Enter or C closes it)" if n >= 3 else
+                        "Specify next corner", opts)
+
+    def point(self, p):
+        if self.points and G.dist(self.points[-1], p) < 1e-9:
+            return
+        self.points.append(p)
+        self.base = self.last = p
+        self._ask()
+
+    def text(self, s):
+        k = s.strip().upper()
+        if k == "C" and self.points:
+            self.enter()
+            return True
+        if k == "U" and self.points:
+            self.points.pop()
+            self.base = self.last = self.points[-1] if self.points else None
+            if self.points:
+                self._ask()
+            else:
+                self.begin()
+            return True
+        return False
+
+    def enter(self):
+        pts = M._tidy([list(q) for q in self.points])
+        if len(pts) > 1 and G.dist(pts[0], pts[-1]) < 1e-9:
+            pts.pop()                   # (its last corner clicked on its first: closed there)
+        if len(pts) < 3 or _area(pts) < 1e-12:
+            if not self.points:
+                self.finish()
+                return
+            self.ctx.message("A dashed polygon needs three corners not in a line: click "
+                             "another, or Esc")
+            return
+        _ask_and_add_box(self, M.DashPolygon(pts, height=self._height()))
+
+    def _height(self):
+        return float(self.ctx.project.settings.get("tag_height", 0.1)) * self.ctx.sheet().k()
+
+    def preview(self, p):
+        if not self.points:
+            return []
+        pts = self.points + [p]
+        if len(pts) < 3:
+            return [M.Line(pts[0], pts[1])]
+        return [M.DashPolygon(pts, height=self._height())]
+
+
+def _area(pts):
+    """The area a closed run of points goes round (its sign: which way round)."""
+    return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(pts, pts[1:] + pts[:1]))) / 2.0
+
+
+def _ask_and_add_box(cmd, box):
+    """A dashed box's (or polygon's) window, then the box added: belonging to the device
+    chosen, or to one picked on the drawing (on any sheet) after; Cancel, or Esc while
+    picking, adds none."""
+    host = cmd.ctx.host
+    got = host.ask_dash_box(box) if host is not None else {"text": "", "device": None}
+    cmd.finish()
+    if got is None:
+        return
+    if got.get("pick"):
+        # (the device picked on the drawing, on any sheet: the box is made after)
+        sheet_id = cmd.ctx.sheet().id
+        host.pick_device_for(lambda dev: dev is not None and _add_box(
+            cmd.ctx, sheet_id, box, got["text"], dev))
+        return
+    _add_box(cmd.ctx, cmd.ctx.sheet().id, box, got["text"], got.get("device"))
 
 
 class LadderCmd(Command):
@@ -3667,12 +3837,13 @@ def _add_box(ctx, sheet_id, box, text, device):
         return None
     attrs = tags.link_attrs({}, device) if device is not None else {}
     b = box.copy(text=text or "", attrs=attrs)
-    with ctx.edit("Dashed box") as ed:
+    what = "Dashed polygon" if isinstance(box, M.DashPolygon) else "Dashed box"
+    with ctx.edit(what) as ed:
         if b.layer not in project.layers:
             ed.layer(b.layer, None, M.Layer(b.layer, M.ADAPTIVE).to_dict())
         b = ed.add(sheet, b)
-    ctx.message("Dashed box%s" % (" belonging to %s" % device.attrs.get("TAG", "?")
-                                  if device is not None else ""))
+    ctx.message("%s%s" % (what, " belonging to %s" % device.attrs.get("TAG", "?")
+                          if device is not None else ""))
     return b
 
 
@@ -4191,6 +4362,47 @@ class ExplodeCmd(Command):
         self.ctx.set_selection(new)
         self.ctx.message("Exploded %d block(s)" % n if n else "Nothing to explode: select "
                          "symbols or footprints")
+        self.finish()
+
+
+class JoinCmd(Command):
+    """JOIN (the owner, 0.26: "Unite / join lines"): the selected lines, arcs and polylines that
+    touch end to end become one object (join.py): lines in a line one line, arcs of one circle
+    one arc, other chains one polyline; in one step of Undo, and what couldn't be joined (gaps,
+    overlaps, branches, an arc on a line, wires) said on the command line."""
+    name, title = "JOIN", "Join"
+    selects = True
+
+    def begin(self):
+        from . import join
+        sheet = self.ctx.sheet()
+        ents = [e for e in _selected(self.ctx) if not self.ctx.layer_locked(e.layer)]
+        made, notes = join.plan(ents, sheet.k())
+        new = set()
+        if made:
+            with self.ctx.edit("Join") as ed:
+                for e, old in made:
+                    for i in old:
+                        ed.remove(sheet, i)
+                    new.add(ed.add(sheet, e).id)
+            took = sum(len(old) for _e, old in made)
+            kinds = {}
+            for e, _old in made:
+                n = {"line": "line", "arc": "arc", "circle": "circle"}.get(e.kind, "polyline")
+                if e.kind == "polyline" and e.closed:
+                    n = "closed polyline"
+                kinds[n] = kinds.get(n, 0) + 1
+            self.ctx.message("Joined %d objects into %d: %s" % (
+                took, len(made), ", ".join("%d %s%s" % (c, n, "" if c == 1 else "s")
+                                           for n, c in sorted(kinds.items()))))
+        elif not notes:
+            self.ctx.message("Nothing to join: select lines, arcs or polylines whose ends "
+                             "touch")
+        else:
+            self.ctx.message("Nothing joined")
+        for line in notes:
+            self.ctx.message(line)
+        self.ctx.set_selection(new)
         self.finish()
 
 
@@ -5884,12 +6096,14 @@ COMMANDS = {
     "WIRE": (WireCmd, ["W"]),
     "BUS": (BusCmd, ["BU"]),
     "EXPLODE": (ExplodeCmd, ["X"]),
+    "JOIN": (JoinCmd, ["J"]),
     "DIMLINEAR": (DimLinearCmd, ["DLI", "DIM"]),
     "HATCH": (HatchCmd, ["H", "BHATCH", "BH", "FILL"]),
     "MTEXT": (MTextCmd, ["MT", "T2", "NOTE"]),
     "USETITLEBLOCK": (UseTitleBlockCmd, ["USETB", "TBUSE"]),
     "LEADER": (LeaderCmd, ["LE", "LEAD", "MLEADER", "MLD", "QLEADER", "BALLOON"]),
     "DASHBOX": (DashBoxCmd, ["DB", "DBOX", "BOX"]),
+    "DASHPOLY": (DashPolygonCmd, ["DPOLY", "DP", "DASHPOLYGON"]),
     "LADDER": (LadderCmd, ["LAD", "LADR"]),
     "ARRAY": (ArrayCmd, ["AR", "ARRAYRECT", "ARRAYPOLAR"]),
     "ARRAYEDIT": (ArrayEditCmd, ["AE"]),
