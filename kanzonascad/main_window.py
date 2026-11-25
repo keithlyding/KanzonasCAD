@@ -533,7 +533,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self._cmd_act("dim_units", "Dimension &units", C.DimUnitsCmd, "Units")
         self._cmd_act("leader", "L&eader", C.LeaderCmd, "Leader")
         self._cmd_act("dash_box", "Dashed bo&x", C.DashBoxCmd, "Dashed box")
-        self._cmd_act("dash_poly", "Dashed &polygon", C.DashPolygonCmd, "Dashed poly")
+        self._cmd_act("dash_poly", "Dashed &polygon", C.DashPolygonCmd, "Dash poly")
         self._cmd_act("ladder", "La&dder", C.LadderCmd, "Ladder")
         self._cmd_act("hatch", "&Hatch", C.HatchCmd, "Hatch")
         self._cmd_act("mtext", "&Multiline text", C.MTextCmd, "Multiline text")
