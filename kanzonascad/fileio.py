@@ -2,6 +2,8 @@
 only when used) and PDF export (Qt's own PDF writer: vector lines and outlined text, one page
 per sheet at its real size)."""
 
+import contextlib
+import errno
 import math
 import os
 import re
@@ -1423,16 +1425,41 @@ def add_drawing(project, sheet, ents, rep, path, at=None, anchor="center"):
 # ============================================================================================
 # PDF
 # ============================================================================================
+@contextlib.contextmanager
+def written_whole(path):
+    """Write a file under another name beside it (the name given to the with), then put it in
+    path's place in one step (0.26, the owner: Export to PDF over a PDF open in Adobe failed
+    without a word: Qt's PDF writer doesn't say when it can't open its file). OSError when
+    it can't be done, PermissionError when the file is in use in another program or the
+    folder can't be written to; the file that was there is left as it was."""
+    tmp = path + ".writing"
+    try:
+        yield tmp
+        if not os.path.isfile(tmp) or os.path.getsize(tmp) == 0:
+            raise PermissionError(errno.EACCES, "the file couldn't be written", path)
+        os.replace(tmp, path)
+    finally:
+        if os.path.isfile(tmp):
+            os.remove(tmp)
+
+
 def export_pdf(project, path, sheets=None, line_width=0.008, mono=True, note=None, links=True):
     """One page per sheet at its real size: black on white paper (mono False keeps the
     layers' colors), each cross-reference a link to the place it names (pdf_links; links
     False: none). Returns the page count. note(message): told when the links were left out
-    (no pypdf)."""
+    (no pypdf). OSError when the file can't be written (written_whole: PermissionError when
+    it is open in another program)."""
+    with written_whole(path) as tmp:
+        n = _write_pdf(project, tmp, path, sheets, line_width, mono, note, links)
+    return n
+
+
+def _write_pdf(project, tmp, path, sheets, line_width, mono, note, links):
     from PySide6.QtCore import QMarginsF, QSizeF
     from PySide6.QtGui import QPainter, QPageSize, QPageLayout, QPdfWriter
     from .render import SheetRenderer
     sheets = list(sheets or project.sheets)
-    writer = QPdfWriter(path)
+    writer = QPdfWriter(tmp)
     writer.setCreator("KanzonasCAD")
     writer.setTitle(project.fields.get("Project", "") or os.path.basename(path))
     writer.setResolution(600)
@@ -1447,6 +1474,9 @@ def export_pdf(project, path, sheets=None, line_width=0.008, mono=True, note=Non
             writer.setPageLayout(layout)
             if painter is None:
                 painter = QPainter(writer)
+                if not painter.isActive():      # (Qt only says so on the console)
+                    raise PermissionError(errno.EACCES, "the file couldn't be opened for "
+                                          "writing", path)
             else:
                 writer.newPage()
             painter.setRenderHint(QPainter.Antialiasing, True)
@@ -1460,11 +1490,11 @@ def export_pdf(project, path, sheets=None, line_width=0.008, mono=True, note=Non
                 SheetRenderer(project, s, dark=False, mono=mono).paint(
                     painter, pen_width=line_width * s.k())
     finally:
-        if painter is not None:
+        if painter is not None and painter.isActive():
             painter.end()
+    del painter, writer             # (the file closed before it is put in its place)
     from . import pdf_links
-    if links and painter is not None and pdf_links.add_links(project, path, sheets) is None \
-            and note:
+    if links and sheets and pdf_links.add_links(project, tmp, sheets) is None and note:
         note("The PDF has no cross-reference links: pypdf isn't installed "
              "(pip install pypdf).")
     return len(sheets)

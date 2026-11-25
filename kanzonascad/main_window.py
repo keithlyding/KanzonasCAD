@@ -202,6 +202,20 @@ def copy_title(title, taken):
 
 
 class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, QMainWindow):
+    _sweep_due = False      # (a gcpolicy.sweep waits for the event loop: tabs were closed)
+
+    @staticmethod
+    def _sweep_soon():
+        if not MainWindow._sweep_due:
+            MainWindow._sweep_due = True
+            QTimer.singleShot(0, MainWindow._sweep)
+
+    @staticmethod
+    def _sweep():
+        from . import gcpolicy
+        MainWindow._sweep_due = False
+        gcpolicy.sweep()
+
     def __init__(self, family=None):
         """family: the windows this one opens projects and sheets with (a window from Open
         this sheet in a new window joins its opener's); the first is the main one, which
@@ -212,6 +226,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         install_text_measure()
         from . import no_wheel
         no_wheel.install()              # (the wheel never changes a number box or a list)
+        from . import gcpolicy
+        # (no long stalls from Python's collector: gcpolicy.py)
+        gcpolicy.install(lambda f: QTimer.singleShot(0, f))
         from . import paths
         # (portable: settings.ini in the data folder beside the program, not the registry)
         self.settings = paths.settings()
@@ -626,7 +643,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
               "drawing")
         A("black", "&Black drawing background", self._set_black, checkable=True,
           icon="black_bg", label="Black background",
-          tip="Draw on black, as in AutoCAD. PDF export always prints black on white.")
+          tip="Draw on black, as in AutoCAD. PDF export prints black on white, or in color "
+              "when picked.")
 
         self._cmd_act("wire", "&Wire", C.WireCmd, "Wire")
         self.acts["wire"].setProperty("icon_key", "wire")
@@ -1102,6 +1120,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         i = self.tabs.addTab(d, d.title())
         self.tabs.setCurrentIndex(i)
         v.setFocus()
+        from . import gcpolicy
+        gcpolicy.settle()       # (the project set aside: working on it doesn't go through it)
         return d
 
     def new_project(self):
@@ -1281,7 +1301,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         w = self.tabs.widget(index)
         if not isinstance(w, Document):
             return True
-        if not self.sharing(w):
+        closing = not self.sharing(w)       # (the project itself, not one more window on it)
+        if closing:
             if not self._maybe_save(w):
                 return False
             self._drop_autosave(w)
@@ -1292,6 +1313,10 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         for f in (getattr(w, "listener", None), w.view._project_changed):
             if f in w.project.listeners:
                 w.project.listeners.remove(f)
+        if closing:
+            # (the project's memory given back once the tab is gone: gcpolicy.sweep; a window
+            # more on a project still open leaves little behind, kept until the next one)
+            w.destroyed.connect(lambda _o=None: MainWindow._sweep_soon())
         w.deleteLater()
         if not self.is_main() and self.tabs.count() == 0 and self.isVisible():
             QTimer.singleShot(0, self.close)    # (a window of its own, emptied: it goes)
@@ -2112,7 +2137,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         return part
 
     def pdf_colors(self):
-        """Export to PDF in the layers' colors (Options; off to start: black on white)."""
+        """Export to PDF in the layers' colors: the last pick in the Export to PDF window (Save
+        as type) or in Options (one setting; off to start: black and white)."""
         v = self.settings.value("pdf_colors", False)
         return v not in (False, "false", "0", 0, None)
 
@@ -2133,8 +2159,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             return
         try:
             fileio.export_dxf(d.project, s, path, blocks=self.dxf_blocks())
-        except Exception as ex:
-            QMessageBox.warning(self, APP, "Couldn't write %s:\n%s" % (path, ex))
+        except Exception as ex:         # (any failure said: open in another program, 0.26)
+            dialogs.write_failed(self, APP, path, ex)
             return
         self.statusBar().showMessage("Exported %s" % path, 5000)
 
@@ -2147,38 +2173,48 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         if not folder:
             return
         n = 0
-        try:
-            for s in d.project.sheets:
-                fileio.export_dxf(d.project, s, os.path.join(
-                    folder, "%s-%s.dxf" % (d.name(), d.project.sheet_number(s))),
-                    blocks=self.dxf_blocks())
-                n += 1
-        except Exception as ex:
-            QMessageBox.warning(self, APP, "Export stopped:\n%s" % ex)
-        self.statusBar().showMessage("Exported %d sheet(s) to %s" % (n, folder), 5000)
+        for s in d.project.sheets:
+            path = os.path.join(folder, "%s-%s.dxf" % (d.name(), d.project.sheet_number(s)))
+            try:
+                fileio.export_dxf(d.project, s, path, blocks=self.dxf_blocks())
+            except Exception as ex:     # (any failure said, and the export stops there)
+                dialogs.write_failed(self, APP, path, ex)
+                break
+            n += 1
+        self.statusBar().showMessage("Exported %d of %d sheet(s) to %s" % (
+            n, len(d.project.sheets), folder), 5000)
+
+    PDF_BW = "PDF in black and white (*.pdf)"
+    PDF_COLOR = "PDF in color (*.pdf)"
 
     def export_pdf(self):
+        """Export to PDF...: every sheet into one PDF, in black and white or in color, as
+        picked in the window's Save as type (the owner, 0.26: asked at export; the last pick
+        kept, the same setting as Options' Export to PDF in the layers' colors)."""
         d = self.doc()
         if d is None:
             return
-        path, _f = QFileDialog.getSaveFileName(self, "Export to PDF",
-                                               os.path.join(self._last_dir(), d.name() + ".pdf"),
-                                               "PDF (*.pdf)")
+        types = [self.PDF_BW, self.PDF_COLOR]
+        path, picked = QFileDialog.getSaveFileName(
+            self, "Export to PDF", os.path.join(self._last_dir(), d.name() + ".pdf"),
+            ";;".join(types), types[self.pdf_colors()])
         if not path:
             return
+        if picked in types:
+            self.settings.setValue("pdf_colors", picked == self.PDF_COLOR)
         if self._fits_or_go_on(d.project, d.project.sheets, "Export") != "go":
             return
+        color = self.pdf_colors()
         notes = []
         try:
-            n = fileio.export_pdf(d.project, path, mono=not self.pdf_colors(),
-                                  note=notes.append)
-        except Exception as ex:
-            QMessageBox.warning(self, APP, "Couldn't write %s:\n%s" % (path, ex))
+            n = fileio.export_pdf(d.project, path, mono=not color, note=notes.append)
+        except Exception as ex:         # (any failure said: open in another program, 0.26)
+            dialogs.write_failed(self, APP, path, ex)
             return
         for msg in notes:
             self.cmdline.add_history(msg)
-        self.statusBar().showMessage(" ".join(["Exported %d sheet(s) to %s." % (n, path)] +
-                                              notes), 5000)
+        self.statusBar().showMessage(" ".join(["Exported %d sheet(s) to %s (%s)." % (
+            n, path, "in color" if color else "black and white")] + notes), 5000)
 
     def _misfits(self, p, sheets):
         """[(sheet, [(entity, why)])] of the sheets chosen whose drawing doesn't fit at their

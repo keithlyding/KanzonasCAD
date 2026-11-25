@@ -511,7 +511,16 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   only DXF). The owner has AutoCAD Electrical to test it with if it comes back.
 - US practice: JIC/NFPA symbols, horizontal rungs, grid-style references (`6-D1`), zones A-H
   down the left and 1-10 along the top to start (both editable).
-- Drawing area black by default; PDF always black on white.
+- Drawing area black by default; PDF black on white to start. Export to PDF asks color or
+  black and white in its window (Save as type) and keeps the last pick (the owner, 0.26: "the
+  Export PDF window gets a Color / Black and white choice that remembers the last pick"; the
+  same setting as Options' Export to PDF in the layers' colors).
+- Paste (the owner, 0.26): a click places the objects by their lower left corner; Enter
+  instead puts them at the exact coordinates they were copied from, on whatever sheet is
+  shown (copy from sheet 1, paste on sheet 2 in the same spot; AutoCAD's PASTEORIG).
+- A file that can't be written (a PDF open in Adobe, a workbook open in Excel) is always said
+  in a message box, never passed over (the owner, 0.26); PDFs are written beside the file and
+  put in its place, so an old PDF never passes for the new one.
 - Revisions: one project revision, each sheet may override it.
 - The library lives outside the program (Documents\KanzonasCAD Library); projects keep their
   own copies of the blocks (and, from part assignment on, parts) they use.

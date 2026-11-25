@@ -66,6 +66,8 @@ def _shutdown_qt():
     for _ in range(3):
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
         app.processEvents()
+    from kanzonascad import gcpolicy
+    gcpolicy.uninstall()        # (what MainWindow set aside collected too, as the app quits)
     gc.collect()
 
 

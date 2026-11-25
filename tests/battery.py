@@ -289,6 +289,14 @@ def first_difference(a, b, path="project"):
     return "%s: %r != %r" % (path, a, b)
 
 
+def place_of(e):
+    """Where an object is, for comparing a copy with its original: a block reference by its
+    insertion point (its box changes with a new tag), anything else by its box."""
+    if isinstance(e, M.Insert):
+        return tuple(e.pos)
+    return tuple(e.bbox())
+
+
 # ---- the mouse, as a person uses it -------------------------------------------------------------
 def _qt():
     from PySide6.QtCore import Qt, QPoint, QPointF
@@ -4172,6 +4180,38 @@ def random_editing(log, out, ops, seed, drawing=None):
             [x.points for x in on])
         BC.CHECKED["symbol copied onto a wire cuts it"] += 1
 
+    def op_paste_same_place():
+        # (0.26, the owner: "pressing Enter instead of clicking drops the pasted objects at the
+        # exact coordinates they were copied from": copied on this sheet, pasted with Enter on
+        # another one, or on this one, as a user does it: select, Ctrl+C, the sheet, Ctrl+V,
+        # Enter; each copy where its original is, worked out from the originals)
+        QTest = _qt()[3]
+        ents = [e for e in some() if not isinstance(e, (M.Wire, M.WireCross))]
+        if not ents:
+            return
+        src = s
+        want = sorted((type(e).__name__, place_of(e)) for e in ents)
+        v.set_selection({e.id for e in ents})
+        if not win.copy_clip():
+            return
+        to = rnd.choice(p.sheets)
+        if to is not src:
+            v.show_sheet(to.id)
+        before = set(to.entities)
+        win.paste()
+        assert isinstance(v.cmd, C.PasteCmd), "Ctrl+V didn't start pasting"
+        assert "Enter" in v._prompt[0], "the paste prompt doesn't say what Enter does: %r" % (
+            v._prompt[0],)
+        QTest.keyClick(v, Qt.Key_Return)
+        assert v.cmd is None, "Enter didn't paste"
+        new = [to.entities[i] for i in v.sel if i in to.entities and i not in before]
+        got = sorted((type(e).__name__, place_of(e)) for e in new
+                     if not isinstance(e, (M.Wire, M.WireCross)))
+        assert got == want, "pasted with Enter %s, copied from %s (sheet %s to %s)" % (
+            got, want, p.sheet_number(src), p.sheet_number(to))
+        BC.CHECKED["paste with Enter: where it was copied from" +
+                   (" (another sheet)" if to is not src else "")] += 1
+
     def op_same_name_pins():
         # a symbol with two pins of one name, a wire on each pin, off on its own; moved,
         # scooted or turned through the commands: every pin keeps its wire
@@ -5044,7 +5084,8 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
              (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_fp_label_sizes, 2), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2),
              (op_import_blocks, 1), (op_props_panel, 3), (op_missing_fp, 2),
-             (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1)]
+             (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1),
+             (op_paste_same_place, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -5577,20 +5618,9 @@ def files(log, out):
 
 # ---- 4. speed ------------------------------------------------------------------------------
 def speed(log, out):
-    # (what the sections before left alive set aside, so Python's collector doesn't go
-    # through it all on every full collection here: on CI the clean up took 3.27 s after a
-    # 3,000-step run, 1.5-2 s after a short one, the long battery, 0.25, seed 4931; what
-    # these steps make themselves is still collected and timed)
-    import gc
-    gc.collect()
-    gc.freeze()
-    try:
-        return _speed(log, out)
-    finally:
-        gc.unfreeze()
-
-
-def _speed(log, out):
+    # (0.25 set aside what the sections before left alive (gc.freeze) for these steps: on CI
+    # Python's collector went through it all, 3.27 s after a 3,000-step run, seed 4931; since
+    # 0.26 the program does that itself, gcpolicy, and these steps are timed as they run)
     res = []
     p = M.Project.new()
     s = p.sheets[0]

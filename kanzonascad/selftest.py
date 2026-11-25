@@ -66,6 +66,8 @@ BUDGET = {
     "props_repaint": 0.01,      # a repaint with it open: no slower than closed, give or take
     # (0.25: Devices without a footprint) 50 sheets, 2,000 devices, 1,000 footprints:
     "missing_fp": 0.5,          # the check worked out after a change
+    "gc_pause": 0.05,           # (0.26) one full collection by Python's collector, at the most,
+                                # while working on an opened 60,000-line project (gcpolicy)
     "pdf_links": 2.0,           # (0.23.1) the links of 2,000 cross-references added to the PDF
                                 # of 20 sheets (Export to PDF)
 }
@@ -674,6 +676,103 @@ def run(log_path):
     log.check("text font", text_font)
     log.check("speed budget (60,000-line sheet)", big_sheet)
 
+    def collector_pauses():
+        """(0.26) Python's full collections while working on a big project the program
+        opened: none may stop the window longer than the budget (gcpolicy; up to 0.25 each
+        went through every object: 60 to 860 ms on the builds, the window frozen). Worked on
+        until Python has made a few on its own, as it does every so often."""
+        import gc
+        import random
+        from PySide6.QtCore import QPointF, QEvent, Qt
+        from PySide6.QtGui import QMouseEvent
+        from . import gcpolicy
+        assert gcpolicy.installed(), "the main window didn't set up gcpolicy"
+        w = state["win"]
+        coil, no = w.library.get("symbol", "Relay coil"), w.library.get("symbol", "Contact NO")
+        rnd = random.Random(11)
+        src = M.Project.new()
+        while len(src.sheets) < 40:
+            src.sheets.append(src.make_sheet("Sheet %d" % (len(src.sheets) + 1)))
+        for k, s in enumerate(src.sheets):
+            for i in range(1000):
+                x, y = rnd.uniform(0.7, 16.3), rnd.uniform(0.7, 10.3)
+                s._put(M.Line((x, y), (x + rnd.uniform(-0.2, 0.2), y + rnd.uniform(-0.2, 0.2))))
+            for i in range(60):
+                x, y = 1 + (i % 8) * 1.8, 1 + (i // 8) * 1.2
+                n = k * 60 + i
+                m = (n + 60 * 7) % 2400                 # (a contact of a coil 7 sheets on)
+                s._put(M.Insert(coil.name, (x, y), defn=coil,
+                                attrs={"TAG": "CR%d" % (1000 + n), "DEV": "d%d" % n}))
+                s._put(M.Insert(no.name, (x + 0.8, y), defn=no,
+                                attrs={"TAG": "CR%d" % (1000 + m), "PARENT": "d%d" % m}))
+                s._put(M.Wire([(x, y - 0.5), (x + 0.6, y - 0.5)], num="%d%03d" % (k % 9 + 1, i)))
+        path = os.path.join(tmp, "collector.kzcad")
+        src.save(path)
+        del src, s
+        pauses = []
+        started = [None]
+
+        def timed(phase, info):
+            if info.get("generation") != 2:
+                return
+            if phase == "start":
+                started[0] = time.perf_counter()
+            elif started[0] is not None:
+                pauses.append(time.perf_counter() - started[0])
+                started[0] = None
+        d = w.open_path(path)
+        assert d is not None, "the project didn't open"
+        v, p = d.view, d.project
+        v.zoom("sheet")
+        v.repaint()
+        app.processEvents()
+        steps = 0
+        gc.callbacks.append(timed)
+        try:
+            # (a few objects picked and moved, undone and done again now and then, copied and
+            # pasted where they were (Enter), the view zoomed, the mouse moved, the sheets gone
+            # through: until Python has made three full collections of its own, or the most
+            # steps a full collection took up to 0.25)
+            while len(pauses) < 3 and steps < 1500:
+                s = p.sheets[steps % len(p.sheets)]
+                v.show_sheet(s.id)
+                ids = list(s.entities)
+                for i in range(5):
+                    pos = QPointF(150 + (steps * 37 + i * 11) % 600, 120 + (steps * 13) % 400)
+                    app.sendEvent(v, QMouseEvent(QEvent.MouseMove, pos, v.mapToGlobal(pos),
+                                                 Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+                pick = rnd.sample(ids, 40)
+                v.set_selection(set(pick))
+                if steps % 3 == 2:
+                    w.copy_clip()
+                    w.paste()
+                    v.enter()
+                else:
+                    with p.edit("Move") as ed:
+                        for i in pick:
+                            ed.change(s, s.entities[i].moved(0.01, 0.01))
+                if steps % 4 == 3:
+                    p.undo()
+                    p.redo()
+                v.zoom_at(1.1 if steps % 2 else 1 / 1.1, QPointF(300, 200))
+                v._moving_until = 0.0
+                v.repaint()
+                app.processEvents()
+                steps += 1
+        finally:
+            gc.callbacks.remove(timed)
+            p.saved_at = len(p.undo_stack)
+            w.close_tab(w.tabs.indexOf(d))
+        assert pauses, "Python made no full collection in %d steps: nothing measured" % steps
+        worst = max(pauses)
+        assert worst < BUDGET["gc_pause"], \
+            "a full collection stopped the window %.0f ms (%d of %d over %.0f ms, %d steps)" % (
+                worst * 1000, sum(x >= BUDGET["gc_pause"] for x in pauses), len(pauses),
+                BUDGET["gc_pause"] * 1000, steps)
+        return "%d full collection(s) in %d steps, the longest %.1f ms" % (
+            len(pauses), steps, worst * 1000)
+    log.check("speed budget (Python's collector)", collector_pauses)
+
     def notes_sheet():
         import os
         import random
@@ -1274,5 +1373,7 @@ def run(log_path):
             d = w.tabs.widget(i)
             d.project.saved_at = len(d.project.undo_stack)
         w.close()
+    from . import gcpolicy
+    gcpolicy.uninstall()            # (as the program does when it quits)
     log.write("%d failure(s)" % log.failures)
     return log.failures

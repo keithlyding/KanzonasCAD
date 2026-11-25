@@ -1208,7 +1208,13 @@ class PasteCmd(Command):
         self.layers = layers or {}          # {name: Layer dict} copied with them
 
     def begin(self):
-        self.ctx.prompt("Specify insertion point")
+        self.ctx.prompt("Specify insertion point (Enter: where they were copied from)")
+
+    def enter(self):
+        """Enter (or Space, or a right-click) instead of a point: pasted at the coordinates
+        they were copied from, on whatever sheet is shown (the owner, 0.26: copied from one
+        sheet, pasted on another in the same spot; AutoCAD's PASTEORIG)."""
+        self.point(self.base_pt)
 
     def result(self, p):
         dx, dy = p[0] - self.base_pt[0], p[1] - self.base_pt[1]

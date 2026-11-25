@@ -1961,10 +1961,12 @@ about a quarter of the window, on a sheet with a scale too (at 1:24 the sheet is
 paper size).</li>
 <li><b>Black drawing background</b> (on to start, as in AutoCAD): the sheet is drawn black with
 white lines. Turn it off for a white sheet. <b>Export to PDF...</b> prints black on white
-either way, unless <b>Export to PDF in the layers' colors</b> is ticked.</li>
+either way, unless you pick color in its window (or tick <b>Export to PDF in the layers'
+colors</b>).</li>
 <li><b>Export to PDF in the layers' colors</b> (off to start): Export to PDF... draws each layer
 in its color on white paper (a white or black layer in black), as Print does with "the layers'
-colors".</li>
+colors". It is the same choice as the Export to PDF window's <b>Save as type</b>: picking one
+there ticks or unticks this, and this sets what that window offers first.</li>
 <li><b>Theme</b>: Light, Dark or Same as system: the menus, ribbon and panels. Light stays
 light and Dark stays dark whatever Windows is set to; Same as system follows Windows, also when
 it switches while KanzonasCAD is open.</li>
@@ -1982,7 +1984,10 @@ sheet and layer changes, can be undone. Their arrows also sit at the left end of
 row of tabs (Home, Schematic...), always a click away, after <b>Open</b>, <b>Save</b> and
 <b>Print</b>, as in KanzonasPDF.</li>
 <li><b>Cut</b> (Ctrl+X), <b>Copy</b> (Ctrl+C) and <b>Paste</b> (Ctrl+V): paste asks for an
-insertion point (the copied objects' lower left corner lands there). Works between projects,
+insertion point (the copied objects' lower left corner lands there, following the cursor until
+you click). Press <b>Enter</b> (or Space, or right-click) instead of clicking and they go in
+at exactly the coordinates they were copied from, as AutoCAD's Paste to Original Coordinates:
+copy from sheet 1, show sheet 2, Ctrl+V, Enter, and they land in the same spot. Works between projects,
 and after KanzonasCAD is closed and started again. Their layers come with them: a layer the
 project you paste into doesn't have is added as it was (its color, line type, wire size and
 color); a layer it already has keeps its own.</li>
@@ -2132,9 +2137,11 @@ folder (never over your own file, nor over a read-only project's; in the portabl
 <code>data\\recovery</code> beside
 the program). If KanzonasCAD doesn't close normally (a crash, a power
 cut), it offers to recover them the next time it starts.</li>
-<li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
-black on white, or in the layers' colors with Export to PDF in the layers' colors ticked in Edit
-&gt; Options..., General. Each cross-reference in the PDF is a link: click one in your PDF
+<li><b>Export to PDF...</b>: every sheet at its real size, vector lines. Its window asks for
+the file's name and, in <b>Save as type</b>, <b>PDF in black and white</b> (everything printed
+black on white) or <b>PDF in color</b> (each layer in its color on white paper). The pick is
+remembered for the next export (it is also Export to PDF in the layers' colors in Edit &gt;
+Options..., General). Each cross-reference in the PDF is a link: click one in your PDF
 reader and it goes to the page of the sheet it names, zoomed in on what it names, with its
 neighbors in view. The line under a coil leads to that contact, the place under a contact to
 its coil, a source or destination arrow's "2046 / 7-A2" to its other half, an off-sheet
@@ -2144,6 +2151,12 @@ place outside the zones, to the middle of sheet 2). A reference to a sheet
 that isn't in the PDF has no link. (The links need the pypdf library, part of the installed
 and portable programs; run from source without it, the PDF is written without links and the
 command line says so.)</li>
+<li><b>When a file can't be written</b> (any export: PDF, DXF, a report saved as CSV or Excel,
+the pull list, Print into a PDF file): a message says so and why. Most often the file is open
+in another program: Adobe Acrobat or Reader, or Excel, keeps a file it shows locked on Windows,
+so it can't be written over. Close it there and export again, or choose another name. The file
+that was there is left as it was (a PDF is written beside it first, then put in its place), so
+an old PDF never passes for the new one.</li>
 </ul>
 
 <h3>Opening a project someone else has open</h3>
