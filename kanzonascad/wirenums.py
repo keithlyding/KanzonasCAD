@@ -996,9 +996,8 @@ def cross_reference(ed, project, here, there, out_def, in_def, source):
     name = new_link_name(project)
     for (s, q, d), defn in ((here, out_def if source else in_def),
                             (there, in_def if source else out_def)):
-        if defn.name not in project.blocks:
-            ed.block(defn)
-        d2 = project.blocks[defn.name]
+        from .model import ensure_block
+        d2 = ensure_block(ed, project, defn)
         tag_h = project.settings.get("tag_height", 0.1) * s.k()
         ins = Insert(d2.name, q, math.degrees(math.atan2(d[1], d[0])) % 360.0, 1.0, False,
                      {"TAG": name}, d2, tag_h, layer="SYMBOLS")

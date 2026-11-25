@@ -42,7 +42,7 @@ def landing_name(ins, pin):
     if is_terminal(ins):
         term = (ins.attrs.get("TERM", "") or "").strip()
         return "%s-%s" % (tag or "TB?", term) if term else (tag or "TB?")
-    return "%s:%s" % (tag or ins.block, pin)
+    return "%s:%s" % (tag or ins.block_name, pin)
 
 
 def is_terminal(ins):

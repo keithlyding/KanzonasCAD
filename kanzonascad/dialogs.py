@@ -3,7 +3,7 @@ settings. Every change they make goes through one undoable Edit."""
 
 import math
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QComboBox, QSpinBox,
                                QDialogButtonBox, QVBoxLayout, QTableWidget, QTableWidgetItem,
@@ -115,6 +115,7 @@ def sheet_properties(parent, project, sheet):
     rev.setObjectName("revision")
     rev.setPlaceholderText("the project's: %s" % (project.fields.get("Revision") or "(none)"))
     kind = QComboBox()
+    kind.setObjectName("kind")
     for key, label in M.SHEET_KINDS.items():
         kind.addItem(label, key)
     kind.setCurrentIndex(kind.findData(sheet.kind))
@@ -716,6 +717,16 @@ def project_properties(parent, project, tab=0):
     row_c.addWidget(fp_c_on)
     row_c.addWidget(fp_c, 1)
     form.addRow("Footprint label color", row_c)
+    # (0.25: the devices no footprint stands for yet, marked orange; the count in the status
+    # bar either way)
+    from . import missing_fp
+    fp_marks = QCheckBox("Mark devices without a footprint on the drawing (orange)")
+    fp_marks.setObjectName("fp_missing_marks")
+    fp_marks.setChecked(missing_fp.marks_on(project))
+    fp_marks.setToolTip("An orange frame round each schematic device no panel footprint stands "
+                        "for yet; the status bar counts them either way (click it for the "
+                        "list)")
+    form.addRow("", fp_marks)
     stocks = {}
     for key, label in (("rail_stock", "DIN rail bought in lengths of"),
                        ("duct_stock", "Wire duct bought in lengths of")):
@@ -835,6 +846,7 @@ def project_properties(parent, project, tab=0):
     settings["fp_label_height"] = fp_h.value()
     settings["fp_label_color"] = fp_c.color if fp_c_on.isChecked() and fp_c.color not in (
         None, M.ADAPTIVE) else ""
+    settings[missing_fp.SETTING] = fp_marks.isChecked()
     settings["dim_height"] = dim_h.value()
     settings["dim_units"] = dim_u.currentData()
     if wdefault.currentText():
@@ -1637,6 +1649,104 @@ def report_dialog(parent, title, head, rows, folder, filename, empty_text, note)
     dlg.exec()
 
 
+class _GoTable(QTableWidget):
+    """A table whose rows Enter (or a double-click) asks to go to."""
+
+    def __init__(self, rows, cols, go):
+        super().__init__(rows, cols)
+        self.go = go
+        self.itemDoubleClicked.connect(lambda it: go(it.row()))
+
+    def keyPressEvent(self, e):
+        if e.key() in (Qt.Key_Return, Qt.Key_Enter) and self.currentRow() >= 0:
+            self.go(self.currentRow())
+            e.accept()
+            return
+        super().keyPressEvent(e)
+
+
+class MissingFootprintsDialog(QDialog):
+    """Devices without a footprint (missing_fp.py; the status bar's count opens it): one row a
+    device, in page order; double-click a row, or Enter on it, to go there (its sheet shown,
+    it selected and centered); Save as CSV or Excel. It stays open while you work, and
+    follows the project's changes."""
+    goRequested = Signal(int, int)          # sheet id, entity id
+
+    def __init__(self, parent):
+        from . import missing_fp
+        super().__init__(parent)
+        self.setWindowTitle("Devices without a footprint")
+        self.setObjectName("missing_fp_dialog")
+        self.resize(820, 420)
+        self.project = None
+        self.folder = ""
+        self.targets = []
+        lay = QVBoxLayout(self)
+        self.count = QLabel()
+        self.count.setObjectName("missing_fp_header")
+        lay.addWidget(self.count)
+        self.table = _GoTable(0, len(missing_fp.HEAD), self._go)
+        self.table.setObjectName("missing_fp_table")
+        self.table.setHorizontalHeaderLabels(missing_fp.HEAD)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        lay.addWidget(self.table, 1)
+        lay.addWidget(_gray(
+            "A device needs a footprint when it is a schematic symbol with a tag of its own (a "
+            "coil, an operator, a breaker...): contacts take their device's, and off-sheet "
+            "arrows and the like none. It has one when a footprint on a panel sheet is linked "
+            "to it (placed for it, or with its tag). Left out: devices in the field (a Location "
+            "called FIELD, or one no panel sheet has) and those ticked No footprint needed. "
+            "Project properties, Panel, turns the orange marks on the drawing off."))
+        box = QDialogButtonBox(QDialogButtonBox.Close)
+        self.save = box.addButton("Save as CSV or Excel...", QDialogButtonBox.ActionRole)
+        self.save.clicked.connect(self._save)
+        box.rejected.connect(self.reject)
+        lay.addWidget(box)
+
+    def fill(self):
+        """The rows from the project as it is now (the check is kept until it changes)."""
+        from . import missing_fp
+        got = missing_fp.find(self.project)
+        rows = missing_fp.rows(self.project)
+        self.targets = [(s.id, e.id) for s, e in got.missing]
+        t = self.table
+        t.setRowCount(len(rows))
+        for i, row in enumerate(rows):
+            for j, cell in enumerate(row):
+                t.setItem(i, j, QTableWidgetItem(cell))
+        t.resizeColumnsToContents()
+        self.count.setText(missing_fp.describe(len(rows)).capitalize() if rows else
+                           "Every device has a footprint.")
+        self.save.setEnabled(bool(rows))
+        if rows and t.currentRow() < 0:
+            t.setCurrentCell(0, 0)
+
+    def _go(self, row):
+        if 0 <= row < len(self.targets):
+            self.goRequested.emit(*self.targets[row])
+
+    def _save(self):
+        from PySide6.QtWidgets import QFileDialog
+        import os
+        from . import missing_fp, reports
+        path, _f = QFileDialog.getSaveFileName(self, "Save devices without a footprint",
+                                               os.path.join(self.folder,
+                                                            "devices without a footprint.csv"),
+                                               reports.SAVE_TYPES)
+        if not path:
+            return
+        head, rows = missing_fp.table(self.project)
+        try:
+            n = reports.write_csv(path, head, rows, "Devices without a footprint")
+        except OSError as ex:
+            QMessageBox.warning(self, self.windowTitle(), "Couldn't save %s:\n%s" % (path, ex))
+            return
+        QMessageBox.information(self, self.windowTitle(), "Saved %d line(s) to %s." % (n, path))
+
+
 def bom_dialog(parent, project, folder):
     """The bill of materials (bom.py): one line per part (manufacturer and catalog number)
     with how many, description, tags and sheets, rail and duct as stock lengths; Save as
@@ -2208,7 +2318,7 @@ def dash_box_dialog(parent, project, box):
     for s, e in choices:
         where = project.zone_text(s, e.pos[0], e.pos[1]) or ""
         desc = e.attrs.get("DESC", "") or (e.defn.description if e.defn else "")
-        belongs.addItem("%s   %s   %s" % (e.attrs.get("TAG", "?"), where, desc or e.block),
+        belongs.addItem("%s   %s   %s" % (e.attrs.get("TAG", "?"), where, desc or e.block_name),
                         e.attrs.get("DEV"))
     cur = box.attrs.get("PARENT")
     i = belongs.findData(cur) if cur else 0

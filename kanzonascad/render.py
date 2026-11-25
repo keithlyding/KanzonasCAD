@@ -22,6 +22,7 @@ from .sheetframe import border_entities, title_block_entities, shows, frame_sig
 
 CHUNK = 256
 FONT_PX = 100.0                 # glyphs are made at this size, then scaled to the text height
+MISSING_COLOR = "#ff8c00"        # devices without a footprint (missing_fp.py): orange
 _font_cache = {}
 
 
@@ -500,6 +501,29 @@ class SheetRenderer:
         for x0, y0, x1, y1 in boxes:
             painter.drawRect(QRectF(x0 - g, y0 - g, x1 - x0 + 2 * g, y1 - y0 + 2 * g))
 
+    def _paint_missing(self, painter):
+        """An orange frame round each device without a footprint (missing_fp.py), and a dot
+        at its top right corner: on the screen only, never printed; worked out once per
+        change of the project, not here."""
+        from . import missing_fp
+        boxes = missing_fp.marks(self.project, self.sheet)
+        if not boxes:
+            return
+        orange = QColor(MISSING_COLOR)
+        pen = QPen(orange, 2.0)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        g = 0.05 * self.sheet.k()
+        r = 0.045 * self.sheet.k()
+        path = QPainterPath()
+        for x0, y0, x1, y1 in boxes:
+            painter.drawRect(QRectF(x0 - g, y0 - g, x1 - x0 + 2 * g, y1 - y0 + 2 * g))
+            path.addEllipse(QPointF(x1 + g, y1 + g), r, r)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(orange))
+        painter.drawPath(path)
+
     def _paint_xrefs(self, painter, outlines, view=None):
         """Cross-references and wire numbers (worked out again only when what they show
         changed)."""
@@ -592,6 +616,7 @@ class SheetRenderer:
         self._paint_xrefs(painter, outlines, view)
         if pen_width == 0:
             self._paint_dupes(painter)
+            self._paint_missing(painter)
         smooth = painter.testRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         for ch in [tb] + list(self.chunks.values()):

@@ -298,7 +298,10 @@ def retag_copies(project, sheet, ents):
     for e in ents:
         if is_device(e):
             attrs = dict(e.attrs, DEV=uuid.uuid4().hex[:12])
-            if not locked(e):
+            # (a lock on no tag keeps nothing: the copy gets one, or it would be a device
+            # with no tag a footprint links to, showing none; the long battery, 0.25, seed
+            # 4913: a block made with Make block, its tags locked, then copied)
+            if not locked(e) or not (attrs.get("TAG") or "").strip():
                 prefix = e.defn.prefix
                 taken = used_counts(project, prefix, page) | planned.setdefault(prefix, set())
                 got = split(attrs.get("TAG", ""), prefix)

@@ -173,17 +173,77 @@ nobody understands).
   child, could not be confirmed from Autodesk's own documentation: every import is a device,
   fixed in Properties...); dynamic block parameters; AutoCAD Electrical's wire numbering and
   cross-reference behavior. Terminal strips and what followed moved down one number.
+- 0.24.1, released in 0.25 (owner, Nov 24 2026: "I need to be able to edit footprint rating
+  font sizes. Both in the footprint block itself and the ability to override individually its
+  instances"): a text
+  size per footprint label line in the block (Block properties, Label text sizes) and on a copy
+  (its attributes window), paper inches; the copy's, then the block's, then the project's
+  Footprint label height. Also fixed: a label line's Angle wasn't kept ("I also reoriented the
+  label 90 degrees and it reverted back"). Decided ("Option 2, but overridable"): a turned line
+  is kept readable (180 drawn as 0, 270 as 90, on its spot), with Keep readable per line on
+  the copy to draw it exactly as set; no block-level default for it.
+- 0.25 (owner, Nov 24 2026: "Make all this one release please"; the 0.24.1 work above, never
+  published on its own, went out in it):
+  - **File locking** (the owner: "I was able to open two instances of the same file in two
+    different instances of KanzonasCAD. I think we need something to say locked for editing,
+    open as read only?"; the design agreed with the owner): a hidden lock note beside a
+    project open for editing (`.~lock.<file>#`, one name on both platforms), made atomically;
+    a second copy asks: Open read-only (default), Open anyway (warned), Cancel. Decided here:
+    a read-only project can be edited in memory, as AutoCAD allows, and only saving over the
+    file is refused (Save As makes your own, editable, locked copy); stale notes from this
+    computer taken over silently, other computers' asked about; File > Reopen for editing
+    reloads the file once the other copy has closed it (cheap: close and open again).
+  - **A symbol and a footprint with the same name** (the owner: "both having the same name
+    should be ok. Right now, one will supersede the other"): kept apart as since 0.18 under
+    one name key ("name (footprint)"), shown everywhere by their own name; decided here over
+    keying the project's blocks by (kind, name): no format change, nothing to migrate. Make
+    block, Import I/O list and Save to library as part were still going by the plain name.
+  - **A block piece's own color** (the owner: "I want to key it at the same layer but just
+    change the color of ... a little rectangle in the block. Can you also add color to the
+    block editing tab?"): Save block and Make block keep a piece's color and mark the block as
+    keeping its pieces' colors; a block with none draws as before. Color on the Block tab.
+  - **Properties panel** (the owner: "Can text properties be in the block panel, so I don't have
+    to right click it each time?"; asked what it shows, "Everything of the selection"): a
+    docked panel as AutoCAD's Properties palette, Ctrl+1 (opens or raises; the View menu's and
+    View tab's button toggles, as Trace's), right to start, left, bottom or floating, kept in
+    the window state. It follows the selection as Trace does (a timer, never in the click,
+    nothing while closed; the owner's rule from Trace: "make sure that the loading ... doesn't
+    prevent any interaction with the sheet itself"). General for anything; a kind's own fields
+    when everything selected is of that kind; *varies* where several differ, set on all in one
+    step. Decided here: edits apply on Enter or when a field loses focus (ticks and lists at
+    once), each one undoable step, through the attributes window's and the Wire number
+    window's own code (both windows stay). A symbol's text size is shown, not edited (its tag
+    is the project's Tag height, set again on every symbol when that changes; its attributes
+    are their block's); a wire's number is edited one wire at a time; a multi-line note's
+    lines, and the other kinds past General, are left to their own windows for now.
+  - **Devices without a footprint** (the owner: "make a check, so any schematic block in the
+    drawing that's not assigned to a panel footprint will give me some sort of alert"): an
+    orange frame on each (on to start; Project properties, Panel, turns them off), a status
+    bar count opening a list (double-click goes there), and a report (sheet, CSV, Excel).
+    Decided here: a device counts when it gets a tag of its own (devices and parents; not
+    contacts, terminals, outlets or arrows); it is in the field, and left out, when its
+    location (its own LOC, else its sheet's, as Cables between locations reads it) is called
+    FIELD... or, once a panel sheet names a location, is one no panel sheet names (the
+    program had no other way to tell a panel from the field); it has a footprint when one on
+    a panel sheet is linked to it (PARENT, as placed for it) or, linked to none, has its tag;
+    "No footprint needed" per device for the rest.
+  - **Ribbon**: Explode on Home's Modify and on the Block tab (a new Modify group); Block
+    properties... beside Edit block on the Schematic and Panel tabs. The owner reversed the 0.18
+    decision ("Block properties should generally only be visible when editing/creating a
+    block"): the ribbon now shrinks a crowded tab's groups (Ribbon.fit), so the room it took
+    is no longer the worry.
 
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).
 2. Auto wire layer (0.22.1, above).
 3. Cross-reference navigation, Trace (0.23, above; put ahead of terminal strips by the
    owner, Nov 23 2026: "very important").
-4. Terminal strips (0.25; was 0.24 until Import blocks from folder... took 0.24): strips,
+4. Terminal strips (0.26; was 0.24 until Import blocks from folder... took 0.24, then 0.25
+   until the Properties panel and Devices without a footprint took 0.25): strips,
    jumpers, a strip editor, a terminal plan report.
-5. Panel wiring (0.26): a per-device wiring list (owner: yes); point-to-point as wire labels on
+5. Panel wiring (0.27): a per-device wiring list (owner: yes); point-to-point as wire labels on
    the footprints' terminals, not a drawn diagram (see 0.22.1).
-6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.27):
+6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.28):
    "lean heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates
    library: not now.
 
@@ -262,7 +322,7 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
    - Bulk assign: select every contactor on the sheet, pick a part once.
    - Placing a device on a panel sheet pulls the footprint from its part. Panel insert can pick
      from the schematic's devices, so tag and cross-reference come along; the schematic side
-     flags devices not yet placed on a panel.
+     flags devices not yet placed on a panel (done in 0.25: Devices without a footprint).
 7. **Library management**:
    - (wanted: the owner, Nov 2026) Right-click a placed symbol with a part -> "Save to library as part" (name defaults to
      the catalog number): writes symbol + footprint + part into the library.
@@ -377,7 +437,8 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   itself: select them first); the brand is typed in the Assign part window and kept per project;
   a device whose symbol isn't the part's is left alone and counted in the message; Save to
   library as part needs a catalog number, and the same maker and catalog number updates that
-  part. Not yet: the footprint from the part on panel insert, devices not yet on a panel flagged.
+  part. Not yet: the footprint from the part on panel insert (devices not yet on a panel are
+  flagged since 0.25: Devices without a footprint).
 
 - **Library parts** (0.21): one file a part done first, on its own (the two folders' shared
   library needs it); parts.json moves to the files at the first save or delete, not at start-up

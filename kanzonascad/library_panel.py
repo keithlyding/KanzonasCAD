@@ -8,7 +8,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QT
                                QFormLayout, QComboBox, QDialogButtonBox, QCheckBox,
                                QMessageBox, QListWidget, QListWidgetItem, QPlainTextEdit,
                                QToolButton, QMenu, QGroupBox, QGridLayout,
-                               QDoubleSpinBox)
+                               QDoubleSpinBox, QTableWidget, QTableWidgetItem, QHeaderView,
+                               QAbstractItemView)
 
 from . import model as M
 from .library import Library, Part
@@ -585,6 +586,12 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
     sym_note = _hint("Part in cross-references, Contact, Tag prefix, Wire numbers and Pin names "
                      "are a schematic symbol's: this is a panel footprint. Change Kind to make "
                      "it a schematic symbol.")
+    # a footprint's label lines' text sizes (the owner, 0.24.1: "I need to be able to edit
+    # footprint rating font sizes ... in the footprint block itself")
+    sizes = None
+    if defn is not None:
+        sizes = label_sizes_table(defn.label_sizes)
+        form.addRow("Label text sizes", sizes)
     form.addRow(sym_note)
     if defn is None:
         form.addRow("", replace)
@@ -605,8 +612,18 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
             if lab is not None:
                 lab.setEnabled(sym)
         sym_note.setVisible(not sym)
+        if sizes is not None:
+            sizes.setEnabled(not sym)
+            lab = form.labelForField(sizes)
+            if lab is not None:
+                lab.setEnabled(not sym)
     kind.currentIndexChanged.connect(kind_changed)
     kind_changed()
+    if sizes is not None:
+        # (as tall as its wrapped notes need at its width: a dialog's own size leaves them a
+        # line each, and the note under the sizes table was drawn over its last line)
+        dlg.adjustSize()
+        dlg.setMinimumHeight(form.totalHeightForWidth(dlg.width()))
 
     def pin_list():
         return [t.strip() for t in pins.text().replace(";", ",").split(",") if t.strip()]
@@ -649,6 +666,70 @@ def block_details_dialog(parent, library, kind_hint="symbol", defn=None, on_help
     out.update({k: _text_of(box).strip() for k, box in makers.items()})
     if defn is None:
         out["replace"] = replace.isChecked()
+    if sizes is not None:
+        out["label_sizes"] = table_label_sizes(sizes)
+    return out
+
+
+def label_size_lines(keys=()):
+    """The label lines a footprint's sizes are offered for (Block properties, Label text
+    sizes; a copy's attributes window): tag, part number, description, block name, the
+    ratings a linked device gives it, then any other key given."""
+    from .tags import LINKED_ATTRS
+    out = [M.label_size_key(k) for k in list(M.LABELS) + list(LINKED_ATTRS)]
+    out += [k for k in (M.label_size_key(k) for k in keys) if k not in out]
+    return out
+
+
+def _size_box(name, value, blank):
+    """A text size in paper inches; at 0 it says blank (where the size comes from instead)."""
+    b = QDoubleSpinBox()
+    b.setObjectName(name)
+    b.setDecimals(3)
+    b.setRange(0.0, 5.0)
+    b.setSingleStep(0.01)
+    b.setSuffix(" in")
+    b.setSpecialValueText(blank)
+    b.setValue(float(value or 0.0))
+    return b
+
+
+def label_sizes_table(sizes):
+    """Block properties' Label text sizes: a line for each label line a footprint can show,
+    with its size (paper inches; blank: the project's Footprint label height)."""
+    keys = label_size_lines(sizes)
+    t = QTableWidget(len(keys), 2)
+    t.setObjectName("label_sizes")
+    t.setHorizontalHeaderLabels(["Label line", "Text size"])
+    t.verticalHeader().hide()
+    t.setEditTriggers(QAbstractItemView.NoEditTriggers)
+    t.setSelectionMode(QAbstractItemView.NoSelection)
+    for r, k in enumerate(keys):
+        it = QTableWidgetItem(M.label_name(k.lower() if k.lower() in M.LABELS else k))
+        it.setData(Qt.UserRole, k)
+        t.setItem(r, 0, it)
+        t.setCellWidget(r, 1, _size_box("label_size_" + k, sizes.get(k),
+                                        "the project's"))
+    t.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+    t.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+    t.setColumnWidth(1, t.cellWidget(0, 1).sizeHint().width() + 40)
+    # (four lines shown, the rest scrolled to: the window fits a small screen)
+    t.setFixedHeight(t.horizontalHeader().sizeHint().height() + 2 * t.frameWidth() +
+                     min(len(keys), 4) * t.verticalHeader().defaultSectionSize())
+    t.setToolTip("The size of each line of this footprint's label on paper. Blank: the "
+                 "project's Footprint label height (Panel settings). A copy can have its own "
+                 "(its attributes window).")
+    return t
+
+
+def table_label_sizes(t):
+    """{key: paper inches} from a Label text sizes table (the lines left blank: none)."""
+    out = {}
+    for r in range(t.rowCount()):
+        k = t.item(r, 0).data(Qt.UserRole)
+        v = t.cellWidget(r, 1).value()
+        if v > 0:
+            out[k] = v
     return out
 
 
@@ -664,11 +745,14 @@ def block_with_details(defn, details):
             d[k] = details.get(k, d.get(k, ""))
         d["show_pins"] = bool(details.get("show_pins", d.get("show_pins", False)))
         d["phases"] = details.get("phases", d.get("phases", ""))
+        d.pop("label_sizes", None)          # (a footprint's)
         if d.get("tag_pos") is None and defn.kind != "symbol" and defn.entities:
             # (a footprint becoming a symbol: its tag above its drawing, as Make block puts it)
             boxes = [e.bbox() for e in defn.entities]
             x0, x1 = min(b[0] for b in boxes), max(b[2] for b in boxes)
             d["tag_pos"] = [(x0 + x1) / 2, max(b[3] for b in boxes) + 0.1]
+    elif "label_sizes" in details:
+        d["label_sizes"] = dict(details["label_sizes"])
     pin_map = {}
     names = details.get("pin_names") or []
     if d["kind"] == "symbol" and len(names) == len(defn.pins):
@@ -682,14 +766,16 @@ def kind_of(ins):
     return ins.defn.kind if ins.defn is not None else "symbol"
 
 
-def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None):
+def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None, others=()):
     """The attributes of a placed block (TAG, DESC, MFR, CAT) and the part it is; for a
     contact, the device it belongs to; for a device, whether its contacts are listed under it.
     Returns the new attrs dict, or None when cancelled. shown: a dict given in gets "hidden",
-    the attributes not to show on this copy (its "Shown on the drawing" boxes)."""
-    from . import tags
+    the attributes not to show on this copy (its "Shown on the drawing" boxes); for a
+    footprint also "label_sizes", its label lines' own sizes, and "sizes_all": whether the
+    sizes changed go to others too (the other footprints selected with it)."""
+    from . import missing_fp, tags
     dlg = QDialog(parent)
-    dlg.setWindowTitle("%s: attributes" % ins.block)
+    dlg.setWindowTitle("%s: attributes" % ins.block_name)
     v = QVBoxLayout(dlg)
     form = QFormLayout()
     edits = {}
@@ -756,6 +842,7 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
                      "the field drawn on a panel's sheet). Cables between locations uses it.")
         edits["LOC"] = e
         form.addRow("Location", e)
+    nofp = None
     lock = QCheckBox("Lock this tag (automatic numbering leaves it alone)")
     lock.setChecked(ins.attrs.get("TAG_LOCK") == "1")
     listed = None
@@ -767,6 +854,13 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         form.addRow("", lock)
         if ins.defn.role == "parent":
             listed = QCheckBox("List its contacts under it (cross-references)")
+        # (0.25: left out of Devices without a footprint, a device that goes on no panel)
+        nofp = QCheckBox("No footprint needed")
+        nofp.setObjectName("no_footprint")
+        nofp.setChecked(missing_fp.not_needed(ins))
+        nofp.setToolTip("Not listed or marked as a device without a footprint: one that goes "
+                        "on no panel (a device in the field is left out by its Location)")
+        form.addRow("", nofp)
     else:
         form.addRow("", lock)
     if listed is not None:
@@ -841,6 +935,9 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
     # a footprint: its linked device's ratings (edited here or on the device: they are the
     # same), and what it shows on it, several at once (the owner, 0.18.1)
     label_boxes = {}
+    size_boxes = {}
+    line_angles, readable = {}, {}
+    sizes_all = None
     device = None
     if kind_of(ins) == "footprint":
         got = tags.parent_of(project, ins) if project is not None else None
@@ -869,25 +966,75 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         offer += [k for k in keys if k not in offer]
         box = QGroupBox("Shown on it")
         bl = QGridLayout(box)
+        bl.addWidget(QLabel("Text size"), 0, 1)
+        bl.addWidget(QLabel("Angle"), 0, 2)
+        proj_h = float(project.settings.get("fp_label_height", 0.08)) if project is not None \
+            else None
         for i, k in enumerate(offer):
             c = QCheckBox(M.label_name(k))
             c.setObjectName("label_" + k)
             c.setChecked(k in keys)
-            bl.addWidget(c, i // 2, i % 2)
+            bl.addWidget(c, i + 1, 0)
             label_boxes[k] = c
+            # (its size on this copy; blank: its block's, else the project's: the owner,
+            # 0.24.1, "the ability to override individually its instances")
+            key = M.label_size_key(k)
+            if key in ins.defn.label_sizes:
+                blank = "the block's (%s)" % M.fmt_inches(ins.defn.label_sizes[key], 3)
+            elif proj_h is not None:
+                blank = "the project's (%s)" % M.fmt_inches(proj_h, 3)
+            else:
+                blank = "the project's"
+            sb = _size_box("label_size_" + key, ins.label_sizes.get(key), blank)
+            sb.setToolTip("This line's text size on paper on this copy; blank: its block's "
+                          "(Block properties, Label text sizes), else Panel settings' "
+                          "Footprint label height")
+            bl.addWidget(sb, i + 1, 1)
+            size_boxes[key] = sb
+            # (its angle on the drawing, turned on this copy: it then turns with the
+            # footprint; kept readable unless unticked: the owner, 0.24.1, "Option 2, but
+            # overridable")
+            a = QDoubleSpinBox()
+            a.setObjectName("label_angle_" + key)
+            a.setRange(0.0, 359.99)
+            a.setDecimals(2)
+            a.setWrapping(True)
+            a.setSingleStep(90.0)
+            a.setSuffix(" deg")
+            a.setValue(round(ins.attr_angle("@" + key), 2) % 360.0)
+            a.setToolTip("The angle this line is drawn at on the drawing; once turned, it "
+                         "turns with the footprint")
+            bl.addWidget(a, i + 1, 2)
+            line_angles[key] = a
+            r = QCheckBox("Keep readable")
+            r.setObjectName("label_readable_" + key)
+            r.setChecked(key not in ins.label_as_set)
+            r.setToolTip("Ticked: a line turned upside down or to read from the left is drawn "
+                         "facing you (180 as 0, 270 as 90), on the same spot. Unticked: "
+                         "exactly at its angle")
+            bl.addWidget(r, i + 1, 3)
+            readable[key] = r
+        n = len(offer) + 1
+        if others:
+            sizes_all = QCheckBox("Also the other %d selected footprints (the sizes changed "
+                                  "here)" % len(others))
+            sizes_all.setObjectName("label_sizes_all")
+            sizes_all.setChecked(True)
+            bl.addWidget(sizes_all, n, 0, 1, 4)
+            n += 1
         bl.addWidget(_hint("Drag a shown line by its grip to put it where you want; "
-                           "Panel settings sets their size."), (len(offer) + 1) // 2, 0, 1, 2)
+                           "Panel settings sets the size of those without one."), n, 0, 1, 4)
         v.addWidget(box)
     kind = ins.defn.kind if ins.defn is not None else "symbol"
     parts = []
     try:
-        parts = library.parts_using(kind, ins.block)
+        parts = library.parts_using(kind, ins.block_name)
     except (OSError, ValueError) as ex:
         v.addWidget(_hint("Couldn't read your library's parts: %s" % ex))
     part_id = [ins.attrs.get("PART", "")]
     if parts:
         v.addWidget(QLabel("Parts in your library for %s (double-click one to use it):"
-                           % ins.block))
+                           % ins.block_name))
         lst = QListWidget()
         for p in parts:
             it = QListWidgetItem(p.label())
@@ -906,7 +1053,7 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         v.addWidget(lst)
     else:
         v.addWidget(_hint("No part in your library links to %s yet (Library panel, Parts, "
-                          "New part...)." % ins.block))
+                          "New part...)." % ins.block_name))
     v.addWidget(_buttons(dlg))
     if dlg.exec() != QDialog.Accepted:
         return None
@@ -922,6 +1069,15 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         keys = [k for k in M.label_keys(ins.label) if label_boxes[k].isChecked()]
         keys += [k for k, c in label_boxes.items() if c.isChecked() and k not in keys]
         shown["label"] = ",".join(keys)
+        sizes = {k: x for k, x in ins.label_sizes.items() if k not in size_boxes}
+        sizes.update({k: b.value() for k, b in size_boxes.items() if b.value() > 0})
+        shown["label_sizes"] = sizes
+        shown["sizes_all"] = sizes_all is not None and sizes_all.isChecked()
+        shown["label_angles"] = {
+            "@" + k: a.value() for k, a in line_angles.items()
+            if abs(a.value() - round(ins.attr_angle("@" + k), 2) % 360.0) > 1e-9}
+        shown["label_as_set"] = frozenset(k for k in ins.label_as_set if k not in readable) | \
+            frozenset(k for k, r in readable.items() if not r.isChecked())
         if device is not None:
             # (the ratings typed here are the device's: edit_attributes puts them there)
             shown["device"] = {k: out.get(k, "") for k in tags.LINKED_ATTRS if k in edits}
@@ -964,4 +1120,6 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         out["TAG_LOCK"] = "1"
     else:
         out.pop("TAG_LOCK", None)
+    if nofp is not None:
+        out = missing_fp.with_flag(out, nofp.isChecked())
     return out

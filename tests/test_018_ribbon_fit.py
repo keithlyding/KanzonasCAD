@@ -12,6 +12,9 @@ from PySide6.QtWidgets import QToolButton
 from tests.util import APP, window
 
 BLOCK_KEYS = ("save_block", "save_block_as", "block_props", "dup_block", "add_pin", "pins", "add_attr")
+# (the owner, 0.25, reversed 0.18's decision for Block properties: it is beside Edit block on the
+# Schematic and Panel tabs again, tests/test_025_ribbon.py; the others stay on the Block tab only)
+BLOCK_ONLY = tuple(k for k in BLOCK_KEYS if k != "block_props")
 
 
 def tab_actions(win, title):
@@ -49,7 +52,7 @@ class BlockTabTest(unittest.TestCase):
         for title in ("Schematic", "Panel"):
             got = tab_actions(self.win, title)
             self.assertIn(a["edit_block"], got)       # (to open a block)
-            for k in BLOCK_KEYS:
+            for k in BLOCK_ONLY:
                 self.assertNotIn(a[k], got, "%s still on the %s tab" % (k, title))
         got = tab_actions(self.win, "Block")
         for k in BLOCK_KEYS:

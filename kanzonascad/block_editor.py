@@ -281,7 +281,11 @@ def to_block(project, sess):
             for q in parts:
                 c = q._map(back, rot=0.0)
                 c.id = None
-                c.layer, c.color = "0", None
+                # (on layer 0, drawn on its copy's layer; a color given to the piece kept,
+                # the rest in the copy's color: own_colors below; the owner, 0.25: "I want
+                # to key it at the same layer but just change the color of ... a little
+                # rectangle in the block")
+                c.layer = "0"
                 out.append(c)
             ents.append((0 if i is not None else 1, i if i is not None else eid, eid, out))
     ents.sort(key=lambda t: (t[0], t[1]))
@@ -310,6 +314,8 @@ def to_block(project, sess):
     d = old.to_dict()
     d["entities"] = []
     defn = M.BlockDef.from_dict(d)
+    defn.own_colors = old.own_colors or any(c.color is not None for _o, _k, _e, out in ents
+                                            for c in out)
     base = {}
     for _o, _k, eid, out in ents:
         for c in out:
@@ -548,3 +554,51 @@ def update_copies(ed, project, defn, old_name=None, pin_map=None):
                     stranded += 1
         ed.pin_moves.append((s, old, new))
     return len(found), stranded
+
+
+# ---- a symbol and a footprint of one name, from before they were kept apart -----------------
+_SHEET_OF = {"symbol": "schematic", "footprint": "panel"}
+
+
+def lost_kinds(project, library):
+    """Copies that lost their block to one of the other kind with the same name (a footprint
+    "Starter" that took the place of the symbol "Starter": before 0.18, or a footprint made
+    with Make block before 0.25): a block whose copies are on schematic and panel sheets, those
+    on the other kind's sheets drawing it in its place. [(project's name, kind wanted, the
+    library's block of that kind, [(sheet, copy)])] for those the library has the block for,
+    and [(name, kind wanted, n)] for those it hasn't."""
+    found, missing = [], []
+    on = {}                             # {block name: {sheet kind: [(sheet, copy)]}}, one pass
+    for s in project.sheets:
+        if s.kind in ("schematic", "panel"):
+            for e in s.inserts():
+                on.setdefault(e.block, {}).setdefault(s.kind, []).append((s, e))
+    for name, d in sorted(project.blocks.items()):
+        other = "footprint" if d.kind == "symbol" else "symbol" if d.kind == "footprint" \
+            else None
+        if other is None or name not in on:
+            continue
+        own, wrong = on[name].get(_SHEET_OF[d.kind]), on[name].get(_SHEET_OF[other])
+        if not own or not wrong:
+            continue
+        lib = library.get(other, M.library_block_name(name, d.kind)) if library else None
+        if lib is None:
+            missing.append((name, other, len(wrong)))
+        else:
+            found.append((name, other, lib, wrong))
+    return found, missing
+
+
+def put_back_kinds(ed, project, found):
+    """In edit ed: each lost block of lost_kinds brought back from the library (kept apart
+    from the other, as Insert keeps it) and its copies pointed at it. Returns how many
+    copies."""
+    n = 0
+    for _name, _kind, lib, wrong in found:
+        defn = M.ensure_block(ed, project, lib)
+        for s, e in wrong:
+            c = s.entities[e.id].copy(block=defn.name)
+            c.defn = defn
+            ed.change(s, c)
+            n += 1
+    return n

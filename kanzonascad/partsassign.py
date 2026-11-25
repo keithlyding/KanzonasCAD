@@ -28,7 +28,7 @@ def devices(sheet, ids):
 def candidates(library, ents, brand=""):
     """The library's parts for the selected devices' symbols, the brand's first, then by
     maker and catalog number."""
-    names = {e.block for e in ents}
+    names = {e.block_name for e in ents}
     got = [p for p in library.parts() if p.symbol in names]
     b = (brand or "").strip().lower()
     got.sort(key=lambda p: (0 if b and p.manufacturer.strip().lower() == b else 1,
@@ -41,7 +41,7 @@ def assign(ed, project, sheet, ents, part):
     and a copy of it kept in the project. Returns how many took it."""
     n = 0
     for e in ents:
-        if e.block != part.symbol:
+        if e.block_name != part.symbol:
             continue
         ed.change(sheet, e.copy(attrs=dict(e.attrs, **part.attrs())))
         n += 1
@@ -61,7 +61,7 @@ def linked_footprint(project, dev):
     for s in project.sheets:
         for e in s.inserts():
             if tags.is_footprint(e) and e.attrs.get("PARENT") == dev_id:
-                return e.block
+                return e.block_name
     return ""
 
 
@@ -72,5 +72,5 @@ def part_from(project, dev):
     if not cat:
         return None, "give it a catalog number first (double-click it: Catalog number)"
     return Part(manufacturer=(dev.attrs.get("MFR") or "").strip(), catalog=cat,
-                description=(dev.attrs.get("DESC") or "").strip(), symbol=dev.block,
+                description=(dev.attrs.get("DESC") or "").strip(), symbol=dev.block_name,
                 footprint=linked_footprint(project, dev)), None

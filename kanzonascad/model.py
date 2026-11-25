@@ -60,6 +60,8 @@ DEFAULT_SETTINGS = {
     "fp_label_color": "",       # their color ("": the footprint's; the owner, 0.18.7: a
                                 # footprint on layer 0 is white, "I want the tagname to be
                                 # discernible")
+    # devices without a footprint marked orange on the drawing (missing_fp.py; 0.25)
+    "fp_missing_marks": True,
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
@@ -1912,7 +1914,9 @@ class Ladder(Composite):
         m = self.width() / 3.0
         if t < -m or t > self.width() + m or s < -0.5 or s > self.rungs - 0.5:
             return None
-        return int(round(s))
+        # (exactly half a rung past the last rounds up, to even: a rung that isn't there, 763
+        # past 762, which the PDF's links couldn't find; the battery, 0.25, seed 4902)
+        return min(max(int(round(s)), 0), self.rungs - 1)
 
     def parts(self):
         if self._parts is not None:
@@ -2232,7 +2236,7 @@ class BlockDef:
                  category="", description="", role="device", contact="", prefix="",
                  builtin=False, wiring="", attr_texts=(), manufacturer="", family="",
                  series="", catalog="", rail_pos=None, own_colors=False, show_pins=False,
-                 phases=""):
+                 phases="", label_sizes=None):
         self.name = str(name)
         self.kind = kind if kind in BLOCK_KINDS else "symbol"
         self.entities = list(entities)
@@ -2290,6 +2294,11 @@ class BlockDef:
         # further filtered by whether they're 3ph or not?"): "3", "1" (single-phase or
         # control), or "" to be worked out from it (phases_of)
         self.phases = str(phases) if str(phases) in ("1", "3") else ""
+        # a footprint's label lines' text sizes (Block properties, Label text sizes: the
+        # owner, 0.24.1, "I need to be able to edit footprint rating font sizes"): {line's
+        # key, as label_size_key makes it: paper inches}; a line not listed takes the
+        # project's Footprint label height
+        self.label_sizes = clean_label_sizes(label_sizes)
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -2307,7 +2316,8 @@ class BlockDef:
                     {"rail_pos": list(self.rail_pos)} if self.rail_pos is not None else {}) | (
                     {"own_colors": True} if self.own_colors else {}) | (
                     {"show_pins": True} if self.show_pins else {}) | (
-                    {"phases": self.phases} if self.phases else {})
+                    {"phases": self.phases} if self.phases else {}) | (
+                    {"label_sizes": dict(self.label_sizes)} if self.label_sizes else {})
 
     @classmethod
     def from_dict(cls, d, builtin=False):
@@ -2319,7 +2329,13 @@ class BlockDef:
                    d.get("attr_texts", ()), d.get("manufacturer", ""), d.get("family", ""),
                    d.get("series", ""), d.get("catalog", ""), d.get("rail_pos"),
                    d.get("own_colors", False), d.get("show_pins", False),
-                   d.get("phases", ""))
+                   d.get("phases", ""), d.get("label_sizes"))
+
+    @property
+    def shown_name(self):
+        """Its name as the library and people know it: a footprint kept in a project as
+        "Starter (footprint)" beside a symbol "Starter" is "Starter" (project_block_name)."""
+        return library_block_name(self.name, self.kind)
 
     def same_as(self, other):
         a, b = self.to_dict(), other.to_dict()
@@ -2463,6 +2479,28 @@ def library_block_name(name, kind):
     return name[:-len(tail)] if name.endswith(tail) else name
 
 
+def project_block(project, name, kind):
+    """The project's copy of the library block (kind, name), or None: under its own name, or
+    "name (kind)" when a block of the other kind has that name (project_block_name)."""
+    for n in (name, "%s (%s)" % (name, kind)):
+        got = project.blocks.get(n)
+        if got is not None and got.kind == kind and library_block_name(n, kind) == name:
+            return got
+    return None
+
+
+def ensure_block(ed, project, defn):
+    """In edit ed: a library block put in the project, as Insert puts it there (a block of its
+    name and kind already in it stays as it is), under project_block_name. Returns the
+    project's copy, the one to place."""
+    got = project_block(project, defn.name, defn.kind)
+    if got is not None:
+        return got
+    pname = project_block_name(project, defn.name, defn.kind)
+    ed.block(renamed_block(defn, pname))
+    return project.blocks[pname]
+
+
 def renamed_block(defn, name):
     """A copy of a block definition under another name."""
     return defn if defn.name == name else BlockDef.from_dict(dict(defn.to_dict(), name=name))
@@ -2487,6 +2525,66 @@ def label_keys(label):
     return out
 
 
+def _stack_offsets(heights):
+    """How far down from the label spot each stacked line's middle goes (its text heights in
+    order): each line LABEL_LINE times its own height tall, the stack centered on the spot.
+    Lines of one size: (i - (n - 1) / 2) * LABEL_LINE * h, as before 0.24.1, to the bit."""
+    n = len(heights)
+    if not n:
+        return []
+    if all(h == heights[0] for h in heights):
+        h = heights[0]
+        return [(i - (n - 1) / 2.0) * LABEL_LINE * h for i in range(n)]
+    # (two neighbors' middles apart by half of each one's line: a big rating under a small
+    # tag stays clear of it, and the gap between texts follows the texts beside it)
+    mids, at = [], 0.0
+    for i, h in enumerate(heights):
+        if i:
+            at += LABEL_LINE * (heights[i - 1] + h) / 2.0
+        mids.append(at)
+    middle = (mids[0] - LABEL_LINE * heights[0] / 2.0 + mids[-1] +
+              LABEL_LINE * heights[-1] / 2.0) / 2.0
+    return [m - middle for m in mids]
+
+
+def label_size_key(key):
+    """The key a label line's text size is kept under (BlockDef.label_sizes,
+    Insert.label_sizes): as its own place is (attr_at "@KEY"), "TAG", "CAT", "HP"."""
+    return str(key).upper()
+
+
+def clean_label_sizes(sizes):
+    """{key: paper inches} as kept: keys upper case, sizes above zero (0 or blank: none)."""
+    out = {}
+    for k, v in (sizes or {}).items():
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            continue
+        if v > 0 and math.isfinite(v):
+            out[label_size_key(k)] = v
+    return out
+
+
+def label_sizes_to(others, before, after):
+    """The footprints in others with the label sizes changed from before to after (a copy's
+    attributes window, {key: paper inches} each): a size set or changed there is theirs too, one
+    cleared there is cleared on them; their other sizes stay. The changed copies."""
+    out = []
+    for o in others:
+        sizes = dict(o.label_sizes)
+        for k in set(before) | set(after):
+            if before.get(k) == after.get(k):
+                continue
+            if k in after:
+                sizes[k] = after[k]
+            else:
+                sizes.pop(k, None)
+        if sizes != o.label_sizes:
+            out.append(o.copy(label_sizes=sizes))
+    return out
+
+
 def label_name(key):
     """A label key as the menus and windows name it (Tag, Part number, Horsepower)."""
     if key in LABEL_NAMES:
@@ -2504,11 +2602,12 @@ class Insert(Entity):
     commas: label_keys)."""
     kind = "insert"
     __slots__ = ("block", "pos", "angle", "scale", "mirror", "attrs", "defn", "tag_h", "label",
-                 "hidden", "attr_at", "attr_rot", "label_color", "_world", "_body")
+                 "hidden", "attr_at", "attr_rot", "label_color", "label_sizes", "label_k",
+                 "label_as_set", "_world", "_body")
 
     def __init__(self, block, pos, angle=0.0, scale=1.0, mirror=False, attrs=None, defn=None,
                  tag_h=None, label="", hidden=(), attr_at=None, attr_rot=None, label_color=None,
-                 **kw):
+                 label_sizes=None, label_k=None, label_as_set=(), **kw):
         super().__init__(**kw)
         self.block = str(block)
         self.pos = _pt(pos)
@@ -2532,6 +2631,18 @@ class Insert(Entity):
         self.attr_rot = {str(k): float(v) % 360.0 for k, v in (attr_rot or {}).items()}
         # a footprint's label color (Panel settings: Footprint label color), None: its own
         self.label_color = str(label_color) if label_color else None
+        # a footprint's label lines' own text sizes on this copy (its attributes window,
+        # Size: the owner, 0.24.1, "the ability to override individually its instances"):
+        # {key (label_size_key): paper inches}; a line not listed takes its block's
+        self.label_sizes = clean_label_sizes(label_sizes)
+        # drawing units per paper inch for those sizes: its sheet's when it was put there
+        # (Sheet._put), grown with its tag_h when the sheet's scale changes (paper_scaled)
+        self.label_k = float(label_k) if label_k else None
+        # its label lines turned on their own (attr_rot "@KEY") and drawn exactly at that
+        # angle, upside down included (the attributes window's Keep readable unticked: the
+        # owner, 0.24.1, "Option 2, but overridable"); the others read from the bottom or the
+        # right: {key (label_size_key)}
+        self.label_as_set = frozenset(label_size_key(k) for k in (label_as_set or ()))
         self._world = None
         self._body = None                   # (its drawing's box: wires.body_box)
 
@@ -2552,6 +2663,12 @@ class Insert(Entity):
             d["attr_rot"] = dict(self.attr_rot)
         if self.label_color:
             d["label_color"] = self.label_color
+        if self.label_sizes:
+            d["label_sizes"] = dict(self.label_sizes)
+        if self.label_k and self.label:
+            d["label_k"] = self.label_k
+        if self.label_as_set:
+            d["label_as_set"] = sorted(self.label_as_set)
         return d
 
     @classmethod
@@ -2559,7 +2676,8 @@ class Insert(Entity):
         return cls(d["block"], d["pos"], d.get("angle", 0.0), d.get("scale", 1.0),
                    d.get("mirror", False), d.get("attrs", {}), blocks.get(d["block"]),
                    d.get("tag_h"), d.get("label", ""), d.get("hidden", ()), d.get("attr_at"),
-                   d.get("attr_rot"), d.get("label_color"), layer=d.get("layer", "0"),
+                   d.get("attr_rot"), d.get("label_color"), d.get("label_sizes"),
+                   d.get("label_k"), d.get("label_as_set", ()), layer=d.get("layer", "0"),
                    color=d.get("color"), id=d.get("id"))
 
     def copy(self, **changes):
@@ -2701,9 +2819,12 @@ class Insert(Entity):
 
     def attr_angle(self, name):
         """The angle on the drawing an attribute's text is drawn at (the attributes window's
-        Angle; an attribute not shown: where it would be)."""
+        Angle; an attribute not shown: where it would be). A footprint's label line ("@KEY"):
+        the angle set, before Keep readable turns it to face the reader (label_angle)."""
         if name in self.attr_rot:
             return self._turned(name)
+        if name.startswith("@") and self.defn is not None and self.defn.kind == "footprint":
+            return self._label_auto_angle()         # (a label line not turned on its own)
         if name == "TAG":
             t = self.tag_text()
             return t.angle if t is not None else 0.0
@@ -2762,6 +2883,12 @@ class Insert(Entity):
         bb = self._compute_bbox()
         return ((bb[0] + bb[2]) / 2.0, bb[1])
 
+    @property
+    def block_name(self):
+        """Its block's name as people know it (BlockDef.shown_name): what lists, reports and
+        the Properties panel show; e.block is the project's key for it."""
+        return self.defn.shown_name if self.defn is not None else self.block
+
     def label_value(self, key=None):
         """What a footprint's label line for key says (its first one when None): "?" for an
         empty tag, part number or description; None for an empty attribute (no line) or no
@@ -2773,7 +2900,7 @@ class Insert(Entity):
         if key is None or d is None:
             return None
         if key == "name":
-            return d.name
+            return d.shown_name             # (its own name, not "name (footprint)")
         if key in LABELS:
             v = self.attrs.get(LABELS[key], "")
             if not v:
@@ -2787,7 +2914,8 @@ class Insert(Entity):
         """[(key, Text)]: what a footprint shows on it (Footprint label), a line for each key
         with a value: stacked in the middle of its block's label spot, or each where it was
         dragged (attr_at "@KEY", in the block's coordinates, as a symbol's attributes);
-        centered, paper-sized (tag_h), read from the bottom or the right as it is turned."""
+        centered, paper-sized (label_height: its own size, its block's, else tag_h), read from
+        the bottom or the right as it is turned."""
         d = self.defn
         if d is None or d.kind != "footprint" or not self.label:
             return []
@@ -2795,22 +2923,64 @@ class Insert(Entity):
                  if v is not None]
         if not lines:
             return []
-        h = self.tag_h or 0.125
-        a = self.angle % 180.0
-        ang = 90.0 if 45.0 <= a < 135.0 else 0.0
+        hs = [self.label_height(k) for k, _v in lines]
+        ang = self._label_auto_angle()
         bx, by = self.to_world(d.label_point())
         # (down the lines: below on a part read across, to the right on one read upward)
         down = (math.sin(math.radians(ang)), -math.cos(math.radians(ang)))
+        # (a line dragged to a place of its own keeps its place in the stack, as before)
+        offs = _stack_offsets(hs)
         out = []
         for i, (k, v) in enumerate(lines):
             at = self.attr_at.get("@" + k.upper())
             if at:
                 q = self.to_world(at[:2])
             else:
-                off = (i - (len(lines) - 1) / 2.0) * LABEL_LINE * h
+                off = offs[i]
                 q = (bx + down[0] * off, by + down[1] * off)
-            out.append((k, Text(q, v, h, ang, "center", "middle")))
+            out.append((k, Text(q, v, hs[i], self.label_angle(k), "center", "middle")))
         return out
+
+    def _label_auto_angle(self):
+        """A footprint label line's angle when not turned on its own: read across, or upward
+        on a part turned sideways."""
+        a = self.angle % 180.0
+        return 90.0 if 45.0 <= a < 135.0 else 0.0
+
+    def label_angle(self, key):
+        """The angle a footprint's label line is drawn at: turned on this copy (attr_rot
+        "@KEY", the attributes window's Angle: it turns with the footprint afterward), else as
+        the footprint is turned (_label_auto_angle); kept readable (from the bottom or the
+        right: 180 drawn as 0, 270 as 90, about its own middle) unless Keep readable is
+        unticked for it (label_as_set). (Up to 0.24 a line's Angle wasn't kept: the owner,
+        0.24.1, "I also reoriented the label 90 degrees and it reverted back".)"""
+        name = "@" + label_size_key(key)
+        if name not in self.attr_rot:
+            return self._label_auto_angle()
+        ang = self._turned(name)
+        if label_size_key(key) not in self.label_as_set and 90.0 + 1e-9 < ang <= 270.0 + 1e-9:
+            ang = (ang - 180.0) % 360.0
+        return ang
+
+    def label_size(self, key):
+        """A label line's text size in paper inches as set (this copy's, else its block's),
+        and where from: (size, "copy" | "block"), or (None, "project"): the project's
+        Footprint label height (tag_h)."""
+        k = label_size_key(key)
+        if k in self.label_sizes:
+            return self.label_sizes[k], "copy"
+        d = self.defn
+        if d is not None and k in d.label_sizes:
+            return d.label_sizes[k], "block"
+        return None, "project"
+
+    def label_height(self, key):
+        """A label line's text height on the drawing: its size (label_size) times its sheet's
+        drawing units per paper inch, else tag_h, the project's height on its sheet."""
+        size, _from = self.label_size(key)
+        if size is None:
+            return self.tag_h or 0.125
+        return size * (self.label_k or 1.0)
 
     def label_text(self):
         """A footprint's first label line (Footprint label), or None: no label."""
@@ -3047,7 +3217,8 @@ def paper_scaled(e, f):
     if isinstance(e, MText):
         return e.copy(height=e.height * f, width=e.width * f)    # (it wraps where it did)
     if isinstance(e, Insert):
-        return e.copy(tag_h=e.tag_h * f)
+        # (its label lines with sizes of their own grow with it: label_k)
+        return e.copy(tag_h=e.tag_h * f, label_k=e.label_k * f if e.label_k else None)
     return e.copy(height=e.height * f)
 
 
@@ -3390,6 +3561,11 @@ class Sheet:
         old = self.entities.get(ent.id)
         if old is not None:
             self.index.remove(ent.id)
+        if isinstance(ent, Insert) and ent.label_k is None and ent.label:
+            # (a footprint's label lines' sizes are paper inches: this sheet's units for them,
+            # once, as its tag_h took them; before it is drawn or indexed here)
+            ent.label_k = self.k()
+            ent._world = ent._bbox = ent._snaps = ent._body = None
         self.entities[ent.id] = ent
         self.index.add(ent)
         self.version += 1
@@ -3697,7 +3873,8 @@ class Edit:
                 for e in list(s.entities.values()):
                     if isinstance(e, Insert) and e.label:
                         # a footprint's label: paper-sized, its own height (0.18.1)
-                        self.change(s, e.copy(tag_h=float(after["fp_label_height"]) * s.k()))
+                        self.change(s, e.copy(tag_h=float(after["fp_label_height"]) * s.k(),
+                                              label_k=s.k()))
         if after.get("fp_label_color", "") != before.get("fp_label_color", ""):
             for s in p.sheets:
                 for e in list(s.entities.values()):
@@ -3735,6 +3912,10 @@ class Edit:
 class Project:
     def __init__(self):
         self.path = None
+        # (open for editing elsewhere: Save refused, Save As makes your own copy; and this
+        # copy's lock note when it is open for editing here: filelock.py, locking.py)
+        self.read_only = False
+        self.lock = None
         self.fields = {k: "" for k in PROJECT_FIELDS}
         self.zone_format = "{sheet}-{row}{col}"
         self.settings = dict(DEFAULT_SETTINGS)

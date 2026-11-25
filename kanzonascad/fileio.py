@@ -132,7 +132,8 @@ PIN_TAG = "KZPIN"                   # (a block's pins, as hidden constant ATTDEF
 TEXT_TAG = "KZTEXT"                 # (a flipped block's own texts, as locked ATTDEFs: KZTEXT1...)
 
 # what a block's attributes carry out to AutoCAD (KanzonasCAD's own, internal ones stay home)
-_INTERNAL = {"DEV", "PARENT", "TAG_LOCK", "XREF", "XDEV", "FROM", "TAGLINK", "PART", "SLOT"}
+_INTERNAL = {"DEV", "PARENT", "TAG_LOCK", "XREF", "XDEV", "FROM", "TAGLINK", "PART", "SLOT",
+             "NO_FP"}
 
 
 def _write_picture(doc, msp, e, path, n):

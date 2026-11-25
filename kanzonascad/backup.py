@@ -92,7 +92,13 @@ def autosave_path(key):
 def write_autosave(project, key):
     os.makedirs(recovery_folder(), exist_ok=True)
     data = project.to_dict()
-    data["autosave_of"] = project.path or ""
+    if getattr(project, "read_only", False):
+        # (read-only, open for editing elsewhere: recovered as an unsaved project, so its
+        # recovery can never go over the original; named so it isn't taken for it, 0.25)
+        data["autosave_of"] = ""
+        data["read_only_of"] = project.path or ""
+    else:
+        data["autosave_of"] = project.path or ""
     path = autosave_path(key)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -108,14 +114,16 @@ def remove_autosave(key):
 
 
 def leftovers():
-    """[(recovery file, original path or "", saved time)] of projects not closed normally."""
+    """[(recovery file, original path or "", saved time, the file it is a read-only copy of
+    or "")] of projects not closed normally."""
     folder = recovery_folder()
     out = []
     for p in sorted(glob.glob(os.path.join(glob.escape(folder), "autosave-*" + SUFFIX))):
         try:
             with open(p, encoding="utf-8") as f:
-                orig = json.load(f).get("autosave_of", "")
-        except (OSError, ValueError):
-            orig = ""
-        out.append((p, orig, os.path.getmtime(p)))
+                got = json.load(f)
+            orig, ro = got.get("autosave_of", ""), got.get("read_only_of", "")
+        except (OSError, ValueError, AttributeError):
+            orig, ro = "", ""
+        out.append((p, orig, os.path.getmtime(p), ro))
     return out

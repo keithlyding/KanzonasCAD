@@ -21,7 +21,8 @@ and reports come next.</i></p>
 <b>Home</b>, <b>Schematic</b>, <b>Panel</b>, <b>Sheets</b>, <b>Output</b> and <b>View</b>, and
 <b>Block</b> while you edit a block; each
 group of buttons has its name under it (Rail and duct, Dimensions, Numbering...). Move, Copy,
-Rotate, Mirror, Stretch and Erase are on the Schematic and Panel tabs too (Modify), not only Home.
+Rotate, Mirror, Stretch and Erase are on the Schematic and Panel tabs too (Modify), not only Home;
+the Home tab's Modify group also has <b>Explode</b>.
 The Schematic and Panel tabs are laid out alike: what you draw first (Wire and Bus; DIN rail and
 Wire duct), then placing parts (Symbols; Footprints: the same buttons in the same order), Modify,
 Dimensions, the tab's own groups, and Parts, Layers and Settings at the right end. Double-click a
@@ -36,9 +37,13 @@ still doesn't fit as icons scrolls sideways (the mouse wheel over it).</li>
 block...</b>, <b>Add pin</b>, <b>Pins...</b>, <b>Add attribute</b>, <b>Linear dimension</b> and
 <b>Aligned dimension</b> (Measure: to measure the block as you draw it; a dimension drawn in
 a block's tab isn't saved into the block, so its copies don't carry it; one the block already
-had stays), <b>Edit block...</b> and <b>Update blocks from library...</b>. It shows up and opens by itself
-in a block's tab (Edit block..., on the Schematic tab's Symbols group and the Panel tab's
-Footprints group, opens one), and goes away when you leave it. To have it all the time, turn
+had stays), <b>Edit block...</b> and <b>Update blocks from library...</b>, and <b>Explode</b>
+and <b>Color</b> (Modify: a block placed inside the block you are editing, taken apart there;
+one piece of the block given a color of its own). It shows up and
+opens by itself in a block's tab (Edit block..., on the Schematic tab's Symbols group and the
+Panel tab's Footprints group, opens one), and goes away when you leave it. <b>Block
+properties...</b> is also beside Edit block... on those two groups, for a block selected in the
+drawing. To have it all the time, turn
 on <b>Block tab</b> (View menu, and the View tab's Ribbon group). The same commands are always
 in the Library menu.</li>
 <li><b>Project tabs</b>: each open project has its own tab. Drag a tab away from the tabs and
@@ -52,8 +57,14 @@ shown, for printing them.</li>
 the device, wire or PLC point you select is in the project (see <b>{trace}: where a device or
 wire is used</b>). It opens above the command line; drag its title to the left or right side of
 the window if you like it there.</li>
+<li><b>Properties</b> panel (Ctrl+1 opens it; View, <b>Properties panel</b>, shows or hides
+it): everything about what is selected, changed right there (see <b>The Properties
+panel</b>). It opens at the right; drag its title to the left side or the bottom, or off the
+window to float it. Where it is and whether it is open are kept for next time.</li>
 <li><b>Status bar</b>: the cursor's X and Y in inches and its <b>zone</b> (for example
-6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches.</li>
+6-D1: sheet 6, row D, column 1), and the GRID, SNAP, ORTHO and OSNAP switches; in orange, how
+many devices have no footprint yet (<b>12 devices without a footprint</b>: click it for the
+list; see <b>Devices without a footprint</b>).</li>
 </ul>
 
 <h2>Projects and sheets</h2>
@@ -107,7 +118,9 @@ new ladders, and the height of new text.</li>
 <li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
 uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
 (changing it resizes every tag), and the symbol color.</li>
-<li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors.</li>
+<li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors, and
+<b>Mark devices without a footprint on the drawing</b> (on to start: see Devices without a
+footprint).</li>
 <li><b>Wire layers</b>: <b>New wires go on</b>, the wire layer new wires go on on every sheet
 that hasn't one of its own (WIRES to start), and the project's wire layers in a list, as in
 Layers...: <b>New</b> makes a wire layer of any name (CONTROL, say), <b>Add preset...</b> adds
@@ -380,11 +393,22 @@ own from its maker's drawing (Make block), or Edit block one of these and save i
 own name. A footprint of yours with the same name replaces a built-in one.</li>
 <li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
 footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
-<li><b>A symbol and a footprint with the same name</b> stay apart in a project: the one
-placed second is kept as "name (footprint)" or "name (symbol)" (its tab in the Library still
-shows its own name), so a footprint never takes a symbol's drawing, or the other way round.
-Edit block..., Update blocks from library... and saving a changed block find each by its own
-name and kind.</li>
+<li><b>A symbol and a footprint with the same name</b> (a starter's schematic symbol and its
+panel footprint, both "Starter") stay apart in a project: placed from the Library, made with
+Make block, brought in by Import I/O list or pasted, the one that comes second is kept as
+"name (footprint)" or "name (symbol)", so a footprint never takes a symbol's drawing, or the
+other way round. Everywhere you read it, it goes by its own name: the Properties panel, the
+bill of materials, Trace, Devices without a footprint, a footprint label showing its block's
+name, the Library. Edit block..., Block properties..., Update blocks from library..., Save to
+library as part and saving a changed block find each by its own name and kind. In a DXF
+export a block name stands for one block only (AutoCAD's names don't say what kind a block
+is), so there the second one keeps its "name (footprint)" (or "name (symbol)") block name;
+opened again in KanzonasCAD it is the same footprint. A project saved by an earlier version
+in which one had already taken the other's place (its symbol copies on schematic sheets
+drawing the footprint, or its footprint copies on panel sheets drawing the symbol) is mended
+when it opens: the lost one comes back from your library, its copies drawn with it again, and
+the command line says so (one step: Undo takes it back). When your library hasn't got it, its
+copies stay as they are and the command line says which.</li>
 </ul>
 <p>The <b>Library</b> opens as a popup window, as AutoCAD Electrical's icon menu does, so the
 drawing keeps the whole width: <b>Insert symbol...</b> (Schematic tab) opens it on its Symbols,
@@ -437,7 +461,7 @@ attributes window's Shown on the drawing (or Show or hide attributes).</li>
 <b>tag</b> goes (Enter puts it above).</li>
 </ol>
 <p>It is saved to your library and, unless you untick it, the selected objects become the
-block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
+block (a device symbol's copy tagged as Insert tags one: CR601 on page 6). <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
 footprint.</p>
 <p><b>Assign part...</b> (Library menu, the Panel tab's Parts): select the devices
 (every contactor on the sheet, say), then pick one of your library's parts for them, from those
@@ -521,7 +545,8 @@ manufacturer.</p>
 <ul>
 <li><b>Properties...</b> (a button in the Library popup, its right-click menu, or
 <b>Block properties...</b> in the Library menu): the details Make block asked for, filled in:
-name, category, description, manufacturer, family, series and, for a symbol, its part in
+name, category, description, manufacturer, family, series, for a footprint its <b>Label text
+sizes</b> (each label line's size; see Footprint label) and, for a symbol, its part in
 cross-references, contact, tag prefix, wire numbers through it and its pin names in order
 (renaming pins; Edit block adds or removes them). Those last are greyed out on a panel
 footprint (Make block makes one when you are on a panel sheet): change its <b>Kind</b> to
@@ -564,8 +589,15 @@ their stack, so it closes up with them when one above it is empty (a rating's te
 straight down under the stack joins it too); it goes on with the next name until Enter or Esc.
 Each copy of the block then has a box for it in <b>Properties...</b>: an empty one shows
 nothing. HP, VOLTS, AMPS, FLA, VA, PRI and SEC typed as a plain number show their unit (5 shows
-5HP); any other attribute shows as typed. Leaving the block's tab, the ribbon goes
-back to the tab it was on. A footprint has a pink
+5HP); any other attribute shows as typed. <b>Color one piece</b>: select a piece in the
+block's tab (a small rectangle, say) and give it a color with <b>Color</b> (the Block tab's
+Modify group, or the Home tab) or the Properties panel's Color; it stays on its layer. Save
+block keeps it: every copy draws that piece in its color and the rest of the block in the
+copy's own color (its layer's, or one given to the copy), in print, PDF and DXF export too (the
+piece's own color there; the rest by block). ByLayer gives the piece back the copy's color. A
+block whose pieces have no color of their own draws all in the copy's color, as before. Make
+block keeps a color given to a piece before it was made a block in the same way. Leaving the
+block's tab, the ribbon goes back to the tab it was on. A footprint has a pink
 <b>DIN RAIL</b> text on layer BLOCK DIN RAIL: its insertion point (a ring, with a dashed line
 across the part where the rail's centerline runs) is the middle of the part's rail clip. Move
 it to where the rail's center crosses the part (its height on the part is what counts on a
@@ -676,7 +708,9 @@ CR701 when that's free).</li>
 <li>When a sheet's <b>page number changes</b> (typed in Sheet properties, or by moving sheets
 around), its tags follow: CR601 becomes CR701.</li>
 <li><b>Typing a tag yourself</b> (double-click the device) locks it: automatic numbering never
-changes it. Untick "Lock this tag" there to give it back.</li>
+changes it. Untick "Lock this tag" there to give it back. The same window's <b>No footprint
+needed</b> leaves a device out of Devices without a footprint (one that goes on no
+panel).</li>
 <li><b>Renumber sheet</b> (Schematic tab, Sheets menu) numbers the sheet's unlocked devices
 01, 02... per prefix in the sheet's <b>numbering order</b> (Sheet properties): across then
 down, or down then across, or <b>along the wires</b>. Locked tags stay and their numbers are
@@ -858,6 +892,84 @@ says <b>Tracing...</b> until it is complete; on a big project the rows come in a
 found). Picking something else meanwhile drops the older look-up.</li>
 <li>The list follows changes to the drawing. A row whose object was erased says so on the
 command line when you go to it, and the list is made again.</li>
+</ul>
+
+<h2>The Properties panel</h2>
+<p><b>Properties</b> (Ctrl+1; Modify menu) opens a panel, as AutoCAD's Properties palette,
+showing everything about what is selected, so you don't have to double-click or right-click
+each time. It stays open while you work and follows the selection: click something and it
+shows it. The <b>Properties panel</b> button (View menu, View tab's Panels group) shows or
+hides it, checked while it is open; Ctrl+1 only ever opens it or brings it to the front. It
+docks at the right to start; drag its title to the left side or the bottom, or off the window
+to float it; where it is and whether it is open are kept for next time.</p>
+<ul>
+<li><b>General</b>, for anything: its kind, <b>Layer</b> (a list), <b>Color</b> (ByLayer, a
+few colors, or Other... for any), and where it makes sense its <b>Position X</b> and <b>Y</b>
+(its insertion point, in drawing inches) and <b>Rotation</b> (turned about that point; a symbol
+moved this way takes its wires with it).</li>
+<li><b>Symbol</b> or <b>Footprint</b>: its block, <b>Tag</b> (typed on a device, it is locked,
+as in its attributes window; on a footprint, the device with that tag is the one it is; a
+contact shows the device it <b>Belongs to</b>), Description, Manufacturer, Catalog number, each
+attribute's value (a terminal's number, a PLC point's address, ratings; a linked footprint's
+ratings are its device's, as in its attributes window), a symbol's <b>Location</b>, <b>Lock
+this tag</b> and <b>No footprint needed</b>. Then <b>Text lines</b>: for a symbol, its tag and
+each attribute it can show, with <b>Shown</b>, its text size (read only: a symbol's tag takes
+the project's Tag height, Project properties, and its attributes their block's, Edit block)
+and its <b>Angle</b>; for a footprint, each line it can show (Tag, Part number, Description,
+Block name and its ratings) with <b>Shown</b>, its <b>Text size</b> on paper (blank: its
+block's, else the project's Footprint label height), its <b>Angle</b> and <b>Readable</b> (Keep
+readable), as in its attributes window.</li>
+<li><b>Wire</b>: its <b>Wire number</b> (one wire at a time: typed, it is locked, and a number
+another wire has asks whether it is a cross-reference, as the Wire number window does),
+<b>Lock number</b>, its <b>Gauge</b> (blank: its layer's), <b>Color in its label</b> (as the
+project, shown or off: Wire color label) and its length.</li>
+<li><b>Text</b>: its wording and <b>Height</b> on paper (a multi-line note's lines are shown;
+double-click it to edit them). <b>Line</b>: its <b>Length</b> (kept from its first point) and
+<b>Angle</b>. <b>Circle</b>: its <b>Radius</b>. Other kinds (dimensions, hatches, leaders,
+dashed boxes, ladders, rail, duct, pictures, polylines, arcs) show General; double-click them
+for their own windows.</li>
+<li><b>Several selected</b>: a field they all have shows their one value, or <b>*varies*</b>
+when they differ (a tick half ticked, a list's first item); set it and it is set on all of
+them. Objects of different kinds show General only.</li>
+<li>A change applies at once: a text or number when you press Enter or leave the field (not
+at every key), a tick or a list when you click it. Each is one step: Undo takes it back, and
+the panel shows the drawing as it is after Undo, Redo or a change made anywhere else. A value
+that can't be taken (a gauge that isn't one) is said on the command line and changes nothing.
+The panel changes things through the same steps as the attributes window and the Wire number
+window, which stay (double-click, or right-click).</li>
+<li>It never holds up the drawing: a click is handled at once and the panel fills a moment
+after, from what is selected only; while it is closed it does nothing.</li>
+</ul>
+
+<h2>Devices without a footprint</h2>
+<p>Every schematic device that goes in a panel should have a footprint on a panel sheet. While
+one doesn't, KanzonasCAD marks it on the drawing with an <b>orange frame</b> and a dot at its
+corner (on the screen only: never printed), and the status bar says how many there are, in
+orange: <b>12 devices without a footprint</b>. Click it (or <b>Devices without a
+footprint...</b>, Sheets menu, and the Output and Panel tabs' Reports) for the list: tag,
+description, block, sheet, where and location, in page order. Double-click a row, or press
+Enter on it, to go to the device: its sheet shown, it selected and centered. The list stays
+open while you work and follows the drawing. <b>Save as CSV or Excel...</b> writes it; it is
+also a report sheet (Report sheet..., <b>Devices without a footprint</b>).</p>
+<ul>
+<li><b>Which devices need one</b>: schematic symbols with a tag of their own, devices and
+parents (a coil, an operator, a breaker, a PLC module, a terminal strip). Contacts and the other
+parts of a device (terminals, outlets, a module's continued piece) take their device's
+footprint; off-sheet connectors, source and destination arrows, ground and everything that
+isn't a placed symbol (wire numbers, ladders, rails, title blocks, dashed boxes) need none.</li>
+<li><b>Devices in the field</b> are left out by their location (a device's own Location, else
+its sheet's, as Cables between panels reads it): a location called FIELD (FIELD, FIELD-2...),
+and, once a panel sheet names its location (Sheet properties: MCP...), any location no panel
+sheet has (JB-1 with no JB-1 panel sheet). With no panel sheet naming a location, only FIELD
+tells.</li>
+<li><b>No footprint needed</b> (a device's attributes window, or the Properties panel) leaves
+out one device you know goes on no panel.</li>
+<li><b>Has a footprint</b>: a footprint on a <b>panel sheet</b> (Sheet properties: Type Panel)
+that was placed for the device (it asks which device it is, see Which device a footprint is),
+or one placed for none that carries the device's tag.</li>
+<li>Project properties, Panel, <b>Mark devices without a footprint on the drawing</b> turns the
+orange marks off (the count stays). It is worked out once per change of the project, never
+while you move the mouse.</li>
 </ul>
 
 <h2>Wires</h2>
@@ -1116,7 +1228,9 @@ name; each goes on a sheet of its own ("Slot 2 - 1734-IB8") after the sheet show
 shown, its tag of that page, and each point's address, tag and description written beside its
 terminal, where the field wire comes in (layer PLC I/O): an input module a third of the way
 across with the texts to its left, an output module at the left of the sheet with the texts to
-its right. Each point's address is also kept on the module (attributes ADDR0, ADDR1..., not
+its right. When your title block leaves no room there, the module and its texts are moved
+clear of it, or, when they fit nowhere at the sheet's scale, the sheet gets the biggest scale
+they fit at (as Fit does). Each point's address is also kept on the module (attributes ADDR0, ADDR1..., not
 shown), for <b>Number wires on PLC I/O points by their address</b>. A module the library
 hasn't got, or a point a module hasn't got, is left out and named on the command line. One
 Undo takes it all back.</li>
@@ -1318,7 +1432,7 @@ writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workb
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 <p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints
 and goes into the PDF with the drawings: pick the bill of materials, wire list, terminal strip
-list, pull list or panel materials, and it comes in as a table (lines and texts on layer
+list, pull list, panel materials or devices without a footprint, and it comes in as a table (lines and texts on layer
 REPORT) on report sheets just after the sheet shown, as many as it takes ("Bill of materials (1
 of 3)"), in the room the border and title block leave; a cell too long for its column ends in
 "…". A report sheet isn't kept up to date as you draw (that would slow every change on a big
@@ -1674,7 +1788,25 @@ unticked, they take the footprint's color)
 for every footprint in the project (projects made before 0.18.1 take 0.08" when opened; their
 labels were the tag height). An empty tag or description shows "?"; an empty rating shows no
 line. It prints and goes into PDF and DXF exports. Changing the tag, part number or
-description (double-click the footprint) changes the label.</li>
+description (double-click the footprint) changes the label.
+<b>A size for each line:</b> a footprint block can give each of its label lines a text size
+of its own (Block properties..., <b>Label text sizes</b>: a size beside Tag, Part number, each
+rating and the rest, in inches on paper; blank takes the project's Footprint label height),
+and a placed copy can have its own over its block's: double-click it, and in <b>Shown on
+it</b> set a line's <b>Text size</b> (blank: the block's, its size shown greyed, else the
+project's). A line takes its copy's size, then its block's, then the project's: changing the
+project's height changes only the lines with no size of their own. The sizes are on paper, so
+on a 1:4 panel sheet they are drawn four times larger and print the size you typed. With other
+footprints selected too, <b>Also the other selected footprints</b> gives them the sizes you
+changed in one step (their other sizes stay). Lines of different sizes stack without
+overlapping, each line as tall as its own text. Saving the block to your library and <b>Update
+blocks from library</b> bring a block's sizes into a project like its other changes.
+<b>Turning a line:</b> in the same window, each line's <b>Angle</b> turns it on that copy; it
+then turns with the footprint (Rotate). A line is kept readable: turned to 180 it is drawn at
+0, and 270 at 90, on the same spot, so it reads from the bottom or the right, as the
+footprint's own lines do. Untick its <b>Keep readable</b> to draw it exactly at its angle,
+upside down included. (Up to 0.24 a line's Angle wasn't kept: it went back to how the
+footprint was turned.)</li>
 <li><b>Which device a footprint is</b>: placing a footprint (Insert footprint, or a part's
 footprint) asks which schematic device it is, as a contact asks which coil: <b>Enter</b> takes
 the one offered (the next device with no footprint yet, in page order; one with the
@@ -1836,9 +1968,11 @@ colors".</li>
 <li><b>Theme</b>: Light, Dark or Same as system: the menus, ribbon and panels. Light stays
 light and Dark stays dark whatever Windows is set to; Same as system follows Windows, also when
 it switches while KanzonasCAD is open.</li>
-<li><b>Command line</b>, <b>Sheets panel</b> and <b>{trace} panel</b> show or hide those
-panels (each shows a check while its panel is open). Ctrl+E (the Sheets menu's <b>{trace}</b>)
-only ever opens the {trace} panel.</li>
+<li><b>Command line</b>, <b>Sheets panel</b>, <b>{trace} panel</b> and <b>Properties
+panel</b> show or hide those panels (each shows a check while its panel is open; the View tab's
+Panels group has them too). Ctrl+E (the Sheets menu's <b>{trace}</b>) only ever opens the
+{trace} panel, and Ctrl+1 (the Modify menu's <b>Properties</b>) only ever opens the Properties
+panel.</li>
 </ul>
 
 <h2>Edit menu</h2>
@@ -1858,7 +1992,9 @@ color); a layer it already has keeps its own.</li>
 <h2>Files</h2>
 <ul>
 <li><b>New project</b> (Ctrl+N), <b>Open...</b> (Ctrl+O, a project, or a DXF or DWG drawing),
-<b>Open recent</b>, <b>Save</b> (Ctrl+S), <b>Save as...</b> (Ctrl+Shift+S),
+<b>Open recent</b>, <b>Reopen for editing</b> (see Opening a project someone else has open,
+below), <b>Save</b> (Ctrl+S),
+<b>Save as...</b> (Ctrl+Shift+S),
 <b>Close project</b> (Ctrl+W), <b>Exit</b> (Ctrl+Q). Save is grayed out while the project has
 no unsaved changes (the tab's name shows a * when it has some); Save as... always works. In a
 block's tab, Save saves the block.</li>
@@ -1992,7 +2128,8 @@ General.</li>
 Edit &gt; Options..., Files, says; none turns backups off). <b>Open backups
 folder</b> opens it; to go back to one, open it like any project and Save as.</li>
 <li><b>Autosave</b>: every 5 minutes (Options, Files, changes it or turns it off), projects with unsaved changes are copied to a recovery
-folder (never over your own file; in the portable version, <code>data\\recovery</code> beside
+folder (never over your own file, nor over a read-only project's; in the portable version,
+<code>data\\recovery</code> beside
 the program). If KanzonasCAD doesn't close normally (a crash, a power
 cut), it offers to recover them the next time it starts.</li>
 <li><b>Export to PDF...</b>: every sheet at its real size, vector lines, everything printed
@@ -2002,11 +2139,48 @@ reader and it goes to the page of the sheet it names, zoomed in on what it names
 neighbors in view. The line under a coil leads to that contact, the place under a contact to
 its coil, a source or destination arrow's "2046 / 7-A2" to its other half, an off-sheet
 connector's place to the connector there (one link per place where it lists several). A
-frozen sheet's reference that is out of date leads to the zone it says. A reference to a sheet
+frozen sheet's reference that is out of date leads to the zone it says (one saying "2-?", a
+place outside the zones, to the middle of sheet 2). A reference to a sheet
 that isn't in the PDF has no link. (The links need the pypdf library, part of the installed
 and portable programs; run from source without it, the PDF is written without links and the
 command line says so.)</li>
 </ul>
+
+<h3>Opening a project someone else has open</h3>
+<p>While a project is open for editing,
+KanzonasCAD keeps a small lock note beside it: a hidden file named <code>.~lock.</code><i>file
+name</i><code>#</code> (for Plant.kzcad, <code>.~lock.Plant.kzcad#</code>; the same name on
+Windows, where it has the hidden attribute, and on Linux, where the dot hides it). It says who
+has it open (user name, computer, the program's process and version, and since when), and goes
+when the project closes: its tab or window closed, Exit, or Update now closing KanzonasCAD.
+Save as... moves it to the new file. Opening a project that someone else has open (on another
+computer, or another KanzonasCAD window on this one) asks first: "<i>Plant.kzcad</i> is open
+on <i>computer</i> by <i>user</i> since <i>time</i>.", with three buttons:</p>
+<ul>
+<li><b>Open read-only</b> (the default): the project opens with "(read-only)" in its tab and
+the window's title. Everything works: looking, printing, exporting, copying out of it, and
+even changing it to try something out, as AutoCAD does with a read-only drawing. Only saving
+over the file is refused: Save and Ctrl+S say "read-only: use Save As..." on the command line.
+<b>Save as...</b> makes a copy of your own (it suggests "<i>name</i> (copy)"), which you can
+then edit and save, and which is locked for you. Closing a read-only project with changes
+offers Save as... for them. Its autosave copy goes to the recovery folder under a name of its
+own, never over the file or the other person's autosave copy; recovered after a crash, it comes
+back as an unsaved project.</li>
+<li><b>Open anyway</b>: after a warning that both copies could save over each other's changes,
+it opens for editing and the lock note becomes yours. If the other copy then saves, it is
+warned that someone opened the file anyway, and can choose not to.</li>
+<li><b>Cancel</b>: it doesn't open.</li>
+</ul>
+<p><b>Reopen for editing</b> (File menu) opens a read-only project again for editing once the
+other copy has closed it: the file as it is saved now (changes you made read-only are lost, and
+it asks first). While the other copy still has it, it says so on the command line.</p>
+<p>A lock note left by a KanzonasCAD on this computer that is no longer running (a crash, a power
+cut) is taken over without asking; one from another computer can't be checked from here, so
+it asks, and Open anyway takes it. Two people opening the same project on a network share at
+the same moment can't both get it: the note is made in one step that fails when one is
+already there. A project in a folder where the note can't be written (a read-only share, no
+permission), or whose file is read-only, opens read-only and the command line says why.
+Opening a project already open in this KanzonasCAD window goes to its tab, as before.</p>
 
 <h2>Printing</h2>
 <p><b>Print...</b> (File menu, Ctrl+P, the Output tab, or right-click in the Sheets panel)
@@ -2120,6 +2294,8 @@ spacing, the crosshair, the running object snaps and polar tracking angles.</li>
 <tr><td>F9</td><td>Snap to grid on/off</td></tr>
 <tr><td>F10</td><td>Polar tracking on/off</td></tr>
 <tr><td>Ctrl+9</td><td>Command line on/off</td></tr>
+<tr><td>Ctrl+1</td><td>Properties: opens the Properties panel (or brings it to the front; it
+never closes it) with what is selected</td></tr>
 <tr><td>Ctrl+E</td><td>{trace}: opens the {trace} panel (or brings it to the front; it never
 closes it) with every place the selected device, wire or PLC point is used; Enter or a
 double-click on a row goes there</td></tr>

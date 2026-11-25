@@ -815,6 +815,9 @@ def pdf_links_right(project, path, sheets):
                 return None
         if held:
             x0, y0, x1, y1 = ts.layout_zone_frame()
+            # (a place outside the sheet's zones, "2-?": the middle of its frame)
+            if place == unzoned and aimed(*ts.turn((x0 + x1) / 2.0, (y0 + y1) / 2.0)):
+                return None
             cw, rh = (x1 - x0) / ts.cols, (y1 - y0) / ts.rows
             for ri in range(ts.rows):
                 for ci in range(ts.cols):
@@ -822,6 +825,16 @@ def pdf_links_right(project, path, sheets):
                     if project.zone_text(ts, x, y) == place and aimed(x, y):
                         return None
         return "leads to nothing named %r: %s" % (place, box)
+
+    def named_on(ts, place):
+        """Whether a sheet holds something the text names (as wrong() finds it) at place."""
+        unzoned = "%s-?" % project.sheet_number(ts)
+        for e in ts.entities.values():
+            if belongs(e, devs, parents, names):
+                q = ref_point(e)
+                if (project.zone_text(ts, q[0], q[1]) or unzoned) == place:
+                    return True
+        return False
 
     n_links = 0
     for i, s in enumerate(sheets):
@@ -854,6 +867,12 @@ def pdf_links_right(project, path, sheets):
                 over = [j for j, r in enumerate(rects)
                         if r[0] <= mid[0] <= r[2] and r[1] <= mid[1] <= r[3]]
                 where = places.get(place, [])
+                if not held:
+                    # (only the pages holding what it names: a place as written can be on
+                    # more than one sheet (rung 137 on two ladders, one numbered by hand), and
+                    # the one it names may be left out of the PDF while another page has a
+                    # rung of that number: the long battery, 0.25, seed 4923)
+                    where = [w for w in where if named_on(sheets[w], place)]
                 if not where:
                     # (no link of its own; one over it must be another text's, drawn over it
                     # or under it: looked at once the page's texts have taken theirs)
@@ -881,3 +900,96 @@ def pdf_links_right(project, path, sheets):
             project.sheet_number(s), extra)
         n_links += len(used)
     return n_links
+
+
+# ---- devices without a footprint (0.25) --------------------------------------------------------
+def missing_footprints(project):
+    """{(sheet id, entity id)} of the devices that need a footprint and have none, worked out
+    here from every object of every sheet, from the rules (not missing_fp.py's code): a placed
+    schematic symbol that is a device or parent with a tag prefix and isn't an off-sheet link;
+    not ticked NO_FP; not in the field (its LOC, else its sheet's location: FIELD..., or, when a
+    panel sheet names a location, one no panel sheet names); and no footprint on a panel sheet
+    linked to it (PARENT its DEV) nor an unlinked one with its tag."""
+    panels = [s for s in project.sheets if s.kind == "panel"]
+    named = {s.location.strip().upper() for s in panels if s.location.strip()}
+    linked, tagged = set(), set()
+    for s in panels:
+        for e in s.entities.values():
+            if isinstance(e, M.Insert) and e.defn is not None and e.defn.kind == "footprint":
+                if e.attrs.get("PARENT"):
+                    linked.add(e.attrs["PARENT"])
+                elif e.attrs.get("TAG", "").strip():
+                    tagged.add(e.attrs["TAG"].strip().upper())
+    out = set()
+    for s in project.sheets:
+        for e in s.entities.values():
+            d = getattr(e, "defn", None)
+            if not isinstance(e, M.Insert) or d is None or d.kind != "symbol":
+                continue
+            if d.role not in ("device", "parent") or not d.prefix or d.wiring == "link":
+                continue
+            if e.attrs.get("NO_FP") == "1":
+                continue
+            loc = ((e.attrs.get("LOC") or "").strip() or s.location or "").strip().upper()
+            if loc.startswith("FIELD") or (loc and named and loc not in named):
+                continue
+            if e.attrs.get("DEV") and e.attrs["DEV"] in linked:
+                continue
+            if e.attrs.get("TAG", "").strip().upper() in tagged:
+                continue
+            out.add((s.id, e.id))
+    return out
+
+
+def missing_right(win, project):
+    """The check's devices are those worked out here; the status bar counts them; the sheet
+    shown marks each of its own (the marks on) or none (off)."""
+    from kanzonascad import missing_fp
+    want = missing_footprints(project)
+    got = {(s.id, e.id) for s, e in missing_fp.find(project).missing}
+    assert got == want, "devices without a footprint: %d listed, %d worked out (%s more, %s " \
+        "fewer)" % (len(got), len(want), sorted(got - want)[:4], sorted(want - got)[:4])
+    b = win.missing_fp_button
+    if want:
+        assert b.text() == missing_fp.describe(len(want)) and not b.isHidden(), \
+            "the status bar says %r for %d" % (b.text(), len(want))
+    else:
+        assert b.isHidden(), "the status bar shows %r with none" % b.text()
+    v = win.view()
+    s = v.sheet()
+    boxes = missing_fp.marks(project, s)
+    mine = sorted(s.entities[i].bbox() for sid, i in want if sid == s.id)
+    assert sorted(boxes) == (mine if missing_fp.marks_on(project) else []), \
+        "%d orange marks on the sheet, %d devices without a footprint there" % (
+            len(boxes), len(mine))
+    CHECKED["devices without a footprint"] += 1
+
+
+TWIN = "Battery twin"           # (a symbol and a footprint of this one name: op_same_name)
+
+
+def twins_apart(project):
+    """(0.25) Every copy placed as the symbol or the footprint named TWIN (its TWIN attribute
+    says which, set where it was placed) still draws a block of that kind, the project's
+    block of its name that kind, shown by the name both share; and the project has one block
+    of each kind for it (never one in the other's place)."""
+    seen = set()
+    for s in project.sheets:
+        for e in s.inserts():
+            want = e.attrs.get("TWIN")
+            if not want:
+                continue
+            d = project.blocks.get(e.block)
+            assert d is not None and e.defn is not None, "a %s copy of %s without its block" % (
+                want, TWIN)
+            assert (d.kind, e.defn.kind) == (want, want), \
+                "a %s copy of %s draws the %s %s (block %r): one took the other's place" % (
+                    want, TWIN, d.kind, d.shown_name, e.block)
+            assert e.block_name == TWIN, "%s shown as %r" % (TWIN, e.block_name)
+            seen.add(want)
+    for kind in seen:
+        got = [n for n, b in project.blocks.items() if b.kind == kind and b.shown_name == TWIN]
+        assert len(got) == 1, "the project has %d %ss named %s: %r" % (len(got), kind, TWIN,
+                                                                       got)
+    if len(seen) == 2:
+        CHECKED["a symbol and a footprint of one name kept apart"] += 1

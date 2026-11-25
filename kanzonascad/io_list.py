@@ -128,8 +128,6 @@ def place(ed, project, modules, after=None):
     top of the room its frame leaves, its slot shown, each point's text beside its terminal,
     right-aligned, on layer PLC I/O, and each point's address kept on the module (ADDR0,
     ADDR1...: not shown). Returns the sheets made."""
-    from .scalefit import room
-    from .tags import retag_copies
     if LAYER not in project.layers:
         ed.layer(LAYER, None, M.Layer(LAYER).to_dict())
     at = project.sheets.index(after) + 1 if after in project.sheets else len(project.sheets)
@@ -139,38 +137,71 @@ def place(ed, project, modules, after=None):
         # showed the module until the project was saved and opened again, then nothing (the
         # battery, 0.22.4, seed 44); placed as the project's copy is drawn, which may differ
         # from the library's (seed 469: past the frame))
-        if d.name not in project.blocks:
-            ed.block(d)
-        d = project.blocks[d.name]
+        d = M.ensure_block(ed, project, d)     # (a footprint of its name kept apart, 0.25)
         s = project.make_sheet(("Slot %s - %s" % (slot, cat)) if slot else cat, "schematic")
         ed.add_sheet(s, at + len(made))
-        k = s.k()
-        area, _tb = room(project, s)
-        # (an input module's terminals down its left: the texts go to their left, so it sits a
-        # third of the way across; an output module's down its right (sourcing: its loads to
-        # its right), so it sits on the left, the texts to its right (the owner, 0.21.2:
-        # "Shouldn't the ob8e module default to the left side of the screen?"); its first
-        # terminal an inch under the top)
-        right = bool(d.pins) and d.pins[0]["pos"][0] > 0
-        x = area[0] + (area[2] - area[0]) * (1.0 / 6.0 if right else 1.0 / 3.0)
-        y = area[3] - 1.0
-        # (as Insert places a symbol: its own size, its tag paper-sized, on layer SYMBOLS)
-        ins = M.Insert(d.name, (x * k, y * k), 0.0, 1.0, False,
-                       dict(addrs, SLOT=slot) if slot else dict(addrs), d,
-                       project.settings.get("tag_height") * k, layer="SYMBOLS")
-        ins = retag_copies(project, s, [ins])[0]
-        ins = ed.add(s, ins)
-        pins = dict(ins.pin_points())
-        for pin, text in points:
-            q = pins[pin]
-            if right:
-                ed.add(s, M.Text((q[0] + 0.15 * k, q[1] + 0.03 * k), text, TEXT_H * k, 0.0,
-                                 "left", layer=LAYER))
-            else:
-                ed.add(s, M.Text((q[0] - 0.15 * k, q[1] + 0.03 * k), text, TEXT_H * k, 0.0,
-                                 "right", layer=LAYER))
+        _lay_out(ed, project, s, d, slot, points, addrs)
+        _clear_of_title_block(ed, project, s, (d, slot, points, addrs))
         made.append(s)
     return made
+
+
+def _lay_out(ed, project, s, d, slot, points, addrs):
+    """A module and its points' texts on its sheet, at the sheet's scale."""
+    from .scalefit import room
+    from .tags import retag_copies
+    k = s.k()
+    area, _tb = room(project, s)
+    # (an input module's terminals down its left: the texts go to their left, so it sits a
+    # third of the way across; an output module's down its right (sourcing: its loads to
+    # its right), so it sits on the left, the texts to its right (the owner, 0.21.2:
+    # "Shouldn't the ob8e module default to the left side of the screen?"); its first
+    # terminal an inch under the top)
+    right = bool(d.pins) and d.pins[0]["pos"][0] > 0
+    x = area[0] + (area[2] - area[0]) * (1.0 / 6.0 if right else 1.0 / 3.0)
+    y = area[3] - 1.0
+    # (as Insert places a symbol: its own size, its tag paper-sized, on layer SYMBOLS)
+    ins = M.Insert(d.name, (x * k, y * k), 0.0, 1.0, False,
+                   dict(addrs, SLOT=slot) if slot else dict(addrs), d,
+                   project.settings.get("tag_height") * k, layer="SYMBOLS")
+    ins = retag_copies(project, s, [ins])[0]
+    ins = ed.add(s, ins)
+    pins = dict(ins.pin_points())
+    for pin, text in points:
+        q = pins[pin]
+        if right:
+            ed.add(s, M.Text((q[0] + 0.15 * k, q[1] + 0.03 * k), text, TEXT_H * k, 0.0,
+                             "left", layer=LAYER))
+        else:
+            ed.add(s, M.Text((q[0] - 0.15 * k, q[1] + 0.03 * k), text, TEXT_H * k, 0.0,
+                             "right", layer=LAYER))
+
+
+def _clear_of_title_block(ed, project, s, module):
+    """A module sheet whose module or texts went over its title block (a title block of
+    yours that takes much of the sheet; the battery, 0.25, seed 7): moved clear of it when it
+    fits beside it, else laid out again at the biggest scale it fits at (as Fit: its texts
+    the same size on paper, beside their terminals as at any scale) and moved clear."""
+    from .scalefit import outside, drawing_box, room, centering, fits, fit_for
+    if outside(project, s) is None:
+        return
+    box = drawing_box(s)
+    area, tb = room(project, s)
+    if not fits(box[2] - box[0], box[3] - box[1], s.scale, area, tb):
+        got = fit_for(project, s)
+        if got is None:
+            return
+        for eid in list(s.entities):
+            ed.remove(s, eid)
+        ed.sheet_meta(s, scale=float(got[1]), scale_name=got[0])
+        _lay_out(ed, project, s, *module)
+        if outside(project, s) is None:
+            return
+        box = s.extents()
+    moved = centering(box, s.scale, area, tb)
+    if moved:
+        for e in list(s.entities.values()):
+            ed.change(s, e.moved(*moved))
 
 
 def import_list(ed, project, library, path, after=None):

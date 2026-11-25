@@ -48,7 +48,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import tests  # noqa: E402,F401  (settings, library and recovery in scratch folders)
 from tests.util import APP, window, type_in  # noqa: E402
 
-from PySide6.QtCore import QTimer  # noqa: E402
+from PySide6.QtCore import Qt, QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QFileDialog  # noqa: E402
 
 from kanzonascad import block_editor as BE  # noqa: E402
@@ -652,6 +652,7 @@ def mouse_pan(v, rnd):
 # past it, until sheets of 1:68,593 had wires 500,000 inches out, where a slanted wire's chance
 # crossing left 0.001" gaps that no real drawing has. Every check is as strict as before.
 FAR = 1e4
+UNREAD = object()       # (a Properties panel field the battery doesn't read from the model)
 MAX_K = 100.0
 
 
@@ -3156,6 +3157,447 @@ def random_editing(log, out, ops, seed, drawing=None):
                         k, f.attrs.get(k), got[1].attrs.get(k))
             BC.CHECKED["linked footprint ratings"] += 1
 
+    def op_fp_label_sizes():
+        # (0.24.1) a footprint's label lines' text sizes and turns, as a user sets them: sizes
+        # in its block (Block properties, Label text sizes: saved to the library and the
+        # copies updated), and on a copy (its attributes window: a size, an angle and Keep
+        # readable per line; with other footprints selected, the sizes changed go to them).
+        # Each line's height and angle are worked out here from what was stored: the copy's
+        # size, else the block's, else the project's (tag_h); a line turned on its own at its
+        # angle with the footprint, kept readable (90 < a <= 270 drawn 180 less) unless unticked
+        from unittest import mock
+        from PySide6.QtWidgets import QDoubleSpinBox, QCheckBox
+        from kanzonascad import library_panel
+        from kanzonascad import tags
+        fs = [e for e in s.inserts() if tags.is_footprint(e) and not v.layer_locked(e.layer)
+              and e.label]
+        if not fs:
+            return
+        f = rnd.choice(fs)
+        keys = [M.label_size_key(k) for k in M.label_keys(f.label)]
+        real = library_panel.QDialog.exec
+        if rnd.random() < 0.35 and lib.get("footprint", M.library_block_name(
+                f.block, "footprint")) is not None:
+            want = {k: rnd.choice([0.0, 0.05, 0.1, 0.15, 0.2]) for k in rnd.sample(
+                keys, rnd.randint(1, len(keys)))}
+
+            def answer(dlg):
+                for k, x in want.items():
+                    b = dlg.findChild(QDoubleSpinBox, "label_size_" + k)
+                    assert b is not None and b.isEnabled(), "Block properties: no size for " + k
+                    b.setValue(x)
+                return QDialog.Accepted
+            library_panel.QDialog.exec = answer
+            try:
+                with mock.patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                    new = win.block_properties("footprint", M.library_block_name(
+                        f.block, "footprint"))
+            finally:
+                library_panel.QDialog.exec = real
+            if new is None:
+                return
+            got = p.blocks[f.block].label_sizes
+            for k, x in want.items():
+                assert got.get(k) == (x or None), "Block properties: %s's size %r, typed %r" % (
+                    k, got.get(k), x)
+            BC.CHECKED["footprint label sizes in its block"] += 1
+        else:
+            f = s.entities[f.id]
+            others = [e for e in fs if e.id != f.id][:rnd.randint(0, 2)]
+            v.set_selection({f.id} | {o.id for o in others})
+            sizes = {k: rnd.choice([0.0, 0.06, 0.12, 0.25]) for k in rnd.sample(
+                keys, rnd.randint(0, len(keys)))}
+            turn = rnd.choice(keys)
+            ang = rnd.choice([0.0, 45.0, 90.0, 180.0, 270.0])
+            keep = rnd.random() < 0.6
+            before = {o.id: dict(o.label_sizes) for o in others}
+
+            def answer(dlg):
+                for k, x in sizes.items():
+                    dlg.findChild(QDoubleSpinBox, "label_size_" + k).setValue(x)
+                dlg.findChild(QDoubleSpinBox, "label_angle_" + turn).setValue(ang)
+                dlg.findChild(QCheckBox, "label_readable_" + turn).setChecked(keep)
+                return QDialog.Accepted
+            had = dict(f.label_sizes)
+            library_panel.QDialog.exec = answer
+            try:
+                win.edit_attributes(f)
+            finally:
+                library_panel.QDialog.exec = real
+            g = s.entities[f.id]
+            want = dict(had)
+            for k, x in sizes.items():
+                if x:
+                    want[k] = x
+                else:
+                    want.pop(k, None)
+            assert g.label_sizes == want, "a copy's sizes %r, typed %r over %r" % (
+                g.label_sizes, sizes, had)
+            assert (turn in g.label_as_set) == (not keep), "Keep readable not kept"
+            for o in others:
+                ow = dict(before[o.id])
+                for k in set(had) | set(want):
+                    if had.get(k) != want.get(k):
+                        if k in want:
+                            ow[k] = want[k]
+                        else:
+                            ow.pop(k, None)
+                assert s.entities[o.id].label_sizes == ow, "the other selected footprint's " \
+                    "sizes %r, not %r" % (s.entities[o.id].label_sizes, ow)
+                BC.CHECKED["footprint label sizes to the selected"] += 1
+            BC.CHECKED["footprint label sizes on a copy"] += 1
+        g = s.entities[f.id]
+        if not g.label_texts():
+            return
+        assert g.label_k is not None, "a labeled footprint with no label_k"
+        blk = g.defn.label_sizes
+        for k, t in g.label_texts():
+            kk = M.label_size_key(k)
+            size = g.label_sizes.get(kk) or blk.get(kk)
+            h = size * g.label_k if size else (g.tag_h or 0.125)
+            assert abs(t.height - h) < 1e-9, "label line %s %r tall, not %r" % (k, t.height, h)
+            r = g.attr_rot.get("@" + kk)
+            if r is None:
+                a = 90.0 if 45.0 <= g.angle % 180.0 < 135.0 else 0.0
+            else:
+                a = (g.angle + (-r if g.mirror else r)) % 360.0
+                if kk not in g.label_as_set and 90.0 + 1e-9 < a <= 270.0 + 1e-9:
+                    a -= 180.0
+            assert abs((t.angle - a + 180.0) % 360.0 - 180.0) < 1e-6, \
+                "label line %s drawn at %r, not %r" % (k, t.angle, a)
+            BC.CHECKED["footprint label line height and angle"] += 1
+        shown = [(k, t.text, t.pos, t.height, t.angle) for k, t in g.label_texts()]
+        # (saved and opened, the same; undone and redone, the same)
+        q = M.Project.from_dict(json.loads(json.dumps(p.to_dict())))
+        e2 = q.sheet_by_id(s.id).entities[g.id]
+        assert [(k, t.text, t.pos, t.height, t.angle) for k, t in e2.label_texts()] == shown, \
+            "a footprint's label lines changed through save and open"
+        if p.undo_stack and p.undo_stack[-1].name in ("Attributes", "Update %s" % g.block):
+            p.undo()
+            p.redo()
+            e3 = s.entities.get(g.id)
+            assert e3 is not None and [(k, t.text, t.pos, t.height, t.angle)
+                                       for k, t in e3.label_texts()] == shown, \
+                "a footprint's label lines not the same undone and redone"
+            BC.CHECKED["footprint label sizes undone and redone"] += 1
+
+    def props_widget(key):
+        """A Properties panel field's widget, found by its name as a test would."""
+        from PySide6.QtWidgets import QWidget
+        body = win.props_panel.body
+        return body.findChild(QWidget, "prop_" + key) if body is not None else None
+
+    def props_fill(ids):
+        """The selection set and the Properties panel open and filled with it (as after the
+        panel's short wait)."""
+        if win.props_dock.isHidden():
+            win.properties()
+        v.set_selection(set(ids))
+        win._props_wait.stop()
+        win.props_fill()
+
+    def props_set(key, value):
+        """A field of the Properties panel set as a user does: typed and Enter, a number box
+        left, a tick clicked, a list item picked."""
+        from kanzonascad import props_panel as PP
+        w = props_widget(key)
+        assert w is not None, "the Properties panel has no %s (it has %s)" % (
+            key, sorted(win.props_panel.widgets))
+        if isinstance(w, PP._Text):
+            w.setText(value)
+            w.setModified(True)
+            w.editingFinished.emit()
+        elif isinstance(w, PP._Number):
+            w.setValue(value)
+            w.editingFinished.emit()
+        elif isinstance(w, PP._Check):
+            if w.checkState() != (Qt.Checked if value else Qt.Unchecked):
+                w.click()
+                assert w.checkState() == (Qt.Checked if value else Qt.Unchecked), \
+                    "%s: a click left it %r" % (key, w.checkState())
+        else:
+            i = next(j for j, d in enumerate(w.datas) if PP._same(d, value))
+            w.setCurrentIndex(i)
+            w.activated.emit(i)
+
+    def model_value(key, e, sh):
+        """A Properties panel field's value read from the object itself (not the panel's
+        code): what the field must show, and what setting it must leave."""
+        from kanzonascad import missing_fp
+        if key == "layer":
+            return e.layer
+        if key == "color":
+            return e.color
+        if key in ("TAG", "DESC", "MFR", "CAT", "LOC"):
+            return e.attrs.get(key, "")
+        if key.startswith("attr_"):
+            return e.attrs.get(key[5:], "")
+        if key == "nofp":
+            return missing_fp.not_needed(e)
+        if key == "lock":
+            return e.attrs.get("TAG_LOCK") == "1"
+        if key.startswith("shown_"):
+            return key[6:] not in e.hidden
+        if key.startswith("angle_"):
+            return round(e.attr_angle(key[6:]), 2) % 360.0
+        if key.startswith("label_size_"):
+            return e.label_sizes.get(key[11:])
+        if key.startswith("label_angle_"):
+            return round(e.attr_angle("@" + key[12:]), 2) % 360.0
+        if key.startswith("label_readable_"):
+            return key[15:] not in e.label_as_set
+        if key.startswith("label_"):
+            return key[6:] in M.label_keys(e.label)
+        if key == "gauge":
+            return M.gauge_text(e.awg)
+        if key == "color_label":
+            return e.show_color
+        if key == "wire_num":
+            return e.num or ""
+        if key == "wire_lock":
+            return e.num_lock
+        if key == "text":
+            return e.text
+        if key == "height":
+            return round(e.height / (1.0 if e.fixed else sh.k()), 4)
+        if key == "length":
+            return round(G.dist(e.p1, e.p2), 6)
+        if key == "radius":
+            return e.radius
+        if key in ("x", "y"):
+            q = e.center if isinstance(e, M.Circle) else e.pos
+            return q[0 if key == "x" else 1]
+        if key == "rotation":
+            return e.angle
+        return UNREAD
+
+    def op_props_panel():
+        # (0.25) the Properties panel as a user works it: objects selected (one, a few of a
+        # kind, or of mixed kinds), what it shows checked against the objects themselves
+        # (*varies* where they differ), then a field set through its widget by name; every one
+        # of them must hold what was set, in one step that undoes and redoes exactly
+        from PySide6.QtWidgets import QComboBox, QGroupBox
+        from kanzonascad import props_panel as PP
+        from kanzonascad import wirenums
+        ents = list(s.entities.values())
+        if not ents:
+            return
+        first = rnd.choice(ents)
+        same = [e for e in ents if PP.kind_of(e) == PP.kind_of(first) and e.id != first.id]
+        r = rnd.random()
+        if r < 0.5 or not same:
+            pick = [first]
+        elif r < 0.85:
+            pick = [first] + rnd.sample(same, min(len(same), rnd.randint(1, 3)))
+        else:
+            pick = [first] + rnd.sample(ents, min(len(ents), 2))
+            pick = list({e.id: e for e in pick}.values())
+        props_fill([e.id for e in pick])
+        pick = [s.entities[e.id] for e in pick]
+        kinds = {PP.kind_of(e) for e in pick}
+        groups = [g.title() for g in win.props_panel.body.findChildren(QGroupBox)]
+        if len(kinds) > 1 and kinds != {"text", "mtext"}:
+            assert groups == ["General"], "mixed kinds show %s" % groups
+            BC.CHECKED["properties: mixed kinds show General"] += 1
+        # what it shows, against the objects
+        for key, w in win.props_panel.widgets.items():
+            vals = [model_value(key, e, s) for e in pick]
+            if any(x is UNREAD for x in vals):
+                continue
+            varies = any(x != vals[0] for x in vals[1:])
+            if isinstance(w, PP._Text):
+                if varies:
+                    assert w.text() == "" and w.placeholderText() == PP.VARIES, \
+                        "%s: %r shown for %r" % (key, w.text(), vals)
+                elif not w.size:
+                    assert w.text() == str(vals[0]), "%s shows %r, not %r" % (
+                        key, w.text(), vals[0])
+            elif isinstance(w, PP._Check):
+                want = Qt.PartiallyChecked if varies else (Qt.Checked if vals[0] else
+                                                           Qt.Unchecked)
+                assert w.checkState() == want, "%s ticked %r for %r" % (key, w.checkState(),
+                                                                        vals)
+            elif isinstance(w, QComboBox):
+                if varies:
+                    assert w.currentText() == PP.VARIES, "%s shows %r for %r" % (
+                        key, w.currentText(), vals)
+                else:
+                    assert PP._same(w.value(), vals[0]), "%s shows %r, not %r" % (
+                        key, w.value(), vals[0])
+            elif isinstance(w, PP._Number):
+                if varies:
+                    assert w.text() == PP.VARIES, "%s shows %r for %r" % (key, w.text(), vals)
+                else:
+                    assert abs(w.value() - vals[0]) < 10 ** -w.decimals(), \
+                        "%s shows %r, not %r" % (key, w.value(), vals[0])
+            if varies:
+                BC.CHECKED["properties: *varies*"] += 1
+        BC.CHECKED["properties shown"] += 1
+        # a field set
+        keys = [k for k, w in win.props_panel.widgets.items() if hasattr(w, "committed")
+                and model_value(k, pick[0], s) is not UNREAD]
+        if not keys:
+            return
+        key = rnd.choice(keys)
+        w = props_widget(key)
+        if isinstance(w, PP._Text) and w.size:
+            value = rnd.choice(["", "0.06", "0.15"])
+            want = float(value) if value else None
+        elif isinstance(w, PP._Text):
+            value = {"TAG": "CR%d" % rnd.randint(900, 999), "LOC": rnd.choice(
+                         ["", "FIELD", "MCP", "JB-1"]),
+                     "gauge": rnd.choice(["", "12", "14", "1/0"]),
+                     "wire_num": "9%03d" % rnd.randint(0, 999),
+                     "text": "T%d" % rnd.randint(1, 99)}.get(key, rnd.choice(
+                         ["", "PUMP", "5", "480V"]))
+            if key == "wire_num":
+                if len(pick) > 1 or wirenums.others_numbered(p, s, pick[0], value) or \
+                        not wirenums.enabled(p):
+                    return
+            if key == "text" and not value:
+                return
+            want = M.gauge_text(value) if key == "gauge" else value
+            if key == "TAG" and PP.kind_of(pick[0]) == "footprint":
+                return                  # (linking a footprint: op_missing_fp)
+        elif isinstance(w, PP._Number):
+            if key in ("x", "y"):
+                value = round(model_value(key, pick[0], s) + rnd.choice([-1.0, 0.5, 2.0]), 4)
+            elif "angle" in key or key == "rotation":
+                value = rnd.choice([0.0, 45.0, 90.0, 180.0, 270.0])
+            elif key == "height":
+                value = rnd.choice([0.08, 0.125, 0.2])
+            else:
+                value = rnd.choice([0.25, 1.0, 2.5])
+            want = value
+        elif isinstance(w, PP._Check):
+            # (half ticked, *varies*: a click ticks it on all of them)
+            value = w.checkState() == Qt.PartiallyChecked or rnd.random() < 0.5
+            want = value
+        else:
+            choices = [d for d in w.datas if d is not PP.NA and d != PP.OTHER]
+            value = rnd.choice(choices)
+            want = value
+        before = {e.id: e.to_dict() for e in pick}
+        n = len(p.undo_stack)
+        props_set(key, value)
+        now = [s.entities.get(e.id) for e in pick]
+        for e in now:
+            assert e is not None, "setting %s took an object away" % key
+            got = model_value(key, e, s)
+            if key == "wire_lock" and not e.num:
+                continue
+            if key[5:] in tags_mod.NUMBER_ATTRS and key.startswith("attr_") and not value:
+                continue                # (left blank: numbered on its strip by itself)
+            if isinstance(want, float) and isinstance(got, float):
+                ok = abs((got - want + 180.0) % 360.0 - 180.0) < 1e-6 if "angle" in key or \
+                    key == "rotation" else abs(got - want) < 1e-6
+            else:
+                ok = got == want
+            assert ok, "Properties: %s set to %r on %d object(s); %s holds %r" % (
+                key, value, len(pick), PP.kind_name(e), got)
+        if any(s.entities[e.id].to_dict() != before[e.id] for e in pick):
+            assert len(p.undo_stack) == n + 1, "Properties: %s took %d steps" % (
+                key, len(p.undo_stack) - n)
+            after = {e.id: s.entities[e.id].to_dict() for e in pick}
+            if len(p.undo_stack) == n + 1:
+                p.undo()
+                assert {e.id: s.entities[e.id].to_dict() for e in pick} == before, \
+                    "Properties: %s undone isn't as before" % key
+                p.redo()
+                assert {e.id: s.entities[e.id].to_dict() for e in pick} == after, \
+                    "Properties: %s redone isn't as after" % key
+                BC.CHECKED["properties: one step, undone and redone"] += 1
+            # (the panel shows it, filled again after the change)
+            win._props_wait.stop()
+            win.props_fill()
+            if len(pick) == 1 and isinstance(props_widget(key), PP._Text) and \
+                    not props_widget(key).size:
+                assert props_widget(key).text() == str(model_value(key, s.entities[pick[0].id],
+                                                                   s)), \
+                    "the panel shows %r after the change" % props_widget(key).text()
+        BC.CHECKED["properties: a field set"] += 1
+        BC.missing_right(win, p)
+
+    def op_missing_fp():
+        # (0.25) devices without a footprint, as a user changes what the check reads: a
+        # sheet's type and location (Sheet properties), a device's No footprint needed (its
+        # attributes window, or the Properties panel) or Location (the panel), a footprint
+        # given a device's tag (linked) or another (unlinked) in the panel, a footprint
+        # placed for a device; then the devices listed, counted and marked are those worked
+        # out from the rules (battery_checks.missing_footprints)
+        from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit
+        from kanzonascad import dialogs, library_panel
+        from kanzonascad import tags
+        r = rnd.random()
+        devs = [e for e in s.inserts() if tags.is_device(e)]
+        fps_here = [e for e in s.inserts() if tags.is_footprint(e)]
+        if r < 0.25:
+            kind = rnd.choice(["panel", "schematic", s.kind])
+            loc = rnd.choice(["", "MCP", "JB-1", "FIELD", s.location])
+            real = dialogs.QDialog.exec
+
+            def answer(dlg):
+                k = dlg.findChild(QComboBox, "kind")
+                k.setCurrentIndex(k.findData(kind))
+                dlg.findChild(QLineEdit, "location").setText(loc)
+                return QDialog.Accepted
+            dialogs.QDialog.exec = answer
+            try:
+                win.sheet_properties()
+            finally:
+                dialogs.QDialog.exec = real
+            assert (s.kind, s.location) == (kind, loc), "Sheet properties: %r" % (
+                (s.kind, s.location),)
+        elif r < 0.45 and devs:
+            d = rnd.choice(devs)
+            on = rnd.random() < 0.5
+            real = library_panel.QDialog.exec
+
+            def answer(dlg):
+                dlg.findChild(QCheckBox, "no_footprint").setChecked(on)
+                return QDialog.Accepted
+            library_panel.QDialog.exec = answer
+            try:
+                win.edit_attributes(d)
+            finally:
+                library_panel.QDialog.exec = real
+            assert (s.entities[d.id].attrs.get("NO_FP") == "1") == on, "No footprint needed"
+        elif r < 0.65 and devs:
+            pick = rnd.sample(devs, min(len(devs), rnd.randint(1, 3)))
+            props_fill([e.id for e in pick])
+            if rnd.random() < 0.5:
+                # (half ticked, *varies*: a click ticks it on all of them)
+                on = props_widget("nofp").checkState() == Qt.PartiallyChecked or \
+                    rnd.random() < 0.5
+                props_set("nofp", on)
+                assert all((s.entities[e.id].attrs.get("NO_FP") == "1") == on for e in pick), \
+                    "No footprint needed set %r in the Properties panel: %r" % (on, [
+                        s.entities[e.id].attrs.get("NO_FP") for e in pick])
+            else:
+                loc = rnd.choice(["", "FIELD", "JB-1", "MCP"])
+                props_set("LOC", loc)
+                assert all(s.entities[e.id].attrs.get("LOC", "") == loc for e in pick), \
+                    "Location set %r in the Properties panel: %r" % (loc, [
+                        s.entities[e.id].attrs.get("LOC") for e in pick])
+        elif r < 0.85 and fps_here:
+            f = rnd.choice(fps_here)
+            alld = [e for sh in p.sheets for e in sh.inserts() if tags.is_device(e)
+                    and e.attrs.get("TAG")]
+            props_fill([f.id])
+            if alld and rnd.random() < 0.7:
+                d = rnd.choice(alld)
+                props_set("TAG", d.attrs["TAG"])
+                got = tags.find_tag(p, d.attrs["TAG"])[1]
+                assert s.entities[f.id].attrs.get("PARENT") == got.attrs.get("DEV"), \
+                    "a footprint given %s's tag isn't linked to it" % d.attrs["TAG"]
+            else:
+                props_set("TAG", "ZZ%d" % rnd.randint(1, 99))
+                assert not s.entities[f.id].attrs.get("PARENT"), "a footprint given a tag " \
+                    "no device has is still linked"
+        else:
+            op_footprint()
+        BC.missing_right(win, p)
+
     def op_location():
         # as Sheet properties and a device's Location do: the sheet's location, or a device's
         # own (LOC), set or cleared
@@ -3455,7 +3897,9 @@ def random_editing(log, out, ops, seed, drawing=None):
         if not devs:
             return
         pick = rnd.sample(devs, min(len(devs), rnd.randint(1, 4)))
-        block = rnd.choice(pick).block
+        # (a part names its symbol as the library does: a symbol kept as "name (symbol)"
+        # beside a footprint of its name is "name", Insert.block_name; 0.25, seed 4902)
+        block = rnd.choice(pick).block_name
         part = Part(manufacturer=rnd.choice(["Allen-Bradley", "Siemens", "ABB"]),
                     catalog="BAT-%d" % rnd.randint(1, 10 ** 6), description="battery part",
                     symbol=block)
@@ -3467,7 +3911,7 @@ def random_editing(log, out, ops, seed, drawing=None):
             n = win.assign_part()
         finally:
             win.__dict__.pop("ask_part", None)
-        want = [i for i in before if s.entities[i].block == block]
+        want = [i for i in before if s.entities[i].block_name == block]
         assert n == len(want), "Assign part put the part on %d devices, not %d" % (n, len(want))
         for i, old in before.items():
             a = s.entities[i].attrs
@@ -4300,6 +4744,152 @@ def random_editing(log, out, ops, seed, drawing=None):
                 got_t, got_j, want_t, want_j)
         BC.CHECKED["terminal count from the tap numbers"] += 1
 
+    # (0.25: a symbol and a footprint of one name, in the library from the start)
+    lib.save_block(M.BlockDef(BC.TWIN, "symbol", [M.Circle((0.25, 0), 0.1)],
+                              pins=[{"name": "A1", "pos": (0, 0)}, {"name": "A2",
+                                                                    "pos": (0.5, 0)}],
+                              role="device", prefix="M"))
+    lib.save_block(M.BlockDef(BC.TWIN, "footprint",
+                              [M.Polyline([(0, 0), (1.5, 0), (1.5, 2.5), (0, 2.5)], True)]))
+
+    def op_same_name():
+        # (0.25) the symbol or the footprint named BC.TWIN placed from the Library (its insert
+        # signal, as a double-click), or made again with Make block, of the other kind than
+        # the one holding the plain name in the project (up to 0.25 Make block went over it);
+        # each copy marked with the kind it was placed as (TWIN), which BC.twins_apart holds
+        # every copy to through moves, copies, undo, redo and save/open
+        kind = rnd.choice(["symbol", "footprint", "footprint", "make"])
+        held = p.blocks.get(BC.TWIN)
+        if kind == "make" and held is None:
+            kind = rnd.choice(["symbol", "footprint"])
+        before = set(s.entities)
+        if kind == "make":
+            kind = "footprint" if held.kind == "symbol" else "symbol"
+            q = pt()
+            with p.edit("draw") as ed:
+                r = ed.add(s, M.Polyline([q, (q[0] + 1.0, q[1]), (q[0] + 1.0, q[1] + 0.5)],
+                                         True))
+            v.set_selection({r.id})
+            real = win.ask_block_details
+            win.ask_block_details = lambda ents: {
+                "kind": kind, "name": BC.TWIN, "category": "", "description": "",
+                "role": "device", "contact": "", "prefix": "M" if kind == "symbol" else "",
+                "pin_names": ["A1", "A2"] if kind == "symbol" else [], "replace": True}
+            try:
+                v.run(C.MakeBlockCmd)
+                typed = [q] + ([q, (q[0] + 1.0, q[1]), "", (q[0] + 0.5, q[1] + 0.75)]
+                               if kind == "symbol" else [])
+                for t in typed:
+                    if v.cmd is not None:
+                        v.input_text(fmt(t) if t else "")
+                finish()
+            finally:
+                win.ask_block_details = real
+        else:
+            win.library_panel.insertRequested.emit(lib.get(kind, BC.TWIN), {})
+            if v.cmd is not None:
+                v.input_text(fmt(pt()))
+            if v.cmd is not None and rnd.random() < 0.5:
+                v.input_text("N")
+            finish()
+        new = [e for i, e in s.entities.items() if i not in before and isinstance(e, M.Insert)]
+        if len(new) == 1:
+            with p.edit("mark") as ed:
+                ed.change(s, new[0].copy(attrs=dict(new[0].attrs, TWIN=kind)))
+        BC.twins_apart(p)
+
+    PIECES = "Battery piece color"
+    lib.save_block(M.BlockDef(PIECES, "symbol", [M.Line((0, 0), (0.5, 0)),
+                                                  M.Circle((0.25, 0), 0.1)],
+                              pins=[{"name": "A1", "pos": (0, 0)}, {"name": "A2",
+                                                                    "pos": (0.5, 0)}],
+                              role="device", prefix="CR"))
+
+    def op_block_piece_color():
+        # (0.25) one piece of a block given a color of its own in the block's tab (Edit
+        # block..., the Block tab's Color), saved (Save block, its copies updated): every copy
+        # then draws that piece in that color and the other in the copy's own (the owner: "I
+        # want to key it at the same layer but just change the color of ... a little
+        # rectangle in the block"); ByLayer puts it back to the copy's
+        from PySide6.QtGui import QColor
+        from kanzonascad import no_wheel
+        if not any(e.block_name == PIECES for sh in p.sheets for e in sh.inserts()) or \
+                rnd.random() < 0.3:
+            win.library_panel.insertRequested.emit(lib.get("symbol", PIECES), {})
+            if v.cmd is not None:
+                v.input_text(fmt(pt()))
+            finish()
+        d = win.edit_block("symbol", PIECES)
+        if d is None:
+            return
+        circle = next(e for e in d.view.sheet().entities.values() if isinstance(e, M.Circle))
+        color = rnd.choice(["#00ff00", "#ff00ff", None])
+        d.view.set_selection({circle.id})
+        pick = ("Choose a color...", True) if color else ("ByLayer (the layer's color)", True)
+        real = (no_wheel.get_item, no_wheel.get_color)
+        no_wheel.get_item = lambda *a, **k: pick
+        no_wheel.get_color = lambda *a, **k: QColor(color or "#000000")
+        try:
+            win.acts["object_color"].trigger()
+        finally:
+            no_wheel.get_item, no_wheel.get_color = real
+        got = d.view.sheet().entities[circle.id]
+        assert (got.color, got.layer) == (color, circle.layer), "Color in the block's tab: %r" % (
+            (got.color, got.layer),)
+        from unittest import mock
+        with mock.patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+            assert win.save_block(), "Save block failed"
+        for sh in p.sheets:
+            for e in sh.inserts():
+                if e.block_name != PIECES or e.defn is None:
+                    continue
+                cols = {type(w).__name__: w.color for w in e.world_entities()
+                        if isinstance(w, (M.Line, M.Circle))}
+                assert cols == {"Line": e.color, "Circle": color or e.color}, \
+                    "a copy of %s draws its pieces %r (piece %r, copy %r)" % (
+                        PIECES, cols, color, e.color)
+                BC.CHECKED["a block piece's own color on its copies"] += 1
+
+    def op_lock_file():
+        # (0.25) the battery's project saved and held open for editing by this copy, as Open
+        # holds it; opened in a second copy (a window of its own, someone on another
+        # computer, who picks the question's default, Open read-only): it comes up read-only,
+        # its Save refused with the file left as it was (after an edit in it, some of the
+        # time); closed, it leaves this copy's lock note; and this copy closing it leaves none
+        from kanzonascad import filelock as FL
+        path2 = os.path.join(out, "locked.kzcad")
+        p.save(path2, backups=0)
+        with open(path2, "rb") as f:
+            raw = f.read()
+        mine = FL.acquire(path2, FL.Who("battery", "BATTERY-PC"))
+        w2, _v2 = window()
+        w2.lock_who = FL.Who("someone", "OTHER-PC")
+        asked = []
+        w2.ask_locked = lambda path, info: asked.append(info) or "read_only"
+        try:
+            d2 = w2.open_path(path2)
+            assert d2 is not None and d2.project.read_only, "not opened read-only"
+            assert [a.get("computer") for a in asked] == ["BATTERY-PC"], asked
+            assert "(read-only)" in w2.windowTitle(), w2.windowTitle()
+            if rnd.random() < 0.5:
+                with d2.project.edit("line") as ed:
+                    ed.add(d2.project.sheets[0], M.Line(pt(), pt()))
+            assert not w2.save(), "a read-only project saved"
+            with open(path2, "rb") as f:
+                assert f.read() == raw, "Save wrote over a read-only project's file"
+            d2.project.saved_at = len(d2.project.undo_stack)
+            w2.close_tab(w2.tabs.indexOf(d2))
+            got = FL.read(path2)
+            assert got is not None and got["id"] == mine.info["id"], \
+                "closing the read-only copy took the lock note: %r" % (got,)
+        finally:
+            for _w, o in w2.documents():
+                o.project.saved_at = len(o.project.undo_stack)
+            w2.close()
+            mine.release()
+        assert FL.read(path2) is None, "the lock note stayed after the project closed"
+        BC.CHECKED["a project open elsewhere opened read-only"] += 1
+
     imported = {"symbol": [], "footprint": []}    # (names op_import_blocks brought in)
 
     def op_import_blocks():
@@ -4407,6 +4997,14 @@ def random_editing(log, out, ops, seed, drawing=None):
         sides = sorted([(pin[0] - bb[0], (-1, 0)), (bb[2] - pin[0], (1, 0)),
                         (pin[1] - bb[1], (0, -1)), (bb[3] - pin[1], (0, 1))])
         others = [q for n, q in e.pin_points() if G.dist(q, pin) > wires.TOL]
+        # (only out of a side the pin is on: a pin inside the symbol's drawing (an imported
+        # block's pins go anywhere) is reached round the drawing, as Wire goes round symbols,
+        # never straight through it; the long battery, seed 4902 step 2850: a pin half an
+        # inch inside, the way round past another pin, refused as it should be)
+        sides = [(m, d) for m, d in sides if m <= wires.TOL]
+        if not sides:
+            BC.CHECKED["imported symbol's pin inside its drawing: skipped"] += 1
+            return
         ways = [(pin[0] + d[0] * 2.0 * k, pin[1] + d[1] * 2.0 * k) for _m, d in sides]
         ways = [a for a in ways if all(G.dist_to_segment(q, a, pin) > wires.TOL
                                        for q in others)]
@@ -4444,8 +5042,9 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_switch_sheet, 2), (op_big, 1), (op_snap, 3), (op_zoom, 1),
              (op_mouse_window, 3), (op_blank_press, 2), (op_lasso, 2), (op_drag, 2), (op_pan, 1), (op_undo, 6),
              (op_redo, 4), (op_print, 2), (op_window, 2), (op_update_blocks, 1),
-             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2),
-             (op_import_blocks, 1)]
+             (op_distribute, 2), (op_del_dot, 1), (op_symbol_on_bus, 2), (op_tag_grip, 2), (op_bus_land, 2), (op_dash_box, 2), (op_array, 2), (op_offset, 2), (op_mid_grip, 2), (op_number, 2), (op_wire_around, 2), (op_bus_around, 2), (op_wire_run, 2), (op_block_pins, 1), (op_block_attrs, 1), (op_pdf_import, 2), (op_tap, 2), (op_wire_label, 2), (op_fp_labels, 2), (op_wire_size, 2), (op_move_area, 2), (op_dim_units, 2), (op_frame, 1), (op_wire_color, 1), (op_arrow_pair, 1), (op_fp_label_color, 1), (op_fp_label_sizes, 2), (op_xref_device, 1), (op_bus_pick, 1), (op_copy_onto_wire, 1), (op_contact_blocks, 1), (op_column_feed, 1), (op_source_master, 1), (op_pdb, 1), (op_picture, 1), (op_array_edit, 2), (op_assign_part, 1), (op_report_sheet, 1), (op_io_list, 1), (op_io_numbers, 1), (op_ladder, 2), (op_trace, 2),
+             (op_import_blocks, 1), (op_props_panel, 3), (op_missing_fp, 2),
+             (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -4470,6 +5069,8 @@ def random_editing(log, out, ops, seed, drawing=None):
                     blocks_known(p, other)
                 BC.footprints_follow(p)
                 BC.arrows_follow(p)
+                BC.missing_right(win, p)
+                BC.twins_apart(p)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()
@@ -4734,6 +5335,20 @@ def mixed_project(win):
         ed.add(panel, M.Dimension((4, 10), (5.5625, 10), (5, 12), height=0.125 * panel.k(),
                                   units="1/16"))
         ed.sheet_meta(panel, show_title_block=False)
+    # (0.24.1) a footprint whose label lines have sizes of their own, in its block and on the
+    # copy, one turned and drawn as set (Keep readable off), on the 1:4 panel sheet
+    fpn = sorted(n for n, d in lib.blocks("footprint")[0].items() if d.builtin)[0]
+    fpd = M.BlockDef.from_dict(dict(lib.get("footprint", fpn).to_dict(),
+                                    label_sizes={"TAG": 0.12}))
+    with p.edit("a footprint with sized label lines") as ed:
+        ed.block(fpd)
+        fpi = ed.add(panel, M.Insert(fpn, (20, 20), defn=p.blocks[fpn],
+                                     attrs={"TAG": "M9", "CAT": "100-C09", "HP": "5"},
+                                     tag_h=0.08 * panel.k(), label="tag,cat,HP",
+                                     label_sizes={"HP": 0.2}, label_as_set=["CAT"],
+                                     attr_rot={"@CAT": 180.0}))
+    assert {k: t.height for k, t in fpi.label_texts()} == {
+        "tag": 0.12 * panel.k(), "cat": 0.08 * panel.k(), "HP": 0.2 * panel.k()}
     with p.edit("a wire showing its color") as ed:
         w0 = next(iter(p.sheets[0].wires()), None)
         if w0 is not None:
@@ -4767,6 +5382,22 @@ def mixed_project(win):
         ed.project_settings({"cables": {rs[0]["key"]: pull.clean_cable(
             {"tag": "W101", "type": "4C #14 SOOW", "marking": "colors",
              "colors": {rs[0]["conductors"][0]["num"]: "RED"}})}})
+    # (0.25) devices without a footprint: CB1 ticked No footprint needed, PLC1 given a
+    # footprint on the panel sheet (the coil is in the field)
+    from kanzonascad import missing_fp, tags
+    with p.edit("footprints") as ed:
+        s = p.sheets[0]
+        cb = [e for e in s.inserts() if e.attrs.get("TAG") == "CB1"][0]
+        ed.change(s, cb.copy(attrs=missing_fp.with_flag(cb.attrs, True)))
+        plc = [e for e in s.inserts() if e.attrs.get("TAG") == "PLC1"][0]
+        ed.add(panel, M.Insert(fpn, (30, 20), defn=p.blocks[fpn],
+                               attrs=tags.link_footprint({}, plc, p.blocks[fpn]),
+                               tag_h=0.08 * panel.k(), label="tag"))
+    got = {(sh.id, e.id) for sh, e in missing_fp.find(p).missing}
+    assert got == BC.missing_footprints(p), (got, BC.missing_footprints(p))
+    assert not any(e.attrs.get("TAG") in ("CB1", "PLC1", "CR1") for _sh, e in
+                   missing_fp.find(p).missing), [e.attrs.get("TAG") for _sh, e in
+                                                 missing_fp.find(p).missing]
     v.show_sheet(p.sheets[0].id)
     # (0.21) a picture kept in the project (a logo), on the first sheet
     fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))
@@ -4946,6 +5577,20 @@ def files(log, out):
 
 # ---- 4. speed ------------------------------------------------------------------------------
 def speed(log, out):
+    # (what the sections before left alive set aside, so Python's collector doesn't go
+    # through it all on every full collection here: on CI the clean up took 3.27 s after a
+    # 3,000-step run, 1.5-2 s after a short one, the long battery, 0.25, seed 4931; what
+    # these steps make themselves is still collected and timed)
+    import gc
+    gc.collect()
+    gc.freeze()
+    try:
+        return _speed(log, out)
+    finally:
+        gc.unfreeze()
+
+
+def _speed(log, out):
     res = []
     p = M.Project.new()
     s = p.sheets[0]

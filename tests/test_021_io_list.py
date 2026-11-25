@@ -115,6 +115,29 @@ class IoListTest(unittest.TestCase):
         wb.save(path)
         self.assertEqual(len(self.win.import_io_list(path)), 2)
 
+    def test_clear_of_a_big_title_block(self):
+        # (a title block of yours over most of the lower sheet: the module and its texts went
+        # over it, as the battery found, 0.25 seed 7; now moved clear, or the sheet given the
+        # biggest scale they fit at)
+        from kanzonascad.scalefit import outside
+        with self.p.edit("big title block") as ed:
+            ed.add(self.p.title_block, M.Polyline([(2.6, 0.5), (16.4, 0.5), (16.4, 6.1),
+                                                   (2.6, 6.1)], True))
+        made = self.win.import_io_list(self.path)
+        self.assertEqual(len(made), 2)
+        for s in made:
+            self.assertIsNone(outside(self.p, s), s.title)
+            texts = [e for e in s.entities.values() if isinstance(e, M.Text)]
+            self.assertEqual(len(texts), 3 if s is made[0] else 1)
+            # (each beside its terminal on paper, at the sheet's scale)
+            k = s.k()
+            pins = [q for _n, q in s.inserts()[0].pin_points()]
+            for t in texts:
+                self.assertAlmostEqual(t.height, io_list.TEXT_H * k)
+                side = 0.15 * k if t.align == "right" else -0.15 * k
+                self.assertLess(min(G.dist((t.pos[0] + side, t.pos[1] - 0.03 * k), q)
+                                    for q in pins), 1e-9)
+
 
 if __name__ == "__main__":
     unittest.main()

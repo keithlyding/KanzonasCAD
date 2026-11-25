@@ -6,6 +6,69 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.25
+
+**New**
+- Properties panel (Ctrl+1, or View > Properties panel), like AutoCAD's Properties palette: it
+  stays open beside the drawing and shows what you select, so you don't have to double-click
+  or right-click each time. Change a field there and it applies at once (Enter, or click
+  away); Undo takes it back.
+- It shows a symbol's or footprint's tag, description, attributes and each text line (shown
+  or not, its size, its angle, keep readable), a wire's number, lock, gauge and color label,
+  a text's wording and height, a line's length and angle, and for anything its layer, color,
+  position and rotation.
+- Select several and a field they share shows their value, or *varies*; set it and they all
+  take it in one step. It never holds up the drawing: it fills a moment after you click.
+- Devices without a footprint: every schematic device that no panel footprint stands for yet
+  is framed in orange on the drawing, and the status bar counts them ("12 devices without a
+  footprint"). Click the count for the list; double-click a row to go to the device. It is
+  also a report (Sheets menu, Output tab), a report sheet, and saves as CSV or Excel.
+- Contacts, off-sheet arrows and other drawing aids are left out, and so are devices in the
+  field (a Location called FIELD, or one no panel sheet has). Tick "No footprint needed" on a
+  device (double-click it, or in the Properties panel) to leave it out too. Project
+  properties, Panel, turns the orange marks off.
+- Explode is on the Home tab, and on the Block tab while you edit a block (to take apart a
+  block placed inside it). Block properties... is back beside Edit block on the Schematic and
+  Panel tabs.
+- Footprint label text sizes, line by line: in Block properties a footprint has Label text
+  sizes, a size for its tag, part number, each rating and the rest. Leave one blank to use
+  the project's Footprint label height. A placed footprint can have its own sizes over its
+  block's (double-click it: Text size in Shown on it); with other footprints selected, they
+  can take the same sizes in one step. The sizes are on paper, so they print the same on a
+  1:4 panel sheet.
+
+- A project open for editing is marked as such. Opening it in a second KanzonasCAD, on your
+  computer or someone else's, says who has it open and since when, and offers Open read-only
+  (the default), Open anyway or Cancel. Read-only, "(read-only)" shows in the tab and title,
+  and everything works but saving over the file: Save As makes your own copy, which you can
+  edit. File > Reopen for editing opens it for editing once the other copy has closed it.
+- A note left by a KanzonasCAD that crashed on this computer is taken over without asking. A
+  project in a folder you can't write to opens read-only, and the command line says why.
+
+**Fixed**
+- Turning a footprint label line (its Angle) now stays: it went back to how the footprint was
+  turned. A turned line turns with the footprint and is kept readable (180 is drawn as 0, 270
+  as 90); untick Keep readable to draw it exactly at its angle.
+- A symbol and a footprint with the same name now stay apart everywhere: Make block, Import
+  I/O list and Save to library as part could still put one in the other's place. Lists,
+  reports and labels show the name you gave it, not "name (footprint)". A project where one
+  already took the other's place gets the lost one back from your library when it opens.
+- A cross-reference to something exactly half a rung below a ladder's last rung named a rung
+  past the end (763 under a ladder ending at 762); it names the last rung now.
+- Trim on a closed polyline clicked right where something crosses it now cuts it: it lit the
+  whole loop as cut away and then kept it all.
+- Make block now tags the device it places (CR101), as Insert does; it had no tag, and a
+  copy of it locked with Lock numbers stayed without one, so a footprint linked to it showed
+  no tag.
+- In a PDF export, a frozen sheet's out-of-date reference to a place outside the zones ("2-?")
+  now links to that sheet.
+- Import I/O list no longer puts a module over a large title block: it is moved clear of it,
+  or the sheet gets a scale it fits at.
+- One piece of a block in a color of its own (a small rectangle, say) now stays that color
+  after Save block: every copy draws it in that color and the rest of the block in the copy's
+  color. It went back to the copy's color. Make block keeps such a color too. The Block tab has
+  Color, and the Properties panel's Color works in a block's tab.
+
 ## 0.24
 
 **New**
