@@ -8,6 +8,7 @@ import time
 import unittest
 
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
 
 from tests.util import APP, window, type_in, NEAREST
@@ -511,6 +512,10 @@ class TraceTest(unittest.TestCase):
         # (the sheet drawn first: drawing 1,500 coils' cross-references the first time took
         # 3.7 s on CI and fell inside the time below, which is Trace's alone)
         self.v.repaint()
+        # (and what the tests before left waiting on the event loop done first: a closed
+        # project's memory given back (gcpolicy.sweep, 0.26) ran inside the time below, 0.54 s
+        # on the Windows build)
+        QApplication.processEvents()
         t = time.perf_counter()
         self.trace()
         first = time.perf_counter() - t
