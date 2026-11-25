@@ -259,6 +259,32 @@ class PdfLinksTest(unittest.TestCase):
         self.check_link(reader, 0, self.s1, held[0], 1, self.s2, M.Line(mid, mid))
         self.assertGreater(BC.pdf_links_right(self.p, path, self.p.sheets), 0)
 
+    def test_a_rung_number_on_two_sheets_one_left_out(self):
+        # (the long battery, 0.25, seed 4923: places by ladder, the coil on rung 137 of sheet
+        # 1, and sheet 3 has a rung 137 too (a ladder's first number typed); sheet 1 left out
+        # of the PDF, the contact's "137" on sheet 2 rightly has no link, since what it names
+        # isn't in the PDF; the check took "137" for a place in the PDF, sheet 3's rung)
+        from tests import battery_checks as BC
+        self.p.settings["referencing"] = "ladder"
+        with self.p.edit("ladders") as ed:
+            ed.add(self.s1, M.Ladder((1.0, 9.0), (6.0, 9.0), rungs=1, spacing=0.5, first=137))
+            ed.add(self.s3, M.Ladder((10.0, 30.0), (40.0, 30.0), rungs=1, spacing=2.0,
+                                     first=137))
+        self.assertEqual(self.p.zone_text(self.s1, *self.coil.pos), "137")
+        self.ref(self.s2, "137")
+        path, reader, _n = self.export([self.s2, self.s3])
+        page = reader.pages[0]
+        item = self.ref(self.s2, "137")
+        tb = xrefs.text_item(item).bbox()
+        mid = page_xy(self.s2, (tb[0] + tb[2]) / 2.0, (tb[1] + tb[3]) / 2.0)
+        self.assertEqual([a for a in self.annots(page)
+                          if a["/Rect"][0] <= mid[0] <= a["/Rect"][2] and
+                          a["/Rect"][1] <= mid[1] <= a["/Rect"][3]], [])
+        BC.pdf_links_right(self.p, path, [self.s2, self.s3])
+        # with sheet 1 in it, the link is there and the check still wants it
+        path, reader, _n = self.export([self.s1, self.s2, self.s3], "all.pdf")
+        self.assertGreater(BC.pdf_links_right(self.p, path, [self.s1, self.s2, self.s3]), 0)
+
     def test_the_battery_check_with_texts_drawn_over_each_other(self):
         # (the battery, seeds 41 and 468 after 0.23: a contact's "?", or an arrow's device
         # line, drawn under another reference; that one's link over it is right, not a link

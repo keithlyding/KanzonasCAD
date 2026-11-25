@@ -826,6 +826,16 @@ def pdf_links_right(project, path, sheets):
                         return None
         return "leads to nothing named %r: %s" % (place, box)
 
+    def named_on(ts, place):
+        """Whether a sheet holds something the text names (as wrong() finds it) at place."""
+        unzoned = "%s-?" % project.sheet_number(ts)
+        for e in ts.entities.values():
+            if belongs(e, devs, parents, names):
+                q = ref_point(e)
+                if (project.zone_text(ts, q[0], q[1]) or unzoned) == place:
+                    return True
+        return False
+
     n_links = 0
     for i, s in enumerate(sheets):
         page = reader.pages[i]
@@ -857,6 +867,12 @@ def pdf_links_right(project, path, sheets):
                 over = [j for j, r in enumerate(rects)
                         if r[0] <= mid[0] <= r[2] and r[1] <= mid[1] <= r[3]]
                 where = places.get(place, [])
+                if not held:
+                    # (only the pages holding what it names: a place as written can be on
+                    # more than one sheet (rung 137 on two ladders, one numbered by hand), and
+                    # the one it names may be left out of the PDF while another page has a
+                    # rung of that number: the long battery, 0.25, seed 4923)
+                    where = [w for w in where if named_on(sheets[w], place)]
                 if not where:
                     # (no link of its own; one over it must be another text's, drawn over it
                     # or under it: looked at once the page's texts have taken theirs)
