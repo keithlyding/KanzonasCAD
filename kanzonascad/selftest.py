@@ -944,12 +944,26 @@ def run(log_path):
         app.processEvents()
         ticks, clicks, whole, moves, heads = [], [], [], [], []
         real_work = w._trace_work
+        import gc
+        gc.collect()        # (Trace timed, not a collection of the sheets made before)
+        in_gc = [0.0, None]     # (time in Python's collector during a step, when one started)
+
+        def collector(phase, info):
+            if phase == "start":
+                in_gc[1] = time.perf_counter()
+            elif in_gc[1] is not None:
+                in_gc[0] += time.perf_counter() - in_gc[1]
+                in_gc[1] = None
 
         def timed():
+            # (Python's collector can stop the program anywhere for a while, on any work, the
+            # 0.25 build: 243 ms in one step; Trace's own slices are what this times)
+            in_gc[0] = 0.0
             t0 = time.perf_counter()
             real_work()
-            ticks.append(time.perf_counter() - t0)
+            ticks.append(time.perf_counter() - t0 - in_gc[0])
         w._trace_work = timed
+        gc.callbacks.append(collector)
         try:
             w.trace_dock.show()
             t0 = time.perf_counter()
@@ -977,6 +991,7 @@ def run(log_path):
                 heads.append(w.trace_panel.header.text())
             assert sum(h.startswith("Wire") for h in heads) == 20, heads
         finally:
+            gc.callbacks.remove(collector)
             w._trace_work = real_work
             w.trace_dock.hide()
             p.saved_at = len(p.undo_stack)
