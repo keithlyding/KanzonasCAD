@@ -55,6 +55,13 @@ build fails without them.
   already took the other's place gets the lost one back from your library when it opens.
 - A cross-reference to something exactly half a rung below a ladder's last rung named a rung
   past the end (763 under a ladder ending at 762); it names the last rung now.
+- Trim on a closed polyline clicked right where something crosses it now cuts it: it lit the
+  whole loop as cut away and then kept it all.
+- Make block now tags the device it places (CR101), as Insert does; it had no tag, and a
+  copy of it locked with Lock numbers stayed without one, so a footprint linked to it showed
+  no tag.
+- In a PDF export, a frozen sheet's out-of-date reference to a place outside the zones ("2-?")
+  now links to that sheet.
 - Import I/O list no longer puts a module over a large title block: it is moved clear of it,
   or the sheet gets a scale it fits at.
 - One piece of a block in a color of its own (a small rectangle, say) now stays that color

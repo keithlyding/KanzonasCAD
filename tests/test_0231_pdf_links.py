@@ -239,6 +239,26 @@ class PdfLinksTest(unittest.TestCase):
         mid = (x0 + (j + 0.5) * cw, y1 - (i + 0.5) * rh)
         self.check_link(reader, 2, self.s3, held, 0, s1, M.Line(mid, mid))
 
+    def test_a_frozen_sheet_out_of_date_naming_a_place_outside_the_zones(self):
+        # (the long battery, 0.25, seed 4912: a frozen sheet's "2069 / 2-?", the other arrow
+        # since moved into a zone, had no link, while "2-?" is a place on page 2: it leads to
+        # the middle of that sheet's frame)
+        from tests import battery_checks as BC
+        with self.p.edit("the destination off the zones") as ed:
+            ed.change(self.s2, self.now(self.s2, self.dst).moved(-60.0, 0.0))
+        with self.p.edit("freeze") as ed:
+            xrefs.freeze(ed, self.p, self.s1, True)
+        held = [t for t in xrefs.shown(self.p, self.s1) if t[2].endswith("2-?")]
+        self.assertEqual(len(held), 1, xrefs.shown(self.p, self.s1))
+        with self.p.edit("back") as ed:
+            ed.change(self.s2, self.now(self.s2, self.dst).moved(60.0, 0.0))
+        self.assertIn(self.s1, xrefs.out_of_date(self.p))
+        path, reader, _n = self.export()
+        x0, y0, x1, y1 = self.s2.layout_zone_frame()
+        mid = self.s2.turn((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+        self.check_link(reader, 0, self.s1, held[0], 1, self.s2, M.Line(mid, mid))
+        self.assertGreater(BC.pdf_links_right(self.p, path, self.p.sheets), 0)
+
     def test_the_battery_check_with_texts_drawn_over_each_other(self):
         # (the battery, seeds 41 and 468 after 0.23: a contact's "?", or an arrow's device
         # line, drawn under another reference; that one's link over it is right, not a link

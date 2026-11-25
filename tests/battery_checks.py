@@ -815,6 +815,9 @@ def pdf_links_right(project, path, sheets):
                 return None
         if held:
             x0, y0, x1, y1 = ts.layout_zone_frame()
+            # (a place outside the sheet's zones, "2-?": the middle of its frame)
+            if place == unzoned and aimed(*ts.turn((x0 + x1) / 2.0, (y0 + y1) / 2.0)):
+                return None
             cw, rh = (x1 - x0) / ts.cols, (y1 - y0) / ts.rows
             for ri in range(ts.rows):
                 for ci in range(ts.cols):

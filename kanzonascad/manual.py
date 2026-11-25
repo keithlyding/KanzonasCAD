@@ -461,7 +461,7 @@ attributes window's Shown on the drawing (or Show or hide attributes).</li>
 <b>tag</b> goes (Enter puts it above).</li>
 </ol>
 <p>It is saved to your library and, unless you untick it, the selected objects become the
-block. <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
+block (a device symbol's copy tagged as Insert tags one: CR601 on page 6). <b>New part...</b> then links a manufacturer and catalog number to the symbol and the
 footprint.</p>
 <p><b>Assign part...</b> (Library menu, the Panel tab's Parts): select the devices
 (every contactor on the sheet, say), then pick one of your library's parts for them, from those
@@ -2139,7 +2139,8 @@ reader and it goes to the page of the sheet it names, zoomed in on what it names
 neighbors in view. The line under a coil leads to that contact, the place under a contact to
 its coil, a source or destination arrow's "2046 / 7-A2" to its other half, an off-sheet
 connector's place to the connector there (one link per place where it lists several). A
-frozen sheet's reference that is out of date leads to the zone it says. A reference to a sheet
+frozen sheet's reference that is out of date leads to the zone it says (one saying "2-?", a
+place outside the zones, to the middle of sheet 2). A reference to a sheet
 that isn't in the PDF has no link. (The links need the pypdf library, part of the installed
 and portable programs; run from source without it, the PDF is written without links and the
 command line says so.)</li>

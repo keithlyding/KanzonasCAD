@@ -127,8 +127,7 @@ def trim(ent, click, cutters):
         ss = sorted({0.0 if abs(s - total) < EPS else s for s in ss})
         if len(ss) < 2:
             return []
-        lo = max([s for s in ss if s < s0 - EPS], default=ss[-1])
-        hi = min([s for s in ss if s > s0 + EPS], default=ss[0])
+        lo, hi = _loop_cut(ss, s0)
         # keep from hi around to lo (it may pass the start)
         if hi < lo:
             piece = _poly_piece(pts, cum, hi, lo)
@@ -155,6 +154,17 @@ def trim(ent, click, cutters):
         return out
 
     return None
+
+
+def _loop_cut(ss, s0):
+    """A closed polyline cut at s0 (along it), between two or more crossings ss (sorted):
+    (the crossing at or before the click, the first after it, going round). A click right on
+    a crossing cuts from that crossing on, as _circle_cut: before, that crossing was neither
+    before nor after the click, both ends of the cut came out as the next one, and Trim kept
+    the whole loop while it lit the whole loop as cut away (the long battery, 0.25, seed 4913)."""
+    lo = max([s for s in ss if s <= s0 + EPS], default=ss[-1])
+    hi = min([s for s in ss if s > s0 + EPS], default=ss[0])
+    return lo, hi
 
 
 def _circle_cut(ent, click, angs):
@@ -222,8 +232,7 @@ def trimmed_away(ent, click, cutters):
         ss = sorted({0.0 if abs(s - total) < EPS else s for s in ss})
         if len(ss) < 2:
             return [ent]
-        lo = max([s for s in ss if s < s0 - EPS], default=ss[-1])
-        hi = min([s for s in ss if s > s0 + EPS], default=ss[0])
+        lo, hi = _loop_cut(ss, s0)
         if lo < hi:
             return [Polyline(_poly_piece(pts, cum, lo, hi))]
         a = _poly_piece(pts, cum, lo, total)

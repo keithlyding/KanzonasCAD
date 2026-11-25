@@ -662,12 +662,17 @@ def link_spans(project, sheet):
 
 
 def zone_aims(project):
-    """{zone as written ("2-F3"): (sheet id, x, y) of its middle} for every sheet's grid."""
+    """{zone as written ("2-F3"): (sheet id, x, y) of its middle} for every sheet's grid, and
+    "2-?" (a place outside a sheet's zones) the middle of that sheet's frame: a frozen sheet's
+    "2069 / 2-?" had no link while the check of the PDF's links (and a reader) took it for a
+    place on page 2 (the long battery, 0.25, seed 4912)."""
     out = {}
     for s in project.sheets:
         x0, y0, x1, y1 = s.layout_zone_frame()
         cw, rh = (x1 - x0) / s.cols, (y1 - y0) / s.rows
         num = project.sheet_number(s)
+        mx, my = s.turn((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+        out.setdefault("%s-?" % num, (s.id, mx, my))
         for i, row in enumerate(s.row_labels()):
             for j, col in enumerate(s.col_labels()):
                 x, y = s.turn(x0 + (j + 0.5) * cw, y1 - (i + 0.5) * rh)

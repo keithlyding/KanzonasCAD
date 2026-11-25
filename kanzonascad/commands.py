@@ -3056,9 +3056,16 @@ class MakeBlockCmd(Command):
                 ed.block(M.renamed_block(defn, pname))
                 for e in self.ents:
                     ed.remove(sheet, e.id)
-                ins = ed.add(sheet, M.Insert(pname, self.base_pt,
-                                             defn=project.blocks[pname],
-                                             layer=self.ents[0].layer if self.ents else "0"))
+                # (a device's copy tagged as Insert tags one: CR601 and its hidden id; up to
+                # 0.25 it had neither, so nothing could link to it as its device)
+                from . import tags
+                pdef = project.blocks[pname]
+                ins = ed.add(sheet, M.Insert(
+                    pname, self.base_pt, defn=pdef,
+                    attrs=tags.new_attrs(project, sheet, pdef, {}),
+                    tag_h=project.settings.get("tag_height") * sheet.k()
+                    if pdef.kind == "symbol" else None,
+                    layer=self.ents[0].layer if self.ents else "0"))
             self.ctx.set_selection({ins.id})
         self.ctx.message("Saved %s %s to your library" % (
             "symbol" if d["kind"] == "symbol" else "footprint", defn.name))
