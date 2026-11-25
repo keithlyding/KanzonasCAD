@@ -437,11 +437,16 @@ class WindowTest(unittest.TestCase):
         def turn(prog):
             turns.append(1)
             real_turn(prog)
+        import gc
+        gc.collect()
+        gc.freeze()     # (the tests before's objects not gone through by Python's collector in
+        #                 the middle: 0.17 s once on the Linux build, in a run of 305 tests, 0.25)
         try:
             L._write_json = slow
             IB.Progress.turn = turn
             done, longest = IB.put_in(self.win, imp)
         finally:
+            gc.unfreeze()
             L._write_json = real
             IB.Progress.turn = real_turn
         dlg.deleteLater()
