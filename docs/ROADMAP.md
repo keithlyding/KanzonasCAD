@@ -324,9 +324,18 @@ nobody understands).
        it plain parts.
      - A change to the type reaches placed ones only through a command (Update from type)
        that shows what will change first, not silently.
-     - Ratings start as values typed into the type with formulas (fuse = 1.75 x FLA), not
-       code tables built in: a wrong built-in number could reach a real panel. Built-in
-       tables later, if at all, marked "check".
+   - **Built-in UDTs and your own** (the owner, Nov 26 2026: "If I have three different
+     style motor circuits, I would use three different UDTs"): a few UDTs come with the
+     program, read-only as the built-in blocks and parts are (editing one saves your own
+     copy); you make your own from a saved circuit and keep them in either library folder.
+   - **Ratings are worked out automatically and can be overridden** (the owner: "I'm good
+     with overridable auto calculations"): from the motor's HP and voltage, the full-load
+     current from the NEC motor tables (430.247-430.250), then each device's rating from it
+     by a rule the UDT holds (for example a dual-element fuse at a percent of the table
+     current, per Table 430.52; the percent is the UDT's, editable, so a shop's own rule or
+     a drive maker's fuse table can be used). Any device's rating can be typed over; an
+     overridden one is kept through a rebuild and shown as overridden. Built-in tables are
+     marked to check against the code edition in force.
    - Two phases: choices, optional parts and rebuild in place first; values and ratings
      second.
 
