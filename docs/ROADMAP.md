@@ -307,6 +307,28 @@ nobody understands).
      X) as an option, vertical (IEC-style, top-to-bottom) layouts, and IEC versions of the
      limit, pressure, temperature and float switches, the fused disconnect and starter
      combinations, drive terminals and the distribution blocks.
+7. **UDTs** (0.30, the owner, Nov 26 2026; named "UDT" as in PLCs and Ignition, the owner's
+   choice): a circuit type built on saved circuits, for example a whole motor circuit
+   (disconnect, manual starter, VFD, terminal blocks, motor).
+   - **Choices** (the manual starter swappable with fuses), **optional parts** that can be
+     added or left out (line and load reactors), and **ratings** for every device.
+   - Placed in any direction; its devices, wires and labels become ordinary objects with
+     their own tags, wire numbers, cross-references and parts, "as if it was a bunch of
+     individual parts like normal" (so reports, terminal strips and the battery see them as
+     any other), tied together by a hidden group id.
+   - Proposed (to confirm with the owner when it is started):
+     - A placed UDT keeps its type and choices: select it, change a choice (fuses for the
+       starter, add a load reactor) and it is rebuilt in place, devices that stay keeping
+       their tags and wire numbers.
+     - A device edited by hand inside one keeps the edit and the rebuild warns; Detach makes
+       it plain parts.
+     - A change to the type reaches placed ones only through a command (Update from type)
+       that shows what will change first, not silently.
+     - Ratings start as values typed into the type with formulas (fuse = 1.75 x FLA), not
+       code tables built in: a wrong built-in number could reach a real panel. Built-in
+       tables later, if at all, marked "check".
+   - Two phases: choices, optional parts and rebuild in place first; values and ratings
+     second.
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,
