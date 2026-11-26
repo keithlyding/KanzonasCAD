@@ -1009,3 +1009,111 @@ def twins_apart(project):
                                                                        got)
     if len(seen) == 2:
         CHECKED["a symbol and a footprint of one name kept apart"] += 1
+
+
+TOL = 1e-6
+
+
+def _has_term(e):
+    d = getattr(e, "defn", None)
+    return isinstance(e, M.Insert) and d is not None and d.kind == "symbol" and \
+        any(a.get("attr") == "TERM" for a in d.attr_texts)
+
+
+def _wire_group(wires, start):
+    """The wires joined to start (one's end on another), worked out wire by wire."""
+    out = {w.id for w in start}
+    todo = list(start)
+    while todo:
+        w = todo.pop()
+        for o in wires:
+            if o.id in out:
+                continue
+            if any(o.touches(q, TOL) for q in (w.points[0], w.points[-1])) or \
+                    any(w.touches(q, TOL) for q in (o.points[0], o.points[-1])):
+                out.add(o.id)
+                todo.append(o)
+    return out
+
+
+def strips_right(project):
+    """(0.27) The terminal strips as the terminals on the drawing say, worked out here from
+    every terminal and wire (not strips.py's nets or wirenums' groups): every terminal is in
+    exactly one strip, the one of its strip device's tag (else its own); a strip's numbers are
+    each on one row; a strip with nothing kept is in number order; each terminal's wire numbers
+    (both sides) are those of the wires on its pins, and what its wires land on on its own
+    sheet (both sides) the pins of the symbols those wires reach there (off-sheet connectors
+    and arrows not landings); its internal and external sides are two of its pins."""
+    from kanzonascad import strips, wirenums
+    found = strips.find(project)
+    seen = collections.Counter()
+    by_place = {}
+    devs = {}
+    for s in project.sheets:
+        for e in s.inserts():
+            d = e.defn
+            if d is not None and d.kind == "symbol" and d.role in ("device", "parent") and \
+                    d.prefix and e.attrs.get("DEV"):
+                devs[e.attrs["DEV"]] = e
+    kept = project.settings.get("strips") or {}
+    for st in found:
+        nums = [r.num for r in st.rows if r.num]
+        assert len(nums) == len(set(nums)), "strip %s has a number twice: %r" % (st.tag, nums)
+        if st.key not in kept and "tag:" + st.tag.upper() not in kept:
+            assert nums == sorted(nums, key=strips.natural), \
+                "strip %s out of number order with nothing kept: %r" % (st.tag, nums)
+            CHECKED["terminal strip in number order"] += 1
+        for r in st.rows:
+            assert r.spare == (not r.places), "terminal %s-%s: spare %r, drawn %d times" % (
+                st.tag, r.num, r.spare, len(r.places))
+            for s, e in r.places:
+                seen[(s.id, e.id)] += 1
+                by_place[(s.id, e.id)] = (st, r)
+    numbered = wirenums.enabled(project)
+    for s in project.sheets:
+        terms = [e for e in s.inserts() if _has_term(e)]
+        if not terms:
+            continue
+        wires = list(s.wires())
+        many = len(wires) > 1500 or any(w.own_num for w in wires)
+        for e in terms:
+            assert seen[(s.id, e.id)] == 1, "terminal %s on sheet %s in %d strips' rows" % (
+                e.id, s.id, seen[(s.id, e.id)])
+            st, r = by_place[(s.id, e.id)]
+            par = devs.get(e.attrs.get("PARENT") or "")
+            want = ((par if par is not None else e).attrs.get("TAG") or "").strip() or "TB?"
+            assert st.tag == want, "terminal %s on strip %s, not %s" % (e.id, st.tag, want)
+            assert r.num == (e.attrs.get("TERM") or "").strip(), (r.num, e.attrs.get("TERM"))
+            pins = dict(e.pin_points())
+            mine = [x for x in (r.inside, r.outside) if x is not None]
+            assert all(x.pin in pins for x in mine) and len({x.pin for x in mine}) == len(mine), \
+                "terminal %s-%s's sides %r" % (st.tag, r.num, [x.pin for x in mine])
+            if many or len(r.places) != 1:
+                continue
+            on = [w for q in pins.values() for w in wires if w.touches(q, TOL)]
+            want_nums = {w.num or "?" for w in on} if numbered else set()
+            got_nums = {n for x in mine for n in x.wires}
+            assert got_nums == want_nums, "terminal %s-%s: wires %r, on its pins %r" % (
+                st.tag, r.num, sorted(got_nums), sorted(want_nums))
+            lands, linked = set(), False
+            for name, q in pins.items():
+                group = _wire_group(wires, [w for w in wires if w.touches(q, TOL)])
+                ws = [w for w in wires if w.id in group]
+                for x in s.inserts():
+                    d = x.defn
+                    if d is None or d.kind != "symbol" or not d.pins:
+                        continue
+                    for pn, xq in x.pin_points():
+                        if (x.id, pn) == (e.id, name) or not any(w.touches(xq, TOL)
+                                                                 for w in ws):
+                            continue
+                        if d.wiring == "link":
+                            linked = True       # (on through a connector: maybe back here)
+                        else:
+                            lands.add((x.id, pn))
+            if linked:
+                continue
+            got = {(x.id, pn) for side in mine for sh, x, pn in side.to if sh is s}
+            assert got == lands, "terminal %s-%s lands on %s, its wires reach %s" % (
+                st.tag, r.num, sorted(got), sorted(lands))
+            CHECKED["terminal's wires and landings"] += 1

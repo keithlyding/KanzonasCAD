@@ -60,6 +60,11 @@ BUDGET = {
     "join_undo": 1.0,           # that undone, then drawn
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
                                 # 2,000 devices, half of them in the field
+    # (0.27: terminal strips) 50 sheets, a strip of 100 terminals each (5,000 terminals, a
+    # device wired to each side, 10,000 wires, half the far ends in the field):
+    "strips_open": 0.5,         # Terminal strips... opened: every strip listed, the first shown
+    "strips_plan": 0.5,         # the terminal plan of every terminal worked out
+    "strips_apply": 0.5,        # a strip renumbered backwards and written back (OK), one step
     # (0.23: Trace, Ctrl+E) on 50 sheets of 1,000 lines, 40 coils, 40 contacts and 40 wires:
     "trace_index": 2.0,         # the first list, every sheet indexed (50 sheets)
     "trace_click": 0.005,       # a click (selection change) with the panel open: the lookup
@@ -1083,6 +1088,67 @@ def run(log_path):
         assert dt < BUDGET["pull"], "the pull list took %.2f s" % dt
         return "1,000 conductors to pull of 2,000 wires: %.3f s" % dt
     log.check("speed budget (cables between locations)", pull_list)
+
+    def terminal_strips():
+        from . import strip_window, strips
+        w = state["win"]
+        lib = w.library
+        term, strip, lt = (lib.get("symbol", n) for n in ("Terminal", "Terminal strip",
+                                                            "Pilot light"))
+        p = M.Project.new()
+        while len(p.sheets) < 50:
+            p.sheets.append(p.make_sheet("Sheet %d" % (len(p.sheets) + 1)))
+        for b in (term, strip, lt):
+            p.blocks[b.name] = b
+        for k, s in enumerate(p.sheets):
+            s.location = "MCP"
+            tb = M.Insert(strip.name, (1, 10.5), defn=strip,
+                          attrs={"TAG": "TB%d" % (k + 1), "DEV": "strip%d" % k})
+            s._put(tb)
+            for i in range(100):
+                x, y = 3 + (i % 10) * 1.4, 1 + (i // 10) * 0.9
+                t = M.Insert(term.name, (x, y), defn=term,
+                             attrs={"TAG": tb.attrs["TAG"], "PARENT": "strip%d" % k,
+                                    "TERM": str(i + 1)})
+                s._put(t)
+                pins = dict(t.pin_points())
+                for side, dx in (("1", -0.5), ("2", 0.5)):
+                    d = M.Insert(lt.name, (x + dx, y + 0.3), defn=lt,
+                                 attrs=dict({"TAG": "LT%d_%d%s" % (k, i, side)},
+                                            **({"LOC": "FIELD"} if side == "2" else {})))
+                    s._put(d)
+                    s._put(M.Wire([pins[side], d.pin_points()[0][1]]))
+        from . import wirenums
+        with p.edit("Wire numbers") as ed:          # (numbered, as a project opened is)
+            wirenums.sync(ed, p)
+        p.undo_stack.clear()
+        t0 = time.perf_counter()
+        dlg = strip_window.StripEditorDialog(w, p)
+        do = time.perf_counter() - t0
+        assert dlg.list.count() == 50 and dlg.table.rowCount() == 100, (
+            dlg.list.count(), dlg.table.rowCount())
+        assert "(FIELD)" in dlg.table.item(0, 4).text(), dlg.table.item(0, 4).text()
+        t0 = time.perf_counter()
+        rows = strips.plan_rows(p)
+        dp = time.perf_counter() - t0
+        assert len(rows) == 5000 and rows[0][5].endswith("(FIELD)"), rows[0]
+        lay = dlg.layout_of(0)
+        lay.rows.reverse()
+        lay.renumber(1)
+        t0 = time.perf_counter()
+        assert dlg.apply()
+        da = time.perf_counter() - t0
+        dlg.deleteLater()
+        got = [r.places[0][1].pos for r in strips.find(p, wires=False)[0].rows]
+        assert got[0][1] > got[-1][1], "the strip renumbered backwards: %r" % got[:2]
+        assert len(p.undo_stack) == 1
+        assert do < BUDGET["strips_open"], "Terminal strips... opened in %.2f s" % do
+        assert dp < BUDGET["strips_plan"], "the terminal plan in %.2f s" % dp
+        assert da < BUDGET["strips_apply"], "a strip renumbered and written back in %.2f s" % da
+        return ("50 strips of 100 terminals (10,000 wires): Terminal strips... opened %.3f s, "
+                "the terminal plan %.3f s, a strip renumbered and written back %.3f s"
+                % (do, dp, da))
+    log.check("speed budget (terminal strips)", terminal_strips)
 
     def trace():
         # (Trace, 0.23; the owner: "make sure that the loading of the cross-references doesn't

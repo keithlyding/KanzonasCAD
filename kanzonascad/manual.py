@@ -1228,7 +1228,8 @@ and change the texts and pins, then save it under a name of your own.</li>
 takes a tag, TB601). Placing a terminal asks which strip, as a contact asks for its coil; it
 shows the strip's tag and numbers itself on the strip: 1, 2, 3... (the lowest free number;
 a copy takes the next one). Double-click a terminal to type its number instead. The strip
-lists where its terminals are.</li>
+lists where its terminals are. <b>Terminal strips...</b> puts a strip's terminals in order,
+renumbers them and adds spares and jumpers (Terminal strips, below).</li>
 <li><b>PLC input</b> and <b>PLC output</b> points belong to a <b>PLC I/O card</b> the same
 way, and list under it; double-click a point to type its <b>address</b> (I:0/3, %I0.3...),
 shown under it.</li>
@@ -1461,13 +1462,64 @@ writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workb
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 <p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints
 and goes into the PDF with the drawings: pick the bill of materials, wire list, terminal strip
-list, pull list, panel materials or devices without a footprint, and it comes in as a table (lines and texts on layer
+list, terminal plan, pull list, panel materials or devices without a footprint, and it comes in as a table (lines and texts on layer
 REPORT) on report sheets just after the sheet shown, as many as it takes ("Bill of materials (1
 of 3)"), in the room the border and title block leave; a cell too long for its column ends in
 "…". A report sheet isn't kept up to date as you draw (that would slow every change on a big
 project): <b>Update report sheets</b> (Sheets menu) draws every report sheet again from the
 drawing as it is, and picking a report that has sheets already draws it again there. One Undo
 each.</p>
+
+<h2>Terminal strips</h2>
+<p>A terminal strip is the terminals that share its tag (TB1): the <b>Terminals</b> placed on a
+<b>Terminal strip</b> symbol, or given its tag. Its terminals can be on any sheets; the same
+number drawn twice (on two sheets, say) is one terminal, with the wires of both places.</p>
+<p><b>Terminal strips...</b> (Panel tab: Terminals; Sheets menu) opens the strip editor, on the
+strip of the terminal or strip selected (else the first). The strips are listed on the left,
+with how many terminals each has; on the right the one picked, terminal by terminal in its
+order:</p>
+<ul>
+<li><b>Terminal</b>: its number (? while it has none). Double-click it to type another; a
+number already on the strip is refused.</li>
+<li><b>Internal wire</b> and <b>Internal to</b>, <b>External wire</b> and <b>External to</b>:
+the wire numbers on each side and the devices' pins they go to (<b>CR1:A1</b>; another terminal
+as <b>TB2-4</b>), worked out from the schematic each time, across sheets through off-sheet
+connectors and source and destination arrows. A side is a pin of the terminal. The internal
+side is the one wired inside the strip's location (its sheet's location, or the strip's own:
+Sheet properties, a device's Location), the external side the one going to another location
+(the field, a junction box), shown with that location: <b>LT1:1 (FIELD)</b>. With no
+locations, the left pin (as the terminal is drawn) is internal and the right pin external.</li>
+<li><b>Jumper</b>: the jumper it is on (J1, J2...). <b>Where</b>: the sheet and zone it is
+drawn at, or <b>spare</b>.</li>
+</ul>
+<p>Pick one or more terminals (click, Shift+click, Ctrl+click), then:</p>
+<ul>
+<li><b>Move up</b> and <b>Move down</b>: the terminals picked one place along the strip. The
+order is the strip's own: a strip in number order needs nothing kept, one put in another order
+keeps it (a terminal placed later goes in after the one numbered just below it).</li>
+<li><b>Renumber</b>: every terminal of the strip, spares too, numbered in the order shown from
+the number beside it (1 to start). Terminals without a number get one too.</li>
+<li><b>Add spare</b>: a spare terminal after the one picked (at the end with none picked),
+numbered one more than the highest number on the strip: a terminal on the strip with nothing
+drawn for it. <b>Remove spare</b> takes the spares picked off the strip; a drawn terminal is
+erased on the drawing. A terminal placed later that takes a spare's number (it takes the lowest
+free one) is that terminal from then on.</li>
+<li><b>Add jumper</b>: one jumper bridging the terminals picked (two or more; those already on a
+jumper with them join it). <b>Remove jumper</b> takes the terminals picked off their jumper (a
+jumper left with one terminal is gone). Jumpers are listed in the editor and on the terminal
+plan, not drawn on the schematic.</li>
+</ul>
+<p><b>OK</b> puts the new numbers on the terminals on the drawing (every place each is drawn) and
+keeps each strip's order, spares and jumpers with the project, all the strips changed in one
+step (Edit, Undo takes it back). <b>Cancel</b> keeps nothing.</p>
+<p><b>Terminal plan...</b> (Sheets menu; Output tab, on the Terminals button's menu) lists every
+strip, terminal by terminal in its order: its number, the wire and what it goes to on its
+internal side and on its external side, its jumper (<b>J1: 1, 2, 3</b>: the terminals it
+bridges) and where it is drawn, spares included. <b>Save as CSV or Excel...</b> writes it, and
+<b>Report sheet...</b> draws it on sheets of the project (Terminal plan).</p>
+<p>Not yet: multi-level terminals (each level is a terminal of its own number for now), jumpers
+drawn on the schematic, and a strip drawn on a panel sheet (place its Terminal block footprints
+on the rail).</p>
 
 <h2>Cables between panels</h2>
 <p><b>Cables between locations...</b> (Sheets menu, Output tab: Reports) lists what has to be

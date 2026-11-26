@@ -556,6 +556,14 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
           icon="terminal_list", label="Terminals",
           tip="Every terminal strip, terminal by terminal, with the wires on each side and "
               "where it is (save as CSV)")
+        A("terminal_strips", "Terminal stri&ps...", lambda: self.terminal_strips(),
+          icon="terminal_strips", label="Terminal strips",
+          tip="The terminal strips: each strip's terminals in order with the wires on each "
+              "side and where they go; reorder, renumber, add spares and jumpers (one Undo)")
+        A("terminal_plan", "Terminal p&lan...", self.show_terminal_plan,
+          icon="terminal_plan", label="Terminal plan",
+          tip="Every strip terminal by terminal in its order: the wire and what it goes to on "
+              "the internal and the external side, and its jumper (save as CSV or Excel)")
         A("terminal_count", "Terminal &count...", self.show_terminal_count,
           icon="terminal_count", label="Terminal count",
           tip="How many terminals and jumpers the tapped wires need: a wire number and each of "
@@ -832,7 +840,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
-                  "trace", "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_count", "materials",
+                  "trace", "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_strips",
+                  "terminal_plan", "terminal_count", "materials",
                   "missing_fp", "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb",
@@ -961,6 +970,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                                       a["dim_units"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Arrange", "large", [a["align_obj"], a["distribute"]]),
+            # (Terminal strips: on the Panel tab, as AutoCAD Electrical's terminal strip editor)
+            ("Terminals", "large", [a["terminal_strips"]]),
             ("Reports", "large", [a["materials"], a["missing_fp"]]),
             ("Parts", "small", [a["new_part"], a["assign_part"], a["save_as_part"]]),
             ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
@@ -982,7 +993,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                                  a["import_blocks"]]),
             # (Terminal count on the Terminals button's menu: the tab as wide as before)
             ("Reports", "large", [a["bom"], a["cables"], a["wire_list"],
-                                  split_button([a["terminal_list"], a["terminal_count"]]),
+                                  split_button([a["terminal_list"], a["terminal_plan"],
+                                                a["terminal_count"]]),
                                   a["materials"], a["missing_fp"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
         ])
@@ -3443,6 +3455,45 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                               "Each terminal with the wire numbers on its left and right pins, "
                               "as drawn; a terminal with no number yet shows ?.")
 
+    def terminal_strips(self, key=None):
+        """Terminal strips... (Panel tab, Sheets menu): the strip editor, on the strip of the
+        terminal or strip selected (else the first). Returns whether it changed anything."""
+        v = self.view()
+        if v is None:
+            return False
+        if v.cmd is not None:
+            v.cancel()
+        from . import strip_window, strips
+        if key is None:
+            s = v.sheet()
+            for eid in sorted(v.selection()):
+                e = s.entities.get(eid)
+                if e is not None and strips.is_terminal(e):
+                    key = strips.key_of(e)
+                    break
+                if e is not None and strips.is_strip_device(e):
+                    key = e.attrs.get("DEV")
+                    break
+        changed = strip_window.strip_editor(self, v.project, key)
+        if changed:
+            self._say("Terminal strips changed (Undo takes them back)")
+        return changed
+
+    def show_terminal_plan(self):
+        v = self.view()
+        if v is None:
+            return
+        from . import strips
+        dialogs.report_dialog(self, "Terminal plan", strips.PLAN_HEAD, strips.plan_rows(v.project),
+                              self._last_dir(), "terminal plan.csv",
+                              "No terminal strips yet: place a Terminal strip and its "
+                              "Terminals on a schematic.",
+                              "Each strip in its order (Terminal strips...): each terminal's "
+                              "wire and what it goes to on its internal side (wired inside the "
+                              "strip's location) and its external side (to another location; "
+                              "with no locations, its right pin), its jumper, and where it is "
+                              "drawn.")
+
     def show_terminal_count(self):
         v = self.view()
         if v is None:
@@ -4166,7 +4217,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",
-                  "rail", "duct", "materials", "missing_fp", "bom", "cables", "wire_list", "terminal_list", "terminal_count", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "rail", "duct", "materials", "missing_fp", "bom", "cables", "wire_list", "terminal_list", "terminal_strips", "terminal_plan", "terminal_count", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
