@@ -745,11 +745,16 @@ class MoveCmd(_TwoPoint):
                 for _n, q in e.pin_points():
                     own.update(w.id for w in sheet.query_point(q, 1e-6)
                                if isinstance(w, M.Wire) and w.touches(q, 1e-6))
+        from .wires import moved_ends, pull_on
         with self.ctx.edit("Move") as ed:
             moved = self.result(p)
+            ends = moved_ends(sheet, moved)
             for e in moved:
                 ed.change(sheet, e)
             _cut_under(self.ctx, ed, sheet, moved, own)
+            # (a wire end it leaves a hair from a pin or another wire is put on it, as
+            # Stretch does: the long battery, seed 5052)
+            pull_on(ed, sheet, ends)
         self.finish()
 
 
@@ -772,11 +777,16 @@ class CopyCmd(_TwoPoint):
 
     def apply(self, p):
         from .tags import retag_copies
+        from .wires import pull_on
         sheet = self.ctx.sheet()
         with self.ctx.edit("Copy") as ed:
             made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet,
                                                            self.result(p))]
             _cut_under(self.ctx, ed, sheet, made)
+            # (a copied wire's end left a hair from a pin or another wire is put on it, as
+            # Stretch does: the long battery, seed 5052, 0.0037" from a wire)
+            pull_on(ed, sheet, [(e.id, i) for e in made if isinstance(e, M.Wire)
+                                for i in (0, -1)])
         self.last = p
 
 

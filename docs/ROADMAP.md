@@ -287,6 +287,18 @@ nobody understands).
     for now), jumpers drawn on the schematic (a jumper wire is drawn as a wire), a strip drawn
     on a panel sheet as a footprint per terminal (place the Terminal block footprints on the
     rail; it fits with 0.28's panel wiring).
+  - **Near misses: "Warn on the drawing"** (the owner's decision, Nov 26 2026). A symbol turned
+    to an odd angle (45 degrees) has its pins off the grid, so a pin, or a wire run from one,
+    can stop a few thousandths from an unrelated wire (long battery, seed 5052). Joining them
+    automatically would wire two circuits together, and the battery's check may not simply
+    leave them out: the program finds every wire end and pin within 0.01" of a wire, wire end
+    or pin without being joined to it (nearmiss.py, the battery's definition) and marks it red
+    on the drawing with a command-line message, as duplicate tags are, until the user moves it
+    away or joins it. The battery accepts a near miss only when the program marks it and a
+    turned symbol explains it (a pin of a symbol turned off the right angles, or a wire from
+    such a pin, or that wire's off-grid coordinates carried off the pin); any other near miss
+    is the program's own slop and still fails, marked or not, as does a mark where nothing
+    almost meets; and Move and Copy must leave no wire end of theirs a hair short.
 
 - 0.28, panel wiring (the owner's list, item 5; his answers of 0.22.1: "yes, a per device wiring
   list", and point-to-point as labels on the footprints' terminals rather than a drawn

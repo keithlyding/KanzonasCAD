@@ -1302,16 +1302,22 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self._props_changed(d.project)
 
     def _say_duplicates(self, d):
-        """A duplicate tag or wire number that wasn't there before the change: said on the
-        command line (they are marked red on the drawing until fixed: dupes.py)."""
-        from . import dupes
+        """A duplicate tag or wire number, or a near miss (nearmiss.py), that wasn't there
+        before the change: said on the command line (they are marked red on the drawing until
+        fixed: dupes.py)."""
+        from . import dupes, nearmiss
         if getattr(d, "block_session", None) is not None:
             return
         dup_tags, dup_nums = dupes.find(d.project)
         over = dupes.over_outlets(d.project)
+        near = nearmiss.in_project(d.project)
+
+        def spot(s, m):
+            return ("near", s.id, round(m[0][0], 4), round(m[0][1], 4))
         now = {("tag", t) for t in dup_tags} | {("num", n) for n in dup_nums} | {
             ("over", t, tuple(sorted(e.attrs["OUTLET"] for _s, e in g[1])))
-            for t, g in over.items()}
+            for t, g in over.items()} | {
+            spot(s, m) for s, got in near.items() for m in got}
         before = getattr(d, "_dupes_seen", None)
         d._dupes_seen = now
         if before is None:
@@ -1322,7 +1328,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             text = dupes.describe(d.project,
                                   {t: g for t, g in dup_tags.items() if ("tag", t) in new},
                                   {n: g for n, g in dup_nums.items() if ("num", n) in new},
-                                  {t: g for t, g in over.items() if t in newer})
+                                  {t: g for t, g in over.items() if t in newer},
+                                  {s: [m for m in got if spot(s, m) in new]
+                                   for s, got in near.items()})
             self._say(text + " (marked red on the drawing)", 10000)
 
     def _tab_changed(self, _i):
@@ -3676,6 +3684,12 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         two always change the same things the same way."""
         from . import tags
         hidden = shown.get("hidden", ins.hidden)
+        if "TAG" in ins.hidden and "TAG" not in hidden and ins.attrs.get("TAGLINK") == "1":
+            # a contact block's tag shown by hand while it is on its operator's dashed line:
+            # it stays shown (xrefs.sync_block_tags would hide it again at once)
+            attrs = dict(attrs, TAGLINK="0")
+        elif "TAG" in hidden and "TAG" not in ins.hidden and "TAGLINK" in attrs:
+            attrs = {k: x for k, x in attrs.items() if k != "TAGLINK"}    # (hidden by hand)
         if ins.defn is not None and ins.defn.kind == "footprint" and \
                 attrs.get("TAG", "") != ins.attrs.get("TAG", ""):
             # a footprint's tag typed: the device with that tag is the one it is now (none
