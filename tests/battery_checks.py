@@ -857,7 +857,7 @@ def pdf_links_right(project, path, sheets):
         page = reader.pages[i]
         annots = [a.get_object() for a in (page.get("/Annots") or [])]
         rects = [[float(v) for v in a["/Rect"]] for a in annots]
-        used = set()
+        linked = []                 # (part, text, links over it, those right for it)
         unlinked = []
         devs = {e.attrs["DEV"] for e in s.entities.values()
                 if isinstance(e, (M.Insert, M.DashBox)) and e.attrs.get("DEV")}
@@ -894,18 +894,37 @@ def pdf_links_right(project, path, sheets):
                     # or under it: looked at once the page's texts have taken theirs)
                     unlinked.append((part, item[2], over))
                     continue
-                # (texts drawn over each other, contacts stacked by the steps: a link each;
-                # this text's is one of those over it not taken yet, nearest first)
-                free = sorted((j for j in over if j not in used),
-                              key=lambda j: abs((rects[j][0] + rects[j][2]) / 2.0 - mid[0]) +
+                # (texts drawn over each other, contacts stacked by the steps: a link each,
+                # one of those over it that is right for it, nearest first)
+                near = sorted(over, key=lambda j: abs((rects[j][0] + rects[j][2]) / 2.0 -
+                                                      mid[0]) +
                               abs((rects[j][1] + rects[j][3]) / 2.0 - mid[1]))
-                assert free, "%d links over %r of %r on sheet %s, none its own" % (
-                    len(over), part, item[2], project.sheet_number(s))
-                why = [wrong(j, place, where, lo, hi) for j in free]
+                assert near, "no link over %r of %r on sheet %s" % (
+                    part, item[2], project.sheet_number(s))
+                why = [wrong(j, place, where, lo, hi) for j in near]
                 assert None in why, "%r on sheet %s: %s" % (item[2], project.sheet_number(s),
                                                             why[0])
-                used.add(free[why.index(None)])
-                CHECKED["PDF cross-reference links lead to what they name"] += 1
+                linked.append((part, item[2], len(over),
+                               [j for j, w in zip(near, why) if w is None]))
+        # (each its own: a link for every text that has one, no link for two. Taken one text
+        # at a time, a text could take the link of a text drawn over its place and leave that
+        # one none: an arrow's whole "6003B / 6-?" is its link, and two arrows a little apart
+        # draw the second's text over the first's "6-?"; the short battery, 0.26, seed 5)
+        owner = {}                  # link -> the text (index in linked) it is the link of
+
+        def take(r, seen):
+            for j in linked[r][3]:
+                if j not in seen:
+                    seen.add(j)
+                    if j not in owner or take(owner[j], seen):
+                        owner[j] = r
+                        return True
+            return False
+        for r, (part, text, n_over, _right) in enumerate(linked):
+            assert take(r, set()), "%d links over %r of %r on sheet %s, none its own" % (
+                n_over, part, text, project.sheet_number(s))
+            CHECKED["PDF cross-reference links lead to what they name"] += 1
+        used = set(owner)
         for part, text, over in unlinked:
             assert all(j in used for j in over), \
                 "a link over %r (%r), a place not in the PDF" % (part, text)
