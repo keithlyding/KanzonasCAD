@@ -92,7 +92,7 @@ class TurnedPinNearWireTest(unittest.TestCase):
                             "marked red on the drawing" in m for m in said), said)
         # (the battery's check finds it too, and accepts it only as it is marked)
         self.assertEqual({k[0] for k, _p, _k, _d in BC.near_misses(self.s)}, {"end", "pin"})
-        self.assertEqual(BC.near_misses_unflagged(self.s), ([], []))
+        self.assertEqual(BC.near_misses_unflagged(self.s), ([], [], []))
         # (said once, not on every change after)
         n = len(said)
         with self.p.edit("other") as ed:
@@ -118,7 +118,7 @@ class TurnedPinNearWireTest(unittest.TestCase):
         with self.p.edit("onto") as ed:      # (the passing wire put through the pin)
             ed.change(self.s, a.copy(points=[(a.points[0][0], end[1]), (a.points[1][0], end[1])]))
         self.assertEqual(nearmiss.found(self.s), [])
-        self.assertEqual(BC.near_misses_unflagged(self.s), ([], []))
+        self.assertEqual(BC.near_misses_unflagged(self.s), ([], [], []))
 
     def test_upright_symbol(self):
         ins, w, across = self.coil(0.0)
@@ -127,7 +127,12 @@ class TurnedPinNearWireTest(unittest.TestCase):
         self.assertEqual([(k[0], k[1]) for k, _p, kind, _d in near if k[0] == "end"],
                          [("end", w.id)])
         self.assertAlmostEqual(near[0][3], 0.0089, places=6)
-        self.assertEqual(BC.near_misses_unflagged(self.s), ([], []))
+        # (marked by the program, but on the grid: no turned symbol explains it, so the
+        # battery still fails on it, as on the program's own slop)
+        self.assertTrue(nearmiss.found(self.s))
+        missed, odd, false = BC.near_misses_unflagged(self.s)
+        self.assertEqual((missed, false), ([], []))
+        self.assertEqual({k[0] for k, _p, _k, _d in odd}, {"end", "pin"})
 
     def test_upright_exact_join_not_flagged(self):
         ins, w, across = self.coil(0.0)
@@ -165,7 +170,7 @@ class TurnedPinNearWireTest(unittest.TestCase):
         got = nearmiss.found(self.s)
         self.assertTrue(got)
         self.assertTrue(all(abs(m[2] - 0.005) < 1e-9 for m in got), got)
-        self.assertEqual(BC.near_misses_unflagged(self.s), ([], []))
+        self.assertEqual(BC.near_misses_unflagged(self.s), ([], [], []))
 
 
 if __name__ == "__main__":

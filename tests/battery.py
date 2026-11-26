@@ -166,10 +166,15 @@ def check_sheet(sheet):
     check_groups(sheet)
     # (drawing slop: wire ends and pins that look joined but aren't, and the program doesn't
     # mark on the drawing; and no mark where there is none)
-    near, false = BC.near_misses_unflagged(sheet)
+    near, odd, false = BC.near_misses_unflagged(sheet)
+
+    def said(got):
+        return ["%s %s %.2g from a %s" % (k[0], tuple(round(c, 4) for c in p), d, kind)
+                for k, p, kind, d in got[:3]]
     assert not near, "%d wire end(s) or pin(s) almost meet something without joining it, " \
-        "not marked: %s" % (len(near), ["%s %s %.2g from a %s" % (
-            k[0], tuple(round(c, 4) for c in p), d, kind) for k, p, kind, d in near[:3]])
+        "not marked: %s" % (len(near), said(near))
+    assert not odd, "%d wire end(s) or pin(s) almost meet something without joining it, " \
+        "marked, but no turned symbol explains it: %s" % (len(odd), said(odd))
     assert not false, "%d near miss mark(s) where nothing almost meets: %s" % (
         len(false), [(k, tuple(round(c, 4) for c in p)) for k, p in false[:3]])
     kept = nearmiss.found_keyed(sheet)
@@ -2230,6 +2235,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         sel = some()
         if not sel:
             return
+        before = {i: e.points for i, e in s.entities.items() if isinstance(e, M.Wire)}
         v.set_selection({e.id for e in sel})
         v.run(cls)
         if v.cmd is not None:
@@ -2239,6 +2245,15 @@ def random_editing(log, out, ops, seed, drawing=None):
                 v.input_text(fmt((a[0] + rnd.choice([-1, 0, 1]) * 0.5,
                                   a[1] + rnd.choice([-1, 0, 1]) * 0.5)))
         finish()
+        # (Move and Copy put a wire end they leave a hair from a pin or another wire on it, as
+        # Stretch does: the long battery, seed 5052 at step 1723, a copied end 0.0037" from a
+        # wire; such a near miss is the program's doing whatever geometry it is near)
+        ends = [q for w in s.wires() for q in (w.points[0], w.points[-1])
+                if w.id not in before or q not in before[w.id]]
+        bad = BC.ends_left_short(s, ends)
+        assert not bad, "%s left %d wire end(s) a hair from a pin or wire, not put on it: %s" % (
+            cls.__name__[:-3], len(bad), [(tuple(round(c, 4) for c in q), round(d, 5))
+                                          for q, d in bad[:3]])
 
     def op_move_area():
         # (0.18.2: a crossing box over a part of the drawing, then Move typed, every object
