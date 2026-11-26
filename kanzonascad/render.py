@@ -788,3 +788,40 @@ def block_pixmap(defn, size=64, dark=False):
         p.drawPoint(QPointF(q["pos"][0], q["pos"][1]))
     p.end()
     return pm
+
+
+def circuit_pixmap(circuit, width=96, height=None, dark=False, dpr=1.0):
+    """A picture of a saved circuit (circuits.Circuit) for its browser: its objects, its
+    symbols' tags and texts, fitted in width x height pixels (on a screen of dpr device
+    pixels a pixel: as sharp as it shows)."""
+    from PySide6.QtGui import QPixmap
+    height = height or width
+    pm = QPixmap(round(width * dpr), round(height * dpr))
+    pm.setDevicePixelRatio(dpr)
+    pal = Palette(dark)
+    pm.fill(pal.paper)
+    ents = circuit.objects()
+    bb = None
+    for e in ents:
+        bb = G.bbox_union(bb, e.bbox())
+    if bb is None:
+        return pm
+    x0, y0, x1, y1 = bb
+    w, h = max(x1 - x0, 1e-3), max(y1 - y0, 1e-3)
+    k = min((width - 8) / w, (height - 8) / h)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    p.translate(width / 2, height / 2)
+    p.scale(k, -k)
+    p.translate(-(x0 + x1) / 2, -(y0 + y1) / 2)
+    strokes, fills = entities_path(ents)
+    pen = QPen(pal.ink, 1.0)
+    pen.setCosmetic(True)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    p.drawPath(strokes)
+    p.setPen(Qt.NoPen)
+    p.setBrush(pal.ink)
+    p.drawPath(fills)
+    p.end()
+    return pm

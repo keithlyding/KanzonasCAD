@@ -681,6 +681,16 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
           label="Insert symbol")
         A("insert_footprint", "Insert &footprint...", lambda: self.show_library(1),
           icon="library", label="Insert footprint")
+        A("insert_circuit", "Insert &circuit...", lambda: self.insert_circuit(),
+          icon="insert_circuit", label="Insert circuit",
+          tip="Place a circuit saved in your library (a motor starter, a pilot light rung...) "
+              "whole: its devices take new tags of this sheet, its contacts stay linked to "
+              "its own devices, its wires take this sheet's numbers")
+        self._cmd_act("save_circuit", "Sa&ve circuit...", C.SaveCircuitCmd, "Save circuit")
+        self.acts["save_circuit"].setProperty("icon_key", "save_circuit")
+        self.acts["save_circuit"].setToolTip(
+            "Keep the selected objects (symbols, wires, text, a ladder...) in your library as "
+            "a circuit, with a name and a category, to place again with Insert circuit...")
         A("library_panel", "&Library...", lambda: self.show_library(None), icon="library",
           label="Library")
         A("new_part", "New &part...", lambda: self.library_panel.edit_part(new=True),
@@ -841,7 +851,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                   None, "new_revision", "revisions"):
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
-        for k in ("insert_symbol", "insert_footprint", "library_panel", None, "make_block",
+        for k in ("insert_symbol", "insert_footprint", "library_panel", None,
+                  "insert_circuit", "save_circuit", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
                   "save_block_as", "add_pin", "pins", "add_attr", "update_blocks", None,
                   "new_part", "assign_part", "save_as_part", None, "import_blocks",
@@ -924,7 +935,11 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             # shows its groups' buttons small, from the right: Ribbon.fit)
             # (Block properties beside Edit block again: the owner, 0.25, reversing 0.18's
             # decision; a crowded tab shrinks its groups from the right, Ribbon.fit)
-            ("Symbols", "small", [a["insert_symbol"], a["make_block"], a["edit_block"],
+            # (Insert circuit and Save circuit on Insert symbol's button menu: the tab as
+            # wide as before, 0.29)
+            ("Symbols", "small", [split_button([a["insert_symbol"], a["insert_circuit"],
+                                                a["save_circuit"]]),
+                                  a["make_block"], a["edit_block"],
                                   a["block_props"], a["explode"], a["attr_vis"], a["del_comp"],
                                   a["new_part"]]),
             # (the owner: "Copy is not included in schematic and needs to be")
@@ -1313,6 +1328,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self._trace_follow()
         self._props_follow()
         self._show_missing_fp()
+        if self._library_standard() and self.library_dialog.isVisible():
+            self.library_panel.refresh()
         if v is not None:
             v.setFocus()
 
@@ -2365,7 +2382,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
 
     def _other_command(self, what):
         {"undo": self.undo, "redo": self.redo, "save": self.save, "open": self.open_dialog,
-         "new": self.new_project, "quit": self.close}[what]()
+         "new": self.new_project, "quit": self.close,
+         "insert_circuit": self.insert_circuit}[what]()
 
     def undo(self):
         d = self.doc()
@@ -3114,6 +3132,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                     if d.project is v.project:
                         C.clear_wire_picks(d.view)
             self._fill_layers()
+            if self._library_standard():            # (its symbol standard changed)
+                self.library_panel.refresh()
 
     def revisions(self, add=False):
         """Revisions... / New revision...: the revision history, changed in one undoable
@@ -3217,6 +3237,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         """The Library popup: tab 0 symbols, 1 footprints, 2 parts, None: as it was."""
         if tab is not None:
             self.library_panel.tabs.setCurrentIndex(tab)
+        self._library_standard()
         self.library_panel.refresh()
         self.library_dialog.show()
         self.library_dialog.raise_()
@@ -3285,6 +3306,67 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self.settings.setValue("library_save_second", self.library.save_second)
         self._say("New blocks and parts go to the %s library" % (
             "second" if self.library.save_second else "first"))
+
+    def _library_standard(self):
+        """The Library offers the symbols of the shown project's standard (JIC or IEC). True
+        when that changed."""
+        from .symbols_iec import standard_of
+        v = self.view()
+        return v is not None and self.library_panel.set_standard(standard_of(v.project))
+
+    # ---- saved circuits (circuits.py, circuit_window.py) ------------------------------------
+    def ask_circuit_details(self, name=""):
+        """Save circuit asks this: (name, category, description), or None."""
+        from .circuit_window import circuit_details
+        got, _bad = self.library.circuits()
+        return circuit_details(self, {c.category for c in got.values()}, name)
+
+    def save_circuit_from(self, ents, base):
+        """Save circuit's last step (commands.SaveCircuitCmd): the objects kept in the library
+        under the name asked. The saved circuit, or None."""
+        from . import circuits
+        v = self.view()
+        if v is None or not ents:
+            return None
+        details = self.ask_circuit_details()
+        if details is None:
+            return None
+        name, category, description = details
+        try:
+            have, _bad = self.library.circuits()
+            if name in have and QMessageBox.question(
+                    self, APP, "A circuit named %s is already in the library. Replace it?" %
+                    name) != QMessageBox.Yes:
+                return None
+            c = circuits.make(v.project, ents, base, name, category, description)
+            self.library.save_circuit(c)
+        except OSError as ex:
+            QMessageBox.warning(self, APP, "Couldn't save the circuit to the library (%s):\n%s"
+                                % (self.library.folder, ex))
+            return None
+        self._say("Saved circuit %s (%d object(s)) to your library: Library > Insert "
+                  "circuit... places it" % (name, len(ents)))
+        return c
+
+    def ask_circuit(self):
+        """Insert circuit's browser: the circuit chosen, or None."""
+        from .circuit_window import CircuitBrowser
+        dlg = CircuitBrowser(self, self.library, theme.is_dark())
+        got = dlg.chosen if dlg.exec() else None
+        dlg.deleteLater()
+        return got
+
+    def insert_circuit(self):
+        """Library > Insert circuit...: pick a saved circuit, then where it goes."""
+        v = self.view()
+        if v is None:
+            return None
+        c = self.ask_circuit()
+        if c is None:
+            return None
+        cmd = v.run(C.InsertCircuitCmd, c)
+        v.setFocus()
+        return cmd
 
     def insert_block(self, defn, attrs):
         v = self.view()

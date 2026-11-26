@@ -703,7 +703,12 @@ def random_editing(log, out, ops, seed, drawing=None):
             # of it as a contact of its coil)
             "PLC analog input module, 4 channels IN/RTN",
             "PLC digital input module, 16 points, points 0-7",
-            "PLC digital input module, points 8-15 continued"]
+            "PLC digital input module, points 8-15 continued",
+            # (0.29: IEC symbols, and the Allen-Bradley ones)
+            "Relay coil (IEC)", "Contact NO (IEC)", "Contact NC (IEC)",
+            "Circuit breaker 3-pole (IEC)", "Motor protection circuit breaker 3-pole",
+            "Overload relay, electronic 3-pole", "Selector switch 3-position",
+            "Selector switch 3-position contact, closed right", "1769-IF4 module"]
     syms = [n for n in syms if lib.get("symbol", n) is not None]
     start = norm(p.to_dict())
     counts = {}
@@ -4537,6 +4542,70 @@ def random_editing(log, out, ops, seed, drawing=None):
         BC.CHECKED["paste with Enter: where it was copied from" +
                    (" (another sheet)" if to is not src else "")] += 1
 
+    def op_circuit():
+        # (0.29: Save circuit on a handful of objects, then Insert circuit, as the owner would:
+        # select, Save circuit..., its base point (Enter: the lower left corner, or clicked),
+        # a name; Insert circuit..., R and S as wanted, where it goes. What it must have done
+        # worked out from the circuit and the project before: BC.circuit_placed)
+        ents = some(rnd.randint(1, 8))
+        kids = {e.attrs.get("PARENT") for e in s.inserts() if e.attrs.get("PARENT")}
+        devs = [e for e in s.inserts() if tags_mod.is_device(e) and e.attrs.get("DEV") in kids]
+        if devs and rnd.random() < 0.6:
+            # (a device with its contacts on this sheet, as a rung is saved, and maybe one
+            # contact without its device)
+            dev = rnd.choice(devs)
+            ents += [dev] + [e for e in s.inserts()
+                             if e.attrs.get("PARENT") == dev.attrs["DEV"] and
+                             rnd.random() < 0.8]
+        ents = list({e.id: e for e in ents}.values())
+        if not ents:
+            return
+        v.set_selection({e.id for e in ents})
+        name = "Battery circuit %d" % rnd.randint(1, 4)
+        win.ask_circuit_details = lambda name_="": (name, rnd.choice(["Control", ""]), "")
+        try:
+            v.run(C.SaveCircuitCmd)
+            if rnd.random() < 0.5:
+                v.input_text("")
+            else:
+                v.input_text(fmt(pt()))
+        finally:
+            win.__dict__.pop("ask_circuit_details", None)
+        finish()
+        got = win.library.circuits()[0].get(name)
+        assert got is not None, "Save circuit didn't keep %s" % name
+        if rnd.random() < 0.3:
+            to = rnd.choice(p.sheets)
+            if to is not v.sheet():
+                v.show_sheet(to.id)
+        sh = v.sheet()
+        v.set_selection(set())
+        before = {"ids": set(sh.entities), "undo": len(p.undo_stack),
+                  "devs": {e.attrs.get("DEV") for x in p.sheets for e in x.inserts()},
+                  "links": set(wirenums.connectors(p))}
+        win.ask_circuit = lambda: got
+        try:
+            win.insert_circuit()
+        finally:
+            win.__dict__.pop("ask_circuit", None)
+        assert isinstance(v.cmd, C.InsertCircuitCmd), "Insert circuit didn't start"
+        angle, scale = 0.0, 1.0
+        for _i in range(rnd.randint(0, 3)):
+            v.input_text("R")
+            angle = (angle + 90.0) % 360.0
+        if rnd.random() < 0.3:
+            scale = rnd.choice([0.5, 2.0, 1.5])
+            v.input_text("S")
+            v.input_text("%g" % scale)
+        at = pt()
+        v.input_text(fmt(at))
+        assert v.cmd is None, "Insert circuit still running after its point"
+        BC.circuit_placed(p, sh, got, at, angle, scale, before)
+        if rnd.random() < 0.2:
+            p.undo()
+            assert set(sh.entities) == before["ids"], "Undo left part of the circuit"
+            BC.CHECKED["circuit undone in one step"] += 1
+
     def op_same_name_pins():
         # a symbol with two pins of one name, a wire on each pin, off on its own; moved,
         # scooted or turned through the commands: every pin keeps its wire
@@ -5411,7 +5480,8 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_import_blocks, 1), (op_props_panel, 3), (op_missing_fp, 2),
              (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1),
              (op_paste_same_place, 2),
-             (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2)]
+             (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2),
+             (op_circuit, 3)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -5770,6 +5840,37 @@ def mixed_project(win):
                    missing_fp.find(p).missing), [e.attrs.get("TAG") for _sh, e in
                                                  missing_fp.find(p).missing]
     v.show_sheet(p.sheets[0].id)
+    # (0.29) IEC symbols (a coil and its contact) and an Allen-Bradley module, then a saved
+    # circuit of the coil's rung placed again through the commands, as the owner would
+    s = p.sheets[0]
+    v.run(C.InsertCmd, lib.get("symbol", "Relay coil (IEC)"), {})
+    type_in(v, "20,10")
+    v.run(C.InsertCmd, lib.get("symbol", "Contact NO (IEC)"), {})
+    type_in(v, "17,10")
+    iec = [e for e in s.inserts() if e.block == "Relay coil (IEC)"][0]
+    type_in(v, iec.attrs["TAG"])
+    v.run(C.InsertCmd, lib.get("symbol", "1769-IF4 module"), {"TAG": "PLC2", "SLOT": "3"})
+    type_in(v, "26,8")
+    while v.cmd is not None:
+        v.cmd.enter()
+    rung = {e.id for e in s.inserts() if e.block in ("Relay coil (IEC)", "Contact NO (IEC)")}
+    v.set_selection(rung)
+    win.ask_circuit_details = lambda name="": ("Mixed rung", "Control", "battery")
+    try:
+        v.run(C.SaveCircuitCmd)
+        v.input_text("")
+    finally:
+        win.__dict__.pop("ask_circuit_details", None)
+    circuit = lib.circuits()[0]["Mixed rung"]
+    win.ask_circuit = lambda: circuit
+    try:
+        win.insert_circuit()
+    finally:
+        win.__dict__.pop("ask_circuit", None)
+    type_in(v, "17,11")
+    coils = [e for e in s.inserts() if e.block == "Relay coil (IEC)"]
+    assert len(coils) == 2 and len({e.attrs["TAG"] for e in coils}) == 2, coils
+    v.set_selection(set())
     # (0.21) a picture kept in the project (a logo), on the first sheet
     fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))
     return p

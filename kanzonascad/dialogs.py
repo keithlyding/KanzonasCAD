@@ -495,6 +495,17 @@ def project_properties(parent, project, tab=0):
     tag_h.setSuffix(" in")
     tag_h.setValue(float(st["tag_height"]))
     form.addRow("Device tag height", tag_h)
+    # (the owner, 0.22.1: "also put in IEC symbols"; a project's own, JIC to start)
+    from .symbols_iec import STANDARDS, standard_of
+    std = QComboBox()
+    std.setObjectName("symbol_standard")
+    for key, label in STANDARDS.items():
+        std.addItem(label, key)
+    std.setCurrentIndex(max(std.findData(standard_of(project)), 0))
+    std.setToolTip("The symbols Insert symbol offers for this project: JIC/NFPA (US) or IEC "
+                   "60617. Symbols already placed stay as they are; your own symbols are "
+                   "offered either way.")
+    form.addRow("Symbol standard", std)
     wire_nums = QCheckBox("Number wires (page number + 3 digits: 6001, 6002...)")
     wire_nums.setChecked(bool(st.get("wire_numbers", True)))
     form.addRow("Wire numbers", wire_nums)
@@ -838,6 +849,7 @@ def project_properties(parent, project, tab=0):
     settings["show_border"] = show_border.isChecked()
     settings["show_title_block"] = show_tb.isChecked()
     settings["tag_height"] = tag_h.value()
+    settings["symbol_standard"] = std.currentData()
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_numbers_io"] = wire_io.isChecked()
     settings["wire_number_height"] = num_h.value()

@@ -54,7 +54,7 @@ class BlockCatalogTest(unittest.TestCase):
                  for i in range(tree.topLevelItemCount())
                  for j in range(tree.topLevelItem(i).childCount())]
         self.assertEqual(names, ["Chassis"])
-        panel.search.setText("1769")
+        panel.search.setText("1747")        # (no block of that catalog number)
         self.assertEqual(panel.trees["footprint"].topLevelItemCount(), 0)
         self.assertTrue(APP and os)
 

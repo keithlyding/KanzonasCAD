@@ -78,6 +78,13 @@ BUDGET = {
                                 # while working on an opened 60,000-line project (gcpolicy)
     "pdf_links": 2.0,           # (0.23.1) the links of 2,000 cross-references added to the PDF
                                 # of 20 sheets (Export to PDF)
+    # (0.29: saved circuits, as a new kind of thing must be measured) a circuit of 100 rungs (a
+    # coil, two contacts, four wires each: 700 objects) on a sheet of 2,100 devices:
+    "circuit_save": 0.5,        # made from the selection and written to the library
+    "circuit_place": 1.5,       # placed (retagged, relinked, numbered, wires cut), then drawn
+    "circuit_move": 0.03,       # a mouse move while it follows the mouse (the preview slid)
+    "circuit_undo": 1.0,        # the placing undone, then drawn
+    "circuit_browse": 2.0,      # Insert circuit's window listing 100 circuits, pictures drawn
 }
 
 
@@ -1445,6 +1452,96 @@ def run(log_path):
                 "%.3f s (reading %.3f, listing %.3f, writing %.3f)" % (
                     dt, step, read_step, listed, put_step))
     log.check("speed budget (import blocks)", block_folder)
+
+    def saved_circuits():
+        from . import circuits as CI
+        from .circuit_window import CircuitBrowser
+        from .library import Library
+        w = state["win"]
+        lib = Library(os.path.join(tmp, "circuits"))
+        coil, no = w.library.get("symbol", "Relay coil"), w.library.get("symbol", "Contact NO")
+        p = M.Project.new()
+        s = p.sheets[0]
+        p.blocks[coil.name], p.blocks[no.name] = coil, no
+        # (the sheet: 700 devices, each with two contacts, on rungs of their own)
+        for i in range(700):
+            x, y = 40.0 + (i % 20) * 6.0, 2.0 + (i // 20) * 0.5
+            s._put(M.Insert(coil.name, (x + 4.25, y), defn=coil,
+                            attrs={"TAG": "CR%d" % (5000 + i), "DEV": "d%d" % i}))
+            for dx in (0.25, 1.25):
+                s._put(M.Insert(no.name, (x + dx, y), defn=no,
+                                attrs={"TAG": "CR%d" % (5000 + i), "PARENT": "d%d" % i}))
+        ents = []
+        for i in range(100):
+            y = 2.0 + i * 0.5
+            dev = "c%d" % i
+            ents.append(M.Insert(coil.name, (4.25, y), defn=coil, attrs={"DEV": dev,
+                                                                       "TAG": "CR%d" % i}))
+            for dx in (0.25, 1.25):
+                ents.append(M.Insert(no.name, (dx, y), defn=no, attrs={"PARENT": dev,
+                                                                     "TAG": "CR%d" % i}))
+            for a, b in ((-1.0, 0.0), (0.5, 1.0), (1.5, 4.0), (4.5, 6.0)):
+                ents.append(M.Wire([(a, y), (b, y)]))
+        t0 = time.perf_counter()
+        c = CI.make(p, ents, (0.0, 0.0), "Big", "Speed")
+        lib.save_circuit(c)
+        dsave = time.perf_counter() - t0
+        c = lib.circuits()[0]["Big"]
+        d = w.add_document(p)
+        v = d.view
+        v.zoom("extents")
+        v.repaint()
+        app.processEvents()
+        cmd = v.run(C.InsertCircuitCmd, c)
+        from PySide6.QtCore import QPointF, QEvent, Qt
+        from PySide6.QtGui import QMouseEvent
+
+        def move(q):
+            app.sendEvent(v, QMouseEvent(QEvent.MouseMove, q, v.mapToGlobal(q), Qt.NoButton,
+                                         Qt.NoButton, Qt.NoModifier))
+            v.repaint()
+        move(QPointF(200.0, 200.0))             # (its picture made once)
+        t0 = time.perf_counter()
+        for i in range(30):
+            move(QPointF(200.0 + 3 * i, 200.0 + i))
+        dmove = (time.perf_counter() - t0) / 30
+        assert cmd._shown is not None, "Insert circuit showed nothing as the mouse moved"
+        n0 = len(s.entities)
+        t0 = time.perf_counter()
+        v.input_text("8,60")
+        v.repaint()
+        dplace = time.perf_counter() - t0
+        assert len(s.entities) == n0 + 700, (n0, len(s.entities))
+        tagged = {e.attrs["TAG"] for e in s.inserts() if e.block == coil.name}
+        assert len(tagged) == 800, len(tagged)
+        devs = {e.attrs["DEV"] for e in s.inserts() if e.block == coil.name}
+        linked = [e for e in s.inserts() if e.block == no.name and e.attrs.get("PARENT") in devs]
+        assert len(linked) == 1600, len(linked)
+        t0 = time.perf_counter()
+        p.undo()
+        v.repaint()
+        dundo = time.perf_counter() - t0
+        assert len(s.entities) == n0
+        small = CI.make(p, ents[:7], (0.0, 0.0), "Rung")
+        for i in range(100):
+            lib.save_circuit(small.renamed("Rung %03d" % i, "Category %d" % (i % 10)))
+        t0 = time.perf_counter()
+        dlg = CircuitBrowser(w, lib)
+        listed = sum(dlg.tree.topLevelItem(i).childCount()
+                     for i in range(dlg.tree.topLevelItemCount()))
+        dbrowse = time.perf_counter() - t0
+        dlg.deleteLater()
+        assert listed == 101, listed
+        p.saved_at = len(p.undo_stack)
+        w.close_tab(w.tabs.indexOf(d))
+        for key, dt in (("circuit_save", dsave), ("circuit_place", dplace),
+                        ("circuit_move", dmove), ("circuit_undo", dundo),
+                        ("circuit_browse", dbrowse)):
+            assert dt < BUDGET[key], "%s took %.3f s" % (key, dt)
+        return ("a circuit of 700 objects saved %.3f s, placed on a sheet of 2,100 devices "
+                "%.2f s, a mouse move with it %.1f ms, undone %.2f s; 101 circuits listed "
+                "with pictures %.2f s" % (dsave, dplace, dmove * 1000, dundo, dbrowse))
+    log.check("speed budget (saved circuits)", saved_circuits)
 
     w = state.get("win")
     if w is not None:

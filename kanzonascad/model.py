@@ -56,6 +56,9 @@ XREF_HEIGHT_BEFORE_018 = 0.08   # (see Project.from_dict: such projects take the
 DEFAULT_SETTINGS = {
     "text_height": 0.125,       # new text
     "tag_height": 0.1,          # device tags on symbols
+    # the symbols Insert symbol offers: "jic" (JIC/NFPA, US) or "iec" (IEC 60617): a project's
+    # own (Project properties, Schematic; 0.29); every project from before is JIC
+    "symbol_standard": "jic",
     "fp_label_height": 0.08,    # what footprints show on them, paper inches (0.1 before 0.18.1)
     "fp_label_color": "",       # their color ("": the footprint's; the owner, 0.18.7: a
                                 # footprint on layer 0 is white, "I want the tagname to be

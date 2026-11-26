@@ -5,7 +5,8 @@ and by people. `CLAUDE.md` just points here. Read all of it before editing.
 
 A free electrical CAD program in Python (PySide6 + ezdxf) for Windows and Linux, with an
 AutoCAD-like way of working (command line, object snaps, grips, window selection) and a short
-list of commands. US practice: JIC/NFPA symbols, US device tags (CR1, M1), grid-style
+list of commands. US practice: JIC/NFPA symbols (or IEC 60617 ones, a project's choice: its
+Symbol standard), US device tags (CR1, M1), grid-style
 cross-references (6-D1), wire numbers that start with the page number (6001). Drawings are in
 inches on ANSI sheets. It shares its look (menus, ribbon, theme, icons) with KanzonasPDF.
 

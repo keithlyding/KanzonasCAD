@@ -269,6 +269,44 @@ nobody understands).
 6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.29):
    "lean heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates
    library: not now.
+   Done in 0.29 (decisions marked "decided here" are open to the owner's change):
+   - **Saved circuits** (Library > Save circuit..., Insert circuit...): one file a circuit in
+     the library's circuits folder, in either library as blocks and parts are, holding its
+     objects around its base point and its own copies of their blocks and layers. Decided
+     here: its picture is drawn from the circuit itself when the browser lists it, not kept as
+     a picture file beside it (nothing to fall out of step when it is renamed, or synced
+     half-way); its base point is clicked as Make block's is (Enter: the lower left corner);
+     R and S (a typed scale) as it is placed, no flip (a flipped rung reads backwards). Placed,
+     its devices take the sheet's lowest free tags (a locked tag kept), contacts whose device
+     came with it link to the new copy, one whose device was left out is placed unlinked with
+     its tag cleared (decided here: its old tag would link it to an unrelated device of the
+     project), unlocked wire numbers go (the sheet numbers them), connectors and arrows get
+     new names, the same within the circuit (decided here: a pair stays a pair; a lone one
+     waits for its other end), one undo step.
+   - **More symbols and footprints, leaning on Allen-Bradley**: symbols drawn here in the
+     JIC style (motor protection circuit breaker, electronic overload and its NO contact,
+     3-position selector and its contacts, pilot light with its color letter, PLC modules of
+     ControlLogix, CompactLogix, Compact 5000 and POINT I/O drawn whole); built-in parts by
+     catalog number (100-C, 140M, E300, 700-HA, 800F contact blocks, 1492-J, 1606-XLP,
+     PowerFlex 525, the PLC modules, controllers and chassis), read-only as the built-in
+     blocks are (a part of yours with the same id takes its place). Decided here: catalog
+     numbers only where their numbering is sure (E300's depends on three modules: left
+     blank); PLC modules' terminals named by point, not by Rockwell's terminal numbers (on
+     its wiring diagrams; Edit block renames them); footprints only where none generic is
+     near: PowerFlex 525 frames at Rockwell's published nominal sizes, the PLC modules and
+     chassis as "(approximate)"; parts use the generic footprints otherwise.
+   - **IEC 60617 symbols as a project's symbol standard** (Project properties, Schematic:
+     JIC/NFPA (US) or IEC 60617; every project from before and a new one JIC): a core set
+     of 30 drawn here (coils, contacts and timed ones, pushbuttons, E-stop, selector, fuse,
+     breaker, disconnector, thermal overload and its contact, lamp, motors 1~ and 3~,
+     solenoid, transformer, 3-pole power devices, terminal, PE). Insert symbol offers the
+     project's set in place of the other one's equivalents; the rest (PLC, drives,
+     connectors) in both. Decided here: laid out for horizontal rungs as the JIC set, and
+     with the JIC tag prefixes (CR, M, PB...), so tags, terminals, reports and
+     cross-references work unchanged. Still to come: IEC 81346 letter codes (K, Q, S, F, P,
+     X) as an option, vertical (IEC-style, top-to-bottom) layouts, and IEC versions of the
+     limit, pressure, temperature and float switches, the fused disconnect and starter
+     combinations, drive terminals and the distribution blocks.
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,
@@ -533,7 +571,9 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   X?TERMnn wire-connection attributes, a .wdp listing the sheets, and DWG files (ezdxf writes
   only DXF). The owner has AutoCAD Electrical to test it with if it comes back.
 - US practice: JIC/NFPA symbols, horizontal rungs, grid-style references (`6-D1`), zones A-H
-  down the left and 1-10 along the top to start (both editable).
+  down the left and 1-10 along the top to start (both editable). IEC 60617 symbols as a
+  project's choice since 0.29 (Symbol standard; the owner, 0.22.1: "also put in IEC
+  symbols"), JIC to start.
 - Drawing area black by default; PDF black on white to start. Export to PDF asks color or
   black and white in its window (Save as type) and keeps the last pick (the owner, 0.26: "the
   Export PDF window gets a Color / Black and white choice that remembers the last pick"; the

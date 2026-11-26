@@ -378,7 +378,40 @@ fuse, breaker, disconnect, overload heater and contact, pilot light, motor, sole
 transformer, terminal strip and terminal, ground, distribution block, off-sheet connector;
 three-phase: 3-pole breaker, disconnect and fuses, fused disconnect, contactor power contacts,
 overload heaters, starter, motor, drive control terminals, variable frequency drive; power supply; PLC I/O card with input and output points).
+Since 0.29 also: a <b>Motor protection circuit breaker 3-pole</b> (a manual motor starter
+such as Allen-Bradley's 140M: breaker poles and their thermal trip, L1-L3 in, T1-T3 out 1 inch
+away, its auxiliary contacts belonging to it), an <b>Overload relay, electronic 3-pole</b> (the
+wires through its current sensors, as an E300 or 193; its <b>Overload contact NC</b> and the
+new <b>Overload contact NO</b>, 97-98 alarm, belong to it), a <b>Selector switch
+3-position</b> (Hand-Off-Auto: an X over the position each contact is closed in; its contact
+blocks <b>Selector switch 3-position contact, closed left</b> and <b>closed right</b> belong to
+it), a <b>Pilot light with color letter</b> (its COLOR attribute, R, G, A..., shown in the
+lamp), and PLC I/O modules drawn whole by catalog number (ControlLogix 1756-IB16, 1756-OB16E,
+1756-IF8, 1756-OF8; CompactLogix 1769-IQ16, 1769-OB16, 1769-OW8, 1769-IF4, 1769-OF2; Compact
+5000 5069-IB16, 5069-OB16; POINT I/O 1734-IB4, 1734-OB4E, beside the 1734 ones from before).
+Their terminals are named by point (0, 1, 2...): a module's own terminal numbers and commons
+are on Rockwell's wiring diagram for it, and Edit block renames them. Every symbol is drawn by
+KanzonasCAD from the standard conventions, none copied from a maker's or another program's
+drawings.
 A symbol of yours with the same name replaces a built-in one.</li>
+<li><b>IEC 60617 symbols</b>: a project can draw with IEC symbols instead of JIC ones:
+<b>Symbol standard</b> in Project properties (Schematic tab, also Schematic settings...), JIC/NFPA
+(US) or IEC 60617. Every project from before 0.29, and a new one, is JIC (a template saved
+with IEC gives new projects IEC). The IEC set, in the IEC categories, each named "(IEC)":
+relay, contactor and timer coils (a rectangle; the timer's with its delay box), make and break
+contacts and on-delay timed ones, pushbuttons (make, break), emergency stop, two-position
+selector switch, pushbutton contact blocks, fuse, circuit breaker and disconnector 1-pole,
+thermal overload and its break contact, indicator lamp, motor (M 1~), solenoid valve coil,
+control transformer, 3-pole circuit breaker, disconnector, fuses, contactor main contacts and
+thermal overload, motor 3-phase (M 3~), terminal and protective earth. In an IEC project,
+<b>Insert symbol...</b> offers these in place of the JIC symbols they stand for, and in a JIC
+project the JIC ones; the program's other symbols (PLC modules, drives, power supply,
+distribution blocks, connectors and arrows) and your own are offered in both. They are laid out
+as the JIC ones are, for horizontal rungs (pins left and right, 1/2 inch apart; three-pole ones
+with L1/T1 on top), and they keep the JIC tag prefixes (CR, M, PB, CB, FU, OL, LT...), so tags,
+contacts, cross-references, terminals, wire numbers and reports work the same; Block properties
+changes a prefix (to an IEC 81346 letter, K or Q, say). Changing the standard leaves the
+symbols already placed as they are.</li>
 <li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.
 KanzonasCAD comes with generic ones at typical sizes, in the Generic categories: breakers 1, 2
 and 3 pole, fuse holders, a motor protector, a surge protector and a rotary disconnect
@@ -390,9 +423,28 @@ for the back panel); 22 mm pushbuttons, pilot lights and selector switches and a
 emergency stop (Door devices). DIN-rail devices are 18 mm a pole and about 90 mm tall; each one's
 description gives its size. They are typical, not any maker's: for a part you buy, draw its
 own from its maker's drawing (Make block), or Edit block one of these and save it under your
-own name. A footprint of yours with the same name replaces a built-in one.</li>
+own name. In the Allen-Bradley categories (0.29): PowerFlex 525 drives by frame, A to E, at
+the widths and heights Rockwell publishes nominally (check its dimension drawing for the
+mounting holes), and outlines of a 1769 I/O module and controller, a 1756 module and
+chassis of 4, 7, 10, 13 and 17 slots, a 5069 module and a 1734 POINT I/O module on its base,
+each named "(approximate)": their sizes are approximate, so draw them from Rockwell's dimension
+drawings before laying out a real panel. A footprint of yours with the same name replaces a
+built-in one.</li>
 <li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
-footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
+footprint. Placing a part fills in its manufacturer, catalog number and description. Built in
+(0.29), marked "(built in)" in the Parts tab: Allen-Bradley parts by catalog number, each with
+its symbol and footprint: 100-C contactors (100-C09D10 to 100-C43D00, 120V AC coil) and
+their 100-FA11 and 100-FA20 auxiliary contacts, 140M-C2E motor protection circuit breakers
+(1.6 A to 16 A) and the 140M-C-AFA11 auxiliary contact, the E300 electronic overload relay
+(its catalog number depends on the modules chosen: left blank), 700-HA plug-in relays (120V AC
+and 24V DC coils), 800F-X10 and 800F-X01 contact blocks, 1492-J3, J4 and JG3 terminal blocks
+with the 1492-EBJ3 end barrier and 1492-EAJ35 end anchor, 1606-XLP power supplies (30, 50,
+100 W), PowerFlex 525 drives (480V, 0.5 to 15 HP), the PLC modules above, the 1756-L83E and
+1769-L33ER controllers, the 1756-PA72 power supply, 1756 chassis and the 1734-AENT adapter.
+Each part's notes say what to check in Rockwell's selection guide before ordering (coil
+voltage, current range); where no footprint of its own is built in, it uses the generic one
+nearest its size. Assign part... offers them for the devices of their symbols. A built-in part
+can't be deleted; changed (double-click it), your copy takes its place.</li>
 <li><b>A symbol and a footprint with the same name</b> (a starter's schematic symbol and its
 panel footprint, both "Starter") stay apart in a project: placed from the Library, made with
 Make block, brought in by Import I/O list or pasted, the one that comes second is kept as
@@ -438,6 +490,38 @@ its poles). Select a symbol to see a grip on its tag (and on a Rating or other a
 shows at one spot): drag it anywhere, and it stays there on that copy, following the symbol
 when it is moved or turned (Undo puts it back). In the Parts tab, Insert asks whether to place
 the part's symbol or its footprint.</p>
+<h3>Saved circuits</h3>
+<p>A circuit you draw again and again (a motor starter rung, a 3-wire control, an E-stop
+string, a pilot light) can be kept in the library and placed whole, as AutoCAD Electrical's
+circuit builder does:</p>
+<ol>
+<li>Select it (symbols, wires, text, lines, a ladder: anything on the sheet), then <b>Save
+circuit...</b> (Library menu; also on the menu of the Schematic tab's Insert symbol button;
+typed SAVECIRCUIT or CIRCSAVE). Click its base point, the point it is placed by (Enter: the
+lower left corner of what is selected), and give it a name, a category (Motor control,
+Lighting...) and a description. It is a file of its own in the library's <b>circuits</b>
+folder, in the first library or, with Save new blocks and parts to the second library ticked,
+the second, with its own copies of the blocks it uses and its layers; a circuit of that name
+already there is replaced once you say so.</li>
+<li><b>Insert circuit...</b> (Library menu, and Insert symbol's button menu; typed
+INSERTCIRCUIT or CIRCUIT) lists the circuits of both libraries by category, each with its
+picture (drawn from the circuit itself), and a bigger picture of the one selected with what it
+holds; type in its search box to find one. <b>Rename...</b> changes a circuit's name, category
+or description; <b>Delete</b> takes it out of the library (drawings it was placed in keep what
+it put there). Double-click one, or <b>Insert</b>: it follows the mouse; type R to turn it 90
+degrees, S then a number to scale it, and click where its base point goes. Enter afterward
+places the same circuit again.</li>
+</ol>
+<p>Placed, it is one step (Undo takes it all back): every device takes a new tag of the sheet's
+page, the lowest free ones (CR101 saved on page 1 is CR701 on page 7, and never a tag already
+taken; a tag you typed and locked stays as it is) and a new hidden id; each contact whose
+coil came with it belongs to the new coil, so its cross-references work at once, while one
+whose device was left out is placed on its own, its tag cleared (double-click it to link it);
+its wires take the sheet's numbers, as if drawn there (numbers you typed and locked stay); its
+off-sheet connectors and source and destination arrows take new names, the same within the
+circuit, so a pair in it stays a pair and none joins a wire of the drawing by accident; its
+terminals number themselves on their strips; its tags and footprint labels take this
+project's heights; and the sheet's wires under its symbols are cut to them, as Paste does. A block the project already has keeps its own drawing.</p>
 <h3>Making your own</h3>
 <ol>
 <li>Draw it, or open the manufacturer's DXF and copy the view you want into your drawing
@@ -2359,7 +2443,8 @@ never closes it) with what is selected</td></tr>
 closes it) with every place the selected device, wire or PLC point is used; Enter or a
 double-click on a row goes there</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
-<tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same symbol)</td></tr>
+<tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same
+symbol; Insert circuit: the same circuit)</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection (anywhere in the window)</td></tr>
 <tr><td>Right-click</td><td>In a command: Enter (Bus: a menu of its options, Enter first); with
 none: the drawing's menu</td></tr>

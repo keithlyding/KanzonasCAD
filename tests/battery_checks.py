@@ -1009,3 +1009,113 @@ def twins_apart(project):
                                                                        got)
     if len(seen) == 2:
         CHECKED["a symbol and a footprint of one name kept apart"] += 1
+
+
+# ---- saved circuits (0.29) ---------------------------------------------------------------------
+def _placed_at(q, at, angle, scale):
+    """Where a circuit's point q lands placed at at, turned by angle, scaled by scale (worked
+    out here, not by the circuit's code)."""
+    a = math.radians(angle)
+    x, y = q[0] * scale, q[1] * scale
+    return (at[0] + x * math.cos(a) - y * math.sin(a), at[1] + x * math.sin(a) + y * math.cos(a))
+
+
+def _key(name, q):
+    return (name, round(q[0], 6), round(q[1], 6))
+
+
+def circuit_placed(project, sheet, circuit, at, angle, scale, before):
+    """What placing a saved circuit must have done, from the circuit's own data and the
+    project before (before: {"ids": entity ids on the sheet, "devs": every device's hidden
+    id, "links": connector names, "undo": the undo stack's length}):
+    - each of its symbols is on the sheet, new, where its base point says (turned, scaled);
+    - every new device has a tag of this page no other device has, and a new hidden id;
+    - a contact (footprint, dashed box) whose device came with it belongs to that device's
+      new copy and shows its tag; one whose device stayed behind belongs to none;
+    - its connectors' names are new ones, two of one name in it one name still;
+    - its locked wire numbers are on the sheet, locked;
+    - all of it is one step of the undo stack."""
+    from kanzonascad import tags
+    new = [e for e in sheet.inserts() if e.id not in before["ids"]]
+    found = {}
+    for e in new:
+        found.setdefault(_key(e.block_name, e.pos), []).append(e)
+    want = []
+    for d in circuit.entities:
+        if d.get("kind") == "insert":
+            want.append((d, _key(M.library_block_name(d["block"], circuit.defs()[d["block"]].kind)
+                                 if d["block"] in circuit.defs() else d["block"],
+                                 _placed_at(d["pos"], at, angle, scale))))
+    assert len(new) == len(want), "circuit of %d symbols placed %d" % (len(want), len(new))
+    for _d, k in want:
+        assert k in found, "a symbol of the circuit isn't where it goes: %s (new: %s)" % (
+            k, sorted(found))
+    page = project.sheet_number(sheet)
+    devices = [e for s in project.sheets for e in s.inserts() if tags.is_device(e)]
+    for e in new:
+        if not tags.is_device(e):
+            continue
+        tag = e.attrs.get("TAG", "")
+        assert e.attrs.get("DEV") and e.attrs["DEV"] not in before["devs"], \
+            "%s placed with an old hidden id" % tag
+        if not tags.locked(e):
+            got = tags.split(tag, e.defn.prefix)
+            assert got and got[0] == page, "%s placed on page %s" % (tag, page)
+            same = [x for x in devices if x is not e and x.attrs.get("TAG") == tag and
+                    x.defn.prefix == e.defn.prefix]
+            assert not same, "%s placed twice" % tag
+    # (only symbols found alone at their spot: two of one block on one spot can't be told
+    # apart)
+    def one(k):
+        got = found.get(k, [])
+        return got[0] if len(got) == 1 else None
+    devs = {}
+    tag_of = {}
+    for d, k in want:
+        if d.get("attrs", {}).get("DEV"):
+            devs[d["attrs"]["DEV"]] = k
+            tag_of.setdefault(d["attrs"].get("TAG", "").strip().upper(), k)
+    for d, k in want:
+        e = one(k)
+        if e is None or tags.is_device(e) or not (tags.is_child(e) or tags.is_footprint(e)):
+            continue
+        parent = d.get("attrs", {}).get("PARENT", "")
+        tag = d.get("attrs", {}).get("TAG", "").strip().upper()
+        dk = devs.get(parent) if parent else tag_of.get(tag)
+        if dk is not None:
+            dev = one(dk)
+            if dev is None:
+                continue
+            assert e.attrs.get("PARENT") == dev.attrs["DEV"], \
+                "%s of the circuit isn't linked to its device's copy %s" % (
+                    e.block, dev.attrs.get("TAG"))
+            CHECKED["circuit: contact linked to its device's copy"] += 1
+        elif parent or (tag and not tags.is_footprint(e)):
+            assert not e.attrs.get("PARENT"), "%s linked to a device the circuit hasn't" % (
+                e.block,)
+            CHECKED["circuit: contact without its device placed on its own"] += 1
+    olds, news = {}, {}
+    for d, k in want:
+        e = one(k)
+        blk = circuit.defs().get(d["block"])
+        if e is None or blk is None or blk.wiring != "link":
+            continue
+        old = d.get("attrs", {}).get("TAG", "").strip().upper()
+        nw = e.attrs.get("TAG", "").strip().upper()
+        if old:
+            assert nw and nw not in before["links"], "connector %s placed as %s" % (old, nw)
+            olds.setdefault(old, set()).add(nw)
+            news.setdefault(nw, set()).add(old)
+    assert all(len(v) == 1 for v in olds.values()) and all(len(v) == 1 for v in
+                                                         news.values()), (olds, news)
+    if olds:
+        CHECKED["circuit: connectors renamed in pairs"] += 1
+    locked = {d["num"] for d in circuit.entities if d.get("kind") == "wire" and
+              d.get("num_lock") and d.get("num")}
+    if locked and project.settings.get("wire_numbers", True):
+        have = {w.num for w in sheet.wires() if w.num_lock}
+        assert locked <= have, "locked wire numbers %s not kept (%s)" % (locked, have)
+        CHECKED["circuit: locked wire numbers kept"] += 1
+    assert len(project.undo_stack) == before["undo"] + 1, "a circuit placed in %d steps" % (
+        len(project.undo_stack) - before["undo"])
+    CHECKED["circuit placed"] += 1
