@@ -20,6 +20,11 @@ build fails without them.
   terminal: the internal and external wires and where they go, and the jumpers. Save it as
   CSV or Excel, or draw it on report sheets with Report sheet....
 
+**Fixed**
+- Showing the tag of a contact block joined to its pushbutton or selector switch by the
+  dashed line (Tag in the Properties panel, or Shown on the drawing) did nothing: the line hid
+  it again at once. It now stays shown until you hide it.
+
 ## 0.26
 
 **New**

@@ -778,7 +778,8 @@ they move, and a block moved out of the column leaves it. Blocks joined by the l
 tag and no reference of their own, and aren't listed under the operator (the line shows where
 they belong; only the operator shows the tag); one on another sheet, or out of the column, shows
 its tag and reference and is listed as usual. A block's tag you hide yourself (double-click it,
-Shown on the drawing) stays hidden either way. Relay
+Shown on the drawing) stays hidden either way, and one you show yourself on the line (Shown on
+the drawing, or Tag ticked in the Properties panel) stays shown. Relay
 contacts are never joined this way.</li>
 <li><b>Changing it later</b>: double-click the contact. "Belongs to" lists the project's
 devices; pick one or type a tag. Deleting a coil leaves its contacts unlinked (showing

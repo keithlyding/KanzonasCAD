@@ -432,7 +432,8 @@ def joined_now(sheet):
 def sync_block_tags(ed, sheets):
     """Contact blocks on a dashed line show no tag of their own, as in the owner's print (the
     line shows where they belong; the owner, 0.19.11: "Yes"); one taken off the line shows it
-    again. Only a tag hidden here (TAGLINK) comes back: one hidden by hand stays hidden."""
+    again. Only a tag hidden here (TAGLINK) comes back: one hidden by hand stays hidden, and
+    one shown by hand on the line (TAGLINK "0", MainWindow.attribute_changes) stays shown."""
     for s in sheets:
         _lines, ids = joined_now(s)
         for e in list(s.inserts()):
@@ -440,7 +441,7 @@ def sync_block_tags(ed, sheets):
             if d is None or d.role != "child" or d.prefix not in LINKED:
                 continue
             mine = e.attrs.get("TAGLINK") == "1"
-            if e.id in ids and "TAG" not in e.hidden:
+            if e.id in ids and "TAG" not in e.hidden and e.attrs.get("TAGLINK") != "0":
                 attrs = dict(e.attrs, TAGLINK="1")
                 ed.change(s, e.copy(hidden=frozenset(e.hidden) | {"TAG"}, attrs=attrs))
             elif e.id not in ids and mine:

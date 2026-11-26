@@ -3620,6 +3620,12 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         two always change the same things the same way."""
         from . import tags
         hidden = shown.get("hidden", ins.hidden)
+        if "TAG" in ins.hidden and "TAG" not in hidden and ins.attrs.get("TAGLINK") == "1":
+            # a contact block's tag shown by hand while it is on its operator's dashed line:
+            # it stays shown (xrefs.sync_block_tags would hide it again at once)
+            attrs = dict(attrs, TAGLINK="0")
+        elif "TAG" in hidden and "TAG" not in ins.hidden and "TAGLINK" in attrs:
+            attrs = {k: x for k, x in attrs.items() if k != "TAGLINK"}    # (hidden by hand)
         if ins.defn is not None and ins.defn.kind == "footprint" and \
                 attrs.get("TAG", "") != ins.attrs.get("TAG", ""):
             # a footprint's tag typed: the device with that tag is the one it is now (none
