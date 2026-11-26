@@ -24,6 +24,9 @@ build fails without them.
 - Showing the tag of a contact block joined to its pushbutton or selector switch by the
   dashed line (Tag in the Properties panel, or Shown on the drawing) did nothing: the line hid
   it again at once. It now stays shown until you hide it.
+- Move and Copy left a wire end that landed a few thousandths of an inch from another wire or a
+  pin without joining it, so it looked connected and wasn't. Such an end is now put on it, as
+  Stretch and grips already did.
 
 ## 0.26
 

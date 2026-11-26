@@ -248,6 +248,15 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
                 # too; Trim wire cut back to such a crossing 0.0048" from a pin in seed 3152)
                 CHECKED["near misses: ends on slanted runs left out"] += 1
                 continue
+            if any(isinstance(o, M.Insert) and o.defn is not None and o.defn.pins and
+                   abs(o.angle / 90.0 - round(o.angle / 90.0)) > 1e-9 and
+                   any(G.dist(p, q) <= lo for _n, q in o.pin_points()) for o in near):
+                # (an end on a pin of a symbol turned off the right angles: joined, and where
+                # its pins are is chance as well, as a slanted run's crossings are; a drive
+                # turned 45 degrees, moved up, put its terminal 02 and the wire on it 0.0089"
+                # under a wire passing across its row of pins, long battery seed 5052)
+                CHECKED["near misses: ends on pins of turned symbols left out"] += 1
+                continue
             for o in near:
                 if o.id == w.id:
                     continue

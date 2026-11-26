@@ -1594,9 +1594,11 @@ is (Enter starts a new line there, <b>Ctrl+Enter</b> keeps it, Esc drops it); ri
 <b>Text properties...</b> changes its text, height, wrap width and the point it hangs from (top
 left ... bottom right). A DXF's or DWG's MTEXT
 comes in as one, and DXF export writes it as MTEXT.</td></tr>
-<tr><td>Move</td><td>MOVE, M</td><td>Select, base point, second point.</td></tr>
+<tr><td>Move</td><td>MOVE, M</td><td>Select, base point, second point. A wire end it leaves
+less than 0.01" from a pin or another wire is put on it.</td></tr>
 <tr><td>Copy objects</td><td>COPY, CO, CP</td><td>Select, base point, then as many copies as
-you place (Enter ends).</td></tr>
+you place (Enter ends). A copied wire end less than 0.01" from a pin or another wire is put on
+it.</td></tr>
 <tr><td>Rotate</td><td>ROTATE, RO</td><td>Select, base point, angle (a point or degrees).</td></tr>
 <tr><td>Scale</td><td>SCALE, SC</td><td>Select, base point, factor. Or <b>Reference</b> (R): pick
 two points of a length as drawn (or type it), then type the length it should be: this brings a
