@@ -324,8 +324,8 @@ nobody understands).
        it plain parts.
      - A change to the type reaches placed ones only through a command (Update from type)
        that shows what will change first, not silently.
-   - **Built-in UDTs and your own** (the owner, Nov 26 2026: "If I have three different
-     style motor circuits, I would use three different UDTs"): a few UDTs come with the
+   - **Built-in UDTs and your own** (the owner, Nov 26 2026: "If I have two different
+     style motor circuits, I would use two different UDTs"): a few UDTs come with the
      program, read-only as the built-in blocks and parts are (editing one saves your own
      copy); you make your own from a saved circuit and keep them in either library folder.
    - **Ratings are worked out automatically and can be overridden** (the owner: "I'm good
