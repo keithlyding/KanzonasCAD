@@ -937,6 +937,50 @@ def pdf_links_right(project, path, sheets):
     return n_links
 
 
+# ---- a source arrow's wire number (0.19.11) ----------------------------------------------------
+def own_wire_number_wrong(project, sheet, wire, split):
+    """Why the number of a wire of its own (not a tap) at a source arrow is wrong, or None:
+    a number of its page; but a wire on a distribution block outlet's T pin takes its block's
+    phase number with the outlet's letter, wherever the block is (the manual: an outlet "on any
+    sheet"; outlet 4 of page 25's PDB2501 on page 9 is 25005D: the long battery, 0.27, seed
+    5022). Worked out from the drawing: the outlet's OUTLET, the wire on its block's L pin.
+    split: wirenums.split."""
+    num = wire.num
+    for e in sheet.inserts():
+        d = e.defn
+        if d is None or d.wiring != "pdb" or not e.attrs.get("PARENT"):
+            continue
+        for n, q in e.pin_points():
+            if not (n.startswith("T") and wire.touches(q)):
+                continue
+            k = (e.attrs.get("OUTLET") or "").strip()
+            if not k.isdigit() or int(k) < 1:
+                return None             # (an outlet not numbered yet: its wires wait for it)
+            i, letter = int(k), ""
+            while i:
+                i, r = divmod(i - 1, 26)
+                letter = chr(65 + r) + letter
+            phase = set()
+            for bs in project.sheets:
+                for b in bs.inserts():
+                    if b.defn is not None and b.defn.wiring == "pdb" and \
+                            b.attrs.get("DEV") == e.attrs["PARENT"]:
+                        q2 = dict(b.pin_points()).get("L" + n[1:])
+                        phase |= {w.num for w in bs.wires()
+                                  if q2 is not None and w.num and w.touches(q2)}
+            if len(phase) != 1:
+                return None             # (no block, or its phase not numbered: nothing to say)
+            want = phase.pop() + letter
+            CHECKED["a source's wire on a distribution outlet takes its phase's number"] += 1
+            return None if num == want else "a source arrow's wire on outlet %s's %s took %s, " \
+                "not %s" % (k, n, num, want)
+    got = split(num)
+    if got is None or got[0] != project.sheet_number(sheet):
+        return "a source arrow's wire on page %s took %s from a destination's page" % (
+            project.sheet_number(sheet), num)
+    return None
+
+
 # ---- devices without a footprint (0.25) --------------------------------------------------------
 def missing_footprints(project):
     """{(sheet id, entity id)} of the devices that need a footprint and have none, worked out

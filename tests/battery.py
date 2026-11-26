@@ -3108,9 +3108,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         if got is None and WN.by_io_address(p):
             return                          # (numbered by a PLC point's address, O:3/0)
         if base == now[0].num:
-            assert got and got[0] == p.sheet_number(sh), \
-                "a source arrow's wire on page %s took %s from a destination's page" % (
-                    p.sheet_number(sh), now[0].num)
+            why = BC.own_wire_number_wrong(p, sh, now[0], WN.split)
+            assert why is None, why
         BC.CHECKED["a source's wire keeps its page's number"] += 1
 
     def op_wire_color():

@@ -81,6 +81,36 @@ class PdbTest(unittest.TestCase):
         # (each phase its own number: L1, L2 and L3 never share one)
         self.assertEqual(len({self.num_at(self.s, q) for q in ins.values()}), 3)
 
+    def test_battery_check_a_source_arrow_on_an_outlet_of_another_page(self):
+        # (the long battery, 0.27, seed 5022: a source arrow on the wire of an outlet on page
+        # 2, its block on page 1: the wire rightly takes the block's phase number with the
+        # outlet's letter, 1001A, a number of page 1; the check wanted a number of page 2)
+        from tests import battery_checks as BC
+        from kanzonascad.wirenums import ARROWS
+        pdb = self.place(self.par, (5.0, 5.0))
+        self.wire_pins(pdb)
+        self.win.add_sheet()
+        s2 = self.v.sheet()
+        o1 = self.place(self.out, (3.0, 1.0), pdb.attrs["TAG"])
+        self.wire_pins(o1, out=True)
+        q = dict(o1.pin_points())["T1"]
+        self.v.run(C.InsertCmd, self.win.library.get("symbol", ARROWS[0]), {})
+        type_in(self.v, "%r,%r" % (q[0] + 1.5, q[1]))
+        while self.v.cmd is not None:
+            self.v.cmd.enter()
+        self.number()
+        src = next(e for e in s2.inserts() if e.block == ARROWS[0])
+        wire = next(w for w in s2.wires() if w.touches(src.pin_points()[0][1]))
+        base = self.num_at(self.s, dict(self.s.entities[pdb.id].pin_points())["L1"])
+        self.assertEqual(wire.num, base + "A")
+        self.assertEqual(wirenums.split(base)[0], "1")
+        self.assertIsNone(BC.own_wire_number_wrong(self.p, s2, wire, wirenums.split))
+        # (another number there, or a wire of its own on page 2 with page 1's, still fails)
+        self.assertIsNotNone(BC.own_wire_number_wrong(
+            self.p, s2, wire.copy(num=base + "B"), wirenums.split))
+        lone = M.Wire([(8.0, 8.0), (9.0, 8.0)], num="1099")
+        self.assertIsNotNone(BC.own_wire_number_wrong(self.p, s2, lone, wirenums.split))
+
     def test_too_many_outlets_are_flagged(self):
         pdb = self.place(self.par, (5.0, 5.0))
         with self.p.edit("outlets") as ed:
