@@ -288,6 +288,51 @@ nobody understands).
     on a panel sheet as a footprint per terminal (place the Terminal block footprints on the
     rail; it fits with 0.28's panel wiring).
 
+- 0.28, panel wiring (the owner's list, item 5; his answers of 0.22.1: "yes, a per device wiring
+  list", and point-to-point as labels on the footprints' terminals rather than a drawn
+  diagram, which "seems extremely busy"). Decided while building it (Claude, Nov 26 2026; to
+  confirm with the owner):
+  - **Device wiring list...** (Sheets menu; Panel tab, Reports; Output tab, on the Wire list
+    button's menu; a report sheet; CSV and Excel): a unit per device, its own symbol and those
+    linked to it (contacts, PLC points: its children), and one per strip terminal (TB1-4, every
+    place it is drawn). A row per pin and wire group on it (two wires landed on a pin: two rows;
+    an unwired pin one empty row, decided here: a spare terminal is worth seeing): wire number,
+    size (the wire's own, else its layer's), its layer's color, layer, the other pins the group
+    lands on (through connectors and arrows, as the terminal plan: strips.py's nets, reused),
+    each with its location when it isn't the device's, the device's location, where the pin's
+    symbol is, and Footprint: where the pin is on its footprint or why not (no footprint, no
+    terminal positions, no terminal of that name). Worked out every time, never kept.
+  - **A footprint's terminal positions are its block's pins**, named as the device's pins (Edit
+    block, Add pin / Pins...); one footprint stands for the whole device (a contactor's A1/A2
+    are its coil's, L1-T3 its power contacts'). A footprint with none: said in the report's
+    Footprint column and on the command line, never guessed. The program's own terminal blocks,
+    1- and 3-pole breakers and fuse holders, motor protector, rotary disconnect, contactors
+    and overload relay got pins (decided here: typical screw places, so the labels work out of
+    the box; the others, relays, power supplies, PLCs, have none yet).
+  - **A terminal's footprint** is a footprint with the terminal's number (TERM) linked to its
+    strip: placing a footprint, the device typed as TB1-4 (decided here, the strip's tag, a
+    dash, the number); a terminal block's footprint is asked even when every device already
+    has one; or Terminal number in its attributes window. It shows TB1-4 as its tag line; its
+    DXF tag attribute stays TB1.
+  - **Terminal wire labels** (Panel tab, Terminals): **decided here: per panel sheet** (Sheet's
+    terminal_labels, one Undo step, kept in the file), not per project, so a door layout or an
+    issued sheet stays clear. Each footprint terminal labeled "6001 → CR101:A1" (another
+    location shown, "(FIELD)"; a line per wire group; a number alone when it lands nowhere
+    else; decided here: a wire landing on more than three pins, a common or a neutral, names
+    the first two and how many more, "CR201:A2, CR202:A2 +4", the wiring list naming them all),
+    starting just off the pin and running out of the footprint on the side the pin is
+    nearest (measured against the box's half width and height), read across or upward
+    however the footprint is turned or flipped. Height: a project setting of its own, Panel
+    settings' Terminal wire label height, 0.05" on paper to start (decided here: the footprint
+    label height, 0.08", is too tall for terminal blocks 0.2" apart at 1:4). Derived, never
+    stored: worked out once per change of the project (any sheet's version, numbering, the
+    height, the wire layers) and kept with it until the next; the view's picture key already
+    changes with the project's revision. In the footprint label color when the project has
+    one. Printed, in PDF, and in DXF (layer PANEL).
+  - Not done: labels that move out of each other's way where terminals are closer than the
+    text, a drawn point-to-point diagram (the owner's no), footprints placed for every
+    terminal of a strip at once.
+
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).
 2. Auto wire layer (0.22.1, above).
@@ -297,8 +342,8 @@ nobody understands).
    0.24, 0.25 until the Properties panel and Devices without a footprint took 0.25, then 0.26
    until the owner's handwritten list and the collector fix took 0.26, one release): strips,
    jumpers, a strip editor, a terminal plan report.
-5. Panel wiring (0.28): a per-device wiring list (owner: yes); point-to-point as wire labels on
-   the footprints' terminals, not a drawn diagram (see 0.22.1).
+5. Panel wiring: done in 0.28 (below): a per-device wiring list (owner: yes); point-to-point
+   as wire labels on the footprints' terminals, not a drawn diagram (see 0.22.1).
 6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.29):
    "lean heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates
    library: not now.

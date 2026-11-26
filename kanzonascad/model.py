@@ -62,6 +62,9 @@ DEFAULT_SETTINGS = {
                                 # discernible")
     # devices without a footprint marked orange on the drawing (missing_fp.py; 0.25)
     "fp_missing_marks": True,
+    # footprint terminals' wire labels (Terminal wire labels: panelwiring.py; 0.28), paper
+    # inches
+    "fp_wire_label_height": 0.05,
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
@@ -2950,6 +2953,9 @@ class Insert(Entity):
             if not v:
                 # (the footprint block's own, as the bill of materials takes it)
                 v = {"cat": d.catalog, "desc": d.description}.get(key, "")
+            if key == "tag" and v and self.attrs.get("TERM", "").strip():
+                # (a terminal's footprint: its strip and number, TB1-4; 0.28)
+                v = "%s-%s" % (v, self.attrs["TERM"].strip())
             return v or "?"
         v = self.attrs.get(key, "")
         return attr_display(key, v) if v.strip() else None
@@ -3438,6 +3444,9 @@ class Sheet:
         self.xref_frozen = False            # cross-references kept as they were (issued sheet)
         self.xref_shown = None              # the cross-references shown while frozen (or while
                                             # the project's aren't automatic): xrefs.py
+        # a panel sheet's footprint terminals labeled with their wires and where they go
+        # (Terminal wire labels, panelwiring.py; 0.28: per sheet, decided there)
+        self.terminal_labels = False
         self.no_dots = []                   # junction dots deleted (Delete dot): [(x, y)]
         # arrays that stay arrays (arrays.py): {id: {mode, vals, center, source, items}}
         self.arrays = {}
@@ -3691,6 +3700,8 @@ class Sheet:
                            for k, a in self.arrays.items()}
         if self.report:
             d["report"] = self.report
+        if self.terminal_labels:
+            d["terminal_labels"] = True
         if self.pin_order:
             d["pin_order"] = list(self.pin_order)
         if self.pin_layers:
@@ -3749,6 +3760,7 @@ class Sheet:
                            if v}
         self.arrays = _arrays(d.get("arrays"))
         self.report = str(d.get("report", "") or "")
+        self.terminal_labels = bool(d.get("terminal_labels", False))
         self.version += 1
 
     @classmethod

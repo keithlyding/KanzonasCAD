@@ -1180,3 +1180,263 @@ def strips_right(project):
             assert got == lands, "terminal %s-%s lands on %s, its wires reach %s" % (
                 st.tag, r.num, sorted(got), sorted(lands))
             CHECKED["terminal's wires and landings"] += 1
+
+
+def _union_groups(wires):
+    """{wire id: root} of a sheet's wires joined where one's end lies on another (its end or
+    its middle), worked out pair by pair here (not wirenums' groups)."""
+    up = {w.id: w.id for w in wires}
+
+    def find(k):
+        while up[k] != k:
+            up[k] = up[up[k]]
+            k = up[k]
+        return k
+    for i, a in enumerate(wires):
+        ea = (a.points[0], a.points[-1])
+        for b in wires[i + 1:]:
+            if any(b.touches(q, TOL) for q in ea) or \
+                    any(a.touches(q, TOL) for q in (b.points[0], b.points[-1])):
+                ra, rb = find(a.id), find(b.id)
+                if ra != rb:
+                    up[rb] = ra
+    return {k: find(k) for k in up}
+
+
+def panel_wiring_right(project):
+    """(0.28) The device wiring list and the terminal wire labels as the drawing says, worked
+    out here from every wire and pin (not strips.py's nets or wirenums' groups): wires joined
+    end to end or end on a middle on a sheet, joined across sheets at off-sheet connectors and
+    arrows of one name; each pin of each device (its symbol and those linked to it) and of
+    each strip's terminal (every place it is drawn) is a row for each wire group on it, with
+    those wires' numbers and the other pins the group lands on (with their location when it
+    isn't the device's), and a pin with no wire one empty row; and on a panel sheet showing
+    them, each terminal of a device's footprint (its pins, named as the device's) carries a
+    label for each of those groups, "number → landings", read across or upward, just off its
+    pin. A group with a wire numbered on its own (its taps kept apart) is left out."""
+    from kanzonascad import panelwiring, pull, strips, wirenums
+    numbered = wirenums.enabled(project)
+    sheets = list(project.sheets)
+    groups, unsure = {}, set()
+    for s in sheets:
+        ws = list(s.wires())
+        if len(ws) > 600:
+            for w in ws:
+                groups[(s.id, w.id)] = (s.id, "big")
+            unsure.add((s.id, "big"))
+            continue
+        got = _union_groups(ws)
+        for w in ws:
+            groups[(s.id, w.id)] = (s.id, got[w.id])
+            if w.own_num:
+                unsure.add((s.id, got[w.id]))
+    # (across sheets: the groups on connectors of one name are one net)
+    net = {}
+
+    def find(k):
+        while net.get(k, k) != k:
+            k = net[k]
+        return k
+
+    def on_pin(s, q):
+        return [w for w in s.wires() if w.touches(q, TOL)]
+    first = {}
+    for s in sheets:
+        for e in s.inserts():
+            d = e.defn
+            if d is None or d.wiring != "link":
+                continue
+            name = (e.attrs.get("TAG") or "").strip().upper()
+            if not name:
+                continue
+            for _n, q in e.pin_points():
+                for w in on_pin(s, q):
+                    g = groups[(s.id, w.id)]
+                    if name not in first:
+                        first[name] = g
+                    a, b = find(first[name]), find(g)
+                    if a != b:
+                        net[b] = a
+    bad = {find(g) for g in unsure}
+    # (every pin wires land on, by net)
+    lands = collections.defaultdict(list)
+    devs, strip_tags, dev_tags = {}, {}, {}
+    for s in sheets:
+        for e in s.inserts():
+            d = e.defn
+            if d is None or d.kind != "symbol":
+                continue
+            if d.role in ("device", "parent") and d.prefix and e.attrs.get("DEV"):
+                devs[e.attrs["DEV"]] = (s, e)
+            if not d.pins or d.wiring == "link":
+                continue
+            for name, q in e.pin_points():
+                for g in {find(groups[(s.id, w.id)]) for w in on_pin(s, q)}:
+                    lands[g].append((s, e, name))
+    for dev, (s, e) in devs.items():
+        t = (e.attrs.get("TAG") or "").strip().upper()
+        if t:
+            (strip_tags if e.defn.prefix == "TB" and e.defn.role == "parent"
+             else dev_tags).setdefault(t, dev)
+    # (the units: devices with their linked symbols, terminals of strips)
+    units = {}
+    for i, s in enumerate(sheets):
+        for e in s.inserts():
+            d = e.defn
+            if d is None or d.kind != "symbol" or d.wiring == "link":
+                continue
+            tag = (e.attrs.get("TAG") or "").strip()
+            par = e.attrs.get("PARENT") or ""
+            main = False
+            if _has_term(e):
+                num = (e.attrs.get("TERM") or "").strip()
+                strip = par if par in devs else "tag:" + tag.upper()
+                if strip.startswith("tag:") and strip[4:] in strip_tags:
+                    strip = strip_tags[strip[4:]]
+                stag = ((devs[strip][1] if strip in devs else e).attrs.get("TAG") or
+                        "").strip() or "TB?"
+                key, name = (("term", strip, num), "%s-%s" % (stag, num)) if num else (
+                    ("one", s.id, e.id), stag)
+                main = True
+            elif d.role in ("device", "parent") and d.prefix:
+                key, name, main = ("dev", e.attrs.get("DEV")) if e.attrs.get("DEV") else (
+                    "one", s.id, e.id), tag or "?", True
+            elif d.role == "child":
+                if par in devs:
+                    key, name = ("dev", par), (devs[par][1].attrs.get("TAG") or "").strip() or "?"
+                elif tag:
+                    key, name = ("tag", tag.upper()), tag
+                else:
+                    key, name = ("one", s.id, e.id), e.block_name
+            else:
+                continue
+            u = units.setdefault(key, {"name": name, "syms": []})
+            u["syms"].append(((0 if main else 1, i, -e.pos[1], e.pos[0]), s, e))
+    for key, u in units.items():
+        u["syms"].sort(key=lambda t: t[0])
+        u["loc"] = pull.location_of(*devs[key[1]]) if key[0] == "dev" and key[1] in devs \
+            else pull.location_of(u["syms"][0][1], u["syms"][0][2])
+
+    def landing_names(g, me, loc):
+        out = set()
+        for s, x, pin in lands.get(g, ()):
+            if s is me[0] and x is me[1] and pin == me[2]:
+                continue
+            n = pull.landing_name(x, pin)
+            there = pull.location_of(s, x)
+            out.add(n + (" (%s)" % there if there and there != loc else ""))
+        # (as written: a block's name may hold a comma, "PLC ... module, points 8-15")
+        return sorted(out, key=strips.natural)
+
+    def pin_ends(s, e, name, q, loc):
+        """[(numbers, landings)] of the groups on a pin, or None when one is left out."""
+        by = collections.OrderedDict()
+        for w in on_pin(s, q):
+            by.setdefault(find(groups[(s.id, w.id)]), []).append(w)
+        if any(g in bad for g in by):
+            return None
+        return [(frozenset((w.num or "?") for w in ws) if numbered else frozenset(),
+                 tuple(landing_names(g, (s, e, name), loc))) for g, ws in by.items()]
+    want, skip = collections.Counter(), set()
+    ends_of = {}
+    for key, u in units.items():
+        for _k, s, e in u["syms"]:
+            for name, q in e.pin_points():
+                got = pin_ends(s, e, name, q, u["loc"])
+                if got is None:
+                    skip.add((u["name"], name))
+                    continue
+                ends_of.setdefault(key, {}).setdefault(name, []).extend(got)
+                for nums, to in got or [(None, None)]:
+                    want[(u["name"], name, nums, ", ".join(to) if to is not None else None,
+                          u["loc"])] += 1
+
+    def split(t):
+        return frozenset(x for x in t.split(", ") if x) if t else frozenset()
+    have = collections.Counter()
+    for r in panelwiring.rows(project):
+        if (r[0], r[1]) in skip:
+            continue
+        nums = split(r[2]) if r[2] or r[6] else None
+        to = r[6] if r[2] or r[6] else None
+        have[(r[0], r[1], nums, to, r[7])] += 1
+    # (a group with no number (numbering off) and landing nowhere: an "empty" row both ways)
+    for k in list(want):
+        if k[2] == frozenset() and k[3] == "":
+            n = want.pop(k)
+            want[(k[0], k[1], None, None, k[4])] += n
+    assert want == have, "wiring list: missing %s; not on the drawing %s" % (
+        sorted(map(str, (want - have).elements()))[:4],
+        sorted(map(str, (have - want).elements()))[:4])
+    CHECKED["wiring list as the wires and pins say"] += 1
+    # ---- the labels on the footprints' terminals
+    for s in sheets:
+        if s.kind != "panel":
+            assert not panelwiring.labels(project, s), "terminal labels on a sheet not a panel"
+            continue
+        got = panelwiring.labels(project, s)
+        if not s.terminal_labels:
+            assert not got, "terminal labels on a panel sheet with them off"
+            continue
+        h = panelwiring.label_height(project) * s.k()
+        want_l = collections.Counter()
+        spots = []
+        unsure_here = False
+        for f in s.inserts():
+            d = f.defn
+            if d is None or d.kind != "footprint" or not d.pins:
+                continue
+            par = f.attrs.get("PARENT") or ""
+            tag = (f.attrs.get("TAG") or "").strip().upper()
+            term = (f.attrs.get("TERM") or "").strip()
+            if term:
+                if par and par in devs and devs[par][1].defn.prefix == "TB" and \
+                        devs[par][1].defn.role == "parent":
+                    key = ("term", par, term)
+                elif not par and tag:
+                    key = ("term", strip_tags.get(tag, "tag:" + tag), term)
+                else:
+                    continue
+            elif par:
+                key = ("dev", par)
+            elif tag:
+                key = ("dev", dev_tags[tag]) if tag in dev_tags else ("tag", tag)
+            else:
+                continue
+            if key not in units:
+                continue
+            u = units[key]
+            for name, q in f.pin_points():
+                if (u["name"], name) in skip:
+                    unsure_here = True
+                    continue
+                ends = ends_of.get(key, {}).get(name, [])
+                n = 0
+                for nums, to in ends:
+                    if nums or to:
+                        # (a label names three pins at most: the first two, then how many more)
+                        most = panelwiring.MOST
+                        shown = ", ".join(to) if len(to) <= most else "%s +%d" % (
+                            ", ".join(to[:most - 1]), len(to) - most + 1)
+                        want_l[(nums, shown)] += 1
+                        n += 1
+                if n:
+                    spots.append((q, n))
+        if unsure_here:
+            continue
+
+        have_l = collections.Counter()
+        for t in got:
+            assert t.angle in (0.0, 90.0), "a terminal label at %g degrees" % t.angle
+            assert abs(t.height - h) < 1e-9, "a terminal label %g tall, not %g" % (t.height, h)
+            num, _sep, to = t.text.partition(panelwiring.ARROW)
+            if not _sep and t.text.startswith(panelwiring.ARROW.strip() + " "):
+                num, to = "", t.text[len(panelwiring.ARROW.strip()) + 1:]
+            have_l[(split(num), to)] += 1
+            assert any(G.dist(t.pos, q) <= 0.4 * h + (n - 1) / 2.0 * 1.3 * h + 1e-6 * (1 + h)
+                       for q, n in spots), "a terminal label %r far from every terminal" % t.text
+        assert want_l == have_l, "terminal labels on sheet %s: missing %s; wrong %s" % (
+            s.id, sorted(map(str, (want_l - have_l).elements()))[:3],
+            sorted(map(str, (have_l - want_l).elements()))[:3])
+        if want_l:
+            CHECKED["terminal wire labels as the wires and pins say"] += 1

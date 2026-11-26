@@ -17,9 +17,10 @@ def _rect(x0, y0, x1, y1):
     return Polyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], True)
 
 
-def _fp(name, category, w, h, ents=(), description="", rail=True):
+def _fp(name, category, w, h, ents=(), description="", rail=True, pins=()):
     """A footprint w x h inches around its middle: its outline, what's drawn on it, its label
-    spot above the middle (clear of the rail), and the rail through its middle."""
+    spot above the middle (clear of the rail), the rail through its middle, and its terminal
+    positions (pins, named as the matching symbol's: panel wiring labels them)."""
     hw, hh = w / 2.0, h / 2.0
     size = "%g x %g in (%g x %g mm)" % (round(w, 2), round(h, 2), round(w / MM), round(h / MM))
     d = BlockDef(name, "footprint", [_rect(-hw, -hh, hw, hh)] + list(ents),
@@ -27,8 +28,22 @@ def _fp(name, category, w, h, ents=(), description="", rail=True):
                  category="Generic/" + category,
                  description=("%s, typical %s: check the maker's drawing" % (description, size))
                  if description else "Typical %s: check the maker's drawing" % size,
-                 builtin=True, rail_pos=(0.0, 0.0) if rail else None)
+                 builtin=True, rail_pos=(0.0, 0.0) if rail else None, pins=pins)
     return d
+
+
+def _screw_pins(w, h, top, bottom, inset=0.18):
+    """Pins on the screws _screws draws: names top along the top, bottom along the bottom,
+    left to right (a 3-pole device: L1 L2 L3 over T1 T2 T3, as its symbol's pins)."""
+    out = []
+    for names, y in ((top, h / 2.0 - inset), (bottom, -h / 2.0 + inset)):
+        n = len(names)
+        for i, name in enumerate(names):
+            out.append({"name": name, "pos": (-w / 2.0 + w * (i + 0.5) / n, y)})
+    return out
+
+
+LT = (["L1", "L2", "L3"], ["T1", "T2", "T3"])
 
 
 def _screws(w, h, n, inset=0.18, r=None):
@@ -59,35 +74,47 @@ def builtin_footprints():
     P = 18 * MM                         # (one DIN module, 18 mm)
     H = 90 * MM
     out = []
+    # (a pole's pins as the symbols name them: a 1-pole breaker or fuse 1 over 2, three
+    # poles L1-L3 over T1-T3; no symbol has two poles, so none on those)
+    POLE_PINS = {1: (["1"], ["2"]), 2: ([], []), 3: LT}
     # ---- protection ----------------------------------------------------------------------------
     for n in (1, 2, 3):
         w = n * P
         out.append(_fp("Breaker %d-pole (DIN)" % n, "Protection", w, H,
                        _poles(w, H, n) + _toggle(w),
-                       "Miniature circuit breaker, %d pole(s)" % n))
+                       "Miniature circuit breaker, %d pole(s)" % n,
+                       pins=_screw_pins(w, H, *POLE_PINS[n])))
     for n in (1, 3):
         w = n * P
         out.append(_fp("Fuse holder %d-pole (DIN)" % n, "Protection", w, 81 * MM,
                        _poles(w, 81 * MM, n) + [_rect(-w / 2 + 0.06, -0.45, w / 2 - 0.06, 0.45)],
-                       "Fuse holder for 10 x 38 mm fuses, %d pole(s)" % n))
+                       "Fuse holder for 10 x 38 mm fuses, %d pole(s)" % n,
+                       pins=_screw_pins(w, 81 * MM, *POLE_PINS[n])))
     out.append(_fp("Motor protector (DIN)", "Protection", 45 * MM, H,
                    _screws(45 * MM, H, 3) + [Circle((0.0, 0.1), 0.25)],
-                   "Motor protection circuit breaker (manual motor starter), 3 pole"))
+                   "Motor protection circuit breaker (manual motor starter), 3 pole",
+                   pins=_screw_pins(45 * MM, H, *LT)))
     out.append(_fp("Surge protector 1-pole (DIN)", "Protection", P, H, _screws(P, H, 1),
                    "Surge protective device, 1 pole"))
     out.append(_fp("Disconnect, rotary 3-pole (DIN)", "Protection", 3 * P, 80 * MM,
                    _poles(3 * P, 80 * MM, 3) + [Circle((0.0, 0.0), 0.35),
                                                 Line((-0.28, 0.0), (0.28, 0.0))],
-                   "Rotary disconnect switch, 3 pole, about 32 A"))
+                   "Rotary disconnect switch, 3 pole, about 32 A",
+                   pins=_screw_pins(3 * P, 80 * MM, *LT)))
     # ---- control ---------------------------------------------------------------------------
     for name, w, h, what in (("Contactor 9-18 A", 45, 80, "Contactor, 3 pole, 9 to 18 A"),
                              ("Contactor 25-38 A", 54, 90, "Contactor, 3 pole, 25 to 38 A")):
         w, h = w * MM, h * MM
+        # (its coil's A1 and A2 on the left side, under and over the power screws)
+        coil = [{"name": "A1", "pos": (-w / 2.0 + 0.12, h / 2.0 - 0.5)},
+                {"name": "A2", "pos": (-w / 2.0 + 0.12, -h / 2.0 + 0.5)}]
         out.append(_fp(name, "Control", w, h,
-                       _screws(w, h, 3) + [_rect(-w * 0.3, -0.25, w * 0.3, 0.25)], what))
+                       _screws(w, h, 3) + [_rect(-w * 0.3, -0.25, w * 0.3, 0.25)], what,
+                       pins=_screw_pins(w, h, *LT) + coil))
     out.append(_fp("Overload relay 9-18 A", "Control", 45 * MM, 66 * MM,
                    _screws(45 * MM, 66 * MM, 3, inset=0.15) + [Circle((0.0, 0.0), 0.15)],
-                   "Overload relay, mounted under its contactor or on the rail"))
+                   "Overload relay, mounted under its contactor or on the rail",
+                   pins=_screw_pins(45 * MM, 66 * MM, *LT, inset=0.15)))
     for name, h, what in (("Relay, ice cube 8-pin with base", 75, "8-pin plug-in relay on its "
                                                                   "DIN-rail base"),
                           ("Relay, ice cube 14-pin with base", 80, "14-pin plug-in relay on its "
@@ -122,7 +149,9 @@ def builtin_footprints():
         if name.startswith("Ground"):
             ents += [Line((-w * 0.35, -0.05 - k * 0.05), (w * 0.35, -0.05 - k * 0.05))
                      for k in range(3)]
-        out.append(_fp(name, "Terminals", w, h, ents, what))
+        # (pin 1 on the top screw, 2 on the bottom one: a Terminal symbol's left and right)
+        out.append(_fp(name, "Terminals", w, h, ents, what,
+                       pins=_screw_pins(w, h, ["1"], ["2"], inset=0.12)))
     out.append(_fp("Terminal end plate", "Terminals", 2 * MM, 47 * MM, (),
                    "End plate, closing the open side of the last terminal"))
     out.append(_fp("End stop", "Terminals", 9 * MM, 35 * MM,

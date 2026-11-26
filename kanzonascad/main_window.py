@@ -564,6 +564,15 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
           icon="terminal_plan", label="Terminal plan",
           tip="Every strip terminal by terminal in its order: the wire and what it goes to on "
               "the internal and the external side, and its jumper (save as CSV or Excel)")
+        A("wiring_list", "Device &wiring list...", self.show_wiring_list,
+          icon="wiring_list", label="Wiring list",
+          tip="Each device and terminal pin by pin: its wire number, size, color and layer, "
+              "where the wire goes (device:pin) and where the pin is on its footprint (save as "
+              "CSV or Excel)")
+        A("terminal_labels", "Terminal wire la&bels", self.terminal_labels, checkable=True,
+          icon="terminal_labels", label="Wire labels",
+          tip="On this panel sheet, each footprint terminal labeled with its wire number and "
+              "where the wire goes (6001 → CR101:A1), from the schematic as it is")
         A("terminal_count", "Terminal &count...", self.show_terminal_count,
           icon="terminal_count", label="Terminal count",
           tip="How many terminals and jumpers the tapped wires need: a wire number and each of "
@@ -841,7 +850,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
                   "trace", "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_strips",
-                  "terminal_plan", "terminal_count", "materials",
+                  "terminal_plan", "terminal_count", "wiring_list", "terminal_labels", "materials",
                   "missing_fp", "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb",
@@ -971,8 +980,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Arrange", "large", [a["align_obj"], a["distribute"]]),
             # (Terminal strips: on the Panel tab, as AutoCAD Electrical's terminal strip editor)
-            ("Terminals", "large", [a["terminal_strips"]]),
-            ("Reports", "large", [a["materials"], a["missing_fp"]]),
+            ("Terminals", "large", [a["terminal_strips"], a["terminal_labels"]]),
+            ("Reports", "large", [a["materials"], a["missing_fp"], a["wiring_list"]]),
             ("Parts", "small", [a["new_part"], a["assign_part"], a["save_as_part"]]),
             ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
@@ -992,7 +1001,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             ("Import", "large", [a["import_dxf"], a["import_pdf"], a["import_picture"],
                                  a["import_blocks"]]),
             # (Terminal count on the Terminals button's menu: the tab as wide as before)
-            ("Reports", "large", [a["bom"], a["cables"], a["wire_list"],
+            # (Device wiring list on the Wire list button's menu, as Terminal count)
+            ("Reports", "large", [a["bom"], a["cables"],
+                                  split_button([a["wire_list"], a["wiring_list"]]),
                                   split_button([a["terminal_list"], a["terminal_plan"],
                                                 a["terminal_count"]]),
                                   a["materials"], a["missing_fp"]]),
@@ -3494,6 +3505,51 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                               "with no locations, its right pin), its jumper, and where it is "
                               "drawn.")
 
+    def show_wiring_list(self):
+        v = self.view()
+        if v is None:
+            return
+        from . import panelwiring
+        p = v.project
+        rows = panelwiring.rows(p)
+        dialogs.report_dialog(self, "Device wiring list", panelwiring.HEAD, rows,
+                              self._last_dir(), "wiring list.csv",
+                              "No devices or terminals with pins yet: place symbols on a "
+                              "schematic and wire them.",
+                              "Each device (with its contacts and points) and each terminal, "
+                              "pin by pin, one row per wire on it: its number, size, color and "
+                              "layer, and the pins it goes to (through off-sheet connectors and "
+                              "arrows; another location shown with it). Footprint: where the "
+                              "pin is on its panel footprint, or why it isn't (no footprint, "
+                              "no terminal positions: its block has no pins).")
+        missing = panelwiring.without_positions(p)
+        if missing:
+            self._say(panelwiring.describe_missing(missing))
+
+    def terminal_labels(self, on):
+        """Terminal wire labels (Panel tab): this panel sheet's footprint terminals labeled
+        with their wires and where they go, or not; one step to undo."""
+        v = self.view()
+        if v is None:
+            return
+        s = v.sheet()
+        if s is v.project.title_block or s.kind != "panel":
+            self._say("Terminal wire labels are for panel sheets (Sheet properties: Kind)")
+            self._update_ui()
+            return
+        from . import panelwiring
+        p = v.project
+        with p.edit("Terminal wire labels " + ("on" if on else "off")) as ed:
+            ed.sheet_meta(s, terminal_labels=bool(on))
+        if on:
+            n = panelwiring.labeled_count(p, s)
+            msg = "Terminal wire labels on: %d terminal%s labeled" % (n, "" if n == 1 else "s")
+            missing = panelwiring.describe_missing(panelwiring.without_positions(p, s))
+            self._say(msg + ("; " + missing if missing else ""))
+        else:
+            self._say("Terminal wire labels off")
+        self._update_ui()
+
     def show_terminal_count(self):
         v = self.view()
         if v is None:
@@ -4217,7 +4273,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",
-                  "rail", "duct", "materials", "missing_fp", "bom", "cables", "wire_list", "terminal_list", "terminal_strips", "terminal_plan", "terminal_count", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "rail", "duct", "materials", "missing_fp", "bom", "cables", "wire_list", "terminal_list", "terminal_strips", "terminal_plan", "terminal_count", "wiring_list", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
@@ -4265,6 +4321,12 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             a[key].setChecked(on)
             a[key].blockSignals(False)
         a["xref_freeze"].setEnabled(bool(has and not on_tb))
+        # (Terminal wire labels: a panel sheet's own setting)
+        panel = bool(has and not on_tb and v.sheet().kind == "panel")
+        a["terminal_labels"].blockSignals(True)
+        a["terminal_labels"].setChecked(bool(panel and v.sheet().terminal_labels))
+        a["terminal_labels"].blockSignals(False)
+        a["terminal_labels"].setEnabled(panel)
         a["sheet_scale"].setEnabled(bool(has and not on_tb))
         a["sheet_cw"].setEnabled(bool(has and not on_tb))
         a["sheet_ccw"].setEnabled(bool(has and not on_tb))

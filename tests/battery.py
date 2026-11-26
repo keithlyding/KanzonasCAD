@@ -4383,6 +4383,115 @@ def random_editing(log, out, ops, seed, drawing=None):
         if st.jumpers:
             kinds.add("jumper")
 
+    def op_panel_wiring():
+        # (0.28) panel wiring as a user works with it: a sheet made a panel sheet (Sheet
+        # properties' Kind); footprints with terminal positions placed for devices through
+        # Insert (a terminal block's typed as a strip's terminal, TB1-4); Terminal wire labels
+        # turned on or off through its command (one step, Undo and Redo take it back and put
+        # it back); or the Device wiring list shown through its menu command, its rows those
+        # worked out (battery_checks.panel_wiring_right checks both against the drawing)
+        from PySide6.QtWidgets import QComboBox
+        from kanzonascad import dialogs, panelwiring, strips
+        r = rnd.random()
+        if r < 0.2:
+            seen = {}
+            real = dialogs.report_dialog
+            dialogs.report_dialog = lambda _w, title, h, rows, *a: seen.update(rows=rows)
+            try:
+                win.acts["wiring_list"].trigger()
+            finally:
+                dialogs.report_dialog = real
+            assert seen["rows"] == panelwiring.rows(p), "the Device wiring list window's rows"
+            BC.CHECKED["device wiring list as worked out"] += 1
+            return
+        if s is p.title_block:
+            return
+        if s.kind != "panel":
+            if r < 0.4:
+                real = dialogs.QDialog.exec
+
+                def answer(dlg):
+                    k = dlg.findChild(QComboBox, "kind")
+                    k.setCurrentIndex(k.findData("panel"))
+                    return QDialog.Accepted
+                dialogs.QDialog.exec = answer
+                try:
+                    win.sheet_properties()
+                finally:
+                    dialogs.QDialog.exec = real
+                assert s.kind == "panel", "Sheet properties: Kind %r" % s.kind
+            return
+        # (labels on more often than off: what they show is checked while they are on)
+        if r < 0.7 and not (not s.terminal_labels and r < 0.4):
+            pinned = [n for n in fps if lib.get("footprint", n).pins]
+            tbs = [e for sh in p.sheets for e in sh.inserts() if strips.is_strip_device(e)
+                   and e.attrs.get("TAG")]
+            target = None
+            if tbs and rnd.random() < 0.35:
+                pinned = [n for n in pinned if panelwiring.terminal_block(lib.get("footprint",
+                                                                                   n))]
+            else:
+                # (for a device of the drawing, wired or not, its tag typed when asked: one
+                # that fits it, a pin named as one of its pins, its contacts' included)
+                devs = [e for sh in p.sheets for e in sh.inserts() if tags_mod.is_device(e)
+                        and e.defn.wiring != "link" and e.attrs.get("TAG") and
+                        not strips.is_strip_device(e)]
+                if devs:
+                    target = rnd.choice(devs)
+                    dev = target.attrs.get("DEV")
+                    names = {n for sh in p.sheets for e in sh.inserts()
+                             if e is target or (dev and e.attrs.get("PARENT") == dev)
+                             for n, _q in e.pin_points()}
+                    pinned = [n for n in pinned if names & {q["name"] for q in lib.get(
+                        "footprint", n).pins}] or pinned
+            defn = lib.get("footprint", rnd.choice(pinned))
+            before = set(s.entities)
+            v.run(C.InsertCmd, defn, {})
+            if v.cmd is not None:
+                v.input_text(fmt(pt()))
+            typed = None
+            c = v.cmd
+            if c is not None and c.pending is not None:
+                if tbs and panelwiring.terminal_block(defn) and rnd.random() < 0.8:
+                    tb = rnd.choice(tbs)
+                    typed = (tb, str(rnd.randint(1, 6)))
+                    v.input_text("%s-%s" % (tb.attrs["TAG"], typed[1]))
+                elif target is not None and rnd.random() < 0.8:
+                    v.input_text(target.attrs["TAG"])
+            finish()
+            new = [e for i, e in s.entities.items() if i not in before and tags_mod.is_footprint(e)]
+            if typed is not None:
+                assert len(new) == 1 and new[0].attrs.get("PARENT") == typed[0].attrs["DEV"] \
+                    and new[0].attrs.get("TERM") == typed[1], \
+                    "a terminal block placed as %s-%s: %r" % (
+                        typed[0].attrs["TAG"], typed[1], new and new[0].attrs)
+                BC.CHECKED["terminal block placed as a strip's terminal"] += 1
+            BC.panel_wiring_right(p)
+            return
+        if s.terminal_labels and rnd.random() < 0.5:
+            return
+        win._update_ui()
+        act = win.acts["terminal_labels"]
+        assert act.isEnabled() and act.isChecked() == s.terminal_labels, \
+            "Terminal wire labels shows %r for a sheet %s" % (act.isChecked(), s.terminal_labels)
+        on = not s.terminal_labels
+        n = len(p.undo_stack)
+        before = norm(p.to_dict())
+        act.trigger()
+        assert s.terminal_labels == on and act.isChecked() == on, "Terminal wire labels"
+        assert len(p.undo_stack) == n + 1, "Terminal wire labels: %d steps" % (
+            len(p.undo_stack) - n)
+        if rnd.random() < 0.3:
+            after = norm(p.to_dict())
+            p.undo()
+            assert norm(p.to_dict()) == before, "Undo of Terminal wire labels"
+            p.redo()
+            assert norm(p.to_dict()) == after, "Redo of Terminal wire labels"
+        if on and panelwiring.labels(p, s):
+            kinds.add("terminal wire label")
+        BC.CHECKED["terminal wire labels turned on or off"] += 1
+        BC.panel_wiring_right(p)
+
     def op_report_sheet():
         # (0.21: a report drawn on sheets of the project, as the owner would: every page in
         # its frame and clear of the title block, and every row's first cell on one of them,
@@ -5538,7 +5647,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1),
              (op_paste_same_place, 2),
              (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2),
-             (op_strips, 4)]
+             (op_strips, 4), (op_panel_wiring, 6)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -5567,6 +5676,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 BC.missing_right(win, p)
                 BC.twins_apart(p)
                 BC.strips_right(p)
+                BC.panel_wiring_right(p)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()
@@ -5930,6 +6040,27 @@ def mixed_project(win):
         strips.apply(ed, p, [lay])
     assert p.settings["strips"][tb.key] == {"order": ["1", "3", "2", "4"], "spares": ["4"],
                                             "jumpers": [["1", "3"]]}, p.settings["strips"]
+    # (0.28) panel wiring: the breaker's footprint (with terminal positions) and a terminal
+    # block for TB1-1 placed through Insert on the panel sheet, its Terminal wire labels on
+    from kanzonascad import panelwiring
+    panel = next(sh for sh in p.sheets if sh.kind == "panel")
+    v.show_sheet(panel.id)
+    for name, at, who in (("Breaker 3-pole (DIN)", "12,20", "CB1"),
+                          ("Terminal block 2.5 mm2 (#12 AWG)", "16,20", "TB1-1")):
+        v.run(C.InsertCmd, lib.get("footprint", name), {})
+        type_in(v, at)
+        if v.cmd is not None and v.cmd.pending is not None:
+            type_in(v, who)
+        while v.cmd is not None:
+            v.cmd.enter()
+    tf = [e for e in panel.inserts() if e.attrs.get("TERM") == "1"]
+    assert len(tf) == 1 and tf[0].label_value("tag") == "TB1-1", [e.attrs for e in tf]
+    win._update_ui()
+    win.acts["terminal_labels"].trigger()
+    assert panel.terminal_labels
+    got = {t.text for t in panelwiring.labels(p, panel)}
+    assert any(t.endswith("TB1:1") or "→" in t for t in got) and len(got) >= 2, got
+    v.show_sheet(p.sheets[0].id)
     # (0.21) a picture kept in the project (a logo), on the first sheet
     fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))
     return p
@@ -6029,6 +6160,14 @@ def files(log, out):
     p.save(path, backups=0)
     q = M.Project.load(path)
     assert norm(q.to_dict()) == norm(p.to_dict())
+    # (0.28: the wiring list and a panel sheet's terminal wire labels the same from the file)
+    from kanzonascad import panelwiring
+    assert panelwiring.rows(p) == panelwiring.rows(q)
+    for sh in p.sheets:
+        lp = [(t.text, t.pos, t.angle) for t in panelwiring.labels(p, sh)]
+        assert lp == [(t.text, t.pos, t.angle) for t in panelwiring.labels(
+            q, q.sheet_by_id(sh.id))], "terminal wire labels after save/open"
+    assert any(panelwiring.labels(p, sh) for sh in p.sheets)
     # (0.27: the terminal plan the same from the file: order, spare and jumper kept)
     from kanzonascad import strips
     plan = strips.plan_rows(p)

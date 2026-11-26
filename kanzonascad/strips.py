@@ -239,31 +239,47 @@ def _pins(ins):
     return names
 
 
-def _side(ctx, s, ins, pin, q):
-    side = Side(pin)
+def pin_wires(ctx, s, q):
+    """[(wire, net)] of the wires on a pin at q of sheet s, each with its net (a wire group
+    joined across sheets: _nets), in the order the sheet's index gives them."""
     roots = ctx["roots"](s)
-    nets = []
+    out = []
     for o in s.query_point(q, wirenums.TOL):
         if getattr(o, "kind", "") != "wire" or o.id not in roots or not o.touches(q, wirenums.TOL):
             continue
-        if ctx["numbered"]:
-            n = o.num or "?"
-            if n not in side.wires:
-                side.wires.append(n)
         k = (s.id, roots[o.id])
-        n = ctx["net_of"].get(k, k)
+        out.append((o, ctx["net_of"].get(k, k)))
+    return out
+
+
+def net_landings(ctx, net):
+    """[(sheet, symbol, pin)] of every pin a net lands on, on every sheet it is on."""
+    out = []
+    for sid, r in ctx["members"].get(net, [net]):
+        sh = ctx["sheets"].get(sid)
+        if sh is None:
+            continue
+        for x, xp in _landings(sh).get(r, ()):
+            out.append((sh, x, xp))
+    return out
+
+
+def _side(ctx, s, ins, pin, q):
+    side = Side(pin)
+    nets = []
+    for o, n in pin_wires(ctx, s, q):
+        if ctx["numbered"]:
+            num = o.num or "?"
+            if num not in side.wires:
+                side.wires.append(num)
         if n not in nets:
             nets.append(n)
     for n in nets:
-        for sid, r in ctx["members"].get(n, [n]):
-            sh = ctx["sheets"].get(sid)
-            if sh is None:
+        for sh, x, xp in net_landings(ctx, n):
+            if x is ins and xp == pin and sh is s:
                 continue
-            for x, xp in _landings(sh).get(r, ()):
-                if x is ins and xp == pin and sh is s:
-                    continue
-                if not any(x is t[1] and xp == t[2] for t in side.to):
-                    side.to.append((sh, x, xp))
+            if not any(x is t[1] and xp == t[2] for t in side.to):
+                side.to.append((sh, x, xp))
     return side
 
 
@@ -378,15 +394,25 @@ def to_text(project, strip, side):
     terminal), with its location when it isn't the strip's."""
     if side is None:
         return ""
+    return landings_text(side.to, strip.loc)
+
+
+def landings_text(landings, loc, most=None):
+    """Landings [(sheet, symbol, pin)] as written: "CR1:A1, M1:T1 (FIELD)", each once, in
+    natural order, with its location when it isn't loc; with most given and more of them than
+    that, the first most - 1 and how many more ("CR1:A2, CR2:A2 +4")."""
     names = []
-    for sh, x, pin in side.to:
+    for sh, x, pin in landings:
         n = pull.landing_name(x, pin)
-        loc = pull.location_of(sh, x)
-        if loc and loc != strip.loc:
-            n += " (%s)" % loc
+        there = pull.location_of(sh, x)
+        if there and there != loc:
+            n += " (%s)" % there
         if n not in names:
             names.append(n)
-    return ", ".join(sorted(names, key=natural) if len(names) > 1 else names)
+    names = sorted(names, key=natural) if len(names) > 1 else names
+    if most is not None and len(names) > most:
+        return "%s +%d" % (", ".join(names[:most - 1]), len(names) - most + 1)
+    return ", ".join(names)
 
 
 def wires_text(side):
