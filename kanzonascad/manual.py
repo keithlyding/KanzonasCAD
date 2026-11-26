@@ -924,8 +924,9 @@ status bar shows the same while the mouse is over a symbol or footprint, beside 
 coordinates: its tag (or its block's name) and its insertion point, <code>CR101  X 6.250
 Y 4.500</code>.</li>
 <li><b>Symbol</b> or <b>Footprint</b>: its block, <b>Tag</b> (typed on a device, it is locked,
-as in its attributes window; on a footprint, the device with that tag is the one it is; a
-contact shows the device it <b>Belongs to</b>), Description, Manufacturer, Catalog number, each
+as in its attributes window; on a footprint, the device with that tag is the one it is; on a
+source or destination arrow, its name, as in its attributes window; a contact shows the device
+it <b>Belongs to</b>), Description, Manufacturer, Catalog number, each
 attribute's value (a terminal's number, a PLC point's address, ratings; a linked footprint's
 ratings are its device's, as in its attributes window), a symbol's <b>Location</b>, <b>Lock
 this tag</b> and <b>No footprint needed</b>. Then <b>Text lines</b>: for a symbol, its tag and
@@ -950,7 +951,8 @@ them. Objects of different kinds show General only.</li>
 <li>A change applies at once: a text or number when you press Enter or leave the field (not
 at every key), a tick or a list when you click it. Each is one step: Undo takes it back, and
 the panel shows the drawing as it is after Undo, Redo or a change made anywhere else. A value
-that can't be taken (a gauge that isn't one) is said on the command line and changes nothing.
+that can't be taken (a gauge that isn't one, a name for a source arrow on a numbered wire) is
+said on the command line and changes nothing.
 The panel changes things through the same steps as the attributes window and the Wire number
 window, which stay (double-click, or right-click).</li>
 <li>It never holds up the drawing: a click is handled at once and the panel fills a moment
@@ -1406,8 +1408,10 @@ arrows is numbered where its source is (page 6: 6012), whatever sheets its desti
 on. A number locked on a destination's wire before an arrow joined it to the source (typed
 there earlier) doesn't take the source's wire over: the source keeps a number of its own page and
 the destination follows; a number typed on either side once they are joined numbers the whole
-wire. A name another pair already goes by is left alone, so two pairs never join. A destination arrow
-offers the name of a source still waiting for it (or <b>List...</b> on the command line picks the one it continues from a list of them, wire number and place, waiting ones first; <b>Pick on drawing</b> lets you go to its sheet and click it, and comes back; a destination paired either way is <b>linked</b> to that source arrow: it shows that one whatever the order of the others, and follows it when its wire is renumbered, until that source arrow is deleted. Double-click a destination arrow to change it: <b>Comes from</b> lists every source arrow, or <b>Automatic</b> pairs it by order); placed, its wire takes the source's number
+wire. So a name typed for a source arrow on a numbered wire (its attributes window, or Tag in
+the Properties panel) is not taken: its name stays the wire's number, and the command line says
+to type the new number on the wire. A name another pair already goes by is left alone, so two pairs never join. A destination arrow
+offers the name of a source still waiting for it (or <b>List...</b> on the command line picks the one it continues from a list of them, wire number and place, waiting ones first; <b>Pick on drawing</b> lets you go to its sheet and click it, and comes back; a destination paired either way is <b>linked</b> to that source arrow: it shows that one whatever the order of the others, and follows it when its wire is renumbered, until that source arrow is deleted. Double-click a destination arrow to change it: <b>Comes from</b> lists every source arrow, or <b>Automatic</b> pairs it by order; a name typed for a linked destination, with Comes from left as it was, or its Tag in the Properties panel, pairs it by that name instead, no longer linked); placed, its wire takes the source's number
 and its layer (480V BRN, with its color and gauge). Each arrow shows only its other half's
 place: a destination its source, a source its destination. A wire carried on over several
 sheets (page 4 to 5 to 6, a destination and a source on page 5) shows only the next or the

@@ -157,7 +157,7 @@ def general_fields(project):
 def _attr_put(win, project, k):
     """A put changing one attribute of a placed block through the attributes window's code
     (Location left blank: none of its own, its sheet's)."""
-    from . import tags
+    from . import tags, wirenums
 
     def put(ed, s, cur, value):
         attrs = dict(cur.attrs)
@@ -172,6 +172,13 @@ def _attr_put(win, project, k):
                 tags.parent_of(project, cur) is not None:
             shown["device"] = {k: value}    # (a linked footprint's rating is its device's)
         apply_changes(ed, win.attribute_changes(project, s, cur, attrs, shown))
+        if k == "TAG" and cur.defn is not None and cur.defn.wiring == "link" and \
+                value.upper() != (cur.attrs.get("TAG") or "").strip().upper():
+            # (a name numbering would put back: refused, the step undone, with the reason;
+            # never put back silently, the battery, 0.26, seed 202611263)
+            why = wirenums.name_refused(ed, project, s, cur.id, value)
+            if why:
+                raise wirenums.NameRefused(why)
     return put
 
 

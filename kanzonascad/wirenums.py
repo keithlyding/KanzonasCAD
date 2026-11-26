@@ -690,6 +690,42 @@ def follow_links(ed, project):
                 ed.change(s, d.copy(attrs=dict(d.attrs, TAG=name)))
 
 
+def unlink_renamed(project, ins, attrs):
+    """attrs, the attributes typed for a placed block, without its link to a source arrow when
+    it is a destination arrow linked by hand, its link left as it was, and given a name other
+    than that source's: the link would put the source's name back (follow_links), so the name
+    typed is meant to pair it with another source, by name, as Automatic does (the battery,
+    0.26, seed 202611263). A source chosen in the same answer (Comes from) keeps its link."""
+    if ins.block != ARROWS[1] or not attrs.get("FROM") or \
+            attrs.get("FROM") != ins.attrs.get("FROM"):
+        return attrs
+    typed = (attrs.get("TAG") or "").strip().upper()
+    if typed == (ins.attrs.get("TAG") or "").strip().upper():
+        return attrs
+    got = linked_source(project, ins)
+    if got is not None and typed == (got[1].attrs.get("TAG") or "").strip().upper():
+        return attrs
+    return {k: x for k, x in attrs.items() if k != "FROM"}
+
+
+class NameRefused(ValueError):
+    """A name typed for an arrow that numbering would put back (name_refused)."""
+
+
+def name_refused(ed, project, sheet, iid, typed):
+    """None when the arrow (or off-sheet connector) iid, just given the name typed in ed, keeps
+    it once numbering has run; else why not: a source arrow on a numbered wire is named by the
+    wire's number (the owner, 0.18.6), so a name typed for it would be put back, or its wire
+    given a new number. The caller undoes the step (raises NameRefused) and says why."""
+    sync(ed, project)
+    e = sheet.entities.get(iid)
+    now = (e.attrs.get("TAG") or "").strip().upper() if e is not None else ""
+    if e is None or now == (typed or "").strip().upper():
+        return None
+    return ("an arrow on a numbered wire is named by the wire's number: type the new number "
+            "on the wire (Wire number) instead")
+
+
 def sync(ed, project, renumber=None):
     """Give every group its number (see the module's notes); renumber: a sheet (or several:
     Update numbers and cross-references, 0.18) whose

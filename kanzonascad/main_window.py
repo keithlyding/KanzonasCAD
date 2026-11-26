@@ -3614,6 +3614,24 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet(), shown, others)
         if attrs is None:
             return
+        typed = (attrs.get("TAG") or "").strip()
+        if ins.defn is not None and ins.defn.wiring == "link" and \
+                typed.upper() != (ins.attrs.get("TAG") or "").strip().upper():
+            # (an arrow's name numbering would put back: the rest of the answer kept, its
+            # name left as it was, and why said; as the Properties panel refuses it)
+            from . import wirenums
+            try:
+                with v.project.edit("Attributes") as ed:
+                    for sh, e in self.attribute_changes(v.project, v.sheet(), ins, attrs,
+                                                        shown, others):
+                        ed.change(sh, e)
+                    why = wirenums.name_refused(ed, v.project, v.sheet(), ins.id, typed)
+                    if why:
+                        raise wirenums.NameRefused(why)
+                return
+            except wirenums.NameRefused as ex:
+                self._say("%s %s kept: %s" % (ins.block, ins.attrs.get("TAG") or "", ex))
+                attrs = dict(attrs, TAG=ins.attrs.get("TAG", ""))
         changes = self.attribute_changes(v.project, v.sheet(), ins, attrs, shown, others)
         if changes:
             with v.project.edit("Attributes") as ed:
@@ -3634,6 +3652,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             attrs = dict(attrs, TAGLINK="0")
         elif "TAG" in hidden and "TAG" not in ins.hidden and "TAGLINK" in attrs:
             attrs = {k: x for k, x in attrs.items() if k != "TAGLINK"}    # (hidden by hand)
+        from .wirenums import unlink_renamed
+        attrs = unlink_renamed(project, ins, attrs)     # (a destination arrow's name typed)
         if ins.defn is not None and ins.defn.kind == "footprint" and \
                 attrs.get("TAG", "") != ins.attrs.get("TAG", ""):
             # a footprint's tag typed: the device with that tag is the one it is now (none
