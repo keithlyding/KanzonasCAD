@@ -255,14 +255,59 @@ nobody understands).
     a branch (three ends) or an overlap; an arc only with arcs of its circle (polylines are
     straight); gaps up to 0.03" on paper said.
 
+- 0.27, terminal strips (the owner's list, item 4). Decided while building it (Claude, Nov 26
+  2026; to confirm with the owner):
+  - **A strip** is the terminals linked to a Terminal strip symbol (by its hidden id, so a strip
+    renumbered with its page, TB601 to TB701, keeps what is kept of it), or, with no strip
+    symbol, sharing a tag (kept as "tag:TB1"; a strip symbol given that tag later takes it
+    over). The same number drawn twice (two sheets) is one terminal, its wires from both.
+  - **Internal and external sides**: a terminal's two pins as its block is drawn. The internal
+    side is the one wired inside the strip's location (its sheet's, or its own Location), the
+    external one goes to another location (shown with it: LT1:1 (FIELD)); with no locations
+    the left pin is internal, the right external. Worked out from the schematic every time,
+    across sheets through off-sheet connectors and arrows; never kept.
+  - **Kept with the project** (its settings, "strips", per strip; one Undo with the numbers):
+    the order when it isn't number order, the spares (a number on the strip, nothing drawn) and
+    the jumpers (each the terminal numbers it bridges; a terminal on two is one jumper). A
+    terminal placed later goes after the one numbered just below it; one placed with a spare's
+    number (the lowest free one) is that terminal from then on. A number typed on the drawing
+    that leaves the kept order or jumpers behind drops out of them (they follow numbers, as
+    the editor's Renumber rewrites them).
+  - **The editor** (Terminal strips..., Panel tab as AutoCAD Electrical's terminal strip
+    editor, and the Sheets menu) is a window like Cables between locations: OK writes every
+    strip changed in one step, Cancel keeps nothing. Renumber numbers the whole strip, spares
+    too, in the order shown from a number given (1 to start), the terminals with none too. A
+    spare is numbered one past the highest. It works out the wires of a strip when it first
+    shows it, not of every strip, so it opens at once (budget: 50 strips of 100 terminals
+    opened < 0.5 s); no work on the event loop was needed.
+  - **Terminal plan...** is a report of its own beside Terminal strip list... (kept as it
+    was): the strips in their order, each terminal's internal and external wire and what it goes
+    to, its jumper (J1: 1, 2, 3) and where it is drawn; CSV, Excel and a report sheet.
+  - Not done (later, if wanted): multi-level terminals (each level a terminal of its own number
+    for now), jumpers drawn on the schematic (a jumper wire is drawn as a wire), a strip drawn
+    on a panel sheet as a footprint per terminal (place the Terminal block footprints on the
+    rail; it fits with 0.28's panel wiring).
+  - **Near misses: "Warn on the drawing"** (the owner's decision, Nov 26 2026). A symbol turned
+    to an odd angle (45 degrees) has its pins off the grid, so a pin, or a wire run from one,
+    can stop a few thousandths from an unrelated wire (long battery, seed 5052). Joining them
+    automatically would wire two circuits together, and the battery's check may not simply
+    leave them out: the program finds every wire end and pin within 0.01" of a wire, wire end
+    or pin without being joined to it (nearmiss.py, the battery's definition) and marks it red
+    on the drawing with a command-line message, as duplicate tags are, until the user moves it
+    away or joins it. The battery accepts a near miss only when the program marks it and a
+    turned symbol explains it (a pin of a symbol turned off the right angles, or a wire from
+    such a pin, or that wire's off-grid coordinates carried off the pin); any other near miss
+    is the program's own slop and still fails, marked or not, as does a mark where nothing
+    almost meets; and Move and Copy must leave no wire end of theirs a hair short.
+
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).
 2. Auto wire layer (0.22.1, above).
 3. Cross-reference navigation, Trace (0.23, above; put ahead of terminal strips by the
    owner, Nov 23 2026: "very important").
-4. Terminal strips (0.27; was 0.24 until Import blocks from folder... took 0.24, 0.25
-   until the Properties panel and Devices without a footprint took 0.25, then 0.26 until the
-   owner's handwritten list and the collector fix took 0.26, one release): strips,
+4. Terminal strips (done in 0.27, below; was 0.24 until Import blocks from folder... took
+   0.24, 0.25 until the Properties panel and Devices without a footprint took 0.25, then 0.26
+   until the owner's handwritten list and the collector fix took 0.26, one release): strips,
    jumpers, a strip editor, a terminal plan report.
 5. Panel wiring (0.28): a per-device wiring list (owner: yes); point-to-point as wire labels on
    the footprints' terminals, not a drawn diagram (see 0.22.1).
@@ -428,7 +473,7 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     - **Linux, more at home**: the app offers to add itself to the applications menu and to
       open `.kzcad` files on a double-click (as KanzonasPDF's linux_desktop.py does); listed on
       Flathub and AppImageHub (the AppStream metadata exists already: packaging/linux).
-14. Later (all wanted: the owner, Nov 2026): terminal strips, DWG export (written by our own
+14. Later (all wanted: the owner, Nov 2026): terminal strips (done in 0.27), DWG export (written by our own
     code: the owner, "You write it. Don't rely on some third party tool"), Sheets panel as a
     popup. Done in 0.21: PLC I/O from a spreadsheet, the color PDF option, in-place text
     editing.

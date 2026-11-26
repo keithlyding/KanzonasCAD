@@ -319,6 +319,42 @@ class PdfLinksTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             BC.pdf_links_right(self.p, bad, self.p.sheets)
 
+    def test_the_battery_check_with_an_arrow_text_over_the_place_of_another(self):
+        # (the short battery, 0.26, seed 5: a source and a destination arrow a little apart,
+        # each's whole "1003B / 3-E2" its link, the second's text drawn over the first's
+        # "3-E2": the check gave the first text the second's link, nearer its place, and then
+        # found the second with none of its own)
+        from pypdf import PdfWriter
+        from pypdf.generic import ArrayObject, NameObject
+        from tests import battery_checks as BC
+        with self.p.edit("two wires on the panel") as ed:
+            ed.add(self.s3, M.Wire([(12.0, 20.0), (13.0, 20.0)], num="1003B", num_lock=True))
+            ed.add(self.s3, M.Wire([(13.4, 20.0), (14.2, 20.0)], num="1003B", num_lock=True))
+        src = self.place(self.s3, SRC, (13.0, 20.0))
+        self.place(self.s3, DST, (14.2, 20.0), self.now(self.s3, src).attrs["TAG"])
+        first, second = sorted((t for t in xrefs.shown(self.p, self.s3)
+                                if t[2].startswith("1003B / ")), key=lambda t: t[0])
+        a, b = xrefs.text_item(first).bbox(), xrefs.text_item(second).bbox()
+        self.assertTrue(b[0] < a[2] - 0.3 * (a[2] - a[0]), (a, b))   # (drawn over its place)
+        path, reader, _n = self.export()
+        self.assertGreater(BC.pdf_links_right(self.p, path, self.p.sheets), 0)
+        # (with one of the two links taken out, the check still fails)
+        w = PdfWriter(clone_from=reader)
+        page = w.pages[2]
+        mid = page_xy(self.s3, (b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0)
+        keep = [r for r in page["/Annots"] if not (
+            abs((float(r.get_object()["/Rect"][0]) + float(r.get_object()["/Rect"][2])) / 2.0 -
+                mid[0]) < 0.5 and
+            abs((float(r.get_object()["/Rect"][1]) + float(r.get_object()["/Rect"][3])) / 2.0 -
+                mid[1]) < 0.5)]
+        self.assertEqual(len(keep), len(page["/Annots"]) - 1)
+        page[NameObject("/Annots")] = ArrayObject(keep)
+        bad = os.path.join(self.tmp, "one-gone.pdf")
+        with open(bad, "wb") as f:
+            w.write(f)
+        with self.assertRaises(AssertionError):
+            BC.pdf_links_right(self.p, bad, self.p.sheets)
+
     def test_without_pypdf_the_pdf_is_written_without_links(self):
         real = builtins.__import__
 

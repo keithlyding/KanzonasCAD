@@ -60,7 +60,9 @@ from kanzonascad import geometry as G  # noqa: E402
 # (2007-1a, 2007a1, 2007-a1a; 0.22.4), lowercase (a distribution outlet's 1006A isn't one)
 TAP_END = re.compile(r"(?:-\d+|-?[a-z]+)[a-z0-9]*$")
 from kanzonascad import wires, crossings, wirenums, wirelayers, fileio, templates  # noqa: E402
+from kanzonascad import nearmiss  # noqa: E402
 from kanzonascad import tags as tags_mod  # noqa: E402
+from kanzonascad import strips as strips_mod  # noqa: E402
 from kanzonascad import xrefs as XR  # noqa: E402
 from tests import battery_checks as BC  # noqa: E402
 
@@ -162,11 +164,28 @@ def check_sheet(sheet):
                 assert abs(a[0] - b[0]) > 1e-9 or abs(a[1] - b[1]) > 1e-9, e.points
     json.dumps(sheet.to_dict())
     check_groups(sheet)
-    # (drawing slop: wire ends that look joined but aren't)
-    near = BC.near_misses(sheet)
-    assert not near, "%d wire end(s) almost meet something without joining it: %s" % (
-        len(near), ["%s %.2g from a %s" % (tuple(round(c, 4) for c in p), d, k)
-                    for _i, p, k, d in near[:3]])
+    # (drawing slop: wire ends and pins that look joined but aren't, and the program doesn't
+    # mark on the drawing; and no mark where there is none)
+    near, odd, false = BC.near_misses_unflagged(sheet)
+
+    def said(got):
+        return ["%s %s %.2g from a %s" % (k[0], tuple(round(c, 4) for c in p), d, kind)
+                for k, p, kind, d in got[:3]]
+    assert not near, "%d wire end(s) or pin(s) almost meet something without joining it, " \
+        "not marked: %s" % (len(near), said(near))
+    assert not odd, "%d wire end(s) or pin(s) almost meet something without joining it, " \
+        "marked, but no turned symbol explains it: %s" % (len(odd), said(odd))
+    assert not false, "%d near miss mark(s) where nothing almost meets: %s" % (
+        len(false), [(k, tuple(round(c, 4) for c in p)) for k, p in false[:3]])
+    kept = nearmiss.found_keyed(sheet)
+    saved = sheet._near, sheet._near_state
+    sheet._near = sheet._near_state = None
+    fresh = nearmiss.found_keyed(sheet)
+    sheet._near, sheet._near_state = saved
+    assert kept == fresh, "near misses kept up to date differ from a fresh count: %s" % (
+        [(k, kept.get(k), fresh.get(k)) for k in sorted(set(kept) | set(fresh), key=str)
+         if kept.get(k) != fresh.get(k)][:4],)
+    BC.CHECKED["near misses kept up to date"] += 1
     back = BC.folds(sheet)
     assert not back, "%d wire(s) double back over themselves: %s" % (
         len(back), [tuple(round(c, 4) for c in q) for _i, q in back[:3]])
@@ -2216,6 +2235,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         sel = some()
         if not sel:
             return
+        before = {i: e.points for i, e in s.entities.items() if isinstance(e, M.Wire)}
         v.set_selection({e.id for e in sel})
         v.run(cls)
         if v.cmd is not None:
@@ -2225,6 +2245,15 @@ def random_editing(log, out, ops, seed, drawing=None):
                 v.input_text(fmt((a[0] + rnd.choice([-1, 0, 1]) * 0.5,
                                   a[1] + rnd.choice([-1, 0, 1]) * 0.5)))
         finish()
+        # (Move and Copy put a wire end they leave a hair from a pin or another wire on it, as
+        # Stretch does: the long battery, seed 5052 at step 1723, a copied end 0.0037" from a
+        # wire; such a near miss is the program's doing whatever geometry it is near)
+        ends = [q for w in s.wires() for q in (w.points[0], w.points[-1])
+                if w.id not in before or q not in before[w.id]]
+        bad = BC.ends_left_short(s, ends)
+        assert not bad, "%s left %d wire end(s) a hair from a pin or wire, not put on it: %s" % (
+            cls.__name__[:-3], len(bad), [(tuple(round(c, 4) for c in q), round(d, 5))
+                                          for q, d in bad[:3]])
 
     def op_move_area():
         # (0.18.2: a crossing box over a part of the drawing, then Move typed, every object
@@ -3107,9 +3136,8 @@ def random_editing(log, out, ops, seed, drawing=None):
         if got is None and WN.by_io_address(p):
             return                          # (numbered by a PLC point's address, O:3/0)
         if base == now[0].num:
-            assert got and got[0] == p.sheet_number(sh), \
-                "a source arrow's wire on page %s took %s from a destination's page" % (
-                    p.sheet_number(sh), now[0].num)
+            why = BC.own_wire_number_wrong(p, sh, now[0], WN.split)
+            assert why is None, why
         BC.CHECKED["a source's wire keeps its page's number"] += 1
 
     def op_wire_color():
@@ -4256,6 +4284,132 @@ def random_editing(log, out, ops, seed, drawing=None):
                 assert a == old, "Assign part changed a device of another symbol"
         assert p.settings["parts"][part.id]["catalog"] == part.catalog
         BC.CHECKED["part assigned to the devices of its symbol"] += 1
+
+    def op_strips():
+        # (0.27) terminal strips as a user makes and edits them: a Terminal strip and terminals
+        # placed on it through Insert (typing the strip's tag when asked which), wires to them;
+        # then the Terminal strips window: rows picked and moved, spares added and removed,
+        # jumpers added and removed, a number typed, the strip renumbered; OK. What the window
+        # showed is what the drawing and the project then hold, in one step that Undo takes
+        # back whole and Redo puts back; or the terminal plan shown through its menu command
+        from kanzonascad import dialogs, strip_window, strips
+        here = [e for e in s.inserts() if strips.is_terminal(e)]
+        if len(here) < 3 or rnd.random() < 0.15:
+            sd = lib.get("symbol", "Terminal strip")
+            td = lib.get("symbol", "Terminal")
+            tbs = [e for sh in p.sheets for e in sh.inserts() if strips.is_strip_device(e)
+                   and e.attrs.get("TAG")]
+            if not tbs or rnd.random() < 0.3:
+                v.run(C.InsertCmd, sd, {})
+                v.input_text(fmt(pt()))
+                finish()
+                tbs = [e for sh in p.sheets for e in sh.inserts()
+                       if strips.is_strip_device(e) and e.attrs.get("TAG")]
+                if not tbs:
+                    return
+            tb = rnd.choice(tbs)
+            for _k in range(rnd.randint(1, 4)):
+                before = set(s.entities)
+                v.run(C.InsertCmd, td, {})
+                at = pt()
+                v.input_text(fmt(at))
+                c = v.cmd
+                if c is not None and c.pending is not None and c.cands:
+                    v.input_text(tb.attrs["TAG"])
+                finish()
+                new = [e for i, e in s.entities.items() if i not in before and
+                       strips.is_terminal(e)]
+                if len(new) == 1 and rnd.random() < 0.7:
+                    # (a wire from one of its pins to somewhere on the rungs)
+                    q = dict(new[0].pin_points())[rnd.choice(["1", "2"])]
+                    v.run(C.WireCmd)
+                    v.input_text(fmt(q))
+                    v.input_text(fmt((q[0] + rnd.choice([-1, 1]) * rnd.randint(2, 8) * 0.25,
+                                      q[1])))
+                    finish()
+            return
+        if rnd.random() < 0.2:
+            seen = {}
+            real = dialogs.report_dialog
+            dialogs.report_dialog = lambda _w, title, h, rows, *a: seen.update(rows=rows)
+            try:
+                win.acts["terminal_plan"].trigger()
+            finally:
+                dialogs.report_dialog = real
+            assert seen["rows"] == strips.plan_rows(p), "the Terminal plan window's rows"
+            BC.CHECKED["terminal plan as worked out"] += 1
+            return
+        shown = {}
+        before = norm(p.to_dict())
+        n_before = len(p.undo_stack)
+
+        def answer(dlg):
+            t = dlg.table
+            for _k in range(rnd.randint(1, 6)):
+                n = t.rowCount()
+                if not n:
+                    break
+                dlg.pick(sorted(rnd.sample(range(n), min(n, rnd.randint(1, 3)))))
+                b = rnd.choice(["up", "down", "spare", "unspare", "jumper", "unjumper",
+                                "renumber", "type"])
+                if b == "type":
+                    i = rnd.randrange(n)
+                    num = "X%d" % rnd.randint(1, 999)
+                    if num not in [t.item(j, 0).text() for j in range(n)]:
+                        t.item(i, 0).setText(num)
+                        assert t.item(i, 0).text() == num, "a typed number not taken"
+                    continue
+                if b == "renumber":
+                    dlg.start.setValue(rnd.choice([1, 1, 10, 101]))
+                if dlg.buttons[b].isEnabled():
+                    dlg.buttons[b].click()
+            shown["key"] = dlg.found[dlg.cur].key if dlg.cur is not None else None
+            shown["nums"] = [t.item(i, 0).text() for i in range(t.rowCount())]
+            shown["spare"] = [t.item(i, 6).text() == "spare" for i in range(t.rowCount())]
+            shown["jumper"] = [t.item(i, 5).text() for i in range(t.rowCount())]
+            lay = dlg.layouts.get(shown["key"])
+            shown["places"] = [list(r["places"]) for r in lay.rows] if lay else []
+            shown["changed"] = bool(dlg.changed())
+            return QDialog.Accepted
+        real = strip_window.StripEditorDialog.exec
+        strip_window.StripEditorDialog.exec = answer
+        try:
+            win.terminal_strips()
+        finally:
+            strip_window.StripEditorDialog.exec = real
+        if shown.get("key") is None:
+            return
+        after = norm(p.to_dict())
+        assert len(p.undo_stack) == n_before + (1 if shown["changed"] else 0), \
+            "Terminal strips: %d steps to undo" % (len(p.undo_stack) - n_before)
+        st = next((x for x in strips.find(p, wires=False) if x.key == shown["key"]), None)
+        assert st is not None, "the strip edited is gone"
+        assert [r.num or "?" for r in st.rows] == shown["nums"], \
+            "Terminal strips showed %r, the strip is %r" % (shown["nums"],
+                                                            [r.num for r in st.rows])
+        assert [r.spare for r in st.rows] == shown["spare"], "spares as shown"
+        names = {}
+        for r, j in zip(st.rows, shown["jumper"]):
+            if j:
+                names.setdefault(j, []).append(r.num)
+        assert sorted(names.values()) == sorted(st.jumpers), \
+            "jumpers shown %r, kept %r" % (names, st.jumpers)
+        sheets = {sh.id: sh for sh in p.sheets}
+        for places, num in zip(shown["places"], shown["nums"]):
+            for sid, eid in places:
+                e = sheets[sid].entities.get(eid)
+                assert e is not None and (e.attrs.get("TERM") or "?") == num, \
+                    "terminal %s numbered %r on the drawing, %r in the window" % (
+                        eid, e.attrs.get("TERM") if e is not None else None, num)
+        if shown["changed"]:
+            p.undo()
+            assert norm(p.to_dict()) == before, "Undo of Terminal strips: " + \
+                first_difference(before, norm(p.to_dict()))
+            p.redo()
+            assert norm(p.to_dict()) == after, "Redo of Terminal strips"
+            BC.CHECKED["terminal strips edited in one step"] += 1
+        if st.jumpers:
+            kinds.add("jumper")
 
     def op_report_sheet():
         # (0.21: a report drawn on sheets of the project, as the owner would: every page in
@@ -5411,7 +5565,8 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_import_blocks, 1), (op_props_panel, 3), (op_missing_fp, 2),
              (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1),
              (op_paste_same_place, 2),
-             (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2)]
+             (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2),
+             (op_strips, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -5439,6 +5594,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 BC.arrows_follow(p)
                 BC.missing_right(win, p)
                 BC.twins_apart(p)
+                BC.strips_right(p)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()
@@ -5453,6 +5609,8 @@ def random_editing(log, out, ops, seed, drawing=None):
                     assert len(r["locs"]) >= 2 and r["conductors"], r
                 if runs_now:
                     kinds.add("pull list")
+                if any(x.rows for x in strips_mod.find(p, wires=False)):
+                    kinds.add("terminal strip")
             if i % 200 == 199:
                 p.save(path, backups=0)
                 q = M.Project.load(path)
@@ -5769,7 +5927,37 @@ def mixed_project(win):
     assert not any(e.attrs.get("TAG") in ("CB1", "PLC1", "CR1") for _sh, e in
                    missing_fp.find(p).missing), [e.attrs.get("TAG") for _sh, e in
                                                  missing_fp.find(p).missing]
+    # (0.27) a terminal strip placed through Insert, its terminals wired to the coil's rung
+    # and out to the field; reordered, with a spare and a jumper (Terminal strips' OK)
     v.show_sheet(p.sheets[0].id)
+    from kanzonascad import strips
+    v.run(C.InsertCmd, lib.get("symbol", "Terminal strip"), {"TAG": "TB1"})
+    type_in(v, "26,8")
+    while v.cmd is not None:
+        v.cmd.enter()
+    for y in (8.5, 9.0, 9.5):
+        v.run(C.InsertCmd, lib.get("symbol", "Terminal"), {})
+        type_in(v, "30,%g" % y)
+        if v.cmd is not None and v.cmd.pending is not None:
+            type_in(v, "TB1")
+        while v.cmd is not None:
+            v.cmd.enter()
+        t = [e for e in p.sheets[0].inserts() if strips.is_terminal(e) and e.pos[1] == y][0]
+        pins = dict(t.pin_points())
+        v.run(C.WireCmd)
+        type_in(v, "%g,%g" % pins["1"], "%g,%g" % (pins["1"][0] - 1, y))
+        if v.cmd is not None:
+            v.cmd.enter()
+    tb = [x for x in strips.find(p) if x.tag == "TB1"][0]
+    assert [r.num for r in tb.rows] == ["1", "2", "3"], [r.num for r in tb.rows]
+    lay = strips.Layout(tb)
+    lay.move([2], -1)
+    lay.add_spare()
+    lay.add_jumper([0, 1])
+    with p.edit("Terminal strips") as ed:
+        strips.apply(ed, p, [lay])
+    assert p.settings["strips"][tb.key] == {"order": ["1", "3", "2", "4"], "spares": ["4"],
+                                            "jumpers": [["1", "3"]]}, p.settings["strips"]
     # (0.21) a picture kept in the project (a logo), on the first sheet
     fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))
     return p
@@ -5869,6 +6057,11 @@ def files(log, out):
     p.save(path, backups=0)
     q = M.Project.load(path)
     assert norm(q.to_dict()) == norm(p.to_dict())
+    # (0.27: the terminal plan the same from the file: order, spare and jumper kept)
+    from kanzonascad import strips
+    plan = strips.plan_rows(p)
+    assert plan == strips.plan_rows(q) and any(r[6] for r in plan) and \
+        any(r[7] == "spare" for r in plan), plan
     notes.append("save/open")
     for i, s in enumerate(p.sheets):
         dxf = os.path.join(out, "mixed-%d.dxf" % (i + 1))

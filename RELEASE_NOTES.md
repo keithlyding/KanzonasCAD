@@ -6,6 +6,32 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.27
+
+**New**
+- Terminal strips... (Panel tab; Sheets menu): a window listing your terminal strips. Pick one
+  to see its terminals in order, with the wire numbers on each side and the device and pin
+  each wire goes to. The internal side is wired inside the panel, the external side goes to
+  the field (from the sheets' and devices' locations).
+- In that window you can move terminals up and down, renumber the strip in its new order, add
+  and remove spare terminals, add and remove jumpers, and type a terminal's number. OK puts
+  the changes on the drawing in one step, so one Undo takes them back.
+- Terminal plan... (Sheets menu; Output tab, under Terminals): every strip, terminal by
+  terminal: the internal and external wires and where they go, and the jumpers. Save it as
+  CSV or Excel, or draw it on report sheets with Report sheet....
+- Wire ends and pins that almost touch a wire without connecting are marked in red on the
+  drawing, and the command line says where. This happens most with symbols turned to odd
+  angles, whose pins are off the grid. Move them apart, or join them with the snaps, and the
+  mark goes.
+
+**Fixed**
+- Showing the tag of a contact block joined to its pushbutton or selector switch by the
+  dashed line (Tag in the Properties panel, or Shown on the drawing) did nothing: the line hid
+  it again at once. It now stays shown until you hide it.
+- Move and Copy left a wire end that landed a few thousandths of an inch from another wire or a
+  pin without joining it, so it looked connected and wasn't. Such an end is now put on it, as
+  Stretch and grips already did.
+
 ## 0.26
 
 **New**

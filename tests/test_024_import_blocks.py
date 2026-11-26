@@ -440,6 +440,9 @@ class WindowTest(unittest.TestCase):
         # (0.25 set the tests before's objects aside here, gc.freeze: Python's collector went
         # through them in the middle, 0.17 s once on the Linux build; since 0.26 the program
         # does that itself, gcpolicy)
+        # (a sweep queued when an earlier test's window closed runs on the next turn of the
+        # event loop: let it run before the wait is timed, as test_023_trace does)
+        APP.processEvents()
         try:
             L._write_json = slow
             IB.Progress.turn = turn

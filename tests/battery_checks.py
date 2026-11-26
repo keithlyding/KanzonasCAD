@@ -219,11 +219,15 @@ def text_under(view, e, p, r):
 
 
 # ---- drawing slop: almost right, not exactly ----------------------------------------------------
-def near_misses(sheet, lo=1e-6, hi=0.01):
-    """Wire ends that look joined but aren't: within hi (real inches: the battery draws wires
-    a quarter inch apart or more, so anything closer is rounding, not a design) of another
+def near_misses(sheet, lo=1e-6, hi=0.01, targets=None):
+    """Wire ends and pins that look joined but aren't: within hi (real inches: the battery draws
+    wires a quarter inch apart or more, so anything closer is rounding, not a design) of another
     wire or a symbol's pin, yet farther than the program's own tolerance lo (wires.TOL):
-    [(wire id, end, what it nearly meets, distance)]."""
+    [(("end", wire id, 0 or -1) or ("pin", symbol id, pin name), the point, the kind of the
+    nearest thing it nearly meets, distance)]; targets, a dict, gets {that key: [everything
+    it nearly meets]}. Worked out here, not by the program's nearmiss.py,
+    which must mark every one of them on the drawing (the owner, Nov 26 2026: "Warn on the
+    drawing"; check_sheet)."""
     def slanted(a, b):
         return abs(a[0] - b[0]) >= 1e-9 and abs(a[1] - b[1]) >= 1e-9
 
@@ -231,21 +235,37 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
         # (an end at the end of a slanted run is wherever that run happened to be cut: chance)
         return [q for q, r in ((o.points[0], o.points[1]), (o.points[-1], o.points[-2]))
                 if not slanted(q, r)]
-    out = []
+
+    def pins(o):
+        return o.pin_points() if isinstance(o, M.Insert) and o.defn is not None and \
+            o.defn.pins else []
+
+    def on_slanted(p, near, own):
+        # (an end or a pin on a slanted run: where it crosses is chance as well, so the end
+        # is too; Trim wire cut back to such a crossing 0.0048" from a pin in seed 3152)
+        return any(isinstance(o, M.Wire) and o.id != own and any(
+            slanted(a, b) and G.dist_to_segment(p, a, b) <= lo
+            for a, b in zip(o.points, o.points[1:])) for o in near)
+    out = {}
+
+    def found(key, p, kind, d, o):
+        if lo < d < hi:
+            if targets is not None:
+                targets.setdefault(key, []).append(o)
+            if key not in out or d < out[key][3]:
+                out[key] = (key, p, kind, d)
     for w in sheet.wires():
-        for p in straight_ends(w):
+        for i in (0, -1):
+            p = w.points[i]
+            if p not in straight_ends(w):
+                continue
             # (what its other end is joined to it is joined to: a sliver of a wire from a pin
             # to where a slanted wire crossed, that wire deleted, ends a sliver's length from
             # its own pin, seed 3152 at 1:9671)
-            other = w.points[-1] if p is w.points[0] else w.points[0]
+            other = w.points[-1] if i == 0 else w.points[0]
             box = (p[0] - hi, p[1] - hi, p[0] + hi, p[1] + hi)
             near = list(sheet.query(box))
-            if any(isinstance(o, M.Wire) and o.id != w.id and any(
-                    abs(a[0] - b[0]) >= 1e-9 and abs(a[1] - b[1]) >= 1e-9 and
-                    G.dist_to_segment(p, a, b) <= lo for a, b in zip(o.points, o.points[1:]))
-                    for o in near):
-                # (an end on a slanted run: where it crosses is chance as well, so the end is
-                # too; Trim wire cut back to such a crossing 0.0048" from a pin in seed 3152)
+            if on_slanted(p, near, w.id):
                 CHECKED["near misses: ends on slanted runs left out"] += 1
                 continue
             for o in near:
@@ -263,15 +283,163 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
                             d = min(d, G.dist_to_segment(p, a, b))
                         else:
                             CHECKED["near misses: slanted runs left out"] += 1
-                elif isinstance(o, M.Insert) and o.defn is not None and o.defn.pins:
-                    d = min((G.dist(p, q) for _n, q in o.pin_points()
-                             if G.dist(other, q) > lo), default=hi * 2)
+                elif pins(o):
+                    d = min((G.dist(p, q) for _n, q in pins(o) if G.dist(other, q) > lo),
+                            default=hi * 2)
                 else:
                     continue
-                if lo < d < hi:
-                    out.append((w.id, p, o.kind, d))
+                found(("end", w.id, i), p, o.kind, d, o)
+    # a symbol's pin a hair from another's pin, or from a wire's straight run with no end near
+    # it (a wire end near a pin is the end's near miss, above)
+    for e in sheet.inserts():
+        for n, p in pins(e):
+            box = (p[0] - hi, p[1] - hi, p[0] + hi, p[1] + hi)
+            near = list(sheet.query(box))
+            if on_slanted(p, near, None):
+                CHECKED["near misses: pins on slanted runs left out"] += 1
+                continue
+            for o in near:
+                if o.id == e.id:
+                    continue
+                if isinstance(o, M.Wire):
+                    if G.dist(p, o.points[0]) < hi or G.dist(p, o.points[-1]) < hi:
+                        continue
+                    d = min([G.dist_to_segment(p, a, b) for a, b in zip(o.points, o.points[1:])
+                             if not slanted(a, b)] or [hi * 2])
+                elif pins(o):
+                    d = min(G.dist(p, q) for _n, q in pins(o))
+                else:
+                    continue
+                found(("pin", e.id, n), p, o.kind, d, o)
     CHECKED["near misses"] += 1
+    return sorted(out.values(), key=lambda m: str(m[0]))
+
+
+def ends_left_short(sheet, ends, lo=1e-6, hi=0.01):
+    """[(end, distance)]: of the wire ends given, those joined to nothing (no pin, other wire
+    or other wire's end within lo) yet nearer than hi to a pin or another wire (any run): what
+    Move, Copy, Stretch and grips put on it (wires.pull_on, the owner's 0.18.3 rule)."""
+    out = []
+    for p in ends:
+        box = (p[0] - hi, p[1] - hi, p[0] + hi, p[1] + hi)
+        ds, own = [], 0
+        for o in sheet.query(box):
+            if isinstance(o, M.Wire):
+                if G.dist(p, o.points[0]) <= lo or G.dist(p, o.points[-1]) <= lo:
+                    own += 1
+                    if own < 2:
+                        continue            # (its own wire: the first one ending here)
+                ds += [G.dist_to_segment(p, a, b) for a, b in zip(o.points, o.points[1:])]
+            elif isinstance(o, M.Insert) and o.defn is not None and o.defn.pins:
+                ds += [G.dist(p, q) for _n, q in o.pin_points()]
+        d = min(ds, default=hi * 2)
+        if lo < d < hi:
+            out.append((p, d))
+        elif d <= lo:
+            CHECKED["Move and Copy: an end joined, or put on what it nearly met"] += 1
+    CHECKED["Move and Copy: no end left a hair short"] += 1
     return out
+
+
+def _turned(o):
+    """A symbol with pins turned off the right angles (its pins off the grid)."""
+    return isinstance(o, M.Insert) and o.defn is not None and bool(o.defn.pins) and \
+        abs(o.angle / 90.0 - round(o.angle / 90.0)) > 1e-9
+
+
+def _on_turned_pin(sheet, q, lo=1e-6):
+    return any(_turned(o) and any(G.dist(q, r) <= lo for _n, r in o.pin_points())
+               for o in sheet.query((q[0] - lo, q[1] - lo, q[0] + lo, q[1] + lo)))
+
+
+def _turned_side(sheet, o):
+    """Why o (a symbol, or a wire), one side of a near miss, is off the grid by a turned
+    symbol, or None: its pin; a wire starting or ending on such a pin (that end, or a run
+    routed from it)."""
+    if isinstance(o, M.Insert):
+        return "a pin of a turned symbol" if _turned(o) else None
+    if isinstance(o, M.Wire) and (_on_turned_pin(sheet, o.points[0]) or
+                                  _on_turned_pin(sheet, o.points[-1])):
+        return "a wire from a turned symbol's pin"
+    return None
+
+
+def _residue(v, g):
+    """v's distance past the grid of step g below it, in [0, g)."""
+    return v - math.floor(v / g) * g
+
+
+def _carried_off(sheet, p, o):
+    """Whether the near miss of p with o (a wire or a symbol) is between coordinates a symbol
+    turned off the right angles put off the grid, carried off its pin since (a wire routed from
+    the pin, moved away from it with part of the drawing; the long battery, seed 5052 at step
+    2268): an x or y of p, or of o's point nearest p, that is off the 1/64" grid by just what a
+    turned symbol's pin on the sheet is (or its mirror image: turned or flipped since)."""
+    g = sheet.k() / 64.0
+    eps = 1e-7 * max(1.0, sheet.k())
+    marks = set()
+    for e in sheet.inserts():
+        if _turned(e):
+            for _n, q in e.pin_points():
+                for c in q:
+                    r = _residue(c, g)
+                    if eps < r < g - eps:
+                        marks.add(r)
+    if not marks:
+        return False
+    if isinstance(o, M.Wire):
+        c = min((G.closest_on_segment(p, a, b)[0] for a, b in zip(o.points, o.points[1:])),
+                key=lambda q: G.dist(p, q))
+    else:
+        c = min((q for _n, q in o.pin_points()), key=lambda q: G.dist(p, q))
+    for v in (p[0], p[1], c[0], c[1]):
+        r = _residue(v, g)
+        if eps < r < g - eps and any(abs(r - m) <= eps or abs(r - (g - m)) <= eps
+                                     for m in marks):
+            return True
+    return False
+
+
+def near_misses_unflagged(sheet):
+    """The near misses (near_misses) the program doesn't mark on the drawing, the ones it marks
+    that no turned symbol explains, and the marks it makes that are no near miss: ([near miss],
+    [near miss], [(key, point)]). A near miss is accepted only when the program marks it and
+    one side of it is off the grid by a symbol turned off the right angles (a pin of one, a
+    wire end on such a pin, a run of a wire from such a pin, or such a wire's coordinates
+    carried off the pin since: _carried_off): the owner, Nov 26 2026, "Warn on
+    the drawing": a turned symbol's pin, or a wire routed from one, can stop a few thousandths
+    from an unrelated wire, and joining them would wire two circuits together. Anything else
+    (upright geometry: the program's own slop, as Move and Copy leaving an end 0.0037" short,
+    seed 5052) still fails, marked or not."""
+    from kanzonascad import nearmiss
+    got = nearmiss.found_keyed(sheet)
+    targets = {}
+    want = near_misses(sheet, targets=targets)
+    keys = {m[0] for m in want}
+    missed = [m for m in want if m[0] not in got or G.dist(got[m[0]][0], m[1]) > 1e-12]
+    false = [(k, v[0]) for k, v in got.items() if k not in keys]
+    unexplained = []
+    for m in want:
+        if m in missed:
+            continue
+        key = m[0]
+        own = sheet.entities.get(key[1])
+        mine = _turned_side(sheet, own)
+        why = [mine or _turned_side(sheet, o) or (
+            _carried_off(sheet, m[1], o) and "a turned symbol's geometry carried off its pin")
+            for o in targets.get(key, ())]
+        if all(why) and why:
+            for r in set(why):
+                CHECKED["near misses marked, accepted: %s" % r] += 1
+        else:
+            unexplained.append(m)
+    marks = {(round(v[0][0], 6), round(v[0][1], 6)) for v in nearmiss.found(sheet)}
+    if want and not missed:
+        # (every spot is marked: found() keeps one per spot, the marks drawn)
+        assert all(any(abs(q[0] - m[1][0]) < 1e-5 and abs(q[1] - m[1][1]) < 1e-5
+                       for q in marks) for m in want), "a near miss found but not marked"
+        CHECKED["near miss marks drawn"] += 1
+    return missed, unexplained, false
 
 
 def folds(sheet):
@@ -857,7 +1025,7 @@ def pdf_links_right(project, path, sheets):
         page = reader.pages[i]
         annots = [a.get_object() for a in (page.get("/Annots") or [])]
         rects = [[float(v) for v in a["/Rect"]] for a in annots]
-        used = set()
+        linked = []                 # (part, text, links over it, those right for it)
         unlinked = []
         devs = {e.attrs["DEV"] for e in s.entities.values()
                 if isinstance(e, (M.Insert, M.DashBox)) and e.attrs.get("DEV")}
@@ -894,18 +1062,37 @@ def pdf_links_right(project, path, sheets):
                     # or under it: looked at once the page's texts have taken theirs)
                     unlinked.append((part, item[2], over))
                     continue
-                # (texts drawn over each other, contacts stacked by the steps: a link each;
-                # this text's is one of those over it not taken yet, nearest first)
-                free = sorted((j for j in over if j not in used),
-                              key=lambda j: abs((rects[j][0] + rects[j][2]) / 2.0 - mid[0]) +
+                # (texts drawn over each other, contacts stacked by the steps: a link each,
+                # one of those over it that is right for it, nearest first)
+                near = sorted(over, key=lambda j: abs((rects[j][0] + rects[j][2]) / 2.0 -
+                                                      mid[0]) +
                               abs((rects[j][1] + rects[j][3]) / 2.0 - mid[1]))
-                assert free, "%d links over %r of %r on sheet %s, none its own" % (
-                    len(over), part, item[2], project.sheet_number(s))
-                why = [wrong(j, place, where, lo, hi) for j in free]
+                assert near, "no link over %r of %r on sheet %s" % (
+                    part, item[2], project.sheet_number(s))
+                why = [wrong(j, place, where, lo, hi) for j in near]
                 assert None in why, "%r on sheet %s: %s" % (item[2], project.sheet_number(s),
                                                             why[0])
-                used.add(free[why.index(None)])
-                CHECKED["PDF cross-reference links lead to what they name"] += 1
+                linked.append((part, item[2], len(over),
+                               [j for j, w in zip(near, why) if w is None]))
+        # (each its own: a link for every text that has one, no link for two. Taken one text
+        # at a time, a text could take the link of a text drawn over its place and leave that
+        # one none: an arrow's whole "6003B / 6-?" is its link, and two arrows a little apart
+        # draw the second's text over the first's "6-?"; the short battery, 0.26, seed 5)
+        owner = {}                  # link -> the text (index in linked) it is the link of
+
+        def take(r, seen):
+            for j in linked[r][3]:
+                if j not in seen:
+                    seen.add(j)
+                    if j not in owner or take(owner[j], seen):
+                        owner[j] = r
+                        return True
+            return False
+        for r, (part, text, n_over, _right) in enumerate(linked):
+            assert take(r, set()), "%d links over %r of %r on sheet %s, none its own" % (
+                n_over, part, text, project.sheet_number(s))
+            CHECKED["PDF cross-reference links lead to what they name"] += 1
+        used = set(owner)
         for part, text, over in unlinked:
             assert all(j in used for j in over), \
                 "a link over %r (%r), a place not in the PDF" % (part, text)
@@ -916,6 +1103,50 @@ def pdf_links_right(project, path, sheets):
             project.sheet_number(s), extra)
         n_links += len(used)
     return n_links
+
+
+# ---- a source arrow's wire number (0.19.11) ----------------------------------------------------
+def own_wire_number_wrong(project, sheet, wire, split):
+    """Why the number of a wire of its own (not a tap) at a source arrow is wrong, or None:
+    a number of its page; but a wire on a distribution block outlet's T pin takes its block's
+    phase number with the outlet's letter, wherever the block is (the manual: an outlet "on any
+    sheet"; outlet 4 of page 25's PDB2501 on page 9 is 25005D: the long battery, 0.27, seed
+    5022). Worked out from the drawing: the outlet's OUTLET, the wire on its block's L pin.
+    split: wirenums.split."""
+    num = wire.num
+    for e in sheet.inserts():
+        d = e.defn
+        if d is None or d.wiring != "pdb" or not e.attrs.get("PARENT"):
+            continue
+        for n, q in e.pin_points():
+            if not (n.startswith("T") and wire.touches(q)):
+                continue
+            k = (e.attrs.get("OUTLET") or "").strip()
+            if not k.isdigit() or int(k) < 1:
+                return None             # (an outlet not numbered yet: its wires wait for it)
+            i, letter = int(k), ""
+            while i:
+                i, r = divmod(i - 1, 26)
+                letter = chr(65 + r) + letter
+            phase = set()
+            for bs in project.sheets:
+                for b in bs.inserts():
+                    if b.defn is not None and b.defn.wiring == "pdb" and \
+                            b.attrs.get("DEV") == e.attrs["PARENT"]:
+                        q2 = dict(b.pin_points()).get("L" + n[1:])
+                        phase |= {w.num for w in bs.wires()
+                                  if q2 is not None and w.num and w.touches(q2)}
+            if len(phase) != 1:
+                return None             # (no block, or its phase not numbered: nothing to say)
+            want = phase.pop() + letter
+            CHECKED["a source's wire on a distribution outlet takes its phase's number"] += 1
+            return None if num == want else "a source arrow's wire on outlet %s's %s took %s, " \
+                "not %s" % (k, n, num, want)
+    got = split(num)
+    if got is None or got[0] != project.sheet_number(sheet):
+        return "a source arrow's wire on page %s took %s from a destination's page" % (
+            project.sheet_number(sheet), num)
+    return None
 
 
 # ---- devices without a footprint (0.25) --------------------------------------------------------
@@ -1009,3 +1240,111 @@ def twins_apart(project):
                                                                        got)
     if len(seen) == 2:
         CHECKED["a symbol and a footprint of one name kept apart"] += 1
+
+
+TOL = 1e-6
+
+
+def _has_term(e):
+    d = getattr(e, "defn", None)
+    return isinstance(e, M.Insert) and d is not None and d.kind == "symbol" and \
+        any(a.get("attr") == "TERM" for a in d.attr_texts)
+
+
+def _wire_group(wires, start):
+    """The wires joined to start (one's end on another), worked out wire by wire."""
+    out = {w.id for w in start}
+    todo = list(start)
+    while todo:
+        w = todo.pop()
+        for o in wires:
+            if o.id in out:
+                continue
+            if any(o.touches(q, TOL) for q in (w.points[0], w.points[-1])) or \
+                    any(w.touches(q, TOL) for q in (o.points[0], o.points[-1])):
+                out.add(o.id)
+                todo.append(o)
+    return out
+
+
+def strips_right(project):
+    """(0.27) The terminal strips as the terminals on the drawing say, worked out here from
+    every terminal and wire (not strips.py's nets or wirenums' groups): every terminal is in
+    exactly one strip, the one of its strip device's tag (else its own); a strip's numbers are
+    each on one row; a strip with nothing kept is in number order; each terminal's wire numbers
+    (both sides) are those of the wires on its pins, and what its wires land on on its own
+    sheet (both sides) the pins of the symbols those wires reach there (off-sheet connectors
+    and arrows not landings); its internal and external sides are two of its pins."""
+    from kanzonascad import strips, wirenums
+    found = strips.find(project)
+    seen = collections.Counter()
+    by_place = {}
+    devs = {}
+    for s in project.sheets:
+        for e in s.inserts():
+            d = e.defn
+            if d is not None and d.kind == "symbol" and d.role in ("device", "parent") and \
+                    d.prefix and e.attrs.get("DEV"):
+                devs[e.attrs["DEV"]] = e
+    kept = project.settings.get("strips") or {}
+    for st in found:
+        nums = [r.num for r in st.rows if r.num]
+        assert len(nums) == len(set(nums)), "strip %s has a number twice: %r" % (st.tag, nums)
+        if st.key not in kept and "tag:" + st.tag.upper() not in kept:
+            assert nums == sorted(nums, key=strips.natural), \
+                "strip %s out of number order with nothing kept: %r" % (st.tag, nums)
+            CHECKED["terminal strip in number order"] += 1
+        for r in st.rows:
+            assert r.spare == (not r.places), "terminal %s-%s: spare %r, drawn %d times" % (
+                st.tag, r.num, r.spare, len(r.places))
+            for s, e in r.places:
+                seen[(s.id, e.id)] += 1
+                by_place[(s.id, e.id)] = (st, r)
+    numbered = wirenums.enabled(project)
+    for s in project.sheets:
+        terms = [e for e in s.inserts() if _has_term(e)]
+        if not terms:
+            continue
+        wires = list(s.wires())
+        many = len(wires) > 1500 or any(w.own_num for w in wires)
+        for e in terms:
+            assert seen[(s.id, e.id)] == 1, "terminal %s on sheet %s in %d strips' rows" % (
+                e.id, s.id, seen[(s.id, e.id)])
+            st, r = by_place[(s.id, e.id)]
+            par = devs.get(e.attrs.get("PARENT") or "")
+            want = ((par if par is not None else e).attrs.get("TAG") or "").strip() or "TB?"
+            assert st.tag == want, "terminal %s on strip %s, not %s" % (e.id, st.tag, want)
+            assert r.num == (e.attrs.get("TERM") or "").strip(), (r.num, e.attrs.get("TERM"))
+            pins = dict(e.pin_points())
+            mine = [x for x in (r.inside, r.outside) if x is not None]
+            assert all(x.pin in pins for x in mine) and len({x.pin for x in mine}) == len(mine), \
+                "terminal %s-%s's sides %r" % (st.tag, r.num, [x.pin for x in mine])
+            if many or len(r.places) != 1:
+                continue
+            on = [w for q in pins.values() for w in wires if w.touches(q, TOL)]
+            want_nums = {w.num or "?" for w in on} if numbered else set()
+            got_nums = {n for x in mine for n in x.wires}
+            assert got_nums == want_nums, "terminal %s-%s: wires %r, on its pins %r" % (
+                st.tag, r.num, sorted(got_nums), sorted(want_nums))
+            lands, linked = set(), False
+            for name, q in pins.items():
+                group = _wire_group(wires, [w for w in wires if w.touches(q, TOL)])
+                ws = [w for w in wires if w.id in group]
+                for x in s.inserts():
+                    d = x.defn
+                    if d is None or d.kind != "symbol" or not d.pins:
+                        continue
+                    for pn, xq in x.pin_points():
+                        if (x.id, pn) == (e.id, name) or not any(w.touches(xq, TOL)
+                                                                 for w in ws):
+                            continue
+                        if d.wiring == "link":
+                            linked = True       # (on through a connector: maybe back here)
+                        else:
+                            lands.add((x.id, pn))
+            if linked:
+                continue
+            got = {(x.id, pn) for side in mine for sh, x, pn in side.to if sh is s}
+            assert got == lands, "terminal %s-%s lands on %s, its wires reach %s" % (
+                st.tag, r.num, sorted(got), sorted(lands))
+            CHECKED["terminal's wires and landings"] += 1

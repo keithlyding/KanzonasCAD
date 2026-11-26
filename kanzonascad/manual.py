@@ -778,7 +778,8 @@ they move, and a block moved out of the column leaves it. Blocks joined by the l
 tag and no reference of their own, and aren't listed under the operator (the line shows where
 they belong; only the operator shows the tag); one on another sheet, or out of the column, shows
 its tag and reference and is listed as usual. A block's tag you hide yourself (double-click it,
-Shown on the drawing) stays hidden either way. Relay
+Shown on the drawing) stays hidden either way, and one you show yourself on the line (Shown on
+the drawing, or Tag ticked in the Properties panel) stays shown. Relay
 contacts are never joined this way.</li>
 <li><b>Changing it later</b>: double-click the contact. "Belongs to" lists the project's
 devices; pick one or type a tag. Deleting a coil leaves its contacts unlinked (showing
@@ -1228,7 +1229,8 @@ and change the texts and pins, then save it under a name of your own.</li>
 takes a tag, TB601). Placing a terminal asks which strip, as a contact asks for its coil; it
 shows the strip's tag and numbers itself on the strip: 1, 2, 3... (the lowest free number;
 a copy takes the next one). Double-click a terminal to type its number instead. The strip
-lists where its terminals are.</li>
+lists where its terminals are. <b>Terminal strips...</b> puts a strip's terminals in order,
+renumbers them and adds spares and jumpers (Terminal strips, below).</li>
 <li><b>PLC input</b> and <b>PLC output</b> points belong to a <b>PLC I/O card</b> the same
 way, and list under it; double-click a point to type its <b>address</b> (I:0/3, %I0.3...),
 shown under it.</li>
@@ -1355,6 +1357,19 @@ one appears (a tag typed, something pasted, a number locked), the command line s
 on what sheets. Not duplicates: a contact or footprint showing its device's tag, wires joined
 by off-sheet connectors or source and destination arrows (one wire), and a number kept with
 "No: just the same number".</li>
+<li><b>Near misses are marked too.</b> A wire end or a symbol's pin that almost touches a wire,
+a wire end or another symbol's pin without being joined to it (nearer than 0.01", drawing
+units, but not on it) gets a red frame round the spot, on every sheet, until you fix it (on
+the screen only: it doesn't print), and when one appears the command line says where, how far
+and from what ("A wire end at 5.073, 4.323 is 0.0089" from a wire without joining it (sheet
+1)"). It looks connected and isn't. This happens most with a symbol turned to an odd angle
+(45 degrees): its pins aren't on the grid, so a pin, or a wire run from one, can stop a few
+thousandths from a wire it has nothing to do with. The program doesn't join them for you (that
+could wire two circuits together). To clear the mark, either move the two apart (Move the
+wire or the symbol away), or join them on purpose: draw the wire onto the pin or wire with the
+snaps, or drag its end with a grip (an end left less than 0.01" from a pin or wire is put on
+it). Crossing wires that pass through each other with no end near aren't marked, nor are ends
+and pins on slanted runs (where a slanted wire crosses is chance).</li>
 <li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
 as device tags do.</li>
 <li><b>Renumber sheet</b> also numbers the sheet's unlocked wires again, 001, 002... in
@@ -1461,13 +1476,64 @@ writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workb
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 <p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints
 and goes into the PDF with the drawings: pick the bill of materials, wire list, terminal strip
-list, pull list, panel materials or devices without a footprint, and it comes in as a table (lines and texts on layer
+list, terminal plan, pull list, panel materials or devices without a footprint, and it comes in as a table (lines and texts on layer
 REPORT) on report sheets just after the sheet shown, as many as it takes ("Bill of materials (1
 of 3)"), in the room the border and title block leave; a cell too long for its column ends in
 "…". A report sheet isn't kept up to date as you draw (that would slow every change on a big
 project): <b>Update report sheets</b> (Sheets menu) draws every report sheet again from the
 drawing as it is, and picking a report that has sheets already draws it again there. One Undo
 each.</p>
+
+<h2>Terminal strips</h2>
+<p>A terminal strip is the terminals that share its tag (TB1): the <b>Terminals</b> placed on a
+<b>Terminal strip</b> symbol, or given its tag. Its terminals can be on any sheets; the same
+number drawn twice (on two sheets, say) is one terminal, with the wires of both places.</p>
+<p><b>Terminal strips...</b> (Panel tab: Terminals; Sheets menu) opens the strip editor, on the
+strip of the terminal or strip selected (else the first). The strips are listed on the left,
+with how many terminals each has; on the right the one picked, terminal by terminal in its
+order:</p>
+<ul>
+<li><b>Terminal</b>: its number (? while it has none). Double-click it to type another; a
+number already on the strip is refused.</li>
+<li><b>Internal wire</b> and <b>Internal to</b>, <b>External wire</b> and <b>External to</b>:
+the wire numbers on each side and the devices' pins they go to (<b>CR1:A1</b>; another terminal
+as <b>TB2-4</b>), worked out from the schematic each time, across sheets through off-sheet
+connectors and source and destination arrows. A side is a pin of the terminal. The internal
+side is the one wired inside the strip's location (its sheet's location, or the strip's own:
+Sheet properties, a device's Location), the external side the one going to another location
+(the field, a junction box), shown with that location: <b>LT1:1 (FIELD)</b>. With no
+locations, the left pin (as the terminal is drawn) is internal and the right pin external.</li>
+<li><b>Jumper</b>: the jumper it is on (J1, J2...). <b>Where</b>: the sheet and zone it is
+drawn at, or <b>spare</b>.</li>
+</ul>
+<p>Pick one or more terminals (click, Shift+click, Ctrl+click), then:</p>
+<ul>
+<li><b>Move up</b> and <b>Move down</b>: the terminals picked one place along the strip. The
+order is the strip's own: a strip in number order needs nothing kept, one put in another order
+keeps it (a terminal placed later goes in after the one numbered just below it).</li>
+<li><b>Renumber</b>: every terminal of the strip, spares too, numbered in the order shown from
+the number beside it (1 to start). Terminals without a number get one too.</li>
+<li><b>Add spare</b>: a spare terminal after the one picked (at the end with none picked),
+numbered one more than the highest number on the strip: a terminal on the strip with nothing
+drawn for it. <b>Remove spare</b> takes the spares picked off the strip; a drawn terminal is
+erased on the drawing. A terminal placed later that takes a spare's number (it takes the lowest
+free one) is that terminal from then on.</li>
+<li><b>Add jumper</b>: one jumper bridging the terminals picked (two or more; those already on a
+jumper with them join it). <b>Remove jumper</b> takes the terminals picked off their jumper (a
+jumper left with one terminal is gone). Jumpers are listed in the editor and on the terminal
+plan, not drawn on the schematic.</li>
+</ul>
+<p><b>OK</b> puts the new numbers on the terminals on the drawing (every place each is drawn) and
+keeps each strip's order, spares and jumpers with the project, all the strips changed in one
+step (Edit, Undo takes it back). <b>Cancel</b> keeps nothing.</p>
+<p><b>Terminal plan...</b> (Sheets menu; Output tab, on the Terminals button's menu) lists every
+strip, terminal by terminal in its order: its number, the wire and what it goes to on its
+internal side and on its external side, its jumper (<b>J1: 1, 2, 3</b>: the terminals it
+bridges) and where it is drawn, spares included. <b>Save as CSV or Excel...</b> writes it, and
+<b>Report sheet...</b> draws it on sheets of the project (Terminal plan).</p>
+<p>Not yet: multi-level terminals (each level is a terminal of its own number for now), jumpers
+drawn on the schematic, and a strip drawn on a panel sheet (place its Terminal block footprints
+on the rail).</p>
 
 <h2>Cables between panels</h2>
 <p><b>Cables between locations...</b> (Sheets menu, Output tab: Reports) lists what has to be
@@ -1541,9 +1607,11 @@ is (Enter starts a new line there, <b>Ctrl+Enter</b> keeps it, Esc drops it); ri
 <b>Text properties...</b> changes its text, height, wrap width and the point it hangs from (top
 left ... bottom right). A DXF's or DWG's MTEXT
 comes in as one, and DXF export writes it as MTEXT.</td></tr>
-<tr><td>Move</td><td>MOVE, M</td><td>Select, base point, second point.</td></tr>
+<tr><td>Move</td><td>MOVE, M</td><td>Select, base point, second point. A wire end it leaves
+less than 0.01" from a pin or another wire is put on it.</td></tr>
 <tr><td>Copy objects</td><td>COPY, CO, CP</td><td>Select, base point, then as many copies as
-you place (Enter ends).</td></tr>
+you place (Enter ends). A copied wire end less than 0.01" from a pin or another wire is put on
+it.</td></tr>
 <tr><td>Rotate</td><td>ROTATE, RO</td><td>Select, base point, angle (a point or degrees).</td></tr>
 <tr><td>Scale</td><td>SCALE, SC</td><td>Select, base point, factor. Or <b>Reference</b> (R): pick
 two points of a length as drawn (or type it), then type the length it should be: this brings a

@@ -25,7 +25,9 @@ BUDGET = {
     "peak_mb": 800,
     "big_print": 5.0,           # that sheet printed, fit to letter paper (into a PDF file)
     "big_window": 2.0,          # that sheet opened in a new window and drawn, then closed
-    "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings
+    "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings,
+                                # near misses (nearmiss.py: only round what the edit changed)
+    "near_scan": 1.0,           # near misses on that sheet worked out whole (opened)
     # a sheet of notes: 2,000 hatches (and their outlines), 1,000 leaders, 1,000 multi-line
     # notes, 1,000 pictures and 2,000 texts (text drawn as filled outlines took seconds a zoom
     # step here)
@@ -60,6 +62,14 @@ BUDGET = {
     "join_undo": 1.0,           # that undone, then drawn
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
                                 # 2,000 devices, half of them in the field
+    # (0.27: terminal strips) 50 sheets, a strip of 100 terminals each (5,000 terminals, a
+    # device wired to each side, 10,000 wires, half the far ends in the field):
+    "strips_open": 0.5,         # Terminal strips... opened: every strip listed, the first shown
+    "strips_plan": 1.0,         # the terminal plan of every terminal worked out (its wire
+                                # groups read afresh: 0.3 s here, 0.5 s on the build's Linux
+                                # computer; as "pull", for five times as many wires; the
+                                # owner's choice, Nov 2026)
+    "strips_apply": 0.5,        # a strip renumbered backwards and written back (OK), one step
     # (0.23: Trace, Ctrl+E) on 50 sheets of 1,000 lines, 40 coils, 40 contacts and 40 wires:
     "trace_index": 2.0,         # the first list, every sheet indexed (50 sheets)
     "trace_click": 0.005,       # a click (selection change) with the panel open: the lookup
@@ -441,7 +451,7 @@ def run(log_path):
 
     def wire_editing():
         import time
-        from . import wires, crossings
+        from . import wires, crossings, nearmiss
         p = M.Project.new()
         s = p.sheets[0]
         with p.edit("rungs") as ed:
@@ -454,17 +464,33 @@ def run(log_path):
         wires.junctions(s)
         crossings.jumps(p, s)
         t = time.perf_counter()
+        assert nearmiss.found(s) == []
+        scan = time.perf_counter() - t
+        t = time.perf_counter()
         for k in range(10):
             with p.edit("one") as ed:
                 ed.add(s, M.Wire([(40 + k, 0), (40 + k, 1)]))
             wires.junctions(s)
             crossings.jumps(p, s)
+            nearmiss.found(s)
         each = (time.perf_counter() - t) / 10
+        # (a wire end stopped 0.005" short of a rung: marked, after the one edit)
+        t = time.perf_counter()
+        with p.edit("short") as ed:
+            ed.add(s, M.Wire([(5.5, 0.255), (5.5, 0.6)]))
+        got = nearmiss.found(s)
+        near = time.perf_counter() - t
+        assert [round(m[2], 6) for m in got] == [0.005], got
+        assert scan < BUDGET["near_scan"], \
+            "near misses on a 12,030-wire sheet worked out in %.2f s" % scan
         assert each < BUDGET["wire_edit"], \
-            "a wire added to a 12,030-wire sheet (numbers, dots, crossings) took %.0f ms" % (
-                each * 1000)
-        return "one wire on a 12,030-wire sheet, numbered, dots and crossings: %.0f ms" % (
-            each * 1000)
+            "a wire added to a 12,030-wire sheet (numbers, dots, crossings, near misses) " \
+            "took %.0f ms" % (each * 1000)
+        assert near < BUDGET["wire_edit"], "a near miss found after an edit in %.0f ms" % (
+            near * 1000)
+        return ("one wire on a 12,030-wire sheet, numbered, dots, crossings and near misses: "
+                "%.0f ms; near misses on the whole sheet %.0f ms, one found after an edit "
+                "%.0f ms" % (each * 1000, scan * 1000, near * 1000))
     log.check("wire editing speed (12,030-wire sheet)", wire_editing)
 
     def manual():
@@ -1083,6 +1109,67 @@ def run(log_path):
         assert dt < BUDGET["pull"], "the pull list took %.2f s" % dt
         return "1,000 conductors to pull of 2,000 wires: %.3f s" % dt
     log.check("speed budget (cables between locations)", pull_list)
+
+    def terminal_strips():
+        from . import strip_window, strips
+        w = state["win"]
+        lib = w.library
+        term, strip, lt = (lib.get("symbol", n) for n in ("Terminal", "Terminal strip",
+                                                            "Pilot light"))
+        p = M.Project.new()
+        while len(p.sheets) < 50:
+            p.sheets.append(p.make_sheet("Sheet %d" % (len(p.sheets) + 1)))
+        for b in (term, strip, lt):
+            p.blocks[b.name] = b
+        for k, s in enumerate(p.sheets):
+            s.location = "MCP"
+            tb = M.Insert(strip.name, (1, 10.5), defn=strip,
+                          attrs={"TAG": "TB%d" % (k + 1), "DEV": "strip%d" % k})
+            s._put(tb)
+            for i in range(100):
+                x, y = 3 + (i % 10) * 1.4, 1 + (i // 10) * 0.9
+                t = M.Insert(term.name, (x, y), defn=term,
+                             attrs={"TAG": tb.attrs["TAG"], "PARENT": "strip%d" % k,
+                                    "TERM": str(i + 1)})
+                s._put(t)
+                pins = dict(t.pin_points())
+                for side, dx in (("1", -0.5), ("2", 0.5)):
+                    d = M.Insert(lt.name, (x + dx, y + 0.3), defn=lt,
+                                 attrs=dict({"TAG": "LT%d_%d%s" % (k, i, side)},
+                                            **({"LOC": "FIELD"} if side == "2" else {})))
+                    s._put(d)
+                    s._put(M.Wire([pins[side], d.pin_points()[0][1]]))
+        from . import wirenums
+        with p.edit("Wire numbers") as ed:          # (numbered, as a project opened is)
+            wirenums.sync(ed, p)
+        p.undo_stack.clear()
+        t0 = time.perf_counter()
+        dlg = strip_window.StripEditorDialog(w, p)
+        do = time.perf_counter() - t0
+        assert dlg.list.count() == 50 and dlg.table.rowCount() == 100, (
+            dlg.list.count(), dlg.table.rowCount())
+        assert "(FIELD)" in dlg.table.item(0, 4).text(), dlg.table.item(0, 4).text()
+        t0 = time.perf_counter()
+        rows = strips.plan_rows(p)
+        dp = time.perf_counter() - t0
+        assert len(rows) == 5000 and rows[0][5].endswith("(FIELD)"), rows[0]
+        lay = dlg.layout_of(0)
+        lay.rows.reverse()
+        lay.renumber(1)
+        t0 = time.perf_counter()
+        assert dlg.apply()
+        da = time.perf_counter() - t0
+        dlg.deleteLater()
+        got = [r.places[0][1].pos for r in strips.find(p, wires=False)[0].rows]
+        assert got[0][1] > got[-1][1], "the strip renumbered backwards: %r" % got[:2]
+        assert len(p.undo_stack) == 1
+        assert do < BUDGET["strips_open"], "Terminal strips... opened in %.2f s" % do
+        assert dp < BUDGET["strips_plan"], "the terminal plan in %.2f s" % dp
+        assert da < BUDGET["strips_apply"], "a strip renumbered and written back in %.2f s" % da
+        return ("50 strips of 100 terminals (10,000 wires): Terminal strips... opened %.3f s, "
+                "the terminal plan %.3f s, a strip renumbered and written back %.3f s"
+                % (do, dp, da))
+    log.check("speed budget (terminal strips)", terminal_strips)
 
     def trace():
         # (Trace, 0.23; the owner: "make sure that the loading of the cross-references doesn't
