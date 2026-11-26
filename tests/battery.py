@@ -62,6 +62,7 @@ TAP_END = re.compile(r"(?:-\d+|-?[a-z]+)[a-z0-9]*$")
 from kanzonascad import wires, crossings, wirenums, wirelayers, fileio, templates  # noqa: E402
 from kanzonascad import tags as tags_mod  # noqa: E402
 from kanzonascad import xrefs as XR  # noqa: E402
+from kanzonascad import udts as UDT  # noqa: E402
 from tests import battery_checks as BC  # noqa: E402
 
 
@@ -1610,7 +1611,10 @@ def random_editing(log, out, ops, seed, drawing=None):
                 down = ((q[0] - e.a[0]) * uy - (q[1] - e.a[1]) * ux) / e.spacing
                 m = wd / 3.0
                 if -m <= along <= wd + m and -0.5 <= down <= e.rungs - 0.5:
-                    hit = e.numbers()[int(round(down))]
+                    # (exactly half a rung past the last: Python rounds 9.5 to 10, a rung the
+                    # ladder hasn't got; the program keeps such a point to its last rung,
+                    # Ladder.rung_at since 0.25: the battery's seed 41 of 0.30, step 961)
+                    hit = e.numbers()[min(int(round(down)), e.rungs - 1)]
                     break
             assert p.zone_text(s, *q) == hit, "a point on rung %s reads %s" % (
                 hit, p.zone_text(s, *q))
@@ -4606,6 +4610,154 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert set(sh.entities) == before["ids"], "Undo left part of the circuit"
             BC.CHECKED["circuit undone in one step"] += 1
 
+    def udt_intact(sh, gid):
+        # (a placed UDT as it was placed or rebuilt: every member there, none changed by hand,
+        # nothing else in its box; random steps may have moved, erased or drawn over it since,
+        # and then what it must be can't be worked out from its UDT alone)
+        inst = sh.udts.get(gid)
+        if inst is None:
+            return False
+        u = UDT.type_of(sh, inst)
+        have = UDT.members(sh, gid)
+        if set(have) != set(inst["members"]):
+            return False
+        bb = None
+        for e in have.values():
+            bb = G.bbox_union(bb, e.bbox())
+        ids = set(inst["members"].values())
+        if any(e.id not in ids for e in sh.query(bb)):
+            return False
+        names = UDT._names(p, u)
+        for r, e in have.items():
+            m = u.member(r)
+            if m is None or UDT.hand_edited(e, UDT.expected(p, u, m, inst["at"], inst["angle"],
+                                                           inst["scale"], names),
+                                            {x["attr"] for x in inst["ratings"]}):
+                return False
+        return True
+
+    def udt_place(sh, u, at, turns, scale):
+        hp, volts = rnd.choice(sorted(BC.FLC_CHECK))
+        choices = {x["name"]: rnd.choice(x["alternatives"]) for x in u.slots
+                   if rnd.random() < 0.7}
+        before = set(sh.udts)
+        n_undo = len(p.undo_stack)
+        win.ask_udt = lambda: (u, choices, {"HP": hp, "VOLTS": volts})
+        try:
+            win.insert_udt()
+        finally:
+            win.__dict__.pop("ask_udt", None)
+        assert isinstance(v.cmd, C.InsertUdtCmd), "Insert UDT didn't start"
+        for _i in range(turns):
+            v.input_text("R")
+        if scale != 1.0:
+            v.input_text("S")
+            v.input_text("%.12g" % scale)
+        v.input_text(fmt(at))
+        assert v.cmd is None, "Insert UDT still running after its point"
+        new = set(sh.udts) - before
+        assert len(new) == 1 and len(p.undo_stack) == n_undo + 1, (new, n_undo)
+        gid = new.pop()
+        inst = sh.udts[gid]
+        assert (inst["angle"], inst["scale"]) == ((90.0 * turns) % 360.0, scale), inst
+        if udt_intact(sh, gid):
+            BC.udt_motor_circuit(p, sh, UDT.type_of(sh, inst), inst)
+        return gid
+
+    def udt_answer(sh, gid, all_=False, replace=False):
+        inst = sh.udts[gid]
+        u = UDT.type_of(sh, inst)
+        choices = {x["name"]: rnd.choice(x["alternatives"]) for x in u.slots}
+        values = {}
+        if rnd.random() < 0.6:
+            values["HP"], values["VOLTS"] = rnd.choice(sorted(BC.FLC_CHECK))
+        overrides = {}
+        if rnd.random() < 0.3 and inst["ratings"]:
+            r = rnd.choice(inst["ratings"])
+            overrides[r["role"]] = {r["attr"]: rnd.choice(["", "7", "40A", "18.5"])}
+        return {"choices": choices, "values": values, "overrides": overrides, "all": all_,
+                "replace": replace}
+
+    def op_udt():
+        # (0.30: UDTs, as the owner would: Insert UDT... with its choices and values picked, R
+        # turns and a scale, where it goes; then UDT properties... on a placed one (a choice,
+        # a value, a rating typed over), applied to all of its UDT or not, Detach UDT, Update
+        # from UDT... What each must have done worked out from the UDT's drawing and the NEC
+        # values typed again in the checks: BC.udt_motor_circuit)
+        sh = v.sheet()
+        k = sh.k()
+        mine = [g for g in sorted(sh.udts) if UDT.members(sh, g)]
+        if not mine or rnd.random() < 0.4:
+            o = clear_of_drawing(k)
+            if o is None:
+                return
+            u = rnd.choice(sorted(lib.udts()[0].values(), key=lambda x: x.name))
+            udt_place(sh, u, o, rnd.randint(0, 3), 1.0 if rnd.random() < 0.7 else k)
+            return
+        gid = rnd.choice(mine)
+        inst = sh.udts[gid]
+        how = rnd.choice(["props", "props", "props", "all", "detach", "update"])
+        if how == "detach":
+            v.set_selection({rnd.choice(list(UDT.members(sh, gid).values())).id})
+            ids = set(sh.entities)
+            assert win.detach_udt() == 1
+            assert gid not in sh.udts and set(sh.entities) == ids, "Detach UDT changed objects"
+            BC.CHECKED["UDT detached, nothing else changed"] += 1
+            return
+        if how == "update":
+            v.set_selection({rnd.choice(list(UDT.members(sh, gid).values())).id})
+            win.confirm_udt_changes = lambda title, intro, plans, *a, **kw: (plans, {})
+            try:
+                win.update_from_udt()
+            finally:
+                win.__dict__.pop("confirm_udt_changes", None)
+            assert gid not in sh.udts or sh.udts[gid]["type"] == \
+                lib.udts()[0][inst["udt"]].key(), "Update from UDT left it as it was"
+            return
+        if how == "all":
+            same = [g for g in mine if sh.udts[g]["udt"] == inst["udt"] and g != gid]
+            if not same:
+                o = clear_of_drawing(k)
+                if o is None:
+                    return
+                same = [udt_place(sh, UDT.type_of(sh, inst), o, rnd.randint(0, 3), 1.0)]
+        others = [g for g in sorted(sh.udts) if g != gid and UDT.members(sh, g)]
+        was = {g: {i: sh.entities[i].to_dict() for i in sh.udts[g]["members"].values()
+                   if i in sh.entities} for g in others}
+        intact = udt_intact(sh, gid)
+        answer = udt_answer(sh, gid, how == "all", how == "all" and rnd.random() < 0.5)
+        v.set_selection({rnd.choice(list(UDT.members(sh, gid).values())).id})
+        win.ask_udt_properties = lambda *a: answer
+        win.confirm_udt_changes = lambda title, intro, plans, *a, **kw: (plans, {})
+        n_undo = len(p.undo_stack)
+        try:
+            win.udt_properties()
+        finally:
+            win.__dict__.pop("ask_udt_properties", None)
+            win.__dict__.pop("confirm_udt_changes", None)
+        assert len(p.undo_stack) <= n_undo + 1, "UDT properties took more than one step"
+        inst = sh.udts.get(gid)
+        if inst is None:
+            return
+        for sl, alt in answer["choices"].items():
+            assert inst["choices"][sl] == alt, (sl, alt, inst["choices"])
+        if intact and len(p.undo_stack) == n_undo + 1:
+            BC.udt_motor_circuit(p, sh, UDT.type_of(sh, inst), inst)
+            BC.CHECKED["UDT rebuilt in place"] += 1
+        # (the owner's rule: values and ratings change the others only when asked)
+        hp = answer["values"].get("HP")
+        for g in others:
+            if g not in sh.udts:
+                continue
+            now = {i: sh.entities[i].to_dict() for i in sh.udts[g]["members"].values()
+                   if i in sh.entities}
+            if not answer["all"] or sh.udts[g]["udt"] != sh.udts[gid]["udt"]:
+                assert now == was[g], "UDT properties changed another placed UDT"
+                BC.CHECKED["UDT: the others left alone"] += 1
+            elif hp:
+                assert sh.udts[g]["values"]["HP"] == hp, "applied to all: HP not given"
+                BC.CHECKED["UDT: applied to all"] += 1
+
     def op_same_name_pins():
         # a symbol with two pins of one name, a wire on each pin, off on its own; moved,
         # scooted or turned through the commands: every pin keeps its wire
@@ -5481,7 +5633,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1),
              (op_paste_same_place, 2),
              (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2),
-             (op_circuit, 3)]
+             (op_circuit, 3), (op_udt, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -5870,6 +6022,31 @@ def mixed_project(win):
     type_in(v, "17,11")
     coils = [e for e in s.inserts() if e.block == "Relay coil (IEC)"]
     assert len(coils) == 2 and len({e.attrs["TAG"] for e in coils}) == 2, coils
+    v.set_selection(set())
+    # (0.30) the two built-in UDTs placed through the commands, one turned, one rebuilt with
+    # another choice and a rating typed over, as the owner would
+    udts_lib = lib.udts()[0]
+    for name, at, turns in (("Motor circuit, VFD", "30,4", ""), ("Motor circuit, full-voltage "
+                                                                   "starter", "40,2", "R")):
+        win.ask_udt = lambda name=name: (udts_lib[name], {}, {"HP": "10", "VOLTS": "460"})
+        try:
+            win.insert_udt()
+        finally:
+            win.__dict__.pop("ask_udt", None)
+        type_in(v, *([turns] if turns else []) + [at])
+    gid = [g for g, u in s.udts.items() if u["udt"] == "Motor circuit, VFD"][0]
+    v.set_selection({min(s.udts[gid]["members"].values())})
+    fu_role = [m["role"] for m in udts_lib["Motor circuit, VFD"].members
+               if m["entity"].get("block") == "Fuses 3-pole"][0]
+    win.ask_udt_properties = lambda *a: {
+        "choices": {"Protection": "Fuses", "Line reactor": "Included"}, "values": {},
+        "overrides": {fu_role: {"RATING": "20A"}}, "all": False, "replace": False}
+    try:
+        win.udt_properties()
+    finally:
+        win.__dict__.pop("ask_udt_properties", None)
+    assert any(e.attrs.get("RATING") == "20A" for e in s.inserts()
+               if e.block == "Fuses 3-pole"), "the UDT's fuses weren't rebuilt"
     v.set_selection(set())
     # (0.21) a picture kept in the project (a logo), on the first sheet
     fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))

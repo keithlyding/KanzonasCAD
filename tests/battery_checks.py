@@ -1119,3 +1119,141 @@ def circuit_placed(project, sheet, circuit, at, angle, scale, before):
     assert len(project.undo_stack) == before["undo"] + 1, "a circuit placed in %d steps" % (
         len(project.undo_stack) - before["undo"])
     CHECKED["circuit placed"] += 1
+
+
+# ---- UDTs (0.30) -------------------------------------------------------------------------------
+# (worked out here from the UDT's own drawing and the NEC table values typed again below, not by
+# udts.py or nec_tables.py)
+# Table 430.250 (three-phase motors), a few rows: (HP, volts) -> amps
+FLC_CHECK = {("5", "460"): 7.6, ("10", "460"): 14.0, ("3", "230"): 9.6, ("7-1/2", "208"): 24.2,
+             ("1/2", "575"): 0.9, ("25", "460"): 34.0}
+FUSE_SIZES = (1, 3, 6, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 125, 150,
+              175, 200, 225, 250, 300)
+
+
+def next_fuse(amps):
+    """The next standard fuse size at or above amps (240.6(A), typed again here)."""
+    return min(s for s in FUSE_SIZES if s >= amps - 1e-9)
+
+
+def _pass_through(e):
+    """The pins of a symbol a current goes through: L1-T1, L2-T2, L3-T3, 1-2."""
+    pins = dict(e.pin_points())
+    out = []
+    for n, q in pins.items():
+        if n.startswith("L") and n[1:].isdigit() and ("T" + n[1:]) in pins:
+            out.append((q, pins["T" + n[1:]]))
+    if not out and "1" in pins and "2" in pins:
+        out.append((pins["1"], pins["2"]))
+    return out
+
+
+def connected(sheet, box):
+    """A function telling whether two points are joined by the wires and symbols in box: wires
+    join at their points and where an end lands on another wire; a symbol joins each pin to
+    the pin across (L1 to T1, 1 to 2)."""
+    parent = {}
+
+    def k(q):
+        return (round(q[0], 5), round(q[1], 5))
+
+    def find(a):
+        parent.setdefault(a, a)
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def join(a, b):
+        parent[find(k(a))] = find(k(b))
+    near = sheet.query(box)
+    wires = [w for w in near if isinstance(w, M.Wire)]
+    for w in wires:
+        for a, b in zip(w.points, w.points[1:]):
+            join(a, b)
+    for w in wires:
+        for q in (w.points[0], w.points[-1]):
+            for o in wires:
+                if o is not w and o.distance(q) <= 1e-6:
+                    join(q, o.points[0])
+    for e in near:
+        if isinstance(e, M.Insert) and e.defn is not None:
+            for a, b in _pass_through(e):
+                join(a, b)
+    return lambda a, b: find(k(a)) == find(k(b))
+
+
+def udt_motor_circuit(project, sheet, udt, inst, motor_block="Motor 3-phase"):
+    """What a placed motor-circuit UDT must be, from its UDT's drawing: each member of the
+    choices made where its base point puts it (none of the alternatives not chosen there),
+    each phase joined from its incoming end (L1, L2, L3 at the base point, 1/2" apart) to its
+    motor terminal (T1, T2, T3) and to no other phase's, and the motor's FLA and the fuses'
+    rating as the NEC table gives (unless overridden)."""
+    at, angle, scale = inst["at"], inst["angle"], inst["scale"]
+    defs = udt.defs()
+    by_spot = {}
+    for e in sheet.inserts():
+        by_spot.setdefault(_key(e.block_name, e.pos), []).append(e)
+    choices = inst["choices"]
+    gone = set(inst.get("gone", ()))
+    pts = []
+    motor = None
+    for m in udt.members:
+        d = m["entity"]
+        if d.get("kind") == "wire":
+            pts += [_placed_at(q, at, angle, scale) for q in d["points"]]
+        if d.get("kind") != "insert":
+            continue
+        name = M.library_block_name(d["block"], defs[d["block"]].kind)
+        q = _placed_at(d["pos"], at, angle, scale)
+        pts.append(q)
+        here = by_spot.get(_key(name, q), [])
+        slot = next((s for s in udt.slots if s["name"] == m["slot"]), None)
+        chosen = slot is None or choices.get(slot["name"], slot["default"]) == m["alt"]
+        if m["role"] in gone:
+            continue
+        if chosen:
+            assert here, "%s of the UDT isn't where it goes (%s)" % (name, _key(name, q))
+            if name == motor_block:
+                motor = here[0]
+        else:
+            shared = [x for x in udt.members if x is not m and x["entity"].get("kind") ==
+                      "insert" and x["entity"]["block"] == d["block"] and
+                      _key(name, _placed_at(x["entity"]["pos"], at, angle, scale)) ==
+                      _key(name, q)]
+            if not shared:
+                assert not here, "%s left on the sheet for %s not chosen" % (name, m["alt"])
+    CHECKED["UDT: members of the choices where they go"] += 1
+    if motor is None:
+        return
+    xs, ys = [q[0] for q in pts], [q[1] for q in pts]
+    pad = 0.1 * max(scale, 1e-3)
+    joined = connected(sheet, (min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad))
+    ends = dict(motor.pin_points())
+    starts = [_placed_at((0.0, -0.5 * i), at, angle, scale) for i in range(3)]
+    for i, a in enumerate(starts):
+        for j in range(3):
+            got = joined(a, ends["T%d" % (j + 1)])
+            assert got == (i == j), "L%d %s the motor's T%d" % (
+                i + 1, "doesn't reach" if i == j else "is joined to", j + 1)
+    CHECKED["UDT: every phase reaches its motor terminal, none another's"] += 1
+    vals = inst["values"]
+    flc = FLC_CHECK.get((vals.get("HP"), vals.get("VOLTS")))
+    if flc is None or vals.get("FLA") or vals.get("PHASE", "3") != "3":
+        return
+    ov = inst["overrides"]
+    role_of = {i: r for r, i in inst["members"].items()}
+    for e in sheet.inserts():
+        r = role_of.get(e.id)
+        if r is None or ov.get(r):
+            continue
+        if e.block_name == motor_block:
+            assert float(e.attrs.get("FLA", "nan")) == flc, (e.attrs, flc)
+            CHECKED["UDT: motor FLA from the NEC table"] += 1
+        elif e.block_name == "Fuses 3-pole":
+            pct = [x["percent"] for x in inst["ratings"] if x["role"] == r and
+                   x["attr"] == "RATING"]
+            if pct:
+                want = "%dA" % next_fuse(flc * pct[0] / 100.0)
+                assert e.attrs.get("RATING") == want, (e.attrs.get("RATING"), want)
+                CHECKED["UDT: fuses at the next standard size"] += 1

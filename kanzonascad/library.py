@@ -7,6 +7,7 @@ every project. No Qt here.
     <library>/footprints/<name>.kzblock   a panel footprint
     <library>/parts/<id>.json             a part (parts.json before 0.21)
     <library>/circuits/<name>.kzcircuit   a saved circuit (circuits.py)
+    <library>/udts/<name>.kzudt           a UDT (udts.py)
 
 A part ties a manufacturer's part number to its schematic symbol and its panel footprint:
 placing the part's symbol fills in its manufacturer, catalog number and description.
@@ -487,6 +488,87 @@ class Library:
         if os.path.normcase(old_path) != os.path.normcase(path) and os.path.exists(old_path):
             os.remove(old_path)
         return path
+
+
+    # ---- UDTs (udts.py) ------------------------------------------------------------------------
+    # One file a UDT, in either library folder, as circuits are; the program's own
+    # (udt_builtin.py) listed too, read-only: one of yours with the same name takes its place.
+    def _udt_path(self, name):
+        from .udts import FOLDER as UFOLDER, SUFFIX as USUFFIX
+        return os.path.join(self.folder, UFOLDER, safe_name(name) + USUFFIX)
+
+    def builtin_udts(self):
+        """{name: Udt} of the program's own UDTs."""
+        if getattr(self, "_builtin_udts", None) is None:
+            from .udt_builtin import builtin_udts
+            self._builtin_udts = {u.name: u for u in builtin_udts(self.builtins("symbol"))}
+        return self._builtin_udts
+
+    def _own_udts(self):
+        from .udts import Udt, FOLDER as UFOLDER, SUFFIX as USUFFIX
+        out, bad = {}, []
+        d = os.path.join(self.folder, UFOLDER)
+        if os.path.isdir(d):
+            for fn in sorted(os.listdir(d)):
+                if not fn.endswith(USUFFIX):
+                    continue
+                try:
+                    with open(os.path.join(d, fn), encoding="utf-8") as f:
+                        u = Udt.from_dict(json.load(f))
+                except (OSError, ValueError, KeyError, TypeError) as ex:
+                    bad.append("%s (%s)" % (fn, ex))
+                    continue
+                out[u.name] = u
+        return out, bad
+
+    def udts(self):
+        """({name: Udt}: the program's own, the second library's over them, this one's over
+        those, [files it couldn't read])."""
+        out, bad = dict(self.builtin_udts()), []
+        if self.second is not None:
+            got, bad2 = self.second._own_udts()
+            out.update(got)
+            bad += ["%s (second library)" % b for b in bad2]
+        got, bad1 = self._own_udts()
+        out.update(got)
+        return out, bad1 + bad
+
+    def udt_where(self, name):
+        """"first", "second" or "builtin": where the UDT of that name comes from (None:
+        nowhere)."""
+        if os.path.exists(self._udt_path(name)):
+            return "first"
+        if self.second is not None and os.path.exists(self.second._udt_path(name)):
+            return "second"
+        return "builtin" if name in self.builtin_udts() else None
+
+    def save_udt(self, udt, old_name=None):
+        """Write a UDT where the one of its name (or of old_name, when renamed) is, a new one
+        (or a built-in one's copy) where new things go; old_name's file goes when the name
+        changed. Returns the file written."""
+        where = self.udt_where(old_name or udt.name)
+        lib = _writable(self.second if where == "second" else self) \
+            if where in ("first", "second") else self._target()
+        path = lib._udt_path(udt.name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        d = udt.to_dict()
+        _write_json(path, d)
+        if old_name and old_name != udt.name and where in ("first", "second"):
+            old_path = lib._udt_path(old_name)
+            if os.path.normcase(old_path) != os.path.normcase(path) and \
+                    os.path.exists(old_path):
+                os.remove(old_path)
+        return path
+
+    def delete_udt(self, name):
+        """Take one of your UDTs out of the library it is in (a built-in one can't be). True
+        when one was."""
+        where = self.udt_where(name)
+        if where not in ("first", "second"):
+            return False
+        lib = _writable(self if where == "first" else self.second)
+        os.remove(lib._udt_path(name))
+        return True
 
 
 def _writable(lib):

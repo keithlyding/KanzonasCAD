@@ -3302,6 +3302,59 @@ class InsertCircuitCmd(Command):
         self.finish()
 
 
+class InsertUdtCmd(InsertCircuitCmd):
+    """Place a UDT (Insert UDT...) with the choices and values picked for it, by its base
+    point: R turns it 90 degrees, S gives it a scale. One undoable step: its members placed
+    as a circuit's are, then kept together as a placed UDT (udts.place)."""
+    name, title = "INSERTUDT", "Insert UDT"
+
+    def __init__(self, ctx, udt, choices=None, values=None):
+        super().__init__(ctx, udt.circuit(choices))
+        self.repeat_args = (udt, choices, values)
+        self.udt, self.choices, self.values = udt, choices, values
+
+    def _ask(self):
+        if self.asking_scale:
+            return InsertCircuitCmd._ask(self)
+        self.ctx.prompt("Specify insertion point for UDT %s" % self.udt.name,
+                        [("Rotate 90", "R"), ("Scale", "S")])
+
+    def point(self, p):
+        if self.asking_scale:
+            return
+        from .udts import place
+        sheet = self.ctx.sheet()
+        with self.ctx.edit("Insert UDT %s" % self.udt.name) as ed:
+            _gid, made = place(ed, self.ctx.project, sheet, self.udt, p, self.angle,
+                               self.scale, self.choices, self.values)
+            _cut_under(self.ctx, ed, sheet, made)
+        self.ctx.set_selection({e.id for e in made if e.id in sheet.entities})
+        self.ctx.message("UDT %s placed: %d object(s); UDT properties... changes its "
+                         "choices, values and ratings" % (self.udt.name, len(made)))
+        self.finish()
+
+
+class MakeUdtCmd(SaveCircuitCmd):
+    """Make UDT: the selected objects made a UDT (a circuit type with choices, optional parts
+    and ratings): its base point (Enter: the lower left corner of what is selected), then
+    the UDT editor."""
+    name, title = "MAKEUDT", "Make UDT"
+
+    def begin(self):
+        self.ents = _selected(self.ctx)
+        if not self.ents:
+            self.finish()
+            return
+        self.ctx.prompt("Specify base point (the point the UDT is placed by; Enter: its "
+                        "lower left corner)")
+
+    def point(self, p):
+        host = getattr(self.ctx, "host", None)
+        if host is not None and hasattr(host, "make_udt_from"):
+            host.make_udt_from(self.ents, p)
+        self.finish()
+
+
 class InsertCmd(Command):
     """Place a symbol or footprint (from the Library panel): pick where; R turns it 90
     degrees, F flips it side to side, V upside down. A symbol with pins is held by its first pin (L1, 1, A1...), so the
@@ -6261,13 +6314,15 @@ COMMANDS = {
     "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),
     "DELCOMP": (DeleteComponentCmd, ["AEERASECOMP"]),
     "SAVECIRCUIT": (SaveCircuitCmd, ["CIRCSAVE", "AECIRCSAVE"]),
+    "MAKEUDT": (MakeUdtCmd, ["UDTMAKE"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)
 OTHER = {"U": "undo", "UNDO": "undo", "REDO": "redo", "QSAVE": "save", "SAVE": "save",
          "OPEN": "open", "NEW": "new", "QUIT": "quit", "EXIT": "quit",
          "INSERTCIRCUIT": "insert_circuit", "CIRCUIT": "insert_circuit",
-         "AECIRCUIT": "insert_circuit"}
+         "AECIRCUIT": "insert_circuit", "INSERTUDT": "insert_udt", "UDT": "insert_udt",
+         "UDTPROPS": "udt_props", "UPDATEUDT": "update_udt", "DETACHUDT": "detach_udt"}
 
 
 def lookup(text):
