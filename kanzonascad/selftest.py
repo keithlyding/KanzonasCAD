@@ -65,7 +65,10 @@ BUDGET = {
     # (0.27: terminal strips) 50 sheets, a strip of 100 terminals each (5,000 terminals, a
     # device wired to each side, 10,000 wires, half the far ends in the field):
     "strips_open": 0.5,         # Terminal strips... opened: every strip listed, the first shown
-    "strips_plan": 0.5,         # the terminal plan of every terminal worked out
+    "strips_plan": 1.0,         # the terminal plan of every terminal worked out (its wire
+                                # groups read afresh: 0.3 s here, 0.5 s on the build's Linux
+                                # computer; as "pull", for five times as many wires; the
+                                # owner's choice, Nov 2026)
     "strips_apply": 0.5,        # a strip renumbered backwards and written back (OK), one step
     # (0.23: Trace, Ctrl+E) on 50 sheets of 1,000 lines, 40 coils, 40 contacts and 40 wires:
     "trace_index": 2.0,         # the first list, every sheet indexed (50 sheets)
