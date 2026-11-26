@@ -60,6 +60,7 @@ from kanzonascad import geometry as G  # noqa: E402
 # (2007-1a, 2007a1, 2007-a1a; 0.22.4), lowercase (a distribution outlet's 1006A isn't one)
 TAP_END = re.compile(r"(?:-\d+|-?[a-z]+)[a-z0-9]*$")
 from kanzonascad import wires, crossings, wirenums, wirelayers, fileio, templates  # noqa: E402
+from kanzonascad import nearmiss  # noqa: E402
 from kanzonascad import tags as tags_mod  # noqa: E402
 from kanzonascad import strips as strips_mod  # noqa: E402
 from kanzonascad import xrefs as XR  # noqa: E402
@@ -163,11 +164,23 @@ def check_sheet(sheet):
                 assert abs(a[0] - b[0]) > 1e-9 or abs(a[1] - b[1]) > 1e-9, e.points
     json.dumps(sheet.to_dict())
     check_groups(sheet)
-    # (drawing slop: wire ends that look joined but aren't)
-    near = BC.near_misses(sheet)
-    assert not near, "%d wire end(s) almost meet something without joining it: %s" % (
-        len(near), ["%s %.2g from a %s" % (tuple(round(c, 4) for c in p), d, k)
-                    for _i, p, k, d in near[:3]])
+    # (drawing slop: wire ends and pins that look joined but aren't, and the program doesn't
+    # mark on the drawing; and no mark where there is none)
+    near, false = BC.near_misses_unflagged(sheet)
+    assert not near, "%d wire end(s) or pin(s) almost meet something without joining it, " \
+        "not marked: %s" % (len(near), ["%s %s %.2g from a %s" % (
+            k[0], tuple(round(c, 4) for c in p), d, kind) for k, p, kind, d in near[:3]])
+    assert not false, "%d near miss mark(s) where nothing almost meets: %s" % (
+        len(false), [(k, tuple(round(c, 4) for c in p)) for k, p in false[:3]])
+    kept = nearmiss.found_keyed(sheet)
+    saved = sheet._near, sheet._near_state
+    sheet._near = sheet._near_state = None
+    fresh = nearmiss.found_keyed(sheet)
+    sheet._near, sheet._near_state = saved
+    assert kept == fresh, "near misses kept up to date differ from a fresh count: %s" % (
+        [(k, kept.get(k), fresh.get(k)) for k in sorted(set(kept) | set(fresh), key=str)
+         if kept.get(k) != fresh.get(k)][:4],)
+    BC.CHECKED["near misses kept up to date"] += 1
     back = BC.folds(sheet)
     assert not back, "%d wire(s) double back over themselves: %s" % (
         len(back), [tuple(round(c, 4) for c in q) for _i, q in back[:3]])

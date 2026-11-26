@@ -1357,6 +1357,19 @@ one appears (a tag typed, something pasted, a number locked), the command line s
 on what sheets. Not duplicates: a contact or footprint showing its device's tag, wires joined
 by off-sheet connectors or source and destination arrows (one wire), and a number kept with
 "No: just the same number".</li>
+<li><b>Near misses are marked too.</b> A wire end or a symbol's pin that almost touches a wire,
+a wire end or another symbol's pin without being joined to it (nearer than 0.01", drawing
+units, but not on it) gets a red frame round the spot, on every sheet, until you fix it (on
+the screen only: it doesn't print), and when one appears the command line says where, how far
+and from what ("A wire end at 5.073, 4.323 is 0.0089" from a wire without joining it (sheet
+1)"). It looks connected and isn't. This happens most with a symbol turned to an odd angle
+(45 degrees): its pins aren't on the grid, so a pin, or a wire run from one, can stop a few
+thousandths from a wire it has nothing to do with. The program doesn't join them for you (that
+could wire two circuits together). To clear the mark, either move the two apart (Move the
+wire or the symbol away), or join them on purpose: draw the wire onto the pin or wire with the
+snaps, or drag its end with a grip (an end left less than 0.01" from a pin or wire is put on
+it). Crossing wires that pass through each other with no end near aren't marked, nor are ends
+and pins on slanted runs (where a slanted wire crosses is chance).</li>
 <li>When a sheet's page number changes, its unlocked wire numbers follow (6001 becomes 7001),
 as device tags do.</li>
 <li><b>Renumber sheet</b> also numbers the sheet's unlocked wires again, 001, 002... in

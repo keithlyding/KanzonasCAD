@@ -220,10 +220,13 @@ def text_under(view, e, p, r):
 
 # ---- drawing slop: almost right, not exactly ----------------------------------------------------
 def near_misses(sheet, lo=1e-6, hi=0.01):
-    """Wire ends that look joined but aren't: within hi (real inches: the battery draws wires
-    a quarter inch apart or more, so anything closer is rounding, not a design) of another
+    """Wire ends and pins that look joined but aren't: within hi (real inches: the battery draws
+    wires a quarter inch apart or more, so anything closer is rounding, not a design) of another
     wire or a symbol's pin, yet farther than the program's own tolerance lo (wires.TOL):
-    [(wire id, end, what it nearly meets, distance)]."""
+    [(("end", wire id, 0 or -1) or ("pin", symbol id, pin name), the point, the kind of the
+    nearest thing it nearly meets, distance)]. Worked out here, not by the program's nearmiss.py,
+    which must mark every one of them on the drawing (the owner, Nov 26 2026: "Warn on the
+    drawing"; check_sheet)."""
     def slanted(a, b):
         return abs(a[0] - b[0]) >= 1e-9 and abs(a[1] - b[1]) >= 1e-9
 
@@ -231,31 +234,35 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
         # (an end at the end of a slanted run is wherever that run happened to be cut: chance)
         return [q for q, r in ((o.points[0], o.points[1]), (o.points[-1], o.points[-2]))
                 if not slanted(q, r)]
-    out = []
+
+    def pins(o):
+        return o.pin_points() if isinstance(o, M.Insert) and o.defn is not None and \
+            o.defn.pins else []
+
+    def on_slanted(p, near, own):
+        # (an end or a pin on a slanted run: where it crosses is chance as well, so the end
+        # is too; Trim wire cut back to such a crossing 0.0048" from a pin in seed 3152)
+        return any(isinstance(o, M.Wire) and o.id != own and any(
+            slanted(a, b) and G.dist_to_segment(p, a, b) <= lo
+            for a, b in zip(o.points, o.points[1:])) for o in near)
+    out = {}
+
+    def found(key, p, kind, d):
+        if lo < d < hi and (key not in out or d < out[key][3]):
+            out[key] = (key, p, kind, d)
     for w in sheet.wires():
-        for p in straight_ends(w):
+        for i in (0, -1):
+            p = w.points[i]
+            if p not in straight_ends(w):
+                continue
             # (what its other end is joined to it is joined to: a sliver of a wire from a pin
             # to where a slanted wire crossed, that wire deleted, ends a sliver's length from
             # its own pin, seed 3152 at 1:9671)
-            other = w.points[-1] if p is w.points[0] else w.points[0]
+            other = w.points[-1] if i == 0 else w.points[0]
             box = (p[0] - hi, p[1] - hi, p[0] + hi, p[1] + hi)
             near = list(sheet.query(box))
-            if any(isinstance(o, M.Wire) and o.id != w.id and any(
-                    abs(a[0] - b[0]) >= 1e-9 and abs(a[1] - b[1]) >= 1e-9 and
-                    G.dist_to_segment(p, a, b) <= lo for a, b in zip(o.points, o.points[1:]))
-                    for o in near):
-                # (an end on a slanted run: where it crosses is chance as well, so the end is
-                # too; Trim wire cut back to such a crossing 0.0048" from a pin in seed 3152)
+            if on_slanted(p, near, w.id):
                 CHECKED["near misses: ends on slanted runs left out"] += 1
-                continue
-            if any(isinstance(o, M.Insert) and o.defn is not None and o.defn.pins and
-                   abs(o.angle / 90.0 - round(o.angle / 90.0)) > 1e-9 and
-                   any(G.dist(p, q) <= lo for _n, q in o.pin_points()) for o in near):
-                # (an end on a pin of a symbol turned off the right angles: joined, and where
-                # its pins are is chance as well, as a slanted run's crossings are; a drive
-                # turned 45 degrees, moved up, put its terminal 02 and the wire on it 0.0089"
-                # under a wire passing across its row of pins, long battery seed 5052)
-                CHECKED["near misses: ends on pins of turned symbols left out"] += 1
                 continue
             for o in near:
                 if o.id == w.id:
@@ -272,15 +279,60 @@ def near_misses(sheet, lo=1e-6, hi=0.01):
                             d = min(d, G.dist_to_segment(p, a, b))
                         else:
                             CHECKED["near misses: slanted runs left out"] += 1
-                elif isinstance(o, M.Insert) and o.defn is not None and o.defn.pins:
-                    d = min((G.dist(p, q) for _n, q in o.pin_points()
-                             if G.dist(other, q) > lo), default=hi * 2)
+                elif pins(o):
+                    d = min((G.dist(p, q) for _n, q in pins(o) if G.dist(other, q) > lo),
+                            default=hi * 2)
                 else:
                     continue
-                if lo < d < hi:
-                    out.append((w.id, p, o.kind, d))
+                found(("end", w.id, i), p, o.kind, d)
+    # a symbol's pin a hair from another's pin, or from a wire's straight run with no end near
+    # it (a wire end near a pin is the end's near miss, above)
+    for e in sheet.inserts():
+        for n, p in pins(e):
+            box = (p[0] - hi, p[1] - hi, p[0] + hi, p[1] + hi)
+            near = list(sheet.query(box))
+            if on_slanted(p, near, None):
+                CHECKED["near misses: pins on slanted runs left out"] += 1
+                continue
+            for o in near:
+                if o.id == e.id:
+                    continue
+                if isinstance(o, M.Wire):
+                    if G.dist(p, o.points[0]) < hi or G.dist(p, o.points[-1]) < hi:
+                        continue
+                    d = min([G.dist_to_segment(p, a, b) for a, b in zip(o.points, o.points[1:])
+                             if not slanted(a, b)] or [hi * 2])
+                elif pins(o):
+                    d = min(G.dist(p, q) for _n, q in pins(o))
+                else:
+                    continue
+                found(("pin", e.id, n), p, o.kind, d)
     CHECKED["near misses"] += 1
-    return out
+    return sorted(out.values(), key=lambda m: str(m[0]))
+
+
+def near_misses_unflagged(sheet):
+    """The near misses (near_misses) the program doesn't mark on the drawing, and the marks it
+    makes that are no near miss: ([near miss], [(key, point)]). A near miss the program marks
+    is accepted (the owner, Nov 26 2026: "Warn on the drawing": a turned symbol's pin, or a
+    wire routed from one, can stop a few thousandths from an unrelated wire, and joining them
+    would wire two circuits together); one it doesn't still fails."""
+    from kanzonascad import nearmiss
+    got = nearmiss.found_keyed(sheet)
+    want = near_misses(sheet)
+    keys = {m[0] for m in want}
+    missed = [m for m in want if m[0] not in got or G.dist(got[m[0]][0], m[1]) > 1e-12]
+    false = [(k, v[0]) for k, v in got.items() if k not in keys]
+    seen = len(want) - len(missed)
+    if seen:
+        CHECKED["near misses marked on the drawing (accepted)"] += seen
+    marks = {(round(v[0][0], 6), round(v[0][1], 6)) for v in nearmiss.found(sheet)}
+    if want and not missed:
+        # (every spot is marked: found() keeps one per spot, the marks drawn)
+        assert all(any(abs(q[0] - m[1][0]) < 1e-5 and abs(q[1] - m[1][1]) < 1e-5
+                       for q in marks) for m in want), "a near miss found but not marked"
+        CHECKED["near miss marks drawn"] += 1
+    return missed, false
 
 
 def folds(sheet):

@@ -19,6 +19,10 @@ build fails without them.
 - Terminal plan... (Sheets menu; Output tab, under Terminals): every strip, terminal by
   terminal: the internal and external wires and where they go, and the jumpers. Save it as
   CSV or Excel, or draw it on report sheets with Report sheet....
+- Wire ends and pins that almost touch a wire without connecting are marked in red on the
+  drawing, and the command line says where. This happens most with symbols turned to odd
+  angles, whose pins are off the grid. Move them apart, or join them with the snaps, and the
+  mark goes.
 
 **Fixed**
 - Showing the tag of a contact block joined to its pushbutton or selector switch by the

@@ -25,7 +25,9 @@ BUDGET = {
     "peak_mb": 800,
     "big_print": 5.0,           # that sheet printed, fit to letter paper (into a PDF file)
     "big_window": 2.0,          # that sheet opened in a new window and drawn, then closed
-    "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings
+    "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings,
+                                # near misses (nearmiss.py: only round what the edit changed)
+    "near_scan": 1.0,           # near misses on that sheet worked out whole (opened)
     # a sheet of notes: 2,000 hatches (and their outlines), 1,000 leaders, 1,000 multi-line
     # notes, 1,000 pictures and 2,000 texts (text drawn as filled outlines took seconds a zoom
     # step here)
@@ -446,7 +448,7 @@ def run(log_path):
 
     def wire_editing():
         import time
-        from . import wires, crossings
+        from . import wires, crossings, nearmiss
         p = M.Project.new()
         s = p.sheets[0]
         with p.edit("rungs") as ed:
@@ -459,17 +461,33 @@ def run(log_path):
         wires.junctions(s)
         crossings.jumps(p, s)
         t = time.perf_counter()
+        assert nearmiss.found(s) == []
+        scan = time.perf_counter() - t
+        t = time.perf_counter()
         for k in range(10):
             with p.edit("one") as ed:
                 ed.add(s, M.Wire([(40 + k, 0), (40 + k, 1)]))
             wires.junctions(s)
             crossings.jumps(p, s)
+            nearmiss.found(s)
         each = (time.perf_counter() - t) / 10
+        # (a wire end stopped 0.005" short of a rung: marked, after the one edit)
+        t = time.perf_counter()
+        with p.edit("short") as ed:
+            ed.add(s, M.Wire([(5.5, 0.255), (5.5, 0.6)]))
+        got = nearmiss.found(s)
+        near = time.perf_counter() - t
+        assert [round(m[2], 6) for m in got] == [0.005], got
+        assert scan < BUDGET["near_scan"], \
+            "near misses on a 12,030-wire sheet worked out in %.2f s" % scan
         assert each < BUDGET["wire_edit"], \
-            "a wire added to a 12,030-wire sheet (numbers, dots, crossings) took %.0f ms" % (
-                each * 1000)
-        return "one wire on a 12,030-wire sheet, numbered, dots and crossings: %.0f ms" % (
-            each * 1000)
+            "a wire added to a 12,030-wire sheet (numbers, dots, crossings, near misses) " \
+            "took %.0f ms" % (each * 1000)
+        assert near < BUDGET["wire_edit"], "a near miss found after an edit in %.0f ms" % (
+            near * 1000)
+        return ("one wire on a 12,030-wire sheet, numbered, dots, crossings and near misses: "
+                "%.0f ms; near misses on the whole sheet %.0f ms, one found after an edit "
+                "%.0f ms" % (each * 1000, scan * 1000, near * 1000))
     log.check("wire editing speed (12,030-wire sheet)", wire_editing)
 
     def manual():
