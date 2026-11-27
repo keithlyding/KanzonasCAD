@@ -188,6 +188,13 @@ def libraries(lib):
     return out
 
 
+class Write:
+    """One block file to write: the row, the name it goes in under, its file, the block."""
+
+    def __init__(self, row, name, path, defn):
+        self.row, self.name, self.path, self.defn = row, name, path, defn
+
+
 class Importer:
     """The ticked rows put in a library, one block a step (step()); rollback() puts back the
     files as they were (Cancel). target: "first" or "second"."""
@@ -210,8 +217,11 @@ class Importer:
     def _taken(self, kind, name):
         return name in self.taken[kind] or self.dest.has_own(kind, name)
 
-    def step(self):
-        """Put the next block in; False when all are done."""
+    def next_write(self):
+        """The next ticked row decided (its name: skipped, replaced or kept both) and what
+        it was before noted for rollback, without writing it: a Write to hand to write(),
+        None when the row is skipped, False when all rows are done. On the program's own
+        thread (the names taken so far change here only)."""
         if self.at >= len(self.todo):
             return False
         r = self.todo[self.at]
@@ -220,7 +230,7 @@ class Importer:
         if self._taken(r.kind, name):
             if r.choice == "skip":
                 self.skipped.append((r, "a block named %s is in the library" % name))
-                return True
+                return None
             if r.choice == "both":
                 n = 2
                 while self._taken(r.kind, "%s (%d)" % (r.name, n)):
@@ -232,20 +242,44 @@ class Importer:
             bb = r.defn.extents()
             if bb is not None:
                 d["tag_pos"] = [(bb[0] + bb[2]) / 2, bb[3] + 0.1]
-        defn = M.BlockDef.from_dict(d)
-        path = self.dest._path(r.kind, name)
+        w = Write(r, name, self.dest._path(r.kind, name), M.BlockDef.from_dict(d))
         try:
             old = None
-            if os.path.exists(path):
-                with open(path, "rb") as f:
+            if os.path.exists(w.path):
+                with open(w.path, "rb") as f:
                     old = f.read()
-            self.written.append((path, old))
-            self.dest.save_block(defn)
         except OSError as ex:
             self.failed.append((r, str(ex)))
-            return True
+            return None
+        self.written.append((w.path, old))
         self.taken[r.kind].add(name)
-        self.imported.append((r, name))
+        return w
+
+    def write(self, w):
+        """The block's file written (flushed to disk: it takes a disk's own time, so the
+        window can run several of these at once on threads of their own; only the
+        library's file is touched). OSError when it can't be."""
+        self.dest.save_block(w.defn)
+
+    def wrote(self, w, error=None):
+        """A write() finished (error: its OSError, or None): counted, in the rows' order."""
+        if error is not None:
+            self.failed.append((w.row, str(error)))
+        else:
+            self.imported.append((w.row, w.name))
+
+    def step(self):
+        """Put the next block in, written before it returns; False when all are done."""
+        w = self.next_write()
+        if w is False:
+            return False
+        if w is not None:
+            try:
+                self.write(w)
+            except OSError as ex:
+                self.wrote(w, ex)
+            else:
+                self.wrote(w)
         return True
 
     def run(self):

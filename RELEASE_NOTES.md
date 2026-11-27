@@ -6,7 +6,7 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
-## 0.27
+## 0.27.1
 
 **New**
 - Terminal strips... (Panel tab; Sheets menu): a window listing your terminal strips. Pick one
@@ -31,6 +31,8 @@ build fails without them.
 - Move and Copy left a wire end that landed a few thousandths of an inch from another wire or a
   pin without joining it, so it looked connected and wasn't. Such an end is now put on it, as
   Stretch and grips already did.
+- Importing a big folder of blocks (Import blocks from folder...) no longer slows to a crawl on a
+  busy or slow disk: the blocks are written several at a time.
 
 ## 0.26
 
