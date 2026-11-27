@@ -918,12 +918,23 @@ def doubles_back(pts):
 
 def straighten(pts):
     """A route's points without the corners where it turns straight back along itself (a jog
-    over and straight back: a dead end of no use, it goes on from there along the same line)."""
-    out = [tuple(q) for q in pts]
+    over and straight back: a dead end of no use, it goes on from there along the same line),
+    and without a point twice. (Taking a dead end out can leave its neighbors one point twice,
+    and the legs either side of it then a fold of their own, which doubles_back doesn't see
+    across a leg of nothing: a bus fanned onto a terminal block's pins, the long battery, 0.28,
+    seed 2803.)"""
+    def same(a, b):
+        return abs(a[0] - b[0]) < 1e-9 and abs(a[1] - b[1]) < 1e-9
+    out = []
+    for q in pts:
+        if not out or not same(out[-1], q):
+            out.append(tuple(q))
     i = 1
     while 0 < i < len(out) - 1:
         if doubles_back(out[i - 1:i + 2]):
             del out[i]
+            if same(out[i - 1], out[i]):
+                del out[i]
             i = max(1, i - 1)
         else:
             i += 1

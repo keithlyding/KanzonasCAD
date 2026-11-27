@@ -60,7 +60,9 @@ from kanzonascad import geometry as G  # noqa: E402
 # (2007-1a, 2007a1, 2007-a1a; 0.22.4), lowercase (a distribution outlet's 1006A isn't one)
 TAP_END = re.compile(r"(?:-\d+|-?[a-z]+)[a-z0-9]*$")
 from kanzonascad import wires, crossings, wirenums, wirelayers, fileio, templates  # noqa: E402
+from kanzonascad import nearmiss  # noqa: E402
 from kanzonascad import tags as tags_mod  # noqa: E402
+from kanzonascad import strips as strips_mod  # noqa: E402
 from kanzonascad import xrefs as XR  # noqa: E402
 from kanzonascad import udts as UDT  # noqa: E402
 from tests import battery_checks as BC  # noqa: E402
@@ -163,11 +165,28 @@ def check_sheet(sheet):
                 assert abs(a[0] - b[0]) > 1e-9 or abs(a[1] - b[1]) > 1e-9, e.points
     json.dumps(sheet.to_dict())
     check_groups(sheet)
-    # (drawing slop: wire ends that look joined but aren't)
-    near = BC.near_misses(sheet)
-    assert not near, "%d wire end(s) almost meet something without joining it: %s" % (
-        len(near), ["%s %.2g from a %s" % (tuple(round(c, 4) for c in p), d, k)
-                    for _i, p, k, d in near[:3]])
+    # (drawing slop: wire ends and pins that look joined but aren't, and the program doesn't
+    # mark on the drawing; and no mark where there is none)
+    near, odd, false = BC.near_misses_unflagged(sheet)
+
+    def said(got):
+        return ["%s %s %.2g from a %s" % (k[0], tuple(round(c, 4) for c in p), d, kind)
+                for k, p, kind, d in got[:3]]
+    assert not near, "%d wire end(s) or pin(s) almost meet something without joining it, " \
+        "not marked: %s" % (len(near), said(near))
+    assert not odd, "%d wire end(s) or pin(s) almost meet something without joining it, " \
+        "marked, but no turned symbol explains it: %s" % (len(odd), said(odd))
+    assert not false, "%d near miss mark(s) where nothing almost meets: %s" % (
+        len(false), [(k, tuple(round(c, 4) for c in p)) for k, p in false[:3]])
+    kept = nearmiss.found_keyed(sheet)
+    saved = sheet._near, sheet._near_state
+    sheet._near = sheet._near_state = None
+    fresh = nearmiss.found_keyed(sheet)
+    sheet._near, sheet._near_state = saved
+    assert kept == fresh, "near misses kept up to date differ from a fresh count: %s" % (
+        [(k, kept.get(k), fresh.get(k)) for k in sorted(set(kept) | set(fresh), key=str)
+         if kept.get(k) != fresh.get(k)][:4],)
+    BC.CHECKED["near misses kept up to date"] += 1
     back = BC.folds(sheet)
     assert not back, "%d wire(s) double back over themselves: %s" % (
         len(back), [tuple(round(c, 4) for c in q) for _i, q in back[:3]])
@@ -695,6 +714,8 @@ def random_editing(log, out, ops, seed, drawing=None):
     dump_at = int(os.environ["BATTERY_DUMP_AT"]) if os.environ.get("BATTERY_DUMP_AT") else None
     lib = win.library
     syms = ["Contact NO", "Contact NC", "Relay coil", "Pushbutton NO", "Pushbutton NC",
+            # (0.28: numbered 17-18 and x5-x6 on their device; a pushbutton's contact block)
+            "Contact NO timed close", "Contact NC timed open", "Pushbutton contact NC",
             "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC",
             "Disconnect 3-pole", "Fuses 3-pole", "Circuit breaker 3-pole",
             "Fused disconnect 3-pole", "Starter 3-pole", "Drive control terminals",
@@ -1262,10 +1283,24 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert got == at, "%s held by pin %s: the pin went to %s, not %s" % (
                 name, held, got, at)
             BC.CHECKED["insert by its pin"] += 1
+        if len(new) == 1 and tags_mod.is_device(new[0]) and not tags_mod.locked(new[0]):
+            # (0.29: tagged with the project's prefix: an IEC project's 81346-2 letter, K for
+            # a relay, Q for a contactor, X for a terminal strip; worked out from the table)
+            d = new[0].defn
+            want = d.prefix
+            if p.settings.get("symbol_standard") == "iec":
+                want = tags_mod.IEC_ROLE_LETTERS.get((d.prefix, d.role)) or \
+                    tags_mod.IEC_LETTERS.get(d.prefix, d.prefix)
+            tag = new[0].attrs.get("TAG", "")
+            assert tags_mod.split(tag, want) is not None, "%s placed tagged %s, not %s..." % (
+                name, tag, want)
+            BC.CHECKED["a new device tagged with the project's letters"] += 1
         if linked is not None and len(new) == 1:
             got = new[0].attrs.get("PARENT", "")
             assert got == linked, "%s's device: %r, not %r" % (name, got, linked)
             BC.CHECKED["contact linked as asked" if linked else "contact on its own"] += 1
+        if len(new) == 1:
+            BC.contact_numbers_placed(p, new[0])          # (0.28: 13-14, 21-22...)
         if v.cmd is None and rnd.random() < 0.25:
             # Enter: the same symbol again (0.16), held by its first pin
             before = set(s.entities)
@@ -2225,6 +2260,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         sel = some()
         if not sel:
             return
+        before = {i: e.points for i, e in s.entities.items() if isinstance(e, M.Wire)}
         v.set_selection({e.id for e in sel})
         v.run(cls)
         if v.cmd is not None:
@@ -2234,6 +2270,15 @@ def random_editing(log, out, ops, seed, drawing=None):
                 v.input_text(fmt((a[0] + rnd.choice([-1, 0, 1]) * 0.5,
                                   a[1] + rnd.choice([-1, 0, 1]) * 0.5)))
         finish()
+        # (Move and Copy put a wire end they leave a hair from a pin or another wire on it, as
+        # Stretch does: the long battery, seed 5052 at step 1723, a copied end 0.0037" from a
+        # wire; such a near miss is the program's doing whatever geometry it is near)
+        ends = [q for w in s.wires() for q in (w.points[0], w.points[-1])
+                if w.id not in before or q not in before[w.id]]
+        bad = BC.ends_left_short(s, ends)
+        assert not bad, "%s left %d wire end(s) a hair from a pin or wire, not put on it: %s" % (
+            cls.__name__[:-3], len(bad), [(tuple(round(c, 4) for c in q), round(d, 5))
+                                          for q, d in bad[:3]])
 
     def op_move_area():
         # (0.18.2: a crossing box over a part of the drawing, then Move typed, every object
@@ -2538,7 +2583,9 @@ def random_editing(log, out, ops, seed, drawing=None):
                 page = p.sheet_number(sh)
                 for e in sh.entities.values():
                     if tags_mod.is_device(e) and not tags_mod.locked(e):
-                        got = tags_mod.split(e.attrs.get("TAG", ""), e.defn.prefix)
+                        # (a tag of the other standard's letters is kept: its own)
+                        got = tags_mod.split(e.attrs.get("TAG", ""),
+                                             tags_mod.tag_prefix(p, e))
                         assert got is not None and got[0] == page, \
                             "%s on sheet %s after Update numbers" % (e.attrs.get("TAG"), page)
                         k = e.attrs["TAG"]
@@ -2555,17 +2602,21 @@ def random_editing(log, out, ops, seed, drawing=None):
                 page = p.sheet_number(sh)
                 mine = [e for e in sh.entities.values()
                         if tags_mod.is_device(e) and not tags_mod.locked(e)]
-                for prefix in {e.defn.prefix for e in mine}:
+                # (by the project's prefixes: an IEC project's letters, K for its relays,
+                # timers and PLC modules alike; a count held by any device whose tag is made
+                # of the prefix)
+                for prefix in {tags_mod.prefix_for(p, e.defn) for e in mine}:
                     held = set()
                     for sx in p.sheets:
                         for e in sx.entities.values():
-                            if not tags_mod.is_device(e) or e.defn.prefix != prefix or \
+                            if not tags_mod.is_device(e) or \
+                                    tags_mod.tag_prefix(p, e) != prefix or \
                                     (sx is sh and not tags_mod.locked(e)):
                                 continue
                             got = tags_mod.split(e.attrs.get("TAG", ""), prefix)
                             if got and got[0] == page:
                                 held.add(got[1])
-                    group = [e for e in mine if e.defn.prefix == prefix]
+                    group = [e for e in mine if tags_mod.prefix_for(p, e.defn) == prefix]
                     want, n = [], 0
                     while len(want) < len(group):
                         n += 1
@@ -3116,9 +3167,15 @@ def random_editing(log, out, ops, seed, drawing=None):
         if got is None and WN.by_io_address(p):
             return                          # (numbered by a PLC point's address, O:3/0)
         if base == now[0].num:
-            assert got and got[0] == p.sheet_number(sh), \
-                "a source arrow's wire on page %s took %s from a destination's page" % (
-                    p.sheet_number(sh), now[0].num)
+            # (of the first page with a source arrow of its name: a sheet duplicated with its
+            # arrows has a second source of one name, and the wires they join are one group,
+            # numbered from the first sheet in order; seed 2901, 0.29: page 51's source 29009,
+            # a copy of page 29's)
+            first = next(p.sheet_number(x) for x in p.sheets if any(
+                c.block == WN.ARROWS[0] and c.attrs.get("TAG") == src.attrs["TAG"]
+                for c in x.inserts()))
+            why = BC.own_wire_number_wrong(p, sh, now[0], WN.split, first)
+            assert why is None, why
         BC.CHECKED["a source's wire keeps its page's number"] += 1
 
     def op_wire_color():
@@ -3674,6 +3731,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             return e.attrs.get(key, "")
         if key.startswith("attr_"):
             return e.attrs.get(key[5:], "")
+        if key == "pin_numbers":
+            # (0.28: a contact's own, TERM01 and TERM02; none: blank)
+            got = [e.attrs.get("TERM01", ""), e.attrs.get("TERM02", "")]
+            return "-".join(got) if all(got) else ""
         if key == "nofp":
             return missing_fp.not_needed(e)
         if key == "lock":
@@ -3724,7 +3785,11 @@ def random_editing(log, out, ops, seed, drawing=None):
         ents = list(s.entities.values())
         if not ents:
             return
-        first = rnd.choice(ents)
+        # (now and then an arrow, its name typed: kept, or its wire renumbered; the
+        # battery, 0.26, seed 202611263)
+        arrows = [e for e in ents if isinstance(e, M.Insert) and e.block in wirenums.ARROWS]
+        aim = bool(arrows) and rnd.random() < 0.25
+        first = rnd.choice(arrows if aim else ents)
         same = [e for e in ents if PP.kind_of(e) == PP.kind_of(first) and e.id != first.id]
         r = rnd.random()
         if r < 0.5 or not same:
@@ -3780,7 +3845,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 and model_value(k, pick[0], s) is not UNREAD]
         if not keys:
             return
-        key = rnd.choice(keys)
+        key = "TAG" if aim and "TAG" in keys else rnd.choice(keys)
         w = props_widget(key)
         if isinstance(w, PP._Text) and w.size:
             value = rnd.choice(["", "0.06", "0.15"])
@@ -3790,7 +3855,11 @@ def random_editing(log, out, ops, seed, drawing=None):
                          ["", "FIELD", "MCP", "JB-1"]),
                      "gauge": rnd.choice(["", "12", "14", "1/0"]),
                      "wire_num": "9%03d" % rnd.randint(0, 999),
-                     "text": "T%d" % rnd.randint(1, 99)}.get(key, rnd.choice(
+                     "text": "T%d" % rnd.randint(1, 99),
+                     # (typed pin numbers: kept as typed; never a pair the program gives,
+                     # nor one typed before, so a number twice on a device is the program's)
+                     "pin_numbers": rnd.choice(["", "X%dA-X%dB" % ((rnd.randint(100, 10 ** 6),)
+                                                                * 2)])}.get(key, rnd.choice(
                          ["", "PUMP", "5", "480V"]))
             if key == "wire_num":
                 if len(pick) > 1 or wirenums.others_numbered(p, s, pick[0], value) or \
@@ -3801,6 +3870,11 @@ def random_editing(log, out, ops, seed, drawing=None):
             want = M.gauge_text(value) if key == "gauge" else value
             if key == "TAG" and PP.kind_of(pick[0]) == "footprint":
                 return                  # (linking a footprint: op_missing_fp)
+            names = sorted({c.attrs["TAG"].upper() for sh in p.sheets for c in sh.inserts()
+                            if c.block == wirenums.ARROWS[0] and c.attrs.get("TAG")}) \
+                if key == "TAG" and aim else []
+            if names and rnd.random() < 0.3:
+                value = want = rnd.choice(names)        # (another source's: paired with it)
         elif isinstance(w, PP._Number):
             if key in ("x", "y"):
                 value = round(model_value(key, pick[0], s) + rnd.choice([-1.0, 0.5, 2.0]), 4)
@@ -3821,7 +3895,64 @@ def random_editing(log, out, ops, seed, drawing=None):
             want = value
         before = {e.id: e.to_dict() for e in pick}
         n = len(p.undo_stack)
-        props_set(key, value)
+        # (a name typed for a source arrow on a numbered wire numbers the wire, as typed on
+        # the wire: the owner, Nov 27 2026, "Renumber the wire"; with several selected it is
+        # refused, said; a destination arrow linked by hand takes it, no longer linked: never
+        # put back silently, the battery, 0.26, seed 202611263)
+        renum = wirenums.renumbers(p, s, pick[0], value) if key == "TAG" and \
+            len(pick) == 1 else None
+        several = key == "TAG" and len(pick) > 1 and any(
+            wirenums.renumbers(p, s, e, value) is not None for e in pick)
+        asked, told = [], []
+        how = rnd.choice([None, "same", "source", "destination"])
+        if renum is not None:
+            old = (pick[0].attrs.get("TAG") or "").strip().upper()
+            link = wirenums.link_to(s, pick[0])
+            dests = [(sh, c.id) for sh in p.sheets for c in sh.inserts()
+                     if c.block == wirenums.ARROWS[1] and (
+                         c.attrs.get("FROM") == link or not c.attrs.get("FROM") and
+                         (c.attrs.get("TAG") or "").strip().upper() == old)]
+            others = wirenums.others_numbered(p, s, renum, value) if value.strip() else []
+            win.ask_cross_reference = lambda num, where: asked.append(num) or how
+        win.statusBar().clearMessage()
+        real_info = QMessageBox.information
+        QMessageBox.information = staticmethod(lambda *a, **k: told.append(a[2]))
+        try:
+            props_set(key, value)
+        finally:
+            QMessageBox.information = real_info
+            win.__dict__.pop("ask_cross_reference", None)
+        said = win.statusBar().currentMessage()
+        if renum is not None:
+            # (as the number typed on the wire: asked only when another wire has it; not
+            # taken only when that question is cancelled or the wire has no open end for a
+            # connector, said in a message, and then nothing changes)
+            assert bool(asked) == bool(others), "Properties: %r for a source arrow asked %r" % (
+                value, asked)
+            if asked and how is None or told:
+                assert all(s.entities[e.id].to_dict() == before[e.id] for e in pick) and \
+                    len(p.undo_stack) == n, "Properties: %r not taken, but something " \
+                    "changed (%r)" % (value, told)
+                BC.CHECKED["properties: a source arrow's name not taken, as on its wire"] += 1
+                return
+            wire = s.entities[renum.id]
+            assert (wire.num, wire.num_lock) == (value, True), \
+                "Properties: source arrow named %r; its wire is %r (locked %r)" % (
+                    value, wire.num, wire.num_lock)
+            got = [sh.entities[i].attrs.get("TAG") for sh, i in dests if i in sh.entities]
+            assert all(t == value for t in got), \
+                "Properties: source arrow named %r; its destinations show %r" % (value, got)
+            assert len(p.undo_stack) == n + 1, "Properties: a source arrow's name took %d " \
+                "steps" % (len(p.undo_stack) - n)
+            BC.CHECKED["properties: a source arrow's name numbered its wire%s" % (
+                " (asked: %s)" % how if asked else "")] += 1
+        elif several:
+            assert "select it alone" in said, "Properties: %r for several with a source " \
+                "arrow: %r said" % (value, said)
+            assert all(s.entities[e.id].to_dict() == before[e.id] for e in pick) and \
+                len(p.undo_stack) == n, "Properties: %r refused, but something changed" % value
+            BC.CHECKED["properties: a source arrow's name with others, refused, said"] += 1
+            return
         now = [s.entities.get(e.id) for e in pick]
         for e in now:
             assert e is not None, "setting %s took an object away" % key
@@ -3837,6 +3968,10 @@ def random_editing(log, out, ops, seed, drawing=None):
                 ok = got == want
             assert ok, "Properties: %s set to %r on %d object(s); %s holds %r" % (
                 key, value, len(pick), PP.kind_name(e), got)
+        for e in pick:
+            if key == "TAG" and isinstance(e, M.Insert) and e.block in wirenums.ARROWS:
+                BC.CHECKED["properties: a %s renamed" % (
+                    "linked destination arrow" if e.attrs.get("FROM") else e.block.lower())] += 1
         if any(s.entities[e.id].to_dict() != before[e.id] for e in pick):
             assert len(p.undo_stack) == n + 1, "Properties: %s took %d steps" % (
                 key, len(p.undo_stack) - n)
@@ -4266,6 +4401,241 @@ def random_editing(log, out, ops, seed, drawing=None):
         assert p.settings["parts"][part.id]["catalog"] == part.catalog
         BC.CHECKED["part assigned to the devices of its symbol"] += 1
 
+    def op_strips():
+        # (0.27) terminal strips as a user makes and edits them: a Terminal strip and terminals
+        # placed on it through Insert (typing the strip's tag when asked which), wires to them;
+        # then the Terminal strips window: rows picked and moved, spares added and removed,
+        # jumpers added and removed, a number typed, the strip renumbered; OK. What the window
+        # showed is what the drawing and the project then hold, in one step that Undo takes
+        # back whole and Redo puts back; or the terminal plan shown through its menu command
+        from kanzonascad import dialogs, strip_window, strips
+        here = [e for e in s.inserts() if strips.is_terminal(e)]
+        if len(here) < 3 or rnd.random() < 0.15:
+            sd = lib.get("symbol", "Terminal strip")
+            td = lib.get("symbol", "Terminal")
+            tbs = [e for sh in p.sheets for e in sh.inserts() if strips.is_strip_device(e)
+                   and e.attrs.get("TAG")]
+            if not tbs or rnd.random() < 0.3:
+                v.run(C.InsertCmd, sd, {})
+                v.input_text(fmt(pt()))
+                finish()
+                tbs = [e for sh in p.sheets for e in sh.inserts()
+                       if strips.is_strip_device(e) and e.attrs.get("TAG")]
+                if not tbs:
+                    return
+            tb = rnd.choice(tbs)
+            for _k in range(rnd.randint(1, 4)):
+                before = set(s.entities)
+                v.run(C.InsertCmd, td, {})
+                at = pt()
+                v.input_text(fmt(at))
+                c = v.cmd
+                if c is not None and c.pending is not None and c.cands:
+                    v.input_text(tb.attrs["TAG"])
+                finish()
+                new = [e for i, e in s.entities.items() if i not in before and
+                       strips.is_terminal(e)]
+                if len(new) == 1 and rnd.random() < 0.7:
+                    # (a wire from one of its pins to somewhere on the rungs)
+                    q = dict(new[0].pin_points())[rnd.choice(["1", "2"])]
+                    v.run(C.WireCmd)
+                    v.input_text(fmt(q))
+                    v.input_text(fmt((q[0] + rnd.choice([-1, 1]) * rnd.randint(2, 8) * 0.25,
+                                      q[1])))
+                    finish()
+            return
+        if rnd.random() < 0.2:
+            seen = {}
+            real = dialogs.report_dialog
+            dialogs.report_dialog = lambda _w, title, h, rows, *a: seen.update(rows=rows)
+            try:
+                win.acts["terminal_plan"].trigger()
+            finally:
+                dialogs.report_dialog = real
+            assert seen["rows"] == strips.plan_rows(p), "the Terminal plan window's rows"
+            BC.CHECKED["terminal plan as worked out"] += 1
+            return
+        shown = {}
+        before = norm(p.to_dict())
+        n_before = len(p.undo_stack)
+
+        def answer(dlg):
+            t = dlg.table
+            for _k in range(rnd.randint(1, 6)):
+                n = t.rowCount()
+                if not n:
+                    break
+                dlg.pick(sorted(rnd.sample(range(n), min(n, rnd.randint(1, 3)))))
+                b = rnd.choice(["up", "down", "spare", "unspare", "jumper", "unjumper",
+                                "renumber", "type"])
+                if b == "type":
+                    i = rnd.randrange(n)
+                    num = "X%d" % rnd.randint(1, 999)
+                    if num not in [t.item(j, 0).text() for j in range(n)]:
+                        t.item(i, 0).setText(num)
+                        assert t.item(i, 0).text() == num, "a typed number not taken"
+                    continue
+                if b == "renumber":
+                    dlg.start.setValue(rnd.choice([1, 1, 10, 101]))
+                if dlg.buttons[b].isEnabled():
+                    dlg.buttons[b].click()
+            shown["key"] = dlg.found[dlg.cur].key if dlg.cur is not None else None
+            shown["nums"] = [t.item(i, 0).text() for i in range(t.rowCount())]
+            shown["spare"] = [t.item(i, 6).text() == "spare" for i in range(t.rowCount())]
+            shown["jumper"] = [t.item(i, 5).text() for i in range(t.rowCount())]
+            lay = dlg.layouts.get(shown["key"])
+            shown["places"] = [list(r["places"]) for r in lay.rows] if lay else []
+            shown["changed"] = bool(dlg.changed())
+            return QDialog.Accepted
+        real = strip_window.StripEditorDialog.exec
+        strip_window.StripEditorDialog.exec = answer
+        try:
+            win.terminal_strips()
+        finally:
+            strip_window.StripEditorDialog.exec = real
+        if shown.get("key") is None:
+            return
+        after = norm(p.to_dict())
+        assert len(p.undo_stack) == n_before + (1 if shown["changed"] else 0), \
+            "Terminal strips: %d steps to undo" % (len(p.undo_stack) - n_before)
+        st = next((x for x in strips.find(p, wires=False) if x.key == shown["key"]), None)
+        assert st is not None, "the strip edited is gone"
+        assert [r.num or "?" for r in st.rows] == shown["nums"], \
+            "Terminal strips showed %r, the strip is %r" % (shown["nums"],
+                                                            [r.num for r in st.rows])
+        assert [r.spare for r in st.rows] == shown["spare"], "spares as shown"
+        names = {}
+        for r, j in zip(st.rows, shown["jumper"]):
+            if j:
+                names.setdefault(j, []).append(r.num)
+        assert sorted(names.values()) == sorted(st.jumpers), \
+            "jumpers shown %r, kept %r" % (names, st.jumpers)
+        sheets = {sh.id: sh for sh in p.sheets}
+        for places, num in zip(shown["places"], shown["nums"]):
+            for sid, eid in places:
+                e = sheets[sid].entities.get(eid)
+                assert e is not None and (e.attrs.get("TERM") or "?") == num, \
+                    "terminal %s numbered %r on the drawing, %r in the window" % (
+                        eid, e.attrs.get("TERM") if e is not None else None, num)
+        if shown["changed"]:
+            p.undo()
+            assert norm(p.to_dict()) == before, "Undo of Terminal strips: " + \
+                first_difference(before, norm(p.to_dict()))
+            p.redo()
+            assert norm(p.to_dict()) == after, "Redo of Terminal strips"
+            BC.CHECKED["terminal strips edited in one step"] += 1
+        if st.jumpers:
+            kinds.add("jumper")
+
+    def op_panel_wiring():
+        # (0.28) panel wiring as a user works with it: a sheet made a panel sheet (Sheet
+        # properties' Kind); footprints with terminal positions placed for devices through
+        # Insert (a terminal block's typed as a strip's terminal, TB1-4); Terminal wire labels
+        # turned on or off through its command (one step, Undo and Redo take it back and put
+        # it back); or the Device wiring list shown through its menu command, its rows those
+        # worked out (battery_checks.panel_wiring_right checks both against the drawing)
+        from PySide6.QtWidgets import QComboBox
+        from kanzonascad import dialogs, panelwiring, strips
+        r = rnd.random()
+        if r < 0.2:
+            seen = {}
+            real = dialogs.report_dialog
+            dialogs.report_dialog = lambda _w, title, h, rows, *a: seen.update(rows=rows)
+            try:
+                win.acts["wiring_list"].trigger()
+            finally:
+                dialogs.report_dialog = real
+            assert seen["rows"] == panelwiring.rows(p), "the Device wiring list window's rows"
+            BC.CHECKED["device wiring list as worked out"] += 1
+            return
+        if s is p.title_block:
+            return
+        if s.kind != "panel":
+            if r < 0.4:
+                real = dialogs.QDialog.exec
+
+                def answer(dlg):
+                    k = dlg.findChild(QComboBox, "kind")
+                    k.setCurrentIndex(k.findData("panel"))
+                    return QDialog.Accepted
+                dialogs.QDialog.exec = answer
+                try:
+                    win.sheet_properties()
+                finally:
+                    dialogs.QDialog.exec = real
+                assert s.kind == "panel", "Sheet properties: Kind %r" % s.kind
+            return
+        # (labels on more often than off: what they show is checked while they are on)
+        if r < 0.7 and not (not s.terminal_labels and r < 0.4):
+            pinned = [n for n in fps if lib.get("footprint", n).pins]
+            tbs = [e for sh in p.sheets for e in sh.inserts() if strips.is_strip_device(e)
+                   and e.attrs.get("TAG")]
+            target = None
+            if tbs and rnd.random() < 0.35:
+                pinned = [n for n in pinned if panelwiring.terminal_block(lib.get("footprint",
+                                                                                   n))]
+            else:
+                # (for a device of the drawing, wired or not, its tag typed when asked: one
+                # that fits it, a pin named as one of its pins, its contacts' included)
+                devs = [e for sh in p.sheets for e in sh.inserts() if tags_mod.is_device(e)
+                        and e.defn.wiring != "link" and e.attrs.get("TAG") and
+                        not strips.is_strip_device(e)]
+                if devs:
+                    target = rnd.choice(devs)
+                    dev = target.attrs.get("DEV")
+                    names = {n for sh in p.sheets for e in sh.inserts()
+                             if e is target or (dev and e.attrs.get("PARENT") == dev)
+                             for n, _q in e.pin_points()}
+                    pinned = [n for n in pinned if names & {q["name"] for q in lib.get(
+                        "footprint", n).pins}] or pinned
+            defn = lib.get("footprint", rnd.choice(pinned))
+            before = set(s.entities)
+            v.run(C.InsertCmd, defn, {})
+            if v.cmd is not None:
+                v.input_text(fmt(pt()))
+            typed = None
+            c = v.cmd
+            if c is not None and c.pending is not None:
+                if tbs and panelwiring.terminal_block(defn) and rnd.random() < 0.8:
+                    tb = rnd.choice(tbs)
+                    typed = (tb, str(rnd.randint(1, 6)))
+                    v.input_text("%s-%s" % (tb.attrs["TAG"], typed[1]))
+                elif target is not None and rnd.random() < 0.8:
+                    v.input_text(target.attrs["TAG"])
+            finish()
+            new = [e for i, e in s.entities.items() if i not in before and tags_mod.is_footprint(e)]
+            if typed is not None:
+                assert len(new) == 1 and new[0].attrs.get("PARENT") == typed[0].attrs["DEV"] \
+                    and new[0].attrs.get("TERM") == typed[1], \
+                    "a terminal block placed as %s-%s: %r" % (
+                        typed[0].attrs["TAG"], typed[1], new and new[0].attrs)
+                BC.CHECKED["terminal block placed as a strip's terminal"] += 1
+            BC.panel_wiring_right(p)
+            return
+        if s.terminal_labels and rnd.random() < 0.5:
+            return
+        win._update_ui()
+        act = win.acts["terminal_labels"]
+        assert act.isEnabled() and act.isChecked() == s.terminal_labels, \
+            "Terminal wire labels shows %r for a sheet %s" % (act.isChecked(), s.terminal_labels)
+        on = not s.terminal_labels
+        n = len(p.undo_stack)
+        before = norm(p.to_dict())
+        act.trigger()
+        assert s.terminal_labels == on and act.isChecked() == on, "Terminal wire labels"
+        assert len(p.undo_stack) == n + 1, "Terminal wire labels: %d steps" % (
+            len(p.undo_stack) - n)
+        if rnd.random() < 0.3:
+            after = norm(p.to_dict())
+            p.undo()
+            assert norm(p.to_dict()) == before, "Undo of Terminal wire labels"
+            p.redo()
+            assert norm(p.to_dict()) == after, "Redo of Terminal wire labels"
+        if on and panelwiring.labels(p, s):
+            kinds.add("terminal wire label")
+        BC.CHECKED["terminal wire labels turned on or off"] += 1
+        BC.panel_wiring_right(p)
+
     def op_report_sheet():
         # (0.21: a report drawn on sheets of the project, as the owner would: every page in
         # its frame and clear of the title block, and every row's first cell on one of them,
@@ -4340,10 +4710,12 @@ def random_editing(log, out, ops, seed, drawing=None):
                     continue
                 pts = {}
                 for t in d.entities:
-                    m = isinstance(t, M.Text) and re.match(r"(\S+)\s+(IN|OUT)[ -](\d+)$",
-                                                           t.text.strip())
+                    # (0.29: Rockwell's point labels, of any case, an analog channel's V or I
+                    # terminal too: "IN-0", "In 0", "V in 0+", "IOUT-2"; never a return)
+                    m = isinstance(t, M.Text) and re.match(
+                        r"(\S+)\s+(?:[VI] ?)?(IN|OUT)[ -](\d+)\+?$", t.text.strip(), re.I)
                     if m:
-                        pts.setdefault(m.group(1), (m.group(2)[0], int(m.group(3))))
+                        pts.setdefault(m.group(1), (m.group(2)[0].upper(), int(m.group(3))))
                 addr_sym = any(a["attr"] == "ADDR" for a in d.attr_texts)
                 for name, q in e.pin_points():
                     if addr_sym:
@@ -4374,8 +4746,11 @@ def random_editing(log, out, ops, seed, drawing=None):
         o = clear_of_drawing(k)
         if o is None or not wirenums.enabled(p):
             return
+        # (0.29: Rockwell's modules by their terminal numbers, the points not in pin order,
+        # an analog channel's V and I terminals both its point)
         block = rnd.choice(["1734-OB8E module", "1734-IB8 module", "1734-OE4C module",
-                            "PLC digital output module, 16 points"])
+                            "PLC digital output module, 16 points", "1769-IQ16 module",
+                            "1756-OF8 module", "5069-OB16 module"])
         slot = rnd.choice(["", "1", "3", "7", "12"])
         before = set(s.entities)
         v.run(C.InsertCmd, lib.get("symbol", block), {"SLOT": slot} if slot else {})
@@ -5618,6 +5993,79 @@ def random_editing(log, out, ops, seed, drawing=None):
         for _i in range(rnd.randint(1, 4)):
             p.redo()
 
+    def op_symbol_standard():
+        # (0.29) the project's symbol standard changed (Project properties, Schematic): JIC
+        # or IEC 60617, whose tags are made of IEC 81346-2 letters. With unlocked devices
+        # tagged in the other standard's letters it asks "Retag the unlocked devices with the
+        # <new> letters?" (the owner, Nov 27 2026), answered here at random: Yes retags them
+        # all in the one Undo step (locked tags untouched, contacts following), No keeps every
+        # tag, Cancel changes nothing; with none, it doesn't ask
+        from unittest import mock
+        from PySide6.QtWidgets import QComboBox
+        from kanzonascad import dialogs
+
+        def device_tags():
+            return {(sh.id, e.id): (e.attrs.get("TAG"), tags_mod.locked(e)) for sh in p.sheets
+                    for e in sh.entities.values() if tags_mod.is_device(e)}
+        before, whole, steps = device_tags(), norm(p.to_dict()), len(p.undo_stack)
+        now = p.settings.get("symbol_standard", "jic")
+        new = "jic" if now == "iec" else "iec"
+        retag = {(sh.id, e.id) for sh, e in tags_mod.to_retag(p, new)}
+        answer = rnd.choice([QMessageBox.Yes, QMessageBox.No, QMessageBox.Cancel])
+        asked = []
+
+        def exec_(dlg):
+            box = dlg.findChild(QComboBox, "symbol_standard")
+            box.setCurrentIndex(box.findData(new))
+            return QDialog.Accepted
+
+        def question(_parent, _title, text, *_a):
+            asked.append(text)
+            return answer
+        with mock.patch.object(dialogs.QDialog, "exec", exec_), \
+                mock.patch.object(QMessageBox, "question", side_effect=question):
+            win.project_properties(1)
+        assert bool(asked) == bool(retag), "asked %r with %d to retag" % (asked, len(retag))
+        if asked and answer == QMessageBox.Cancel:
+            assert norm(p.to_dict()) == whole and len(p.undo_stack) == steps, \
+                "Cancel changed the project"
+            BC.CHECKED["the symbol standard: Cancel changed nothing"] += 1
+            return
+        assert p.settings.get("symbol_standard") == new, p.settings.get("symbol_standard")
+        after = device_tags()
+        for k, (tag, lock) in before.items():
+            got = after.get(k)
+            if k in retag and answer == QMessageBox.Yes:
+                sh = p.sheet_by_id(k[0])
+                e = sh.entities[k[1]]
+                pre = tags_mod.prefix_for(p, e.defn)
+                assert got[1] is False and tags_mod.split(got[0], pre) is not None, \
+                    "%s not retagged with %s: %r" % (tag, pre, got)
+            else:
+                assert got == (tag, lock), "the symbol standard changed %r to %r" % (tag, got)
+        if retag and answer == QMessageBox.Yes:
+            assert not tags_mod.to_retag(p), "left in the other letters: %r" % [
+                e.attrs.get("TAG") for _s, e in tags_mod.to_retag(p)][:6]
+            index = tags_mod.devices(p)
+            for sh in p.sheets:
+                for e in sh.inserts():
+                    if tags_mod.is_child(e) and e.attrs.get("PARENT") in index:
+                        par = index[e.attrs["PARENT"]][1]
+                        assert e.attrs.get("TAG") == par.attrs.get("TAG"), \
+                            "contact %s of %s" % (e.attrs.get("TAG"), par.attrs.get("TAG"))
+            BC.CHECKED["the symbol standard: Yes retagged the unlocked devices"] += 1
+        elif retag:
+            BC.CHECKED["the symbol standard: No kept the tags"] += 1
+        else:
+            BC.CHECKED["the symbol standard changed, nothing to ask, the tags kept"] += 1
+        assert len(p.undo_stack) == steps + 1, "%d steps" % (len(p.undo_stack) - steps)
+        done = norm(p.to_dict())
+        p.undo()
+        assert norm(p.to_dict()) == whole, "one Undo didn't restore the symbol standard's change"
+        p.redo()
+        assert norm(p.to_dict()) == done, "Redo didn't give the symbol standard's change back"
+        BC.CHECKED["the symbol standard: one Undo restored everything"] += 1
+
     table = [(op_wire, 18), (op_bus, 3), (op_symbol, 14), (op_line, 4), (op_text, 3),
              (op_move, 6), (op_copy, 4), (op_rotate, 3), (op_erase, 4), (op_trim, 6),
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
@@ -5633,7 +6081,8 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1),
              (op_paste_same_place, 2),
              (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2),
-             (op_circuit, 3), (op_udt, 4)]
+             (op_circuit, 3), (op_symbol_standard, 2), (op_strips, 4), (op_panel_wiring, 6),
+             (op_udt, 4)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -5661,6 +6110,9 @@ def random_editing(log, out, ops, seed, drawing=None):
                 BC.arrows_follow(p)
                 BC.missing_right(win, p)
                 BC.twins_apart(p)
+                BC.strips_right(p)
+                BC.panel_wiring_right(p)
+                BC.contact_numbers_apart(p)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()
@@ -5675,6 +6127,8 @@ def random_editing(log, out, ops, seed, drawing=None):
                     assert len(r["locs"]) >= 2 and r["conductors"], r
                 if runs_now:
                     kinds.add("pull list")
+                if any(x.rows for x in strips_mod.find(p, wires=False)):
+                    kinds.add("terminal strip")
             if i % 200 == 199:
                 p.save(path, backups=0)
                 q = M.Project.load(path)
@@ -5991,6 +6445,57 @@ def mixed_project(win):
     assert not any(e.attrs.get("TAG") in ("CB1", "PLC1", "CR1") for _sh, e in
                    missing_fp.find(p).missing), [e.attrs.get("TAG") for _sh, e in
                                                  missing_fp.find(p).missing]
+    # (0.27) a terminal strip placed through Insert, its terminals wired to the coil's rung
+    # and out to the field; reordered, with a spare and a jumper (Terminal strips' OK)
+    v.show_sheet(p.sheets[0].id)
+    from kanzonascad import strips
+    v.run(C.InsertCmd, lib.get("symbol", "Terminal strip"), {"TAG": "TB1"})
+    type_in(v, "26,8")
+    while v.cmd is not None:
+        v.cmd.enter()
+    for y in (8.5, 9.0, 9.5):
+        v.run(C.InsertCmd, lib.get("symbol", "Terminal"), {})
+        type_in(v, "30,%g" % y)
+        if v.cmd is not None and v.cmd.pending is not None:
+            type_in(v, "TB1")
+        while v.cmd is not None:
+            v.cmd.enter()
+        t = [e for e in p.sheets[0].inserts() if strips.is_terminal(e) and e.pos[1] == y][0]
+        pins = dict(t.pin_points())
+        v.run(C.WireCmd)
+        type_in(v, "%g,%g" % pins["1"], "%g,%g" % (pins["1"][0] - 1, y))
+        if v.cmd is not None:
+            v.cmd.enter()
+    tb = [x for x in strips.find(p) if x.tag == "TB1"][0]
+    assert [r.num for r in tb.rows] == ["1", "2", "3"], [r.num for r in tb.rows]
+    lay = strips.Layout(tb)
+    lay.move([2], -1)
+    lay.add_spare()
+    lay.add_jumper([0, 1])
+    with p.edit("Terminal strips") as ed:
+        strips.apply(ed, p, [lay])
+    assert p.settings["strips"][tb.key] == {"order": ["1", "3", "2", "4"], "spares": ["4"],
+                                            "jumpers": [["1", "3"]]}, p.settings["strips"]
+    # (0.28) panel wiring: the breaker's footprint (with terminal positions) and a terminal
+    # block for TB1-1 placed through Insert on the panel sheet, its Terminal wire labels on
+    from kanzonascad import panelwiring
+    panel = next(sh for sh in p.sheets if sh.kind == "panel")
+    v.show_sheet(panel.id)
+    for name, at, who in (("Breaker 3-pole (DIN)", "12,20", "CB1"),
+                          ("Terminal block 2.5 mm2 (#12 AWG)", "16,20", "TB1-1")):
+        v.run(C.InsertCmd, lib.get("footprint", name), {})
+        type_in(v, at)
+        if v.cmd is not None and v.cmd.pending is not None:
+            type_in(v, who)
+        while v.cmd is not None:
+            v.cmd.enter()
+    tf = [e for e in panel.inserts() if e.attrs.get("TERM") == "1"]
+    assert len(tf) == 1 and tf[0].label_value("tag") == "TB1-1", [e.attrs for e in tf]
+    win._update_ui()
+    win.acts["terminal_labels"].trigger()
+    assert panel.terminal_labels
+    got = {t.text for t in panelwiring.labels(p, panel)}
+    assert any(t.endswith("TB1:1") or "→" in t for t in got) and len(got) >= 2, got
     v.show_sheet(p.sheets[0].id)
     # (0.29) IEC symbols (a coil and its contact) and an Allen-Bradley module, then a saved
     # circuit of the coil's rung placed again through the commands, as the owner would
@@ -6147,6 +6652,19 @@ def files(log, out):
     p.save(path, backups=0)
     q = M.Project.load(path)
     assert norm(q.to_dict()) == norm(p.to_dict())
+    # (0.28: the wiring list and a panel sheet's terminal wire labels the same from the file)
+    from kanzonascad import panelwiring
+    assert panelwiring.rows(p) == panelwiring.rows(q)
+    for sh in p.sheets:
+        lp = [(t.text, t.pos, t.angle) for t in panelwiring.labels(p, sh)]
+        assert lp == [(t.text, t.pos, t.angle) for t in panelwiring.labels(
+            q, q.sheet_by_id(sh.id))], "terminal wire labels after save/open"
+    assert any(panelwiring.labels(p, sh) for sh in p.sheets)
+    # (0.27: the terminal plan the same from the file: order, spare and jumper kept)
+    from kanzonascad import strips
+    plan = strips.plan_rows(p)
+    assert plan == strips.plan_rows(q) and any(r[6] for r in plan) and \
+        any(r[7] == "spare" for r in plan), plan
     notes.append("save/open")
     for i, s in enumerate(p.sheets):
         dxf = os.path.join(out, "mixed-%d.dxf" % (i + 1))

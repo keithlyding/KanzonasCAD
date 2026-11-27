@@ -114,6 +114,11 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True):
                 for i in range(48)]
         ents.append(M.Polyline(oval, closed=True, layer=lay))
         ents.append(M.Polyline(leader, layer=lay))
+    # (a panel sheet's terminal wire labels, 0.28, on layer PANEL as its footprints)
+    from .panelwiring import labels as terminal_labels
+    lay = "PANEL" if "PANEL" in project.layers else "0"
+    for t in terminal_labels(project, sheet):
+        ents.append(t.copy(layer=lay))
     pictures = 0
     for e in ents:
         if isinstance(e, M.Picture):
@@ -312,9 +317,10 @@ def _write_insert(doc, msp, ins, names, flipped=()):
         if name in shown:
             st = shown[name]
             # (the tag's real value: a contact not linked yet shows "CR?" on the sheet, but
-            # has no tag, and AutoCAD's attribute holds none)
-            value = (ins.attrs.get("TAG", "") or "") if name == "TAG" and \
-                d.kind == "symbol" else st.text
+            # has no tag, and AutoCAD's attribute holds none; a terminal's footprint shows
+            # TB1-4, its tag TB1 and its number in TERM, 0.28)
+            value = (ins.attrs.get("TAG", "") or "") if name == "TAG" and (
+                d.kind == "symbol" or ins.attrs.get("TERM")) else st.text
             ent = ref.add_attrib(name, value, insert=st.pos,
                                  dxfattribs={"height": st.height, "rotation": st.angle,
                                              "layer": ins.layer or "0"})
@@ -420,6 +426,35 @@ def dxf_document(path):
     except ezdxf.DXFStructureError:
         doc, _auditor = recover.readfile(path)
         return doc
+
+
+def dxf_document_of(data, path):
+    """dxf_document for a file's bytes already read (Import blocks from folder reads them on
+    a thread: block_import.load): the document ezdxf.readfile, or its recover mode, makes of
+    that file, step for step as they do it from the file (ezdxf 1.4), with no disk."""
+    import io
+    import ezdxf
+    from ezdxf import recover
+    from ezdxf.document import Drawing
+    from ezdxf.filemanagement import dxf_stream_info
+    from ezdxf.lldxf.tagger import binary_tags_loader
+    from ezdxf.lldxf.validator import is_dxf_stream
+
+    def text(encoding, errors):         # (as open(path, "rt", ...) reads it)
+        return io.TextIOWrapper(io.BytesIO(data), encoding=encoding, errors=errors)
+    path = str(path)
+    try:
+        if data[:22] == b"AutoCAD Binary DXF\r\n\x1a\x00":
+            doc = Drawing.load(binary_tags_loader(data, errors="surrogateescape"))
+        else:
+            if not is_dxf_stream(text(None, "ignore")):
+                raise IOError("File '%s' is not a DXF file." % path)
+            info = dxf_stream_info(text("utf-8", "ignore"))
+            doc = ezdxf.read(text(info.encoding, "surrogateescape"))
+    except ezdxf.DXFStructureError:
+        doc, _auditor = recover.read(io.BytesIO(data))
+    doc.filename = path
+    return doc
 
 
 def _drawing_sized(ents):

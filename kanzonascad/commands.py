@@ -745,11 +745,16 @@ class MoveCmd(_TwoPoint):
                 for _n, q in e.pin_points():
                     own.update(w.id for w in sheet.query_point(q, 1e-6)
                                if isinstance(w, M.Wire) and w.touches(q, 1e-6))
+        from .wires import moved_ends, pull_on
         with self.ctx.edit("Move") as ed:
             moved = self.result(p)
+            ends = moved_ends(sheet, moved)
             for e in moved:
                 ed.change(sheet, e)
             _cut_under(self.ctx, ed, sheet, moved, own)
+            # (a wire end it leaves a hair from a pin or another wire is put on it, as
+            # Stretch does: the long battery, seed 5052)
+            pull_on(ed, sheet, ends)
         self.finish()
 
 
@@ -772,11 +777,16 @@ class CopyCmd(_TwoPoint):
 
     def apply(self, p):
         from .tags import retag_copies
+        from .wires import pull_on
         sheet = self.ctx.sheet()
         with self.ctx.edit("Copy") as ed:
             made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet,
                                                            self.result(p))]
             _cut_under(self.ctx, ed, sheet, made)
+            # (a copied wire's end left a hair from a pin or another wire is put on it, as
+            # Stretch does: the long battery, seed 5052, 0.0037" from a wire)
+            pull_on(ed, sheet, [(e.id, i) for e in made if isinstance(e, M.Wire)
+                                for i in (0, -1)])
         self.last = p
 
 
@@ -3474,8 +3484,12 @@ class InsertCmd(Command):
                 self._place(self.pending, self.attrs)       # (none: a footprint of its own)
                 return True
             got = tags.find_tag(self.ctx.project, k)
+            term = self._terminal_of(k) if got is None and self.footprint_of else None
             if got is not None:
                 self._place(self.pending, self._link(got[1]))
+            elif term is not None:
+                # (a terminal block's footprint: TB1-4 typed, terminal 4 of strip TB1, 0.28)
+                self._place(self.pending, dict(self._link(term[0]), TERM=term[1]))
             elif self.footprint_of:
                 self._place(self.pending, dict(self.attrs, TAG=k))
                 self.ctx.message("No device is tagged %s: the footprint shows it, linked to "
@@ -3575,8 +3589,10 @@ class InsertCmd(Command):
         if self.pending is not None and self.link_name is not None:
             self._place(self.pending, dict(self.attrs, TAG=self.link_name))
             return
-        if self.pending is not None and self.cands and self.footprint_of:
-            self._place(self.pending, self._link(self.cands[0][1]))
+        if self.pending is not None and self.footprint_of:
+            # (Enter: the first device offered; with none offered, a footprint of its own)
+            self._place(self.pending, self._link(self.cands[0][1]) if self.cands else
+                        self.attrs)
             return
         if self.pending is not None and self.cands:
             self._place(self.pending, self.attrs)
@@ -3585,6 +3601,18 @@ class InsertCmd(Command):
             return
         super().enter()
 
+    def _terminal_of(self, typed):
+        """(strip device, terminal number) of a terminal typed as TB1-4 (its strip's tag, a
+        dash, its number), or None."""
+        from . import strips, tags
+        tag, dash, num = (typed or "").strip().rpartition("-")
+        if not dash or not tag or not num.strip():
+            return None
+        got = tags.find_tag(self.ctx.project, tag)
+        if got is None or not strips.is_strip_device(got[1]):
+            return None
+        return got[1], num.strip()
+
     def _link(self, device):
         """Its attributes as device's contact (or, a footprint, as device's footprint)."""
         from . import tags
@@ -3592,13 +3620,24 @@ class InsertCmd(Command):
             return tags.link_footprint(self.attrs, device, self.defn)
         return tags.link_attrs(self.attrs, device)
 
-    def _make(self, p, defn, mirror=None):
+    def _make(self, p, defn, mirror=None, attrs=None):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
         tag_h = self.ctx.project.settings.get("tag_height") * self.ctx.sheet().k() \
             if self.defn.kind == "symbol" else None
         return M.Insert(defn.name, p, self.angle, 1.0,
-                        self.mirror if mirror is None else mirror, self.attrs, defn,
-                        tag_h, layer=layer)
+                        self.mirror if mirror is None else mirror,
+                        self.attrs if attrs is None else attrs, defn, tag_h, layer=layer)
+
+    def _ghost_attrs(self):
+        """The attributes the ghost shows: with no tag yet, in a project of IEC symbols, the
+        project's letter and "?" (K?, as the copy placed shows it: Project.sync_tag_letters;
+        the block from the library still says CR?)."""
+        d = self.defn
+        if d.kind != "symbol" or not d.prefix or self.attrs.get("TAG"):
+            return None
+        from . import tags
+        pre = tags.prefix_for(self.ctx.project, d)
+        return None if pre == d.prefix else dict(self.attrs, TAG=pre + "?")
 
     def _on_rail(self, p):
         """A footprint's insertion point, its rail point locked onto a DIN rail it comes
@@ -3611,9 +3650,9 @@ class InsertCmd(Command):
 
     def preview(self, p):
         if self.pending is not None:
-            return [self._make(self.pending, self.defn, self.placed_mirror)]
+            return [self._make(self.pending, self.defn, self.placed_mirror, self._ghost_attrs())]
         at, m = self._fit(p)
-        return [self._make(self._on_rail(at), self.defn, m)]
+        return [self._make(self._on_rail(at), self.defn, m, self._ghost_attrs())]
 
     def _sized_to_bus(self, p):
         """A power distribution block (or its outlet) picked on a bus whose phases are spaced
@@ -3687,19 +3726,27 @@ class InsertCmd(Command):
                 return
             self.ctx.message("Nothing to link this %s to yet (a %s device): placed unlinked "
                              "(double-click it to link it later)"
-                             % (d.name.lower(), d.prefix or "parent"))
+                             % (d.name.lower(), tags.prefix_for(project, d) or "parent"))
         if d.kind == "footprint" and not self.attrs.get("TAG") and \
                 not self.attrs.get("PARENT"):
             # which schematic device it is: its tag shows on it, and follows it
             from . import tags
             project = self.ctx.project
             self.cands = tags.footprint_candidates(project, self.attrs.get("CAT") or d.catalog)
-            if self.cands:
+            from . import panelwiring, strips
+            if self.cands or (panelwiring.terminal_block(d) and any(
+                    strips.is_strip_device(e) for _s, e in tags.devices(project).values())):
                 self.pending, self.footprint_of = p, True
+                if not self.cands:
+                    # (every device has its footprint: a terminal block's footprint can still
+                    # be a strip's terminal, typed)
+                    self.ctx.prompt("Which terminal is it: type it as TB1-4, or Enter for none",
+                                    [("None", "N")])
+                    return
                 s, e = self.cands[0]
                 desc = e.attrs.get("DESC", "") or e.defn.description or e.defn.name
-                self.ctx.prompt("Which device is it: Enter for %s (%s, %s), type a tag, or N for "
-                                "none" % (e.attrs.get("TAG", "?"), desc,
+                self.ctx.prompt("Which device is it: Enter for %s (%s, %s), type a tag (a "
+                                "terminal: TB1-4), or N for none" % (e.attrs.get("TAG", "?"), desc,
                                           project.zone_text(s, e.pos[0], e.pos[1]) or "?"),
                                 [("List", "L"), ("None", "N")])
                 return

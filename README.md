@@ -39,8 +39,10 @@ people on AutoCAD.
   to a device), hatch and solid fill, multi-line text.
 - Reports: a bill of materials (parts by manufacturer and catalog number), and Cables between
   locations: what to pull between panels and where every wire lands on both sides (TB1-12),
-  with the cable, its type and the conductors' colors or numbers (CSV and PDF); a wire list and
-  a terminal strip list (CSV).
+  with the cable, its type and the conductors' colors or numbers (CSV and PDF); a wire list, a
+  terminal strip list and a terminal plan (CSV or Excel).
+- Terminal strips: a strip editor (terminals in order with the wires on each side, reorder,
+  renumber, spares and jumpers, one Undo).
 - Project templates, title block position (corner, right-hand or bottom strip), Options, and
   reopening the files you had open last.
 - DXF in and out, DWG in (AutoCAD R13-2018), PDF out, and the lines and text of a PDF in. Imported blocks stay blocks, AutoCAD

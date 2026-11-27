@@ -17,9 +17,10 @@ def _rect(x0, y0, x1, y1):
     return Polyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], True)
 
 
-def _fp(name, category, w, h, ents=(), description="", rail=True):
+def _fp(name, category, w, h, ents=(), description="", rail=True, pins=()):
     """A footprint w x h inches around its middle: its outline, what's drawn on it, its label
-    spot above the middle (clear of the rail), and the rail through its middle."""
+    spot above the middle (clear of the rail), the rail through its middle, and its terminal
+    positions (pins, named as the matching symbol's: panel wiring labels them)."""
     hw, hh = w / 2.0, h / 2.0
     size = "%g x %g in (%g x %g mm)" % (round(w, 2), round(h, 2), round(w / MM), round(h / MM))
     d = BlockDef(name, "footprint", [_rect(-hw, -hh, hw, hh)] + list(ents),
@@ -27,8 +28,22 @@ def _fp(name, category, w, h, ents=(), description="", rail=True):
                  category="Generic/" + category,
                  description=("%s, typical %s: check the maker's drawing" % (description, size))
                  if description else "Typical %s: check the maker's drawing" % size,
-                 builtin=True, rail_pos=(0.0, 0.0) if rail else None)
+                 builtin=True, rail_pos=(0.0, 0.0) if rail else None, pins=pins)
     return d
+
+
+def _screw_pins(w, h, top, bottom, inset=0.18):
+    """Pins on the screws _screws draws: names top along the top, bottom along the bottom,
+    left to right (a 3-pole device: L1 L2 L3 over T1 T2 T3, as its symbol's pins)."""
+    out = []
+    for names, y in ((top, h / 2.0 - inset), (bottom, -h / 2.0 + inset)):
+        n = len(names)
+        for i, name in enumerate(names):
+            out.append({"name": name, "pos": (-w / 2.0 + w * (i + 0.5) / n, y)})
+    return out
+
+
+LT = (["L1", "L2", "L3"], ["T1", "T2", "T3"])
 
 
 def _screws(w, h, n, inset=0.18, r=None):
@@ -39,6 +54,34 @@ def _screws(w, h, n, inset=0.18, r=None):
         x = -w / 2.0 + w * (i + 0.5) / n
         out.append(Circle((x, h / 2.0 - inset), r))
         out.append(Circle((x, -h / 2.0 + inset), r))
+    return out
+
+
+def _dots(pins, r=0.06):
+    """A screw drawn on each pin (pins at one place: one screw)."""
+    seen = []
+    for p in pins:
+        if p["pos"] not in seen:
+            seen.append(p["pos"])
+    return [Circle(q, r) for q in seen]
+
+
+def _relay_pins(w, h, poles, timed=False):
+    """A relay's screws, a column a pole: its NC and NO screws along the top (NC the top
+    row), its common under them at the bottom over the coil's A1 and A2 (A1 left, A2 right).
+    Pole n's common is n1 and n3 (a timer's n5 and n7), its NC screw n2 (n6), its NO n4 (n8)."""
+    nc, no = ("5", "6"), ("7", "8")
+    if not timed:
+        nc, no = ("1", "2"), ("3", "4")
+    top, row = h / 2.0 - 0.12, 0.2
+    out = []
+    for i in range(poles):
+        n = str(i + 1)
+        x = -w / 2.0 + w * (i + 0.5) / poles
+        out += [{"name": n + nc[1], "pos": (x, top)}, {"name": n + no[1], "pos": (x, top - row)},
+                {"name": n + nc[0], "pos": (x, -top + row)},
+                {"name": n + no[0], "pos": (x, -top + row)}]
+    out += [{"name": "A1", "pos": (-w / 4.0, -top)}, {"name": "A2", "pos": (w / 4.0, -top)}]
     return out
 
 
@@ -59,48 +102,84 @@ def builtin_footprints():
     P = 18 * MM                         # (one DIN module, 18 mm)
     H = 90 * MM
     out = []
+    # (a pole's pins as the symbols name them: a 1-pole breaker or fuse 1 over 2, three
+    # poles L1-L3 over T1-T3; no symbol has two poles, so none on those)
+    POLE_PINS = {1: (["1"], ["2"]), 2: ([], []), 3: LT}
     # ---- protection ----------------------------------------------------------------------------
     for n in (1, 2, 3):
         w = n * P
         out.append(_fp("Breaker %d-pole (DIN)" % n, "Protection", w, H,
                        _poles(w, H, n) + _toggle(w),
-                       "Miniature circuit breaker, %d pole(s)" % n))
+                       "Miniature circuit breaker, %d pole(s)" % n,
+                       pins=_screw_pins(w, H, *POLE_PINS[n])))
     for n in (1, 3):
         w = n * P
         out.append(_fp("Fuse holder %d-pole (DIN)" % n, "Protection", w, 81 * MM,
                        _poles(w, 81 * MM, n) + [_rect(-w / 2 + 0.06, -0.45, w / 2 - 0.06, 0.45)],
-                       "Fuse holder for 10 x 38 mm fuses, %d pole(s)" % n))
+                       "Fuse holder for 10 x 38 mm fuses, %d pole(s)" % n,
+                       pins=_screw_pins(w, 81 * MM, *POLE_PINS[n])))
     out.append(_fp("Motor protector (DIN)", "Protection", 45 * MM, H,
                    _screws(45 * MM, H, 3) + [Circle((0.0, 0.1), 0.25)],
-                   "Motor protection circuit breaker (manual motor starter), 3 pole"))
+                   "Motor protection circuit breaker (manual motor starter), 3 pole",
+                   pins=_screw_pins(45 * MM, H, *LT)))
     out.append(_fp("Surge protector 1-pole (DIN)", "Protection", P, H, _screws(P, H, 1),
                    "Surge protective device, 1 pole"))
     out.append(_fp("Disconnect, rotary 3-pole (DIN)", "Protection", 3 * P, 80 * MM,
                    _poles(3 * P, 80 * MM, 3) + [Circle((0.0, 0.0), 0.35),
                                                 Line((-0.28, 0.0), (0.28, 0.0))],
-                   "Rotary disconnect switch, 3 pole, about 32 A"))
+                   "Rotary disconnect switch, 3 pole, about 32 A",
+                   pins=_screw_pins(3 * P, 80 * MM, *LT)))
     # ---- control ---------------------------------------------------------------------------
     for name, w, h, what in (("Contactor 9-18 A", 45, 80, "Contactor, 3 pole, 9 to 18 A"),
                              ("Contactor 25-38 A", 54, 90, "Contactor, 3 pole, 25 to 38 A")):
         w, h = w * MM, h * MM
+        # (its coil's A1 and A2 on the left side, under and over the power screws; its own
+        # auxiliary contacts on the right, NO 13-14 and NC 21-22, as the makers mark them and
+        # as its contacts are numbered on the schematic: pinnumbers.py, 0.28)
+        x0, x1 = -w / 2.0 + 0.12, w / 2.0 - 0.12
+        coil = [{"name": "A1", "pos": (x0, h / 2.0 - 0.5)},
+                {"name": "A2", "pos": (x0, -h / 2.0 + 0.5)}]
+        aux = [{"name": "13", "pos": (x1, h / 2.0 - 0.5)}, {"name": "14", "pos": (x1, -h / 2.0 + 0.5)},
+               {"name": "21", "pos": (x1, h / 2.0 - 0.72)},
+               {"name": "22", "pos": (x1, -h / 2.0 + 0.72)}]
         out.append(_fp(name, "Control", w, h,
-                       _screws(w, h, 3) + [_rect(-w * 0.3, -0.25, w * 0.3, 0.25)], what))
-    out.append(_fp("Overload relay 9-18 A", "Control", 45 * MM, 66 * MM,
-                   _screws(45 * MM, 66 * MM, 3, inset=0.15) + [Circle((0.0, 0.0), 0.15)],
-                   "Overload relay, mounted under its contactor or on the rail"))
-    for name, h, what in (("Relay, ice cube 8-pin with base", 75, "8-pin plug-in relay on its "
-                                                                  "DIN-rail base"),
-                          ("Relay, ice cube 14-pin with base", 80, "14-pin plug-in relay on its "
-                                                                   "DIN-rail base")):
+                       _screws(w, h, 3) + [_rect(-w * 0.3, -0.25, w * 0.3, 0.25)] +
+                       _dots(coil + aux), what,
+                       pins=_screw_pins(w, h, *LT) + coil + aux))
+    # (its contacts on the right, under the T1-T3 screws: NC 95-96, NO 97-98)
+    w, h = 45 * MM, 66 * MM
+    ol = [{"name": n, "pos": (w / 2.0 - 0.12, y)}
+          for n, y in (("97", 0.75), ("95", 0.5), ("96", -0.5), ("98", -0.75))]
+    out.append(_fp("Overload relay 9-18 A", "Control", w, h,
+                   _screws(w, h, 3, inset=0.15) + [Circle((0.0, 0.0), 0.15)] + _dots(ol),
+                   "Overload relay, mounted under its contactor or on the rail",
+                   pins=_screw_pins(w, h, *LT, inset=0.15) + ol))
+    # relays: a changeover contact a pole, each pole's common, NC and NO screws named as
+    # its contacts are numbered on the schematic (pinnumbers.py): pole 1's common is both
+    # 11 (of NC contact 11-12) and 13 (of NO contact 13-14), its NC screw 12, its NO screw
+    # 14; pole 2's 21/23, 22, 24... (a timer's timed contacts: 15/17, 16, 18); A1 and A2 the
+    # coil's
+    for name, h, poles, what in (("Relay, ice cube 8-pin with base", 75, 2,
+                                  "8-pin plug-in relay on its DIN-rail base, 2 changeover "
+                                  "contacts"),
+                                 ("Relay, ice cube 14-pin with base", 80, 4,
+                                  "14-pin plug-in relay on its DIN-rail base, 4 changeover "
+                                  "contacts")):
         w, h = 27 * MM, h * MM
+        pins = _relay_pins(w, h, poles)
         out.append(_fp(name, "Control", w, h,
-                       _screws(w, h, 2, inset=0.12) + [_rect(-w * 0.4, -0.55, w * 0.4, 0.55)],
-                       what))
-    out.append(_fp("Relay, slim interface 6 mm", "Control", 6.2 * MM, H,
-                   _screws(6.2 * MM, H, 1, inset=0.15), "Slim interface relay, 6.2 mm"))
+                       [_rect(-w * 0.4, -0.55, w * 0.4, 0.55)] + _dots(pins), what, pins=pins))
+    # (one column: NC, NO and common along the top, the coil at the bottom)
+    top = H / 2.0 - 0.12
+    pins = [{"name": n, "pos": (0.0, y)} for n, y in (
+        ("12", top), ("14", top - 0.2), ("11", top - 0.4), ("13", top - 0.4), ("A1", -top + 0.2),
+        ("A2", -top))]
+    out.append(_fp("Relay, slim interface 6 mm", "Control", 6.2 * MM, H, _dots(pins, 0.05),
+                   "Slim interface relay, 6.2 mm, 1 changeover contact", pins=pins))
+    pins = _relay_pins(22.5 * MM, H, 2, timed=True)
     out.append(_fp("Timer relay 22.5 mm", "Control", 22.5 * MM, H,
-                   _screws(22.5 * MM, H, 2) + [Circle((0.0, 0.2), 0.12)],
-                   "Timer or monitoring relay, 22.5 mm"))
+                   [Circle((0.0, 0.2), 0.12)] + _dots(pins),
+                   "Timer or monitoring relay, 22.5 mm, 2 changeover contacts", pins=pins))
     # ---- power supplies --------------------------------------------------------------------
     for amps, w in ((2.5, 40), (5, 50), (10, 66)):
         w, h = w * MM, 125 * MM
@@ -122,7 +201,9 @@ def builtin_footprints():
         if name.startswith("Ground"):
             ents += [Line((-w * 0.35, -0.05 - k * 0.05), (w * 0.35, -0.05 - k * 0.05))
                      for k in range(3)]
-        out.append(_fp(name, "Terminals", w, h, ents, what))
+        # (pin 1 on the top screw, 2 on the bottom one: a Terminal symbol's left and right)
+        out.append(_fp(name, "Terminals", w, h, ents, what,
+                       pins=_screw_pins(w, h, ["1"], ["2"], inset=0.12)))
     out.append(_fp("Terminal end plate", "Terminals", 2 * MM, 47 * MM, (),
                    "End plate, closing the open side of the last terminal"))
     out.append(_fp("End stop", "Terminals", 9 * MM, 35 * MM,

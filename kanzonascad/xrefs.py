@@ -2,7 +2,8 @@
 automatic.
 
 - Under a device that has contacts (a coil, a pushbutton operator...): one line per contact,
-  "NO 6-D3" / "NC 7-B2", in sheet order then zone order.
+  "NO 13-14 6-D3" / "NC 21-22 7-B2" (its pin numbers when it has its own: pinnumbers.py; a
+  contact of before 0.28, "NO 6-D3"), in sheet order then zone order.
 - Under each contact: where its device is ("6-D1"), or "?" when it isn't linked to one.
 - Under an off-sheet connector: where the connectors of the same name are ("7-A2"), or "?"
   when it has no other end yet.
@@ -23,7 +24,7 @@ A reference is a plain tuple (x, y, text, height): saved in the sheet as it is w
 import math
 
 from .model import Insert, Text, text_width
-from . import tags
+from . import pinnumbers, tags
 
 MARK = {"NO": "NO", "NC": "NC", "NOTC": "NO", "NOTO": "NO", "NCTO": "NC", "NCTC": "NC"}
 GAP = 0.05                      # between a symbol's box and its first line
@@ -284,6 +285,8 @@ def _worked_out(project):
         y = bb[1] - GAP - hh
         for cs, c in items:
             mark = MARK.get(c.defn.contact, "") if isinstance(c, Insert) else ""
+            if isinstance(c, Insert) and pinnumbers.numberable(c) and pinnumbers.own(c):
+                mark = ("%s %s" % (mark, pinnumbers.text(c))).strip()   # (NO 13-14 6-D3)
             text = ("%s %s" % (mark, _where(project, cs, c))).strip()
             out[s.id].append((round(x, 6), round(y, 6), text, hh))
             aims[s.id].append(_spans(text, 0, [(text, _aim(cs, c))]))
@@ -432,7 +435,8 @@ def joined_now(sheet):
 def sync_block_tags(ed, sheets):
     """Contact blocks on a dashed line show no tag of their own, as in the owner's print (the
     line shows where they belong; the owner, 0.19.11: "Yes"); one taken off the line shows it
-    again. Only a tag hidden here (TAGLINK) comes back: one hidden by hand stays hidden."""
+    again. Only a tag hidden here (TAGLINK) comes back: one hidden by hand stays hidden, and
+    one shown by hand on the line (TAGLINK "0", MainWindow.attribute_changes) stays shown."""
     for s in sheets:
         _lines, ids = joined_now(s)
         for e in list(s.inserts()):
@@ -440,7 +444,7 @@ def sync_block_tags(ed, sheets):
             if d is None or d.role != "child" or d.prefix not in LINKED:
                 continue
             mine = e.attrs.get("TAGLINK") == "1"
-            if e.id in ids and "TAG" not in e.hidden:
+            if e.id in ids and "TAG" not in e.hidden and e.attrs.get("TAGLINK") != "0":
                 attrs = dict(e.attrs, TAGLINK="1")
                 ed.change(s, e.copy(hidden=frozenset(e.hidden) | {"TAG"}, attrs=attrs))
             elif e.id not in ids and mine:

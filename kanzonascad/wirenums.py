@@ -49,13 +49,17 @@ def by_io_address(project):
     return bool(project.settings.get("wire_numbers_io", False))
 
 
-_IO_TEXT = re.compile(r"^(\S+)\s+(IN|OUT)[ -](\d+)$")
+# a module's terminal text: its pin's name, then its point as Rockwell prints it, of any case:
+# IN 0, OUT-3, In 0; an analog one's voltage or current terminal, V in 0+, I out 1+, VOUT-2,
+# IOUT-2 (both the channel's point); never a return or common (V/I in 0-, i RTN-0, RTN OUT-0)
+_IO_TEXT = re.compile(r"^(\S+)\s+(?:[VI] ?)?(IN|OUT)[ -](\d+)\+?$", re.IGNORECASE)
 
 
 def io_points(defn):
     """{pin name: ("I" or "O", point number)} of a PLC module's input and output points: the
-    terminals whose text is "n  IN n", "n  OUT n" or "n  IN-n" (not V, C, RTN-n, power or
-    common terminals). Empty for any other block."""
+    terminals whose text is "n  IN n", "n  OUT n", "n  IN-n", an analog channel's "n  V in
+    n+", "n  IOUT-n" (_IO_TEXT; not V, C, RTN-n, power or common terminals). Empty for any
+    other block."""
     if defn is None or defn.prefix != "PLC":
         return {}
     return point_terminals(defn)
@@ -69,7 +73,7 @@ def point_terminals(defn):
         if isinstance(e, Text):
             m = _IO_TEXT.match(e.text.strip())
             if m and m.group(1) in names:
-                out.setdefault(m.group(1), ("I" if m.group(2) == "IN" else "O",
+                out.setdefault(m.group(1), ("I" if m.group(2).upper() == "IN" else "O",
                                             int(m.group(3))))
     return out
 
@@ -690,6 +694,54 @@ def follow_links(ed, project):
                 ed.change(s, d.copy(attrs=dict(d.attrs, TAG=name)))
 
 
+def unlink_renamed(project, ins, attrs):
+    """attrs, the attributes typed for a placed block, without its link to a source arrow when
+    it is a destination arrow linked by hand, its link left as it was, and given a name other
+    than that source's: the link would put the source's name back (follow_links), so the name
+    typed is meant to pair it with another source, by name, as Automatic does (the battery,
+    0.26, seed 202611263). A source chosen in the same answer (Comes from) keeps its link."""
+    if ins.block != ARROWS[1] or not attrs.get("FROM") or \
+            attrs.get("FROM") != ins.attrs.get("FROM"):
+        return attrs
+    typed = (attrs.get("TAG") or "").strip().upper()
+    if typed == (ins.attrs.get("TAG") or "").strip().upper():
+        return attrs
+    got = linked_source(project, ins)
+    if got is not None and typed == (got[1].attrs.get("TAG") or "").strip().upper():
+        return attrs
+    return {k: x for k, x in attrs.items() if k != "FROM"}
+
+
+def renumbers(project, sheet, ins, typed):
+    """The wire a name typed for the placed block ins renumbers, or None: a source arrow on a
+    numbered wire is named by the wire's number (the owner, 0.18.6), so a name typed for it is
+    the wire's new number, typed as on the wire (the owner, Nov 27 2026: "Renumber the wire").
+    None when wire numbers are off, it isn't a source arrow on a numbered wire, or the name
+    typed is the one it has."""
+    if ins.block != ARROWS[0] or not enabled(project) or \
+            (typed or "").strip().upper() == (ins.attrs.get("TAG") or "").strip().upper():
+        return None
+    return numbered_wire(sheet, ins)
+
+
+class NameRefused(ValueError):
+    """A name typed for an arrow that numbering would put back (name_refused)."""
+
+
+def name_refused(ed, project, sheet, iid, typed):
+    """None when the arrow (or off-sheet connector) iid, just given the name typed in ed, keeps
+    it once numbering has run; else why not (never put back silently: the battery, 0.26, seed
+    202611263). A source arrow on a numbered wire doesn't come here: its name renumbers the
+    wire (renumbers). The caller undoes the step (raises NameRefused) and says why."""
+    sync(ed, project)
+    e = sheet.entities.get(iid)
+    now = (e.attrs.get("TAG") or "").strip().upper() if e is not None else ""
+    want = (typed or "").strip().upper()
+    if e is None or now == want:
+        return None
+    return "numbering names it %s" % now
+
+
 def sync(ed, project, renumber=None):
     """Give every group its number (see the module's notes); renumber: a sheet (or several:
     Update numbers and cross-references, 0.18) whose
@@ -930,11 +982,17 @@ ARROWS = ("Source arrow", "Destination arrow")
 
 def number_at(sheet, ins):
     """The number of the wire on a connector's pin ("" when none)."""
+    w = numbered_wire(sheet, ins)
+    return w.num if w is not None else ""
+
+
+def numbered_wire(sheet, ins):
+    """The numbered wire on a connector's pin, or None."""
     for _n, q in ins.pin_points():
         for w in sheet.query_point(q, TOL):
             if getattr(w, "kind", "") == "wire" and w.num and w.touches(q, TOL):
-                return w.num
-    return ""
+                return w
+    return None
 
 
 def match_arrow_layers(ed, project, name):

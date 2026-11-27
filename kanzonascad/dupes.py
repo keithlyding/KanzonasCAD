@@ -12,13 +12,19 @@ message on the command line when one appears, over the whole project).
 - A power distribution block with more outlets drawn than it has (its OUTLETS, as on its part:
   "1:18" or 18 per phase): the outlets past that number (the owner's count warning).
 
+- A wire end or pin that almost touches a wire, a wire end or a pin without being joined to it
+  (nearmiss.py: the owner, Nov 26 2026, "Warn on the drawing"): a red frame round the spot.
+
 Worked out once per change of the project (kept until then), never on a paint or a mouse
 move."""
 
 import re
 
+from . import nearmiss
 from . import tags
 from . import wirenums
+
+NEAR_MARK = 0.03            # paper inches: half the frame round a near miss (and its margin)
 
 _cache = {"sig": None, "got": None, "over_sig": None, "over": None}
 
@@ -94,9 +100,14 @@ def find(project):
     return dup_tags, dup_nums
 
 
-def describe(project, dup_tags, dup_nums, over=None):
+def _inches(d):
+    return ("%.4f" % d).rstrip("0").rstrip(".") + '"'
+
+
+def describe(project, dup_tags, dup_nums, over=None, near=None):
     """A line for the command line naming them: "Duplicate tag CR201 (sheets 2, 5); duplicate
-    wire number 2004 (sheet 2)"."""
+    wire number 2004 (sheet 2)"; near: {sheet: [(point, what, how far, what does)]}
+    (nearmiss.found)."""
     def where(sheets):
         nums = sorted({project.sheet_number(s) for s in sheets}, key=str)
         return ("sheet " if len(nums) == 1 else "sheets ") + ", ".join(str(n) for n in nums)
@@ -108,6 +119,10 @@ def describe(project, dup_tags, dup_nums, over=None):
             % (t, n, ", ".join(sorted({e.attrs["OUTLET"] for _s, e in past}, key=int)),
                where(s for s, _e in past))
             for t, (n, past) in sorted((over or {}).items())]
+    for s, got in (near or {}).items():
+        out += ["%s at %.4g, %.4g is %s from %s without joining it (sheet %s)"
+                % (who, p[0], p[1], _inches(d), what, project.sheet_number(s))
+                for p, what, d, who in got]
     if not out:
         return ""
     text = "; ".join(out[:4]) + (" and %d more" % (len(out) - 4) if len(out) > 4 else "")
@@ -133,4 +148,6 @@ def marks(project, sheet):
             if s is sheet:
                 t = e.tag_text()
                 out.append(t.bbox() if t is not None else e.bbox())
+    r = NEAR_MARK * sheet.k()
+    out += [(p[0] - r, p[1] - r, p[0] + r, p[1] + r) for p, _w, _d, _who in nearmiss.found(sheet)]
     return out

@@ -556,6 +556,23 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
           icon="terminal_list", label="Terminals",
           tip="Every terminal strip, terminal by terminal, with the wires on each side and "
               "where it is (save as CSV)")
+        A("terminal_strips", "Terminal stri&ps...", lambda: self.terminal_strips(),
+          icon="terminal_strips", label="Terminal strips",
+          tip="The terminal strips: each strip's terminals in order with the wires on each "
+              "side and where they go; reorder, renumber, add spares and jumpers (one Undo)")
+        A("terminal_plan", "Terminal p&lan...", self.show_terminal_plan,
+          icon="terminal_plan", label="Terminal plan",
+          tip="Every strip terminal by terminal in its order: the wire and what it goes to on "
+              "the internal and the external side, and its jumper (save as CSV or Excel)")
+        A("wiring_list", "Device &wiring list...", self.show_wiring_list,
+          icon="wiring_list", label="Wiring list",
+          tip="Each device and terminal pin by pin: its wire number, size, color and layer, "
+              "where the wire goes (device:pin) and where the pin is on its footprint (save as "
+              "CSV or Excel)")
+        A("terminal_labels", "Terminal wire la&bels", self.terminal_labels, checkable=True,
+          icon="terminal_labels", label="Wire labels",
+          tip="On this panel sheet, each footprint terminal labeled with its wire number and "
+              "where the wire goes (6001 → CR101:A1), from the schematic as it is")
         A("terminal_count", "Terminal &count...", self.show_terminal_count,
           icon="terminal_count", label="Terminal count",
           tip="How many terminals and jumpers the tapped wires need: a wire number and each of "
@@ -862,7 +879,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         for k in ("sheet_add", "sheet_dup", "sheet_del", "sheet_up", "sheet_down", "sheet_cw",
                   "sheet_ccw",
                   None, "renumber", "update_numbers", "lock_numbers", "num_source",
-                  "trace", "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_count", "materials",
+                  "trace", "xref_update", "xref_freeze", "xref_auto", None, "bom", "cables", "wire_list", "terminal_list", "terminal_strips",
+                  "terminal_plan", "terminal_count", "wiring_list", "terminal_labels", "materials",
                   "missing_fp", "report_sheet", "report_update", "io_list", None,
                   "sheet_props",
                   "project_props", "schematic_settings", "panel_settings", "edit_tb",
@@ -1000,7 +1018,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                                       a["dim_units"]]),
             ("Real size", "small", [a["scale"], a["sheet_scale"]]),
             ("Arrange", "large", [a["align_obj"], a["distribute"]]),
-            ("Reports", "large", [a["materials"], a["missing_fp"]]),
+            # (Terminal strips: on the Panel tab, as AutoCAD Electrical's terminal strip editor)
+            ("Terminals", "large", [a["terminal_strips"], a["terminal_labels"]]),
+            ("Reports", "large", [a["materials"], a["missing_fp"], a["wiring_list"]]),
             ("Parts", "small", [a["new_part"], a["assign_part"], a["save_as_part"]]),
             ("Layers", "small", [self.panel_layer_box, self.panel_layer_states, a["layers"],
                                  a["object_color"], a["lay_off"], a["lay_on"]]),
@@ -1020,8 +1040,11 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             ("Import", "large", [a["import_dxf"], a["import_pdf"], a["import_picture"],
                                  a["import_blocks"]]),
             # (Terminal count on the Terminals button's menu: the tab as wide as before)
-            ("Reports", "large", [a["bom"], a["cables"], a["wire_list"],
-                                  split_button([a["terminal_list"], a["terminal_count"]]),
+            # (Device wiring list on the Wire list button's menu, as Terminal count)
+            ("Reports", "large", [a["bom"], a["cables"],
+                                  split_button([a["wire_list"], a["wiring_list"]]),
+                                  split_button([a["terminal_list"], a["terminal_plan"],
+                                                a["terminal_count"]]),
                                   a["materials"], a["missing_fp"]]),
             ("Project", "large", [a["save"], a["save_as"]]),
         ])
@@ -1318,16 +1341,22 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self._props_changed(d.project)
 
     def _say_duplicates(self, d):
-        """A duplicate tag or wire number that wasn't there before the change: said on the
-        command line (they are marked red on the drawing until fixed: dupes.py)."""
-        from . import dupes
+        """A duplicate tag or wire number, or a near miss (nearmiss.py), that wasn't there
+        before the change: said on the command line (they are marked red on the drawing until
+        fixed: dupes.py)."""
+        from . import dupes, nearmiss
         if getattr(d, "block_session", None) is not None:
             return
         dup_tags, dup_nums = dupes.find(d.project)
         over = dupes.over_outlets(d.project)
+        near = nearmiss.in_project(d.project)
+
+        def spot(s, m):
+            return ("near", s.id, round(m[0][0], 4), round(m[0][1], 4))
         now = {("tag", t) for t in dup_tags} | {("num", n) for n in dup_nums} | {
             ("over", t, tuple(sorted(e.attrs["OUTLET"] for _s, e in g[1])))
-            for t, g in over.items()}
+            for t, g in over.items()} | {
+            spot(s, m) for s, got in near.items() for m in got}
         before = getattr(d, "_dupes_seen", None)
         d._dupes_seen = now
         if before is None:
@@ -1338,7 +1367,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             text = dupes.describe(d.project,
                                   {t: g for t, g in dup_tags.items() if ("tag", t) in new},
                                   {n: g for n, g in dup_nums.items() if ("num", n) in new},
-                                  {t: g for t, g in over.items() if t in newer})
+                                  {t: g for t, g in over.items() if t in newer},
+                                  {s: [m for m in got if spot(s, m) in new]
+                                   for s, got in near.items()})
             self._say(text + " (marked red on the drawing)", 10000)
 
     def _tab_changed(self, _i):
@@ -3756,6 +3787,90 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                               "Each terminal with the wire numbers on its left and right pins, "
                               "as drawn; a terminal with no number yet shows ?.")
 
+    def terminal_strips(self, key=None):
+        """Terminal strips... (Panel tab, Sheets menu): the strip editor, on the strip of the
+        terminal or strip selected (else the first). Returns whether it changed anything."""
+        v = self.view()
+        if v is None:
+            return False
+        if v.cmd is not None:
+            v.cancel()
+        from . import strip_window, strips
+        if key is None:
+            s = v.sheet()
+            for eid in sorted(v.selection()):
+                e = s.entities.get(eid)
+                if e is not None and strips.is_terminal(e):
+                    key = strips.key_of(e)
+                    break
+                if e is not None and strips.is_strip_device(e):
+                    key = e.attrs.get("DEV")
+                    break
+        changed = strip_window.strip_editor(self, v.project, key)
+        if changed:
+            self._say("Terminal strips changed (Undo takes them back)")
+        return changed
+
+    def show_terminal_plan(self):
+        v = self.view()
+        if v is None:
+            return
+        from . import strips
+        dialogs.report_dialog(self, "Terminal plan", strips.PLAN_HEAD, strips.plan_rows(v.project),
+                              self._last_dir(), "terminal plan.csv",
+                              "No terminal strips yet: place a Terminal strip and its "
+                              "Terminals on a schematic.",
+                              "Each strip in its order (Terminal strips...): each terminal's "
+                              "wire and what it goes to on its internal side (wired inside the "
+                              "strip's location) and its external side (to another location; "
+                              "with no locations, its right pin), its jumper, and where it is "
+                              "drawn.")
+
+    def show_wiring_list(self):
+        v = self.view()
+        if v is None:
+            return
+        from . import panelwiring
+        p = v.project
+        rows = panelwiring.rows(p)
+        dialogs.report_dialog(self, "Device wiring list", panelwiring.HEAD, rows,
+                              self._last_dir(), "wiring list.csv",
+                              "No devices or terminals with pins yet: place symbols on a "
+                              "schematic and wire them.",
+                              "Each device (with its contacts and points) and each terminal, "
+                              "pin by pin, one row per wire on it: its number, size, color and "
+                              "layer, and the pins it goes to (through off-sheet connectors and "
+                              "arrows; another location shown with it). Footprint: where the "
+                              "pin is on its panel footprint, or why it isn't (no footprint, "
+                              "no terminal positions: its block has no pins).")
+        missing = panelwiring.without_positions(p)
+        if missing:
+            self._say(panelwiring.describe_missing(missing))
+
+    def terminal_labels(self, on):
+        """Terminal wire labels (Panel tab): this panel sheet's footprint terminals labeled
+        with their wires and where they go, or not; one step to undo."""
+        v = self.view()
+        if v is None:
+            return
+        s = v.sheet()
+        if s is v.project.title_block or s.kind != "panel":
+            self._say("Terminal wire labels are for panel sheets (Sheet properties: Kind)")
+            self._update_ui()
+            return
+        from . import panelwiring
+        p = v.project
+        with p.edit("Terminal wire labels " + ("on" if on else "off")) as ed:
+            ed.sheet_meta(s, terminal_labels=bool(on))
+        if on:
+            n = panelwiring.labeled_count(p, s)
+            msg = "Terminal wire labels on: %d terminal%s labeled" % (n, "" if n == 1 else "s")
+            missing = panelwiring.describe_missing(panelwiring.without_positions(p, s))
+            self._say(msg + ("; " + missing if missing else ""))
+        else:
+            self._say("Terminal wire labels off")
+        self._update_ui()
+
     def show_terminal_count(self):
         v = self.view()
         if v is None:
@@ -3868,6 +3983,32 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet(), shown, others)
         if attrs is None:
             return
+        from . import wirenums
+        typed = (attrs.get("TAG") or "").strip()
+        if wirenums.renumbers(v.project, v.sheet(), ins, typed) is not None:
+            # (a source arrow's name on a numbered wire: the wire's new number, with the rest
+            # of the answer in its step; the owner, Nov 27 2026)
+            kept = dict(attrs, TAG=ins.attrs.get("TAG", ""))
+            rest = self.attribute_changes(v.project, v.sheet(), ins, kept, shown, others)
+            if self.arrow_renumbers(v, ins, typed, rest):
+                return
+            attrs = kept                # (not taken, as on the wire: the rest of the answer)
+        elif ins.defn is not None and ins.defn.wiring == "link" and \
+                typed.upper() != (ins.attrs.get("TAG") or "").strip().upper():
+            # (an arrow's name numbering would put back: the rest of the answer kept, its
+            # name left as it was, and why said; as the Properties panel refuses it)
+            try:
+                with v.project.edit("Attributes") as ed:
+                    for sh, e in self.attribute_changes(v.project, v.sheet(), ins, attrs,
+                                                        shown, others):
+                        ed.change(sh, e)
+                    why = wirenums.name_refused(ed, v.project, v.sheet(), ins.id, typed)
+                    if why:
+                        raise wirenums.NameRefused(why)
+                return
+            except wirenums.NameRefused as ex:
+                self._say("%s %s kept: %s" % (ins.block, ins.attrs.get("TAG") or "", ex))
+                attrs = dict(attrs, TAG=ins.attrs.get("TAG", ""))
         changes = self.attribute_changes(v.project, v.sheet(), ins, attrs, shown, others)
         if changes:
             with v.project.edit("Attributes") as ed:
@@ -3882,6 +4023,14 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         two always change the same things the same way."""
         from . import tags
         hidden = shown.get("hidden", ins.hidden)
+        if "TAG" in ins.hidden and "TAG" not in hidden and ins.attrs.get("TAGLINK") == "1":
+            # a contact block's tag shown by hand while it is on its operator's dashed line:
+            # it stays shown (xrefs.sync_block_tags would hide it again at once)
+            attrs = dict(attrs, TAGLINK="0")
+        elif "TAG" in hidden and "TAG" not in ins.hidden and "TAGLINK" in attrs:
+            attrs = {k: x for k, x in attrs.items() if k != "TAGLINK"}    # (hidden by hand)
+        from .wirenums import unlink_renamed
+        attrs = unlink_renamed(project, ins, attrs)     # (a destination arrow's name typed)
         if ins.defn is not None and ins.defn.kind == "footprint" and \
                 attrs.get("TAG", "") != ins.attrs.get("TAG", ""):
             # a footprint's tag typed: the device with that tag is the one it is now (none
@@ -4222,11 +4371,15 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                                             bool(num))
         self.apply_wire_number(v, cur, num, lock, own, was, style, on_pin)
 
-    def apply_wire_number(self, v, cur, num, lock, own="", was="", style=None, on_pin=False):
+    def apply_wire_number(self, v, cur, num, lock, own="", was="", style=None, on_pin=False,
+                          before=(), name="Wire number"):
         """A wire's number as the Wire number window answers it (num, locked or not; own:
         "own", "same" or "" for how it numbers as a tap, was: as it did; style: its tap
         suffix's), one step; a number another wire has asks whether it is a cross-reference.
-        The Properties panel's Wire number goes through it too. Returns whether it changed."""
+        The Properties panel's Wire number goes through it too, and a name typed for a source
+        arrow on a numbered wire (arrow_renumbers): before, [(sheet, changed copy)] made in
+        the same step (the rest of an attributes window's answer). Returns whether it
+        changed."""
         from . import wirenums
         if style is None:
             style = cur.tap_style
@@ -4236,17 +4389,20 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             return False
         go_same = False
         if num and num != (cur.num or ""):
-            go = self._cross_reference(v, cur, num, lock)
+            go = self._cross_reference(v, cur, num, lock, before)
             go_same = go == "lock"
-            if not go:
-                return False
+            if not go or go == "done":
+                return bool(go)
             if go == "lock" and not lock:
                 # (two wires with one number: only a locked one stays, numbering gives an
                 # unlocked one a free number again; the battery, 0.17.5, seed 77)
                 lock = True
                 self._say("Wire %s locked: another wire has that number, and numbering "
                           "would change an unlocked one" % num)
-        with v.project.edit("Wire number") as ed:
+        with v.project.edit(name) as ed:
+            for sh, e in before:
+                ed.change(sh, e)
+                cur = v.sheet().entities[cur.id]
             if style != cur.tap_style:
                 # (every wire of its group: one style for the tap, whichever is clicked)
                 got_g = wirenums.group_of(v.project, v.sheet(), cur)
@@ -4270,14 +4426,30 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                     ed.project_settings({"same_numbers": kept + [num]})
         return True
 
-    def _cross_reference(self, v, cur, num, lock):
+    def arrow_renumbers(self, v, ins, typed, before=()):
+        """A name typed for a source arrow on a numbered wire (its attributes window, or Tag in
+        the Properties panel) numbers the wire, as that number typed on the wire does (the
+        owner, Nov 27 2026: "Renumber the wire"): locked, the cross-reference question when
+        another wire has it, and its destination arrows follow; before (the rest of an
+        attributes window's answer) in the same step. Returns whether it was taken; when
+        not, the reason was said or asked as typing it on the wire says it."""
+        from . import wirenums
+        wire = wirenums.renumbers(v.project, v.sheet(), ins, typed)
+        if wire is None:
+            return False
+        num = (typed or "").strip()
+        was = "own" if wire.own_num else "same" if wire.same_num else ""
+        return self.apply_wire_number(v, wire, num, bool(num), was, was, before=before,
+                                      name="Attributes" if before else "Wire number")
+
+    def _cross_reference(self, v, cur, num, lock, before=()):
         """A number typed that another wire already has: asked whether this is a cross-
         reference (the owner, 0.17.5: "it should ask me if it's a cross reference and whether
         it's a source or destination"). Source or destination: off-sheet connectors of a new
         name on the open ends of both, and the number on the one wire they make, in one step;
         True to go on as typed (no other wire has it), "lock" to go on with it locked ("just
-        the same number": only a locked number stays beside another wire's); False when it is
-        done here or cancelled."""
+        the same number": only a locked number stays beside another wire's); "done" when it is
+        done here (with before, apply_wire_number's, in its step), False when cancelled."""
         from . import wirenums
         project, sheet = v.project, v.sheet()
         others = wirenums.others_numbered(project, sheet, cur, num)
@@ -4306,6 +4478,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         out_def = self.library.get("symbol", "Source arrow")
         in_def = self.library.get("symbol", "Destination arrow")
         with project.edit("Cross-reference") as ed:
+            for sh, e in before:
+                ed.change(sh, e)
             name = wirenums.cross_reference(ed, project, here, there, out_def, in_def,
                                             how == "source")
             wirenums.set_number(ed, project, sheet, sheet.entities[cur.id], num, lock)
@@ -4318,7 +4492,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                     lock = True
         self._say("Wire %s%s: connectors %s here and at %s (Undo takes them back)"
                   % (num, " (locked: numbering would change it)" if lock else "", name, where))
-        return False
+        return "done"
 
     def ask_cross_reference(self, num, where):
         """A number already used: "source", "destination", "same" or None (a test replaces
@@ -4479,7 +4653,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                   "schematic_settings", "panel_settings", "object_color", "renumber",
                   "update_numbers", "lock_numbers", "num_source", "sig_arrows", "stretch",
                   "xref_update", "xref_freeze", "xref_auto", "dim_linear", "dim_aligned", "dim_units", "leader", "hatch", "mtext", "use_tb",
-                  "rail", "duct", "materials", "missing_fp", "bom", "cables", "wire_list", "terminal_list", "terminal_count", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
+                  "rail", "duct", "materials", "missing_fp", "bom", "cables", "wire_list", "terminal_list", "terminal_strips", "terminal_plan", "terminal_count", "wiring_list", "attr_vis", "wire_cross", "lay_off", "lay_iso", "lay_on",
                   "lay_lock", "lay_unlock",
                   "line", "polyline", "rect", "circle", "circle_d", "circle_2p", "circle_3p",
                   "circle_ttr", "arc", "text", "move", "copy", "rotate",
@@ -4527,6 +4701,12 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             a[key].setChecked(on)
             a[key].blockSignals(False)
         a["xref_freeze"].setEnabled(bool(has and not on_tb))
+        # (Terminal wire labels: a panel sheet's own setting)
+        panel = bool(has and not on_tb and v.sheet().kind == "panel")
+        a["terminal_labels"].blockSignals(True)
+        a["terminal_labels"].setChecked(bool(panel and v.sheet().terminal_labels))
+        a["terminal_labels"].blockSignals(False)
+        a["terminal_labels"].setEnabled(panel)
         a["sheet_scale"].setEnabled(bool(has and not on_tb))
         a["sheet_cw"].setEnabled(bool(has and not on_tb))
         a["sheet_ccw"].setEnabled(bool(has and not on_tb))

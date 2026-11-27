@@ -123,6 +123,31 @@ class RibbonFitsTest(unittest.TestCase):
                 self.assertGreaterEqual(order.index(g.shown), order.index(g.size)
                                         if g.size == "large" else 1)
 
+    def test_every_tab_fits_a_narrow_window(self):
+        r = self.win.ribbon
+        for i in range(r.count()):
+            need, room, _small = self.fitted(1000, r.tabText(i))
+            self.assertLessEqual(need, room, "the %s tab is %d wide in %d"
+                                 % (r.tabText(i), need, room))
+
+    def test_every_ribbon_button_has_an_icon(self):
+        # (one without showed its name even as icons alone: Wire color label was 75 pixels
+        # wide, and the Schematic tab didn't fit a 1000-pixel window on CI's fonts, 0.29)
+        r = self.win.ribbon
+        bare = [(r.tabText(i), w.defaultAction().text())
+                for i in range(r.count()) for g in r._groups[r.widget(i).widget()]
+                for w in g.widgets
+                if isinstance(w, QToolButton) and w.defaultAction() is not None
+                and w.defaultAction().icon().isNull()]
+        self.assertEqual(bare, [])
+
+    def test_schematic_tab_as_icons_has_room_to_spare(self):
+        # (fonts differ: CI's Linux ones made it 18 pixels wider than here, 0.29; as icons
+        # alone it leaves a real margin in a 1000-pixel window, 992 of room)
+        need, room, small = self.fitted(300, "Schematic")
+        self.assertTrue(all(s == "icons" for s in small.values()), small)
+        self.assertLessEqual(need, 960)
+
     def test_as_built_again_with_room(self):
         self.fitted(1000, "Schematic")
         need, room, small = self.fitted(4000, "Schematic")

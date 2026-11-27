@@ -85,17 +85,20 @@ class CommandsTest(unittest.TestCase):
             self.v.cmd.enter()
         e = self.s.inserts()[0]
         texts = [w.text for w in e.world_entities() if isinstance(w, M.Text)]
-        self.assertIn("1", texts)
-        self.assertIn("2", texts)
+        # (a contact's pins by its own numbers, numbered as placed: 13 and 14, 0.28)
+        self.assertIn("13", texts)
+        self.assertIn("14", texts)
         self.assertIn("PINS", e.shown_names())
         # hidden on that copy
         with self.p.edit("hide") as ed:
             ed.change(self.s, e.copy(hidden=["PINS"]))
         e = self.s.entities[e.id]
         self.assertEqual([w.text for w in e.world_entities() if isinstance(w, M.Text)
-                          and w.text in ("1", "2")], [])
-        # the built-in contact doesn't show them; a symbol saved and opened keeps the choice
-        self.assertFalse(lib.get("symbol", "Contact NO").show_pins)
+                          and w.text in ("13", "14")], [])
+        # the built-in contacts show them since 0.28 (their numbers, 13-14); a coil doesn't; a
+        # symbol saved and opened keeps the choice
+        self.assertTrue(lib.get("symbol", "Contact NO").show_pins)
+        self.assertFalse(lib.get("symbol", "Relay coil").show_pins)
         self.assertTrue(M.BlockDef.from_dict(d.to_dict()).show_pins)
 
     def test_pin_names_read_across_however_turned(self):

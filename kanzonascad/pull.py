@@ -37,12 +37,13 @@ def location_of(sheet, ins):
 
 def landing_name(ins, pin):
     """A wire's landing: a terminal by its strip and number (TB1-12, TB1 when it has no number
-    yet); anything else by its tag and pin (CR1:A1; the block's name when it has no tag)."""
+    yet); anything else by its tag and pin (CR1:A1, a contact by its own number, CR1:13; the
+    block's name when it has no tag)."""
     tag = (ins.attrs.get("TAG", "") or "").strip()
     if is_terminal(ins):
         term = (ins.attrs.get("TERM", "") or "").strip()
         return "%s-%s" % (tag or "TB?", term) if term else (tag or "TB?")
-    return "%s:%s" % (tag or ins.block_name, pin)
+    return "%s:%s" % (tag or ins.block_name, ins.pin_number(pin))
 
 
 def is_terminal(ins):

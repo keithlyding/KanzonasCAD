@@ -111,6 +111,12 @@ def read_folder(folder, subfolders=False):
     return rows
 
 
+def as_read(rows):
+    """Everything a Found row holds, to compare two readings."""
+    return [(r.name, r.path, r.error, r.whole, r.kind, r.ticked,
+             None if r.defn is None else r.defn.to_dict()) for r in rows]
+
+
 class ReadingTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -186,6 +192,35 @@ class ReadingTest(unittest.TestCase):
         self.assertEqual(sts[self.rows.index(bad)], "error")
         self.assertEqual(sts.count("new"), 5)
 
+    def test_read_from_its_bytes_as_from_the_file(self):
+        # (0.29: the bytes read on a thread, block_import.load, the blocks made from them on
+        # the event loop: the same rows as reading the file, for every kind of file)
+        d = tempfile.mkdtemp()
+        paths = BI.drawing_files(self.folder, True)
+        doc = ezdxf.readfile(os.path.join(self.folder, "HCR1.dxf"))
+        binary = os.path.join(d, "binary coil.dxf")
+        doc.saveas(binary, fmt="bin")
+        with open(os.path.join(self.folder, "my blocks.dxf"), "rb") as f:
+            text = f.read()
+        broken = os.path.join(d, "broken.dxf")          # (read by ezdxf's recover mode)
+        with open(broken, "wb") as f:
+            f.write(text.replace(b"ENDSEC", b"ENDSEX", 1))
+        crlf = os.path.join(d, "windows lines.dxf")
+        with open(crlf, "wb") as f:
+            f.write(text.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+        latin = os.path.join(d, "latin.dxf")           # (an older drawing's code page)
+        doc = ezdxf.new("R2000")
+        doc.header["$DWGCODEPAGE"] = "ANSI_1252"
+        doc.modelspace().add_attdef("TAG1", (0, 0), text="caf\xe9")
+        doc.modelspace().add_line((0, 0), (1, 0))
+        doc.saveas(latin, encoding="cp1252")
+        missing = os.path.join(d, "gone.dxf")
+        for p in paths + [binary, broken, crlf, latin, missing]:
+            self.assertEqual(as_read(BI.read_blocks(p, BI.load(p))), as_read(BI.read_blocks(p)),
+                             p)
+        self.assertIsNotNone(BI.read_blocks(binary, BI.load(binary))[0].defn)
+        self.assertEqual(BI.load(missing)[0], "error")
+
     def test_dwg(self):
         # (ezdwg writes DWG: a coil kept as one block, read through the DWG reader)
         import ezdwg
@@ -200,6 +235,7 @@ class ReadingTest(unittest.TestCase):
         path = os.path.join(tempfile.mkdtemp(), "HFU1.dwg")
         d.save(path, strict=False)
         rows = BI.read_blocks(path)
+        self.assertEqual(as_read(BI.read_blocks(path, BI.load(path))), as_read(rows))
         self.assertEqual(len(rows), 1, [r.error for r in rows])
         self.assertIsNone(rows[0].error)
         self.assertEqual(rows[0].name, "HFU1")
@@ -211,6 +247,7 @@ class ReadingTest(unittest.TestCase):
         with open(bad, "wb") as f:
             f.write(b"AC1032 not really")
         rows = BI.read_blocks(bad)
+        self.assertEqual(as_read(BI.read_blocks(bad, BI.load(bad))), as_read(rows))
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0].error)
 
@@ -426,13 +463,13 @@ class WindowTest(unittest.TestCase):
         dlg.folder = self.folder
         dlg.set_rows(rows)
         imp = dlg.importer()
-        real = L._write_json
+        real = L._write_text
         turns = []
         real_turn = IB.Progress.turn
 
-        def slow(path, data):
+        def slow(path, text):
             time.sleep(0.3)
-            real(path, data)
+            real(path, text)
 
         def turn(prog):
             turns.append(1)
@@ -440,18 +477,167 @@ class WindowTest(unittest.TestCase):
         # (0.25 set the tests before's objects aside here, gc.freeze: Python's collector went
         # through them in the middle, 0.17 s once on the Linux build; since 0.26 the program
         # does that itself, gcpolicy)
+        # (a sweep queued when an earlier test's window closed runs on the next turn of the
+        # event loop: let it run before the wait is timed, as test_023_trace does)
+        APP.processEvents()
         try:
-            L._write_json = slow
+            L._write_text = slow
             IB.Progress.turn = turn
             done, longest = IB.put_in(self.win, imp)
         finally:
-            L._write_json = real
+            L._write_text = real
             IB.Progress.turn = real_turn
         dlg.deleteLater()
         self.assertTrue(done)
         self.assertTrue(imp.imported)
         self.assertGreater(len(turns), 10)          # (the event loop turned while it wrote)
         self.assertLess(longest, 0.1)
+
+    def test_a_slow_disk_doesnt_make_a_big_import_slow(self):
+        # (0.27.1: 200 block files, each flushed to disk, one after the other took 12 s and
+        # 15 s on the Windows build where they had taken 2 s: the disk's waits added up.
+        # Written several at a time they overlap: here 40 files of 0.05 s each, 2 s one
+        # after the other)
+        import threading
+        from kanzonascad import library as L
+        folder = tempfile.mkdtemp()
+        for i in range(40):
+            coil_dxf(os.path.join(folder, "HCR%03d.dxf" % i))
+        rows, _step = IB.scan(self.win, BI.drawing_files(folder))
+        imp = BI.Importer(self.lib, rows)
+        real = L._write_text
+        lock = threading.Lock()
+        at_once = {"now": 0, "most": 0}
+
+        def slow(path, text):
+            with lock:
+                at_once["now"] += 1
+                at_once["most"] = max(at_once["most"], at_once["now"])
+            time.sleep(0.05)
+            with lock:
+                at_once["now"] -= 1
+            real(path, text)
+        APP.processEvents()
+        try:
+            L._write_text = slow
+            t0 = time.perf_counter()
+            done, longest = IB.put_in(self.win, imp)
+            dt = time.perf_counter() - t0
+        finally:
+            L._write_text = real
+        self.assertTrue(done)
+        self.assertEqual([n for _r, n in imp.imported], ["HCR%03d" % i for i in range(40)])
+        own, bad = Library(self.lib.folder)._own_blocks("symbol")
+        self.assertEqual((len(own), bad), (41, []))     # (and HCR1, there before)
+        self.assertGreater(at_once["most"], 1)
+        self.assertLessEqual(at_once["most"], IB.WRITERS)
+        self.assertLess(dt, 1.0, "40 slow writes took %.2f s" % dt)
+        self.assertLess(longest, 0.1)
+
+    def test_one_name_twice_written_in_order(self):
+        # (two rows of one name, both Replace it: written one after the other, never at
+        # once, the second one last; rolled back, the library's own is back)
+        from kanzonascad import library as L
+        a, b = (BI.Found("HCR1", "/x/%s.dxf" % k, M.BlockDef(
+            "HCR1", "symbol", [M.Line((0, 0), (w, 0))])) for k, w in (("a", 1), ("b", 3)))
+        for r in (a, b):
+            r.choice = "replace"
+        before = snapshot(self.lib.folder)
+        real = L._write_text
+        writing = []
+
+        def slow(path, text):
+            writing.append(path)
+            clash = len(set(writing)) != len(writing)
+            time.sleep(0.05)
+            real(path, text)
+            writing.remove(path)
+            if clash:
+                raise OSError("two writes of %s at once" % path)
+        try:
+            L._write_text = slow
+            imp = BI.Importer(self.lib, [a, b], "Twice")
+            done, _longest = IB.put_in(self.win, imp)
+        finally:
+            L._write_text = real
+        self.assertTrue(done)
+        self.assertEqual((imp.failed, [n for _r, n in imp.imported]), ([], ["HCR1", "HCR1"]))
+        got = Library(self.lib.folder).get("symbol", "HCR1")
+        self.assertEqual((got.category, got.extents()[2]), ("Twice", 3))
+        imp.rollback()
+        self.assertEqual(snapshot(self.lib.folder), before)
+
+    def slow_disk(self):
+        """Every file call (looking for a file, opening, listing, renaming, flushing) made
+        0.3 s slow, on whichever thread makes it: a context manager."""
+        import builtins
+        import contextlib
+
+        def slowed(fn):
+            def call(*a, **k):
+                time.sleep(0.3)
+                return fn(*a, **k)
+            return call
+        where = [(os.path, "exists"), (os.path, "isdir"), (os, "stat"), (os, "listdir"),
+                 (os, "makedirs"), (os, "replace"), (os, "remove"), (os, "fsync"),
+                 (os, "access"), (builtins, "open")]
+
+        @contextlib.contextmanager
+        def slow():
+            real = [getattr(m, n) for m, n in where]
+            try:
+                for (m, n), fn in zip(where, real):
+                    setattr(m, n, slowed(fn))
+                yield
+            finally:
+                for (m, n), fn in zip(where, real):
+                    setattr(m, n, fn)
+        return slow()
+
+    def test_the_event_loop_never_waits_on_the_disk(self):
+        # (0.27.2's Windows build: one step of 0.45 s between two turns of the event loop
+        # while the blocks were written: the event loop looked on the disk for each block's
+        # file and read the one it replaced. Now only the threads touch the disk: replacing
+        # a block, and Cancel's rollback, too)
+        rows, _step = IB.scan(self.win, BI.drawing_files(self.folder))
+        for r in rows:
+            r.choice = "replace"
+        before = snapshot(self.lib.folder)
+        imp = BI.Importer(self.lib, rows)
+        APP.processEvents()
+        with self.slow_disk():
+            done, longest = IB.put_in(self.win, imp)
+        self.assertTrue(done)
+        self.assertIn("HCR1", [n for _r, n in imp.imported])        # (replaced)
+        self.assertLess(longest, 0.1)
+        imp.rollback()
+        self.assertEqual(snapshot(self.lib.folder), before)
+        # (Cancel after the first block: the rollback on a thread)
+        imp = BI.Importer(self.lib, rows)
+        real = IB.Progress.tick
+        IB.Progress.tick = lambda prog, done, text=None: real(prog, done, text) and done < 1
+        try:
+            with self.slow_disk():
+                done, longest = IB.put_in(self.win, imp)
+        finally:
+            IB.Progress.tick = real
+        self.assertFalse(done)
+        self.assertLess(longest, 0.1)
+        self.assertEqual(snapshot(self.lib.folder), before)
+
+    def test_reading_never_waits_on_the_disk(self):
+        # (0.29's Windows build: one step of 0.12 s between two turns of the event loop while
+        # the drawings were read, the others 0.01 s: a file just written opened slowly, the
+        # virus scanner looking at it first. Now the threads read the files, a few ahead, and
+        # the event loop makes the blocks from what they read)
+        APP.processEvents()
+        with self.slow_disk():
+            rows, longest = IB.scan(self.win, BI.drawing_files(self.folder, True))
+        self.assertLess(longest, 0.1)
+        self.assertEqual(as_read(rows), as_read(read_folder(self.folder, True)))
+        self.assertEqual(sorted({r.name for r in rows}),
+                         ["HCR1", "HCR9", "HLS11", "HPB11", "RELAY BASE", "damaged",
+                          "metric coil"])
 
     def test_imported_symbol_takes_a_wire(self):
         IB.ImportBlocksDialog.exec = lambda dlg: QDialog.Accepted

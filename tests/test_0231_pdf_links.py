@@ -170,8 +170,11 @@ class PdfLinksTest(unittest.TestCase):
         coil, src, dst = self.now(s1, self.coil), self.now(s1, self.src), self.now(s2, self.dst)
         z = self.p.zone_text
         # under the coil: a line for each contact, to the contact
-        self.check_link(reader, 0, s1, self.ref(s1, "NO " + z(s2, *no.pos)), 1, s2, no, path)
-        self.check_link(reader, 0, s1, self.ref(s1, "NC " + z(s3, *nc.pos)), 2, s3, nc, path)
+        # (each with its pin numbers, 0.28)
+        self.check_link(reader, 0, s1, self.ref(s1, "NO 13-14 " + z(s2, *no.pos)), 1, s2, no,
+                        path)
+        self.check_link(reader, 0, s1, self.ref(s1, "NC 21-22 " + z(s3, *nc.pos)), 2, s3, nc,
+                        path)
         # under each contact (on a turned sheet, on a scaled one): to the coil
         self.check_link(reader, 1, s2, self.ref(s2, z(s1, *coil.pos)), 0, s1, coil, path)
         self.check_link(reader, 2, s3, self.ref(s3, z(s1, *coil.pos)), 0, s1, coil, path)
@@ -185,7 +188,7 @@ class PdfLinksTest(unittest.TestCase):
         _path, reader, n = self.export([self.s1, self.s2])
         self.assertEqual(n, 2)
         nc = self.now(self.s3, self.nc)
-        item = self.ref(self.s1, "NC " + self.p.zone_text(self.s3, *nc.pos))
+        item = self.ref(self.s1, "NC 21-22 " + self.p.zone_text(self.s3, *nc.pos))
         tb = xrefs.text_item(item).bbox()
         mid = page_xy(self.s1, (tb[0] + tb[2]) / 2.0, (tb[1] + tb[3]) / 2.0)
         rects = [[float(v) for v in a["/Rect"]] for a in self.annots(reader.pages[0])]
@@ -314,6 +317,42 @@ class PdfLinksTest(unittest.TestCase):
             NameObject("/Dest"): ArrayObject([w.pages[0].indirect_reference,
                                               NameObject("/Fit")])}))
         bad = os.path.join(self.tmp, "stray.pdf")
+        with open(bad, "wb") as f:
+            w.write(f)
+        with self.assertRaises(AssertionError):
+            BC.pdf_links_right(self.p, bad, self.p.sheets)
+
+    def test_the_battery_check_with_an_arrow_text_over_the_place_of_another(self):
+        # (the short battery, 0.26, seed 5: a source and a destination arrow a little apart,
+        # each's whole "1003B / 3-E2" its link, the second's text drawn over the first's
+        # "3-E2": the check gave the first text the second's link, nearer its place, and then
+        # found the second with none of its own)
+        from pypdf import PdfWriter
+        from pypdf.generic import ArrayObject, NameObject
+        from tests import battery_checks as BC
+        with self.p.edit("two wires on the panel") as ed:
+            ed.add(self.s3, M.Wire([(12.0, 20.0), (13.0, 20.0)], num="1003B", num_lock=True))
+            ed.add(self.s3, M.Wire([(13.4, 20.0), (14.2, 20.0)], num="1003B", num_lock=True))
+        src = self.place(self.s3, SRC, (13.0, 20.0))
+        self.place(self.s3, DST, (14.2, 20.0), self.now(self.s3, src).attrs["TAG"])
+        first, second = sorted((t for t in xrefs.shown(self.p, self.s3)
+                                if t[2].startswith("1003B / ")), key=lambda t: t[0])
+        a, b = xrefs.text_item(first).bbox(), xrefs.text_item(second).bbox()
+        self.assertTrue(b[0] < a[2] - 0.3 * (a[2] - a[0]), (a, b))   # (drawn over its place)
+        path, reader, _n = self.export()
+        self.assertGreater(BC.pdf_links_right(self.p, path, self.p.sheets), 0)
+        # (with one of the two links taken out, the check still fails)
+        w = PdfWriter(clone_from=reader)
+        page = w.pages[2]
+        mid = page_xy(self.s3, (b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0)
+        keep = [r for r in page["/Annots"] if not (
+            abs((float(r.get_object()["/Rect"][0]) + float(r.get_object()["/Rect"][2])) / 2.0 -
+                mid[0]) < 0.5 and
+            abs((float(r.get_object()["/Rect"][1]) + float(r.get_object()["/Rect"][3])) / 2.0 -
+                mid[1]) < 0.5)]
+        self.assertEqual(len(keep), len(page["/Annots"]) - 1)
+        page[NameObject("/Annots")] = ArrayObject(keep)
+        bad = os.path.join(self.tmp, "one-gone.pdf")
         with open(bad, "wb") as f:
             w.write(f)
         with self.assertRaises(AssertionError):

@@ -255,17 +255,131 @@ nobody understands).
     a branch (three ends) or an overlap; an arc only with arcs of its circle (polylines are
     straight); gaps up to 0.03" on paper said.
 
+- 0.27, terminal strips (the owner's list, item 4). Decided while building it (Claude, Nov 26
+  2026; to confirm with the owner):
+  - **A strip** is the terminals linked to a Terminal strip symbol (by its hidden id, so a strip
+    renumbered with its page, TB601 to TB701, keeps what is kept of it), or, with no strip
+    symbol, sharing a tag (kept as "tag:TB1"; a strip symbol given that tag later takes it
+    over). The same number drawn twice (two sheets) is one terminal, its wires from both.
+  - **Internal and external sides**: a terminal's two pins as its block is drawn. The internal
+    side is the one wired inside the strip's location (its sheet's, or its own Location), the
+    external one goes to another location (shown with it: LT1:1 (FIELD)); with no locations
+    the left pin is internal, the right external. Worked out from the schematic every time,
+    across sheets through off-sheet connectors and arrows; never kept.
+  - **Kept with the project** (its settings, "strips", per strip; one Undo with the numbers):
+    the order when it isn't number order, the spares (a number on the strip, nothing drawn) and
+    the jumpers (each the terminal numbers it bridges; a terminal on two is one jumper). A
+    terminal placed later goes after the one numbered just below it; one placed with a spare's
+    number (the lowest free one) is that terminal from then on. A number typed on the drawing
+    that leaves the kept order or jumpers behind drops out of them (they follow numbers, as
+    the editor's Renumber rewrites them).
+  - **The editor** (Terminal strips..., Panel tab as AutoCAD Electrical's terminal strip
+    editor, and the Sheets menu) is a window like Cables between locations: OK writes every
+    strip changed in one step, Cancel keeps nothing. Renumber numbers the whole strip, spares
+    too, in the order shown from a number given (1 to start), the terminals with none too. A
+    spare is numbered one past the highest. It works out the wires of a strip when it first
+    shows it, not of every strip, so it opens at once (budget: 50 strips of 100 terminals
+    opened < 0.5 s); no work on the event loop was needed.
+  - **Terminal plan...** is a report of its own beside Terminal strip list... (kept as it
+    was): the strips in their order, each terminal's internal and external wire and what it goes
+    to, its jumper (J1: 1, 2, 3) and where it is drawn; CSV, Excel and a report sheet.
+  - Not done (later, if wanted): multi-level terminals (each level a terminal of its own number
+    for now), jumpers drawn on the schematic (a jumper wire is drawn as a wire), a strip drawn
+    on a panel sheet as a footprint per terminal (place the Terminal block footprints on the
+    rail; it fits with 0.28's panel wiring).
+  - **Near misses: "Warn on the drawing"** (the owner's decision, Nov 26 2026). A symbol turned
+    to an odd angle (45 degrees) has its pins off the grid, so a pin, or a wire run from one,
+    can stop a few thousandths from an unrelated wire (long battery, seed 5052). Joining them
+    automatically would wire two circuits together, and the battery's check may not simply
+    leave them out: the program finds every wire end and pin within 0.01" of a wire, wire end
+    or pin without being joined to it (nearmiss.py, the battery's definition) and marks it red
+    on the drawing with a command-line message, as duplicate tags are, until the user moves it
+    away or joins it. The battery accepts a near miss only when the program marks it and a
+    turned symbol explains it (a pin of a symbol turned off the right angles, or a wire from
+    such a pin, or that wire's off-grid coordinates carried off the pin); any other near miss
+    is the program's own slop and still fails, marked or not, as does a mark where nothing
+    almost meets; and Move and Copy must leave no wire end of theirs a hair short.
+
+- 0.28, panel wiring (the owner's list, item 5; his answers of 0.22.1: "yes, a per device wiring
+  list", and point-to-point as labels on the footprints' terminals rather than a drawn
+  diagram, which "seems extremely busy"). Decided while building it (Claude, Nov 26 2026; to
+  confirm with the owner):
+  - **Device wiring list...** (Sheets menu; Panel tab, Reports; Output tab, on the Wire list
+    button's menu; a report sheet; CSV and Excel): a unit per device, its own symbol and those
+    linked to it (contacts, PLC points: its children), and one per strip terminal (TB1-4, every
+    place it is drawn). A row per pin and wire group on it (two wires landed on a pin: two rows;
+    an unwired pin one empty row, decided here: a spare terminal is worth seeing): wire number,
+    size (the wire's own, else its layer's), its layer's color, layer, the other pins the group
+    lands on (through connectors and arrows, as the terminal plan: strips.py's nets, reused),
+    each with its location when it isn't the device's, the device's location, where the pin's
+    symbol is, and Footprint: where the pin is on its footprint or why not (no footprint, no
+    terminal positions, no terminal of that name). Worked out every time, never kept.
+  - **A footprint's terminal positions are its block's pins**, named as the device's pins (Edit
+    block, Add pin / Pins...); one footprint stands for the whole device (a contactor's A1/A2
+    are its coil's, L1-T3 its power contacts'). A footprint with none: said in the report's
+    Footprint column and on the command line, never guessed. The program's own terminal blocks,
+    1- and 3-pole breakers and fuse holders, motor protector, rotary disconnect, contactors
+    and overload relay got pins (decided here: typical screw places, so the labels work out of
+    the box; the relays got theirs too, below; power supplies and PLCs have none yet).
+  - **A terminal's footprint** is a footprint with the terminal's number (TERM) linked to its
+    strip: placing a footprint, the device typed as TB1-4 (decided here, the strip's tag, a
+    dash, the number); a terminal block's footprint is asked even when every device already
+    has one; or Terminal number in its attributes window. It shows TB1-4 as its tag line; its
+    DXF tag attribute stays TB1.
+  - **Terminal wire labels** (Panel tab, Terminals): **decided here: per panel sheet** (Sheet's
+    terminal_labels, one Undo step, kept in the file), not per project, so a door layout or an
+    issued sheet stays clear. Each footprint terminal labeled "6001 → CR101:A1" (another
+    location shown, "(FIELD)"; a line per wire group; a number alone when it lands nowhere
+    else; decided here: a wire landing on more than three pins, a common or a neutral, names
+    the first two and how many more, "CR201:A2, CR202:A2 +4", the wiring list naming them all),
+    starting just off the pin and running out of the footprint on the side the pin is
+    nearest (measured against the box's half width and height), read across or upward
+    however the footprint is turned or flipped. Height: a project setting of its own, Panel
+    settings' Terminal wire label height, 0.05" on paper to start (decided here: the footprint
+    label height, 0.08", is too tall for terminal blocks 0.2" apart at 1:4). Derived, never
+    stored: worked out once per change of the project (any sheet's version, numbering, the
+    height, the wire layers) and kept with it until the next; the view's picture key already
+    changes with the project's revision. In the footprint label color when the project has
+    one. Printed, in PDF, and in DXF (layer PANEL).
+  - **Confirmed by the owner (Nov 27 2026):** Terminal wire label height 0.05" to start, a
+    terminal's footprint typed as TB1-4 as it is now, and terminal wire labels per sheet, off
+    to start.
+  - **Contact pin numbers: 13/14 and 21/22** (the owner, Nov 27 2026; pinnumbers.py). A
+    contact placed is numbered on its device the makers' way (Schneider TeSys, Sprecher +
+    Schuh CA7): first digit its sequence on the device, second 1-2 NC, 3-4 NO; decided here:
+    5-6 timed NC and 7-8 timed NO (EN 50005's special-function digits), the device's first NO
+    13-14 and first NC 21-22 whichever is drawn first (sequences 1 and 2, as a contactor's own
+    auxiliaries), any other contact the lowest sequence free on its device across the whole
+    project; an overload contact 95-96 (NC), 97-98 (NO) while free. A contact on no device is
+    numbered as the first of its kind; a pushbutton, switch or sensor is numbered on itself
+    with its contact blocks. Decided here: a contact added with numbers (Copy, Paste) or
+    linked to another device keeps them unless that device has them, then the next free pair;
+    typed numbers (Pin numbers, attributes window and Properties panel) are kept; drawings of
+    before 0.28 keep 1-2 (nothing renumbered on open, move or edit). Kept per copy as
+    attributes TERM01/TERM02 (AutoCAD Electrical's pin number attributes: they go out to DXF
+    and come back); shown beside the pins, under the coil ("NO 13-14 6-D3"), in Trace, the
+    wiring list and the terminal labels; wires and snaps keep the block's pin names.
+  - **Control relays got pins** (the owner, Nov 27 2026), and the contactors' auxiliaries
+    (13-14, 21-22) and the overload relay's 95-98. Decided here: the ice cube relays (8-pin: 2
+    poles; 14-pin: 4) and the slim relay (1) are changeover poles, pole n's common named both n1
+    and n3, its NC screw n2, its NO n4, so a NO contact 13-14 and an NC 21-22 land on real
+    screws whatever the order; the timer relay's two poles 15/17, 16, 18 and 25/27, 26, 28;
+    A1 and A2 at the bottom.
+  - Not done: labels that move out of each other's way where terminals are closer than the
+    text, a drawn point-to-point diagram (the owner's no), footprints placed for every
+    terminal of a strip at once.
+
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).
 2. Auto wire layer (0.22.1, above).
 3. Cross-reference navigation, Trace (0.23, above; put ahead of terminal strips by the
    owner, Nov 23 2026: "very important").
-4. Terminal strips (0.27; was 0.24 until Import blocks from folder... took 0.24, 0.25
-   until the Properties panel and Devices without a footprint took 0.25, then 0.26 until the
-   owner's handwritten list and the collector fix took 0.26, one release): strips,
+4. Terminal strips (done in 0.27, below; was 0.24 until Import blocks from folder... took
+   0.24, 0.25 until the Properties panel and Devices without a footprint took 0.25, then 0.26
+   until the owner's handwritten list and the collector fix took 0.26, one release): strips,
    jumpers, a strip editor, a terminal plan report.
-5. Panel wiring (0.28): a per-device wiring list (owner: yes); point-to-point as wire labels on
-   the footprints' terminals, not a drawn diagram (see 0.22.1).
+5. Panel wiring: done in 0.28 (below): a per-device wiring list (owner: yes); point-to-point
+   as wire labels on the footprints' terminals, not a drawn diagram (see 0.22.1).
 6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.29):
    "lean heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates
    library: not now.
@@ -282,31 +396,69 @@ nobody understands).
      its tag cleared (decided here: its old tag would link it to an unrelated device of the
      project), unlocked wire numbers go (the sheet numbers them), connectors and arrows get
      new names, the same within the circuit (decided here: a pair stays a pair; a lone one
-     waits for its other end), one undo step.
+     waits for its other end), one undo step. The owner confirmed (Nov 27 2026): a lone contact
+     stays unlinked with its tag cleared.
    - **More symbols and footprints, leaning on Allen-Bradley**: symbols drawn here in the
      JIC style (motor protection circuit breaker, electronic overload and its NO contact,
      3-position selector and its contacts, pilot light with its color letter, PLC modules of
      ControlLogix, CompactLogix, Compact 5000 and POINT I/O drawn whole); built-in parts by
      catalog number (100-C, 140M, E300, 700-HA, 800F contact blocks, 1492-J, 1606-XLP,
      PowerFlex 525, the PLC modules, controllers and chassis), read-only as the built-in
-     blocks are (a part of yours with the same id takes its place). Decided here: catalog
-     numbers only where their numbering is sure (E300's depends on three modules: left
-     blank); PLC modules' terminals named by point, not by Rockwell's terminal numbers (on
-     its wiring diagrams; Edit block renames them); footprints only where none generic is
-     near: PowerFlex 525 frames at Rockwell's published nominal sizes, the PLC modules and
-     chassis as "(approximate)"; parts use the generic footprints otherwise.
+     blocks are (a part of yours with the same id takes its place). Catalog numbers only
+     where their numbering is sure (E300's depends on three modules: left blank);
+     footprints only where none generic is near: PowerFlex 525 frames at Rockwell's
+     published nominal sizes, the PLC modules and chassis as "(approximate)"; parts use the
+     generic footprints otherwise (the owner confirmed all three, Nov 27 2026: as built).
+     PLC modules' pins (the owner, Nov 27 2026: "Both"): named by Rockwell's terminal (screw)
+     number as its wiring diagram prints it, the point beside it ("2  IN 0"), commons and
+     supplies too, only from Rockwell's own document, its publication named
+     (allen_bradley.TERMINALS); a module not confirmed stays by point. Wire numbers by
+     address and Import I/O list read the point from the text beside the pin. Done (Nov 27
+     2026): all 13 modules by their terminals, from Rockwell's installation instructions and
+     user manuals read through mirror sites (each publication, edition, page and URL in
+     allen_bradley.py). The owner's rules: pin name = the terminal number, the point beside
+     it as Rockwell prints it; 1756, 1734 and 5069 by their printed numbers (5069 0-17; the
+     5069-OB16's counted from the top); 1769, which prints none, by position 1-18 from the
+     top, said so in the manual; a pin for every screw, NC / No Connect / Not used ones
+     named so, none for the 1769-OF2's blacked-out positions; commons and supplies pins too.
+     An analog channel's V and I terminals are both its point; the wiring list and terminal
+     labels name the screw (PLC1:11). Footprints stay "(approximate)", no screw positions.
    - **IEC 60617 symbols as a project's symbol standard** (Project properties, Schematic:
      JIC/NFPA (US) or IEC 60617; every project from before and a new one JIC): a core set
      of 30 drawn here (coils, contacts and timed ones, pushbuttons, E-stop, selector, fuse,
      breaker, disconnector, thermal overload and its contact, lamp, motors 1~ and 3~,
      solenoid, transformer, 3-pole power devices, terminal, PE). Insert symbol offers the
      project's set in place of the other one's equivalents; the rest (PLC, drives,
-     connectors) in both. Decided here: laid out for horizontal rungs as the JIC set, and
-     with the JIC tag prefixes (CR, M, PB...), so tags, terminals, reports and
-     cross-references work unchanged. Still to come: IEC 81346 letter codes (K, Q, S, F, P,
-     X) as an option, vertical (IEC-style, top-to-bottom) layouts, and IEC versions of the
-     limit, pressure, temperature and float switches, the fused disconnect and starter
-     combinations, drive terminals and the distribution blocks.
+     connectors) in both. Decided here: laid out for horizontal rungs as the JIC set; the
+     symbols keep the JIC prefixes (CR, M, PB...), which say what kind of device each is to
+     the program.
+   - **IEC 81346-2 letter codes in an IEC project** (the owner, Nov 27 2026, into 0.29):
+     tags made of the device's class letter instead of the US prefix (tags.prefix_for), by
+     what it does (IEC 81346-2:2019 Table 1, from public summaries; the standard itself not
+     read): K control and timing relays and PLC modules; Q contactors (coil and main
+     contacts one device, one tag: 81346-2 puts power switching under Q, signal relays
+     under K), breakers, motor protection breakers, disconnects; S pushbuttons, selectors,
+     E-stops; F fuses and overload relays; P pilot lights; M motors and solenoids; T
+     transformers, power supplies and drives; X terminal strips (X601) and distribution
+     blocks. Decided here, open to the owner's change: limit, pressure, temperature and
+     float switches B (81346-2: sensing a condition), not S as the owner's list had them;
+     power supplies T (converting AC to DC), not G; PLC K, not A; drives T; solenoids M.
+     Devices of one letter share its counts on a page; your own prefixes are kept. A tag of
+     the other letters (the project's standard changed, No to retagging) is kept and follows
+     its page until Renumber sheet; copies take the project's letters. No project from before had IEC
+     symbols, so nothing is renumbered on open. The owner confirmed (Nov 27 2026): the
+     letters as built (B for sensing switches, T for power supplies and drives, K for PLCs);
+     terminal strips by page (X601, its terminals X601-1); switching the standard asks
+     "Retag the unlocked devices with the <new> letters?" (Yes retags them all in the same
+     Undo step, each keeping its page and count when free, contacts, terminals,
+     cross-references and arrows following, locked tags never changed; No keeps them;
+     Cancel cancels the whole Project properties change; not asked when there are none:
+     tags.retag_letters, through Update numbers' fix_sheet); a device or contact with no tag
+     yet shows the project's letter, K?, X?, Q? (BlockDef.tag_letter, set by the project).
+     PLC modules' screw numbers: entered (allen_bradley.TERMINALS, above). Still to come: vertical (IEC-style,
+     top-to-bottom) layouts, and IEC versions of the limit, pressure, temperature and float
+     switches, the fused disconnect and starter combinations, drive terminals and the
+     distribution blocks.
 7. **UDTs** (0.30, the owner, Nov 26 2026; named "UDT" as in PLCs and Ignition, the owner's
    choice): a circuit type built on saved circuits, for example a whole motor circuit
    (disconnect, manual starter, VFD, terminal blocks, motor).
@@ -542,7 +694,7 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
     - **Linux, more at home**: the app offers to add itself to the applications menu and to
       open `.kzcad` files on a double-click (as KanzonasPDF's linux_desktop.py does); listed on
       Flathub and AppImageHub (the AppStream metadata exists already: packaging/linux).
-14. Later (all wanted: the owner, Nov 2026): terminal strips, DWG export (written by our own
+14. Later (all wanted: the owner, Nov 2026): terminal strips (done in 0.27), DWG export (written by our own
     code: the owner, "You write it. Don't rely on some third party tool"), Sheets panel as a
     popup. Done in 0.21: PLC I/O from a spreadsheet, the color PDF option, in-place text
     editing.
