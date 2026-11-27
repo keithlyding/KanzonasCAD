@@ -21,6 +21,7 @@ name the window gives it is NAME, kept here only."""
 import math
 from collections import namedtuple
 
+from . import pinnumbers
 from . import tags
 from . import wirenums
 from .model import DashBox, Insert, Text, Wire
@@ -294,7 +295,9 @@ def role(e):
             return "Outlet"
         if d.contact:
             mark = MARK.get(d.contact, "")
-            return "%s contact%s" % (mark, ", timed" if d.contact[2:] else "")
+            nums = pinnumbers.text(e) if pinnumbers.numberable(e) else ""
+            return "%s contact%s%s" % (mark, ", timed" if d.contact[2:] else "",
+                                       " " + nums if nums else "")
         if d.prefix == "PLC":
             return "PLC module, continued"
         return "Contact"
@@ -541,5 +544,6 @@ def _landing_row(project, idx, s, e, pin, q):
         from .pull import landing_name
         return _row(project, s, [e.id], q, box, "Terminal", landing_name(e, pin),
                     _desc(e, dev[1] if dev else None))
-    return _row(project, s, [e.id], q, box, role(e), "%s pin %s" % (tag or e.block_name, pin),
+    return _row(project, s, [e.id], q, box, role(e),
+                "%s pin %s" % (tag or e.block_name, e.pin_number(pin)),
                 _desc(e, dev[1] if dev else None))

@@ -114,6 +114,11 @@ def export_dxf(project, sheet, path, include_frame=True, blocks=True):
                 for i in range(48)]
         ents.append(M.Polyline(oval, closed=True, layer=lay))
         ents.append(M.Polyline(leader, layer=lay))
+    # (a panel sheet's terminal wire labels, 0.28, on layer PANEL as its footprints)
+    from .panelwiring import labels as terminal_labels
+    lay = "PANEL" if "PANEL" in project.layers else "0"
+    for t in terminal_labels(project, sheet):
+        ents.append(t.copy(layer=lay))
     pictures = 0
     for e in ents:
         if isinstance(e, M.Picture):
@@ -312,9 +317,10 @@ def _write_insert(doc, msp, ins, names, flipped=()):
         if name in shown:
             st = shown[name]
             # (the tag's real value: a contact not linked yet shows "CR?" on the sheet, but
-            # has no tag, and AutoCAD's attribute holds none)
-            value = (ins.attrs.get("TAG", "") or "") if name == "TAG" and \
-                d.kind == "symbol" else st.text
+            # has no tag, and AutoCAD's attribute holds none; a terminal's footprint shows
+            # TB1-4, its tag TB1 and its number in TERM, 0.28)
+            value = (ins.attrs.get("TAG", "") or "") if name == "TAG" and (
+                d.kind == "symbol" or ins.attrs.get("TERM")) else st.text
             ent = ref.add_attrib(name, value, insert=st.pos,
                                  dxfattribs={"height": st.height, "rotation": st.angle,
                                              "layer": ins.layer or "0"})

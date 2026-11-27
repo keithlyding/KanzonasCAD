@@ -118,9 +118,9 @@ new ladders, and the height of new text.</li>
 <li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
 uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
 (changing it resizes every tag), and the symbol color.</li>
-<li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors, and
+<li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors,
 <b>Mark devices without a footprint on the drawing</b> (on to start: see Devices without a
-footprint).</li>
+footprint), and <b>Terminal wire label height</b> (see Panel wiring).</li>
 <li><b>Wire layers</b>: <b>New wires go on</b>, the wire layer new wires go on on every sheet
 that hasn't one of its own (WIRES to start), and the project's wire layers in a list, as in
 Layers...: <b>New</b> makes a wire layer of any name (CONTROL, say), <b>Add preset...</b> adds
@@ -784,6 +784,29 @@ contacts are never joined this way.</li>
 <li><b>Changing it later</b>: double-click the contact. "Belongs to" lists the project's
 devices; pick one or type a tag. Deleting a coil leaves its contacts unlinked (showing
 <b>?</b>) until a device takes that tag again.</li>
+<li><b>Pin numbers</b>: a contact is numbered as it is placed, the way contactor and relay makers
+mark theirs: the first digit is the contact's number on its device, the second what it is
+(1-2 normally closed, 3-4 normally open, 5-6 a timed NC, 7-8 a timed NO). A device's first NO
+contact is <b>13-14</b> and its first NC <b>21-22</b>, whichever you draw first, as a
+contactor's own auxiliary contacts are marked; every other contact takes the lowest number no
+contact of that device uses, on any sheet: a second NC is <b>31-32</b>, then an NO
+<b>43-44</b>; a second NO before any NC is <b>23-24</b>; a timer's timed NO <b>17-18</b>. An
+overload contact (Overload contact NC) is <b>95-96</b>, an overload's NO <b>97-98</b>, while
+those are free on its device. A pushbutton, an emergency stop, a selector switch or a limit
+switch is numbered on itself (13-14 for an NO, 21-22 for an NC) and its contact blocks with it;
+a contact on its own (no device) is numbered as the first of its kind. The numbers show beside
+its pins (Shown on the drawing, <b>Pin names</b>, hides them on a copy), in the list under its
+device (<b>NO 13-14 6-D3</b>), in Trace (<b>NO contact 13-14</b>), in the wiring lists
+(<b>CR101:13</b>) and on the terminal wire labels, and go to DXF as the attributes TERM01 and
+TERM02 (AutoCAD Electrical's names for a symbol's pin numbers), which a DXF opened again
+keeps. Copy and Paste: a copy keeps its numbers unless its device has them already, then it
+takes the next free pair (a copy of 13-14 on the same coil is 23-24, or 33-34 when 21-22 is
+taken too); the same when a contact is linked to another device (Belongs to) or links itself
+to a device that took its tag. Type your own in its <b>Pin numbers</b> (double-click it, or the
+Properties panel): two numbers, <code>13-14</code> or <code>13 14</code>; they are kept as
+typed, and left blank it shows its block's (1-2). Contactor power contacts (L1-T3), coils
+(A1, A2) and terminals keep their own names. Drawings made before 0.28 keep their contacts'
+1 and 2: nothing is renumbered when they are opened, moved or edited.</li>
 <li><b>Dashed box</b> (DB; Draw menu and the Schematic tab, Draw): a dashed outline around
 anything, with a note in it, that can belong to a device or to nothing. Pick two opposite
 corners; its window asks for the <b>Note</b> (several lines, written inside its top left
@@ -810,7 +833,8 @@ it to change its note or what it belongs to. Everything else is a dashed box's: 
 layer NOTES, listed under its device, and it moves, copies, turns, mirrors, stretches, prints
 and exports like any object.</li>
 <li><b>Cross-references</b> are worked out from the drawing, never typed: under a coil or
-operator, one line per contact, <b>NO 6-D3</b> or <b>NC 7-B2</b> (in sheet order, then zone
+operator, one line per contact, <b>NO 13-14 6-D3</b> or <b>NC 21-22 7-B2</b>, with its pin
+numbers (<b>NO 6-D3</b> for a contact of before 0.28 still showing 1-2; in sheet order, then zone
 order); under each contact, where its device is (<b>6-D1</b>). They use the project's grid
 reference format and each sheet's zones (or, by ladder, the rung: <b>NC 605</b>, <b>603</b>;
 see Ladders), and go into PDF and DXF exports as text.</li>
@@ -882,7 +906,8 @@ isn't one of these (a line, a text), leaves the list as it is.</li>
 <li>Each row gives <b>Where</b> (the zone, 6-D1, or the rung on a sheet by ladder),
 <b>Sheet</b> (its number and title), <b>Role</b>, <b>Name</b> and <b>Description</b>.</li>
 <li><b>A device</b> (a coil, a pushbutton, a terminal strip, a PLC module...): the device
-itself, each of its contacts (Role: <b>NO contact</b>, <b>NC contact</b>), its terminals and
+itself, each of its contacts (Role: <b>NO contact 13-14</b>, <b>NC contact 21-22</b>, with its
+pin numbers), its terminals and
 outlets, its footprints on panel sheets, its dashed boxes, any other symbol showing its tag
 (<i>not linked</i>), and, for a PLC module, each of its points that has a wire on it
 (<b>PLC input</b> or <b>PLC output</b>, with its address, its I/O list text and the wire's
@@ -929,7 +954,8 @@ source or destination arrow, its name, as in its attributes window (for a source
 numbered wire, the wire's new number, as typed on the wire); a contact shows the device
 it <b>Belongs to</b>), Description, Manufacturer, Catalog number, each
 attribute's value (a terminal's number, a PLC point's address, ratings; a linked footprint's
-ratings are its device's, as in its attributes window), a symbol's <b>Location</b>, <b>Lock
+ratings are its device's, as in its attributes window), a contact's <b>Pin numbers</b> (13-14;
+with one contact selected), a symbol's <b>Location</b>, <b>Lock
 this tag</b> and <b>No footprint needed</b>. Then <b>Text lines</b>: for a symbol, its tag and
 each attribute it can show, with <b>Shown</b>, its text size (read only: a symbol's tag takes
 the project's Tag height, Project properties, and its attributes their block's, Edit block)
@@ -1484,7 +1510,7 @@ writes them for a label printer (CSV) or as an Excel workbook (pick "Excel workb
 file's type: its header bold and kept in sight, columns wide enough, counts as numbers).</p>
 <p><b>Report sheet...</b> (Sheets menu) draws a report on sheets of the project, so it prints
 and goes into the PDF with the drawings: pick the bill of materials, wire list, terminal strip
-list, terminal plan, pull list, panel materials or devices without a footprint, and it comes in as a table (lines and texts on layer
+list, terminal plan, device wiring list, pull list, panel materials or devices without a footprint, and it comes in as a table (lines and texts on layer
 REPORT) on report sheets just after the sheet shown, as many as it takes ("Bill of materials (1
 of 3)"), in the room the border and title block leave; a cell too long for its column ends in
 "…". A report sheet isn't kept up to date as you draw (that would slow every change on a big
@@ -1539,9 +1565,73 @@ strip, terminal by terminal in its order: its number, the wire and what it goes 
 internal side and on its external side, its jumper (<b>J1: 1, 2, 3</b>: the terminals it
 bridges) and where it is drawn, spares included. <b>Save as CSV or Excel...</b> writes it, and
 <b>Report sheet...</b> draws it on sheets of the project (Terminal plan).</p>
-<p>Not yet: multi-level terminals (each level is a terminal of its own number for now), jumpers
-drawn on the schematic, and a strip drawn on a panel sheet (place its Terminal block footprints
-on the rail).</p>
+<p>Not yet: multi-level terminals (each level is a terminal of its own number for now) and
+jumpers drawn on the schematic. A strip on a panel sheet is its terminals' footprints on the
+rail, one Terminal block footprint for each terminal (Panel wiring, below).</p>
+
+<h2>Panel wiring</h2>
+<p>What the panel builder needs to land every wire, worked out from the schematic each time
+(never kept, so it is never out of date): the <b>device wiring list</b>, and the <b>terminal
+wire labels</b> on the footprints of a panel sheet.</p>
+<p><b>Device wiring list...</b> (Sheets menu; Panel tab: Reports; Output tab, on the Wire list
+button's menu) lists every device and every terminal, pin by pin. A device is its own symbol
+and the symbols that belong to it (a contactor's coil, its power contacts and auxiliary
+contacts; a PLC card's points), its pins in that order; a terminal (<b>TB1-4</b>) is one unit
+however many places it is drawn. Each row is a pin and a wire on it (two wires landed on one
+pin: two rows; a pin with none: one row, its wire columns empty):</p>
+<ul>
+<li><b>Device</b>, <b>Pin</b>: the tag (or the terminal, TB1-4) and the pin's name.</li>
+<li><b>Wire</b>, <b>Size</b>, <b>Color</b>, <b>Layer</b>: the wire's number, its size (its own,
+Wire size, else its layer's), its layer's insulation color, and its layer.</li>
+<li><b>Goes to</b>: the other pins the wire lands on (<b>CR101:A1</b>; a terminal as
+<b>TB1-4</b>), through off-sheet connectors and source and destination arrows to other
+sheets, each with its location when it isn't the device's (<b>LT1:1 (FIELD)</b>: a device's
+own Location, else its sheet's).</li>
+<li><b>Location</b>, <b>Where</b>: the device's location, and the sheet and zone of the
+symbol the pin is on.</li>
+<li><b>Footprint</b>: where the pin is on the device's footprint on a panel sheet (its sheet
+and zone), or why it isn't: <b>no footprint</b>; <b>no terminal positions</b> (its footprint
+block has no pins: nothing is guessed); or <b>no terminal A1 on</b> the footprint (it has
+pins, but none of that name).</li>
+</ul>
+<p><b>Save as CSV or Excel...</b> writes it, and <b>Report sheet...</b> draws it on sheets of the
+project (Device wiring list). The command line names the footprints with no terminal
+positions.</p>
+<p><b>Terminal positions.</b> A footprint's terminals are its block's pins, named as the
+device's pins: Edit block on the footprint, then <b>Add pin</b> (or Pins...) on the Block tab,
+a pin on each screw, named A1, A2, L1, T1, 13, 14... as the schematic symbols name them; Save
+block. One footprint stands for the whole device: a contactor footprint's A1 and A2 are its
+coil's, its L1-T3 its power contacts', its 13 and 14 its first NO contact's (the contacts' pin
+numbers: Contacts and cross-references). Of the program's own footprints, these come with
+them: the terminal blocks (1 on the top screw, 2 on the bottom one), the 1- and 3-pole breakers
+and fuse holders, the motor protector, the rotary disconnect; the contactors (L1-L3 over
+T1-T3, A1 and A2 on the left, the auxiliary contacts NO 13-14 and NC 21-22 on the right); the
+overload relay (L1-L3, T1-T3, and 95-96 NC, 97-98 NO on the right); and the relays, each pole
+a changeover contact with its common, NC and NO screws, the coil's A1 and A2 at the bottom:
+the 8-pin ice cube relay has 2 poles, the 14-pin one 4, the slim interface relay 1, and pole
+n's common is both <b>n1</b> and <b>n3</b>, its NC screw <b>n2</b> and its NO screw <b>n4</b>
+(pole 1: 11/13, 12, 14; pole 2: 21/23, 22, 24...), so a relay's NO contact 13-14 lands on pole
+1's common and NO screws and its NC 21-22 on pole 2's common and NC screws; the timer relay's 2
+poles are numbered for timed contacts (n5/n7 the common, n6 NC, n8 NO: 15/17, 16, 18 and 25/27,
+26, 28). The power supplies, the PLC and the others have none yet. A terminal's footprint is a
+Terminal block footprint for that terminal: when you place one, type the terminal as
+<b>TB1-4</b> when asked which device it is (its strip's tag, a dash and its number), or
+double-click it and type its <b>Terminal number</b> (it then shows TB1-4).</p>
+<p><b>Terminal wire labels</b> (Panel tab: Terminals) turns the labels on or off for the panel
+sheet shown (each panel sheet has its own; one step to Undo, kept with the project): each
+terminal of each footprint is labeled with its wire number and where the wire goes, <b>6001 →
+CR101:A1</b> (another location shown with it, <b>6001 → LT1:1 (FIELD)</b>; a wire landing
+nowhere else shows its number alone; one landing on more than three pins, a common or a
+neutral, names the first two and how many more, <b>6010 → CR201:A2, CR202:A2 +4</b>, the
+wiring list naming them all), a line for each wire on it. A label starts just off its
+pin and runs out of the footprint on the side the pin is on, read across or upward however
+the footprint is turned or flipped. They are <b>0.05"</b> tall on paper to start: Panel
+settings, <b>Terminal wire label height</b>, sets it for the project (on a 1:8 panel sheet they
+are drawn eight times larger and print the size set), in the Footprint label color when the
+project gives one. They follow every change to the schematic, wire numbers, tags and
+locations (and Undo), print, and go into PDF and DXF exports (DXF: layer PANEL). Turning them
+on says on the command line how many terminals got a label and which footprints have no
+terminal positions.</p>
 
 <h2>Cables between panels</h2>
 <p><b>Cables between locations...</b> (Sheets menu, Output tab: Reports) lists what has to be

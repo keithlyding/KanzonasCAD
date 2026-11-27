@@ -302,6 +302,19 @@ def block_fields(win, project, sheet, ents):
         out.append(Field("attr_" + k, label, "text", get, _attr_put(win, project, k),
                          blank=("a number shows as %s" % M.attr_display(k, "5"))
                          if unit else ""))
+    from . import pinnumbers
+
+    def pins_put(ed, s, cur, value):
+        nums = pinnumbers.parse(value)
+        if nums is None:
+            return                          # (not two numbers: left as they were)
+        apply_changes(ed, win.attribute_changes(
+            project, s, cur, pinnumbers.with_numbers(cur.attrs, nums), {}))
+    out.append(Field("pin_numbers", "Pin numbers", "text",
+                     lambda e: pinnumbers.text(e) if pinnumbers.numberable(e) else NA,
+                     pins_put, blank="its block's: 1-2", single=True,
+                     tip="A contact's two pin numbers (13-14 NO, 21-22 NC...), numbered on its "
+                         "device as it was placed; typed, kept as typed"))
     if not fp:
         out.append(Field("LOC", "Location", "text", lambda e: e.attrs.get("LOC", ""),
                          _attr_put(win, project, "LOC"),

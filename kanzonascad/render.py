@@ -353,6 +353,7 @@ class SheetRenderer:
         self._frame_sig = None
         self._dots = None               # (sheet version, path) of the wire junction dots
         self._xrefs = None              # (references shown, path) of the cross-references
+        self._wiring = None             # (labels, their text items): terminal wire labels
 
     def set_dark(self, dark):
         if dark != self.pal.dark:
@@ -589,6 +590,21 @@ class SheetRenderer:
             painter.setBrush(Qt.NoBrush)
             painter.drawPath(path)
 
+    def _paint_wiring(self, painter, outlines, view=None):
+        """A panel sheet's terminal wire labels (panelwiring.py: worked out once per change of
+        the project, not here), in the footprint label color when the project gives one (Panel
+        settings), else as the wire numbers are."""
+        from . import panelwiring
+        got = panelwiring.labels(self.project, self.sheet)
+        if not got:
+            return
+        if self._wiring is None or self._wiring[0] is not got:
+            self._wiring = (got, [text_item(t) for t in got])
+        c = self.project.settings.get("fp_label_color") or None
+        color = self.pal.color(self.project, M.Text((0, 0), "", 0.1, layer="SYMBOLS",
+                                                    color=c))
+        draw_texts(painter, self._wiring[1], color, outlines, view)
+
     def paint(self, painter, pen_width=0.0, paper=True, under=None):
         """pen_width 0: cosmetic one-pixel lines (screen); a number: that width in inches
         (PDF/print). under: drawn on the paper before anything else."""
@@ -614,6 +630,7 @@ class SheetRenderer:
         draw_texts(painter, texts, pal.frame, outlines, view)
         self._paint_dots(painter)
         self._paint_xrefs(painter, outlines, view)
+        self._paint_wiring(painter, outlines, view)
         if pen_width == 0:
             self._paint_dupes(painter)
             self._paint_missing(painter)

@@ -1,6 +1,6 @@
 """Reports drawn on sheets of the project (the roadmap's item 8: "report sheets drawn in the
 project"; the owner wants it): a bill of materials, wire list, terminal strip list, terminal plan,
-pull list, panel materials or the devices without a footprint as a table of lines and texts on sheets of
+device wiring list, pull list, panel materials or the devices without a footprint as a table of lines and texts on sheets of
 kind Report, as many as it takes, in the room the border and title block leave, so it prints
 and goes to PDF with the drawings.
 
@@ -22,13 +22,14 @@ PAD = 0.05
 def kinds():
     """{key: title} of the reports a sheet can show, in menu order."""
     return {"bom": "Bill of materials", "wires": "Wire list", "terminals": "Terminal strip list",
-            "terminal_plan": "Terminal plan", "pull": "Pull list", "materials": "Panel materials",
+            "terminal_plan": "Terminal plan", "wiring": "Device wiring list",
+            "pull": "Pull list", "materials": "Panel materials",
             "missing_fp": "Devices without a footprint"}
 
 
 def table(project, key):
     """(header, rows) of a report, from the drawing as it is."""
-    from . import bom, materials, missing_fp, pull, reports, strips
+    from . import bom, materials, missing_fp, panelwiring, pull, reports, strips
     if key == "bom":
         return bom.table(project)
     if key == "wires":
@@ -37,6 +38,8 @@ def table(project, key):
         return reports.TERM_HEAD, reports.terminal_rows(project)
     if key == "terminal_plan":
         return strips.table(project)
+    if key == "wiring":
+        return panelwiring.table(project)
     if key == "pull":
         return pull.table(project)
     if key == "materials":

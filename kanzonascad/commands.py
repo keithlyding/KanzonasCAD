@@ -3307,8 +3307,12 @@ class InsertCmd(Command):
                 self._place(self.pending, self.attrs)       # (none: a footprint of its own)
                 return True
             got = tags.find_tag(self.ctx.project, k)
+            term = self._terminal_of(k) if got is None and self.footprint_of else None
             if got is not None:
                 self._place(self.pending, self._link(got[1]))
+            elif term is not None:
+                # (a terminal block's footprint: TB1-4 typed, terminal 4 of strip TB1, 0.28)
+                self._place(self.pending, dict(self._link(term[0]), TERM=term[1]))
             elif self.footprint_of:
                 self._place(self.pending, dict(self.attrs, TAG=k))
                 self.ctx.message("No device is tagged %s: the footprint shows it, linked to "
@@ -3408,8 +3412,10 @@ class InsertCmd(Command):
         if self.pending is not None and self.link_name is not None:
             self._place(self.pending, dict(self.attrs, TAG=self.link_name))
             return
-        if self.pending is not None and self.cands and self.footprint_of:
-            self._place(self.pending, self._link(self.cands[0][1]))
+        if self.pending is not None and self.footprint_of:
+            # (Enter: the first device offered; with none offered, a footprint of its own)
+            self._place(self.pending, self._link(self.cands[0][1]) if self.cands else
+                        self.attrs)
             return
         if self.pending is not None and self.cands:
             self._place(self.pending, self.attrs)
@@ -3417,6 +3423,18 @@ class InsertCmd(Command):
                              "link it later)" % self.defn.name)
             return
         super().enter()
+
+    def _terminal_of(self, typed):
+        """(strip device, terminal number) of a terminal typed as TB1-4 (its strip's tag, a
+        dash, its number), or None."""
+        from . import strips, tags
+        tag, dash, num = (typed or "").strip().rpartition("-")
+        if not dash or not tag or not num.strip():
+            return None
+        got = tags.find_tag(self.ctx.project, tag)
+        if got is None or not strips.is_strip_device(got[1]):
+            return None
+        return got[1], num.strip()
 
     def _link(self, device):
         """Its attributes as device's contact (or, a footprint, as device's footprint)."""
@@ -3527,12 +3545,20 @@ class InsertCmd(Command):
             from . import tags
             project = self.ctx.project
             self.cands = tags.footprint_candidates(project, self.attrs.get("CAT") or d.catalog)
-            if self.cands:
+            from . import panelwiring, strips
+            if self.cands or (panelwiring.terminal_block(d) and any(
+                    strips.is_strip_device(e) for _s, e in tags.devices(project).values())):
                 self.pending, self.footprint_of = p, True
+                if not self.cands:
+                    # (every device has its footprint: a terminal block's footprint can still
+                    # be a strip's terminal, typed)
+                    self.ctx.prompt("Which terminal is it: type it as TB1-4, or Enter for none",
+                                    [("None", "N")])
+                    return
                 s, e = self.cands[0]
                 desc = e.attrs.get("DESC", "") or e.defn.description or e.defn.name
-                self.ctx.prompt("Which device is it: Enter for %s (%s, %s), type a tag, or N for "
-                                "none" % (e.attrs.get("TAG", "?"), desc,
+                self.ctx.prompt("Which device is it: Enter for %s (%s, %s), type a tag (a "
+                                "terminal: TB1-4), or N for none" % (e.attrs.get("TAG", "?"), desc,
                                           project.zone_text(s, e.pos[0], e.pos[1]) or "?"),
                                 [("List", "L"), ("None", "N")])
                 return

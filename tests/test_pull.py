@@ -107,7 +107,7 @@ class PullTest(unittest.TestCase):
         self.assertEqual(len(field), 1)
         # on the panel side the terminal (not the coil the terminal is also wired to)
         self.assertEqual(field[0]["lands"]["MCP"], ["TB101-1"])
-        self.assertEqual(field[0]["lands"]["FIELD"], ["PB101:2"])
+        self.assertEqual(field[0]["lands"]["FIELD"], ["PB101:14"])    # (its pin 2: 13-14)
         jb = rs[1]["conductors"][0]
         self.assertEqual(jb["lands"], {"MCP": ["TB101-2"], "JB-1": ["LT201:1"]})
         self.assertTrue(jb["num"])                      # (its wire number, as on the drawing)
@@ -233,7 +233,7 @@ class PullTest(unittest.TestCase):
             rows = list(csv.reader(f))
         self.assertEqual(n, 2)
         self.assertEqual(rows[0][0], "From")
-        self.assertEqual(rows[1][6:], ["TB101-1", "PB101:2"])
+        self.assertEqual(rows[1][6:], ["TB101-1", "PB101:14"])
         dialogs.write_pull_pdf(p, os.path.join(d, "pull.pdf"))
         with open(os.path.join(d, "pull.pdf"), "rb") as f:
             self.assertEqual(f.read(4), b"%PDF")

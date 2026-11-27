@@ -300,6 +300,75 @@ nobody understands).
     is the program's own slop and still fails, marked or not, as does a mark where nothing
     almost meets; and Move and Copy must leave no wire end of theirs a hair short.
 
+- 0.28, panel wiring (the owner's list, item 5; his answers of 0.22.1: "yes, a per device wiring
+  list", and point-to-point as labels on the footprints' terminals rather than a drawn
+  diagram, which "seems extremely busy"). Decided while building it (Claude, Nov 26 2026; to
+  confirm with the owner):
+  - **Device wiring list...** (Sheets menu; Panel tab, Reports; Output tab, on the Wire list
+    button's menu; a report sheet; CSV and Excel): a unit per device, its own symbol and those
+    linked to it (contacts, PLC points: its children), and one per strip terminal (TB1-4, every
+    place it is drawn). A row per pin and wire group on it (two wires landed on a pin: two rows;
+    an unwired pin one empty row, decided here: a spare terminal is worth seeing): wire number,
+    size (the wire's own, else its layer's), its layer's color, layer, the other pins the group
+    lands on (through connectors and arrows, as the terminal plan: strips.py's nets, reused),
+    each with its location when it isn't the device's, the device's location, where the pin's
+    symbol is, and Footprint: where the pin is on its footprint or why not (no footprint, no
+    terminal positions, no terminal of that name). Worked out every time, never kept.
+  - **A footprint's terminal positions are its block's pins**, named as the device's pins (Edit
+    block, Add pin / Pins...); one footprint stands for the whole device (a contactor's A1/A2
+    are its coil's, L1-T3 its power contacts'). A footprint with none: said in the report's
+    Footprint column and on the command line, never guessed. The program's own terminal blocks,
+    1- and 3-pole breakers and fuse holders, motor protector, rotary disconnect, contactors
+    and overload relay got pins (decided here: typical screw places, so the labels work out of
+    the box; the relays got theirs too, below; power supplies and PLCs have none yet).
+  - **A terminal's footprint** is a footprint with the terminal's number (TERM) linked to its
+    strip: placing a footprint, the device typed as TB1-4 (decided here, the strip's tag, a
+    dash, the number); a terminal block's footprint is asked even when every device already
+    has one; or Terminal number in its attributes window. It shows TB1-4 as its tag line; its
+    DXF tag attribute stays TB1.
+  - **Terminal wire labels** (Panel tab, Terminals): **decided here: per panel sheet** (Sheet's
+    terminal_labels, one Undo step, kept in the file), not per project, so a door layout or an
+    issued sheet stays clear. Each footprint terminal labeled "6001 → CR101:A1" (another
+    location shown, "(FIELD)"; a line per wire group; a number alone when it lands nowhere
+    else; decided here: a wire landing on more than three pins, a common or a neutral, names
+    the first two and how many more, "CR201:A2, CR202:A2 +4", the wiring list naming them all),
+    starting just off the pin and running out of the footprint on the side the pin is
+    nearest (measured against the box's half width and height), read across or upward
+    however the footprint is turned or flipped. Height: a project setting of its own, Panel
+    settings' Terminal wire label height, 0.05" on paper to start (decided here: the footprint
+    label height, 0.08", is too tall for terminal blocks 0.2" apart at 1:4). Derived, never
+    stored: worked out once per change of the project (any sheet's version, numbering, the
+    height, the wire layers) and kept with it until the next; the view's picture key already
+    changes with the project's revision. In the footprint label color when the project has
+    one. Printed, in PDF, and in DXF (layer PANEL).
+  - **Confirmed by the owner (Nov 27 2026):** Terminal wire label height 0.05" to start, a
+    terminal's footprint typed as TB1-4 as it is now, and terminal wire labels per sheet, off
+    to start.
+  - **Contact pin numbers: 13/14 and 21/22** (the owner, Nov 27 2026; pinnumbers.py). A
+    contact placed is numbered on its device the makers' way (Schneider TeSys, Sprecher +
+    Schuh CA7): first digit its sequence on the device, second 1-2 NC, 3-4 NO; decided here:
+    5-6 timed NC and 7-8 timed NO (EN 50005's special-function digits), the device's first NO
+    13-14 and first NC 21-22 whichever is drawn first (sequences 1 and 2, as a contactor's own
+    auxiliaries), any other contact the lowest sequence free on its device across the whole
+    project; an overload contact 95-96 (NC), 97-98 (NO) while free. A contact on no device is
+    numbered as the first of its kind; a pushbutton, switch or sensor is numbered on itself
+    with its contact blocks. Decided here: a contact added with numbers (Copy, Paste) or
+    linked to another device keeps them unless that device has them, then the next free pair;
+    typed numbers (Pin numbers, attributes window and Properties panel) are kept; drawings of
+    before 0.28 keep 1-2 (nothing renumbered on open, move or edit). Kept per copy as
+    attributes TERM01/TERM02 (AutoCAD Electrical's pin number attributes: they go out to DXF
+    and come back); shown beside the pins, under the coil ("NO 13-14 6-D3"), in Trace, the
+    wiring list and the terminal labels; wires and snaps keep the block's pin names.
+  - **Control relays got pins** (the owner, Nov 27 2026), and the contactors' auxiliaries
+    (13-14, 21-22) and the overload relay's 95-98. Decided here: the ice cube relays (8-pin: 2
+    poles; 14-pin: 4) and the slim relay (1) are changeover poles, pole n's common named both n1
+    and n3, its NC screw n2, its NO n4, so a NO contact 13-14 and an NC 21-22 land on real
+    screws whatever the order; the timer relay's two poles 15/17, 16, 18 and 25/27, 26, 28;
+    A1 and A2 at the bottom.
+  - Not done: labels that move out of each other's way where terminals are closer than the
+    text, a drawn point-to-point diagram (the owner's no), footprints placed for every
+    terminal of a strip at once.
+
 ## Owner's list after 0.21.4 (Nov 2026), in order
 1. Ladder references (0.22, above).
 2. Auto wire layer (0.22.1, above).
@@ -309,8 +378,8 @@ nobody understands).
    0.24, 0.25 until the Properties panel and Devices without a footprint took 0.25, then 0.26
    until the owner's handwritten list and the collector fix took 0.26, one release): strips,
    jumpers, a strip editor, a terminal plan report.
-5. Panel wiring (0.28): a per-device wiring list (owner: yes); point-to-point as wire labels on
-   the footprints' terminals, not a drawn diagram (see 0.22.1).
+5. Panel wiring: done in 0.28 (below): a per-device wiring list (owner: yes); point-to-point
+   as wire labels on the footprints' terminals, not a drawn diagram (see 0.22.1).
 6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.29):
    "lean heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates
    library: not now.

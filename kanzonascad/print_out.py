@@ -45,12 +45,13 @@ AREAS = ("sheet", "extents", "display", "window")
 def drawn_box(project, sheet):
     """The box (drawing units) of everything drawn on a sheet: its objects, and what is drawn
     beside them without being objects (cross-references, wire numbers), or None."""
-    from . import wirenums, xrefs
+    from . import panelwiring, wirenums, xrefs
     boxes = [sheet.extents()]
     if project is not None:
         boxes += [t.bbox() for t in xrefs.texts(project, sheet)]
         boxes += [t.bbox() for t in wirenums.labels(project, sheet)]
         boxes += [t.bbox() for t in wirenums.gauge_labels(project, sheet)]
+        boxes += [t.bbox() for t in panelwiring.labels(project, sheet)]
     boxes = [b for b in boxes if b is not None]
     if not boxes:
         return None
