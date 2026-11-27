@@ -18,7 +18,7 @@ modules, drives, connectors, arrows...) are offered in both.
 
 from .model import Arc, Circle, Line, Polyline, Text
 from .symbols_jic import (PIN, POLE, POLES, RATING3_Y, TAG, TAG3_Y, _box, _link, _pins,
-                          _rating, _sym, _three, _three_pins)
+                          _rating, _sym, _three, _three_pins, show_contact_pins)
 
 CAT = "IEC/"
 SUFFIX = " (IEC)"
@@ -323,4 +323,5 @@ def iec_symbols():
     S.append(_iec("Ground", "Protective earth", "Wiring", o, "device", "", "",
                   pins=[{"name": "1", "pos": (0, 0)}], tag=None,
                   description="Protective earth (PE)"))
+    show_contact_pins(S)
     return S

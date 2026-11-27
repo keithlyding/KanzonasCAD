@@ -87,7 +87,8 @@ class XrefTest(unittest.TestCase):
         # under the coil, in sheet then zone order; under each contact, the coil's place
         z1, z2 = self.p.zone_text(self.s6, 8, 9), self.p.zone_text(self.s6, 8, 4)
         z3 = self.p.zone_text(self.s7, 5, 9)
-        self.assertEqual(texts6[:3], ["NO " + z1, "NC " + z2, "NO " + z3])
+        # (each with its pin numbers on CR601, numbered as placed: 0.28)
+        self.assertEqual(texts6[:3], ["NO 13-14 " + z1, "NC 21-22 " + z2, "NO 33-34 " + z3])
         self.assertEqual(texts6[3:], [here, here])
         self.assertEqual([t[2] for t in xrefs.live(self.p, self.s7)], [here])
         self.assertTrue(z3.startswith("7-"))

@@ -498,9 +498,21 @@ def _writable(lib):
 
 
 def _write_json(path, data):
+    _write_text(path, json.dumps(data, indent=1))
+
+
+def block_text(defn):
+    """A block's file as save_block writes it (worked out apart from the writing: Import
+    blocks makes it on the event loop and writes it on a thread, block_import.Importer)."""
+    return json.dumps(defn.to_dict(), indent=1)
+
+
+def _write_text(path, text):
+    """A file written safely: to a file beside it, flushed to disk (fsync), then renamed
+    over it."""
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=1)
+        f.write(text)
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)

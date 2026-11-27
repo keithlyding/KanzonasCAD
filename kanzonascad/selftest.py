@@ -25,7 +25,9 @@ BUDGET = {
     "peak_mb": 800,
     "big_print": 5.0,           # that sheet printed, fit to letter paper (into a PDF file)
     "big_window": 2.0,          # that sheet opened in a new window and drawn, then closed
-    "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings
+    "wire_edit": 0.15,          # one wire added to a 12,030-wire sheet: numbers, dots, crossings,
+                                # near misses (nearmiss.py: only round what the edit changed)
+    "near_scan": 1.0,           # near misses on that sheet worked out whole (opened)
     # a sheet of notes: 2,000 hatches (and their outlines), 1,000 leaders, 1,000 multi-line
     # notes, 1,000 pictures and 2,000 texts (text drawn as filled outlines took seconds a zoom
     # step here)
@@ -60,6 +62,21 @@ BUDGET = {
     "join_undo": 1.0,           # that undone, then drawn
     "pull": 1.0,                # cables between locations: 2,000 wires from terminals to
                                 # 2,000 devices, half of them in the field
+    # (0.27: terminal strips) 50 sheets, a strip of 100 terminals each (5,000 terminals, a
+    # device wired to each side, 10,000 wires, half the far ends in the field):
+    "strips_open": 0.5,         # Terminal strips... opened: every strip listed, the first shown
+    "strips_plan": 1.0,         # the terminal plan of every terminal worked out (its wire
+                                # groups read afresh: 0.3 s here, 0.5 s on the build's Linux
+                                # computer; as "pull", for five times as many wires; the
+                                # owner's choice, Nov 2026)
+    "strips_apply": 0.5,        # a strip renumbered backwards and written back (OK), one step
+    # (0.28: panel wiring) 20 schematic sheets of 50 contactor coils and 50 breakers (2,000
+    # devices, 10,000 wires), each device's footprint on one of 4 panel sheets showing their
+    # terminal wire labels (4,000 labeled terminals, a third of the contactors turned):
+    "wiring_list": 1.0,         # the device wiring list worked out (4,000 rows)
+    "wiring_open": 1.0,         # a panel sheet's labels worked out and the sheet drawn
+    "wiring_zoom": 2.0,         # ten zoomed repaints of it
+    "wiring_edit": 0.5,         # a device retagged on a schematic sheet, the labels following
     # (0.23: Trace, Ctrl+E) on 50 sheets of 1,000 lines, 40 coils, 40 contacts and 40 wires:
     "trace_index": 2.0,         # the first list, every sheet indexed (50 sheets)
     "trace_click": 0.005,       # a click (selection change) with the panel open: the lookup
@@ -414,7 +431,8 @@ def run(log_path):
         k = max((e for e in sheet.entities.values() if tags.is_child(e)), key=lambda e: e.id)
         assert k.attrs.get("PARENT") == c.attrs["DEV"], k.attrs
         texts = [t[2] for t in xrefs.live(p, sheet)]
-        want = ["NC " + p.zone_text(sheet, 14, 4), p.zone_text(sheet, 12, 9)]
+        # (numbered on its coil as placed, its first NC 21-22: pinnumbers.py, 0.28)
+        want = ["NC 21-22 " + p.zone_text(sheet, 14, 4), p.zone_text(sheet, 12, 9)]
         assert all(t in texts for t in want), (texts, want)
         v.repaint()
         return "contact linked to %s; %s" % (c.attrs["TAG"], ", ".join(want))
@@ -448,7 +466,7 @@ def run(log_path):
 
     def wire_editing():
         import time
-        from . import wires, crossings
+        from . import wires, crossings, nearmiss
         p = M.Project.new()
         s = p.sheets[0]
         with p.edit("rungs") as ed:
@@ -461,17 +479,33 @@ def run(log_path):
         wires.junctions(s)
         crossings.jumps(p, s)
         t = time.perf_counter()
+        assert nearmiss.found(s) == []
+        scan = time.perf_counter() - t
+        t = time.perf_counter()
         for k in range(10):
             with p.edit("one") as ed:
                 ed.add(s, M.Wire([(40 + k, 0), (40 + k, 1)]))
             wires.junctions(s)
             crossings.jumps(p, s)
+            nearmiss.found(s)
         each = (time.perf_counter() - t) / 10
+        # (a wire end stopped 0.005" short of a rung: marked, after the one edit)
+        t = time.perf_counter()
+        with p.edit("short") as ed:
+            ed.add(s, M.Wire([(5.5, 0.255), (5.5, 0.6)]))
+        got = nearmiss.found(s)
+        near = time.perf_counter() - t
+        assert [round(m[2], 6) for m in got] == [0.005], got
+        assert scan < BUDGET["near_scan"], \
+            "near misses on a 12,030-wire sheet worked out in %.2f s" % scan
         assert each < BUDGET["wire_edit"], \
-            "a wire added to a 12,030-wire sheet (numbers, dots, crossings) took %.0f ms" % (
-                each * 1000)
-        return "one wire on a 12,030-wire sheet, numbered, dots and crossings: %.0f ms" % (
-            each * 1000)
+            "a wire added to a 12,030-wire sheet (numbers, dots, crossings, near misses) " \
+            "took %.0f ms" % (each * 1000)
+        assert near < BUDGET["wire_edit"], "a near miss found after an edit in %.0f ms" % (
+            near * 1000)
+        return ("one wire on a 12,030-wire sheet, numbered, dots, crossings and near misses: "
+                "%.0f ms; near misses on the whole sheet %.0f ms, one found after an edit "
+                "%.0f ms" % (each * 1000, scan * 1000, near * 1000))
     log.check("wire editing speed (12,030-wire sheet)", wire_editing)
 
     def manual():
@@ -1091,6 +1125,162 @@ def run(log_path):
         return "1,000 conductors to pull of 2,000 wires: %.3f s" % dt
     log.check("speed budget (cables between locations)", pull_list)
 
+    def terminal_strips():
+        from . import strip_window, strips
+        w = state["win"]
+        lib = w.library
+        term, strip, lt = (lib.get("symbol", n) for n in ("Terminal", "Terminal strip",
+                                                            "Pilot light"))
+        p = M.Project.new()
+        while len(p.sheets) < 50:
+            p.sheets.append(p.make_sheet("Sheet %d" % (len(p.sheets) + 1)))
+        for b in (term, strip, lt):
+            p.blocks[b.name] = b
+        for k, s in enumerate(p.sheets):
+            s.location = "MCP"
+            tb = M.Insert(strip.name, (1, 10.5), defn=strip,
+                          attrs={"TAG": "TB%d" % (k + 1), "DEV": "strip%d" % k})
+            s._put(tb)
+            for i in range(100):
+                x, y = 3 + (i % 10) * 1.4, 1 + (i // 10) * 0.9
+                t = M.Insert(term.name, (x, y), defn=term,
+                             attrs={"TAG": tb.attrs["TAG"], "PARENT": "strip%d" % k,
+                                    "TERM": str(i + 1)})
+                s._put(t)
+                pins = dict(t.pin_points())
+                for side, dx in (("1", -0.5), ("2", 0.5)):
+                    d = M.Insert(lt.name, (x + dx, y + 0.3), defn=lt,
+                                 attrs=dict({"TAG": "LT%d_%d%s" % (k, i, side)},
+                                            **({"LOC": "FIELD"} if side == "2" else {})))
+                    s._put(d)
+                    s._put(M.Wire([pins[side], d.pin_points()[0][1]]))
+        from . import wirenums
+        with p.edit("Wire numbers") as ed:          # (numbered, as a project opened is)
+            wirenums.sync(ed, p)
+        p.undo_stack.clear()
+        t0 = time.perf_counter()
+        dlg = strip_window.StripEditorDialog(w, p)
+        do = time.perf_counter() - t0
+        assert dlg.list.count() == 50 and dlg.table.rowCount() == 100, (
+            dlg.list.count(), dlg.table.rowCount())
+        assert "(FIELD)" in dlg.table.item(0, 4).text(), dlg.table.item(0, 4).text()
+        t0 = time.perf_counter()
+        rows = strips.plan_rows(p)
+        dp = time.perf_counter() - t0
+        assert len(rows) == 5000 and rows[0][5].endswith("(FIELD)"), rows[0]
+        lay = dlg.layout_of(0)
+        lay.rows.reverse()
+        lay.renumber(1)
+        t0 = time.perf_counter()
+        assert dlg.apply()
+        da = time.perf_counter() - t0
+        dlg.deleteLater()
+        got = [r.places[0][1].pos for r in strips.find(p, wires=False)[0].rows]
+        assert got[0][1] > got[-1][1], "the strip renumbered backwards: %r" % got[:2]
+        assert len(p.undo_stack) == 1
+        assert do < BUDGET["strips_open"], "Terminal strips... opened in %.2f s" % do
+        assert dp < BUDGET["strips_plan"], "the terminal plan in %.2f s" % dp
+        assert da < BUDGET["strips_apply"], "a strip renumbered and written back in %.2f s" % da
+        return ("50 strips of 100 terminals (10,000 wires): Terminal strips... opened %.3f s, "
+                "the terminal plan %.3f s, a strip renumbered and written back %.3f s"
+                % (do, dp, da))
+    log.check("speed budget (terminal strips)", terminal_strips)
+
+    def panel_wiring():
+        from . import panelwiring, wirenums
+        w = state["win"]
+        lib = w.library
+        coil, cb = lib.get("symbol", "Contactor coil"), lib.get("symbol", "Circuit breaker 1-pole")
+        fk, fb = lib.get("footprint", "Contactor 9-18 A"), lib.get("footprint",
+                                                                   "Breaker 1-pole (DIN)")
+        p = M.Project.new()
+        for b in (coil, cb, fk, fb):
+            p.blocks[b.name] = b
+        while len(p.sheets) < 20:
+            s = p.make_sheet("Sheet %d" % (len(p.sheets) + 1))
+            s.id = p.new_sheet_id()
+            p.sheets.append(s)
+        panels = []
+        for k in range(4):
+            ps = p.make_sheet("Panel %d" % (k + 1), "panel")
+            ps.id, ps.scale, ps.terminal_labels = p.new_sheet_id(), 0.125, True
+            p.sheets.append(ps)
+            panels.append(ps)
+        n = 0
+        for s in p.sheets[:20]:
+            s.location = "MCP"
+            for i in range(50):
+                x, y = 1.0 + (i % 5) * 3.0, 1.0 + (i // 5) * 0.9
+                c = M.Insert(coil.name, (x + 1.8, y), defn=coil,
+                             attrs={"TAG": "M%d" % n, "DEV": "m%d" % n})
+                b = M.Insert(cb.name, (x, y), defn=cb,
+                             attrs=dict({"TAG": "CB%d" % n, "DEV": "b%d" % n},
+                                        **({"LOC": "FIELD"} if i % 2 else {})))
+                s._put(c)
+                s._put(b)
+                cp, bp = dict(c.pin_points()), dict(b.pin_points())
+                # (ten wires: four from the breaker to the coil, three off each other end)
+                a, z = bp["2"], cp["A1"]
+                xs = [a[0] + (z[0] - a[0]) * t / 4.0 for t in range(5)]
+                for j in range(4):
+                    s._put(M.Wire([(xs[j], y), (xs[j + 1], y)]))
+                for q, dx in ((bp["1"], -0.1), (cp["A2"], 0.1)):
+                    for j in range(3):
+                        s._put(M.Wire([(q[0] + dx * j, q[1]), (q[0] + dx * (j + 1), q[1])]))
+                ps = panels[n // 500]
+                m = n % 500
+                px, py = 4.0 + (m % 25) * 5.0, 4.0 + (m // 25) * 4.5
+                ps._put(M.Insert(fk.name, (px, py), defn=fk, angle=90.0 if m % 3 == 0 else 0.0,
+                                 attrs={"TAG": c.attrs["TAG"], "PARENT": c.attrs["DEV"]}))
+                ps._put(M.Insert(fb.name, (px + 2.2, py), defn=fb,
+                                 attrs={"TAG": b.attrs["TAG"], "PARENT": b.attrs["DEV"]}))
+                n += 1
+        with p.edit("Wire numbers") as ed:          # (numbered, as a project opened is)
+            wirenums.sync(ed, p)
+        p.undo_stack.clear()
+        assert sum(len(s.wires()) for s in p.sheets) == 10000
+        t0 = time.perf_counter()
+        rows = panelwiring.rows(p)
+        dl = time.perf_counter() - t0
+        assert len(rows) == 4000 and rows[1][6] == "M0:A1", rows[:2]
+        p._panel_wiring = None
+        d = w.add_document(p)
+        v = d.view
+        v.show_sheet(panels[0].id)
+        t0 = time.perf_counter()
+        v.zoom("extents")
+        v.repaint()
+        app.processEvents()
+        do = time.perf_counter() - t0
+        labs = panelwiring.labels(p, panels[0])
+        num = rows[1][2]
+        assert len(labs) == 2000 and "%s → CB0:2" % num in {t.text for t in labs}, labs[:2]
+        t0 = time.perf_counter()
+        for _k in range(10):
+            v.zoom_at(1.25, None)
+            v._moving_until = 0.0
+            v.repaint()
+        dz = time.perf_counter() - t0
+        s0 = p.sheets[0]
+        m0 = next(x for x in s0.inserts() if x.attrs.get("TAG") == "M0")
+        t0 = time.perf_counter()
+        with p.edit("Retag") as ed:
+            ed.change(s0, m0.copy(attrs=dict(m0.attrs, TAG="MX", TAG_LOCK="1")))
+        v.repaint()
+        de = time.perf_counter() - t0
+        assert "%s → MX:A1" % num in {t.text for t in panelwiring.labels(p, panels[0])}, \
+            "the labels didn't follow the device retagged"
+        p.saved_at = len(p.undo_stack)
+        w.close_tab(w.tabs.indexOf(d))
+        assert dl < BUDGET["wiring_list"], "the wiring list in %.2f s" % dl
+        assert do < BUDGET["wiring_open"], "a panel sheet's labels and drawing in %.2f s" % do
+        assert dz < BUDGET["wiring_zoom"], "ten zoomed repaints in %.2f s" % dz
+        assert de < BUDGET["wiring_edit"], "a device retagged, the labels following: %.2f s" % de
+        return ("2,000 devices, 10,000 wires: the wiring list %.3f s, a panel sheet of 2,000 "
+                "labels drawn %.3f s, 10 zooms %.3f s, a device retagged and the labels "
+                "following %.3f s" % (dl, do, dz, de))
+    log.check("speed budget (panel wiring)", panel_wiring)
+
     def trace():
         # (Trace, 0.23; the owner: "make sure that the loading of the cross-references doesn't
         # prevent any interaction with the sheet itself"): 50 sheets of 1,000 lines, 40 coils,
@@ -1431,26 +1621,33 @@ def run(log_path):
         gc.collect()
         t0 = time.perf_counter()
         rows, read_step = IB.scan(w, BI.drawing_files(src))
+        t_read = time.perf_counter()
         dlg = IB.ImportBlocksDialog(w, lib)
         dlg.folder = src
         dlg.set_rows(rows)
         listed = dlg.fill_step
         imp = dlg.importer()
+        t_list = time.perf_counter()
         done, put_step = IB.put_in(w, imp)
         dt = time.perf_counter() - t0
+        # (where the time went: on the Windows build 200 files flushed to disk one after the
+        # other once took 12 s, their steps all short)
+        parts = "reading %.2f s, listing %.2f s, writing %.2f s" % (
+            t_read - t0, t_list - t_read, t0 + dt - t_list)
         dlg.deleteLater()
         assert done and len(imp.imported) == 200, (done, len(imp.imported), imp.failed)
         got = Library(lib.folder).get("symbol", "HCR117")
         assert [(q["name"], q["pos"]) for q in got.pins] == [("A1", (-0.5, 0.0)),
                                                              ("A2", (0.5, 0.0))], got.pins
         step = max(read_step, put_step, listed)
-        assert dt < BUDGET["block_folder"], "200 block files imported in %.2f s" % dt
+        assert dt < BUDGET["block_folder"], "200 block files imported in %.2f s (%s)" % (
+            dt, parts)
         assert step < BUDGET["block_folder_step"], \
             "a step of %.3f s (reading %.3f, listing %.3f, writing %.3f)" % (
                 step, read_step, listed, put_step)
-        return ("200 block files read, listed and put in the library %.2f s; longest step "
-                "%.3f s (reading %.3f, listing %.3f, writing %.3f)" % (
-                    dt, step, read_step, listed, put_step))
+        return ("200 block files read, listed and put in the library %.2f s (%s); longest "
+                "step %.3f s (reading %.3f, listing %.3f, writing %.3f)" % (
+                    dt, parts, step, read_step, listed, put_step))
     log.check("speed budget (import blocks)", block_folder)
 
     def saved_circuits():

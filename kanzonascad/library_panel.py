@@ -857,6 +857,18 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
             e.setPlaceholderText("a number shows as %s" % M.attr_display(k, "5"))
         form.addRow({"TERM": "Terminal number", "ADDR": "Address (I:0/3, %I0.3...)",
                      "RATING": "Rating"}.get(k, unit[0] if unit else k), e)
+    pin_nums = None
+    from . import pinnumbers
+    if pinnumbers.numberable(ins):
+        # (a contact's pin numbers, 13-14: numbered on its device as it was placed, 0.28;
+        # typed ones are kept as typed)
+        pin_nums = QLineEdit(pinnumbers.text(ins))
+        pin_nums.setObjectName("pin_numbers")
+        pin_nums.setPlaceholderText("its block's: %s" % "-".join(
+            p["name"] for p in ins.defn.pins))
+        pin_nums.setToolTip("Its two pins' numbers as the device marks them (13-14 NO, 21-22 "
+                            "NC...); blank: its block's")
+        form.addRow("Pin numbers", pin_nums)
     if kind_of(ins) == "symbol":
         e = QLineEdit(ins.attrs.get("LOC", ""))
         e.setObjectName("location")
@@ -984,6 +996,19 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
                                  % (device.attrs.get("TAG") or "?"))
                 dbox.setLayout(dform)
                 v.addWidget(dbox)
+        from . import strips
+        from . import panelwiring
+        if (device is not None and strips.is_strip_device(device)) or ins.attrs.get("TERM") \
+                or panelwiring.terminal_block(ins.defn):
+            # (a terminal block's footprint: which terminal of its strip it is, TB1-4; panel
+            # wiring labels its terminals with that terminal's wires, 0.28)
+            tform = QFormLayout()
+            e = QLineEdit(ins.attrs.get("TERM", ""))
+            e.setObjectName("attr_TERM")
+            e.setPlaceholderText("the terminal of its strip it is (4 for TB1-4)")
+            edits["TERM"] = e
+            tform.addRow("Terminal number", e)
+            v.addLayout(tform)
         keys = M.label_keys(ins.label)
         offer = list(M.LABELS) + [k for k in tags.LINKED_ATTRS
                                   if k in edits or ins.attrs.get(k)]
@@ -1086,6 +1111,8 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
         out[k] = e.text().strip()
     if not out.get("LOC"):
         out.pop("LOC", None)            # (no location of its own: its sheet's)
+    if not out.get("TERM") and kind_of(ins) == "footprint":
+        out.pop("TERM", None)           # (a footprint for no terminal)
     if desc_lines:
         out["DESC"] = " ".join(out.get(k, "").strip() for k in sorted(desc_lines)
                                if out.get(k, "").strip())
@@ -1138,6 +1165,10 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
             out.pop("XDEV", None)
         else:
             out["XDEV"] = far.currentData()
+    if pin_nums is not None:
+        nums = pinnumbers.parse(pin_nums.text())
+        if nums is not None:                # (not two numbers: left as they were)
+            out = pinnumbers.with_numbers(out, nums)
     if part_id[0]:
         out["PART"] = part_id[0]
     if lock.isChecked():

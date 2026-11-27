@@ -18,6 +18,7 @@ import os
 
 from . import fileio
 from . import model as M
+from . import library as L
 from .library import Library, _writable
 
 EXTENSIONS = (".dwg", ".dxf")
@@ -188,6 +189,23 @@ def libraries(lib):
     return out
 
 
+class Write:
+    """One block file to write: the row, the name it goes in under, its file, the block and
+    the file's text."""
+
+    def __init__(self, row, name, path, defn, text):
+        self.row, self.name, self.path, self.defn, self.text = row, name, path, defn, text
+
+
+def _own_files(lib, kind):
+    """The block files a library folder holds of one kind (their names as the computer
+    compares them), read once: deciding the rows then touches no disk."""
+    try:
+        return {os.path.normcase(fn) for fn in os.listdir(lib._dir(kind))}
+    except FileNotFoundError:
+        return set()
+
+
 class Importer:
     """The ticked rows put in a library, one block a step (step()); rollback() puts back the
     files as they were (Cancel). target: "first" or "second"."""
@@ -200,6 +218,7 @@ class Importer:
         self.category = (category or "").strip() or "Imported"
         self.todo = [r for r in rows if r.ticked and r.defn is not None]
         self.taken = taken_names(lib)
+        self.own = {kind: _own_files(self.dest, kind) for kind in ("symbol", "footprint")}
         self.written = []               # [(file, what it held before, or None)]
         self.imported, self.skipped, self.failed = [], [], []
         self.at = 0
@@ -207,11 +226,18 @@ class Importer:
     def total(self):
         return len(self.todo)
 
-    def _taken(self, kind, name):
-        return name in self.taken[kind] or self.dest.has_own(kind, name)
+    def _file(self, kind, name):
+        return os.path.normcase(os.path.basename(self.dest._path(kind, name)))
 
-    def step(self):
-        """Put the next block in; False when all are done."""
+    def _taken(self, kind, name):
+        return name in self.taken[kind] or self._file(kind, name) in self.own[kind]
+
+    def next_write(self):
+        """The next ticked row decided (its name: skipped, replaced or kept both) and its
+        file's text made, without touching the disk (the library's files were listed when
+        the Importer was made): a Write to hand to write(), None when the row is skipped,
+        False when all rows are done. On the program's own thread (the event loop: a disk
+        busy elsewhere doesn't hold it up)."""
         if self.at >= len(self.todo):
             return False
         r = self.todo[self.at]
@@ -220,7 +246,7 @@ class Importer:
         if self._taken(r.kind, name):
             if r.choice == "skip":
                 self.skipped.append((r, "a block named %s is in the library" % name))
-                return True
+                return None
             if r.choice == "both":
                 n = 2
                 while self._taken(r.kind, "%s (%d)" % (r.name, n)):
@@ -233,19 +259,45 @@ class Importer:
             if bb is not None:
                 d["tag_pos"] = [(bb[0] + bb[2]) / 2, bb[3] + 0.1]
         defn = M.BlockDef.from_dict(d)
-        path = self.dest._path(r.kind, name)
-        try:
-            old = None
-            if os.path.exists(path):
-                with open(path, "rb") as f:
-                    old = f.read()
-            self.written.append((path, old))
-            self.dest.save_block(defn)
-        except OSError as ex:
-            self.failed.append((r, str(ex)))
-            return True
         self.taken[r.kind].add(name)
-        self.imported.append((r, name))
+        self.own[r.kind].add(self._file(r.kind, name))
+        return Write(r, name, self.dest._path(r.kind, name), defn, L.block_text(defn))
+
+    def write(self, w):
+        """The block's file written: what it held before read (for rollback), then the new
+        text flushed to disk before it takes the name (library._write_text). Only the disk:
+        no Qt, no project, no Python work to speak of, so it can run on a thread of its own
+        while the event loop turns. Returns what the file held before (None: there was
+        none); OSError when it can't be written."""
+        old = None
+        if os.path.exists(w.path):
+            with open(w.path, "rb") as f:
+                old = f.read()
+        self.dest.ensure()
+        L._write_text(w.path, w.text)
+        return old
+
+    def wrote(self, w, old=None, error=None):
+        """A write() finished (old: what it returned; error: its OSError, or None): noted for
+        rollback and counted, in the rows' order. On the program's own thread."""
+        if error is not None:
+            self.failed.append((w.row, str(error)))
+        else:
+            self.written.append((w.path, old))
+            self.imported.append((w.row, w.name))
+
+    def step(self):
+        """Put the next block in, written before it returns; False when all are done."""
+        w = self.next_write()
+        if w is False:
+            return False
+        if w is not None:
+            try:
+                old = self.write(w)
+            except OSError as ex:
+                self.wrote(w, error=ex)
+            else:
+                self.wrote(w, old)
         return True
 
     def run(self):

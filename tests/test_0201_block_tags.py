@@ -41,6 +41,29 @@ class BlockTagsTest(ContactBlocksTest):
             ed.change(self.s, self.now(no).moved(3.0, 0.0))
         self.assertIn("TAG", self.now(no).hidden)
 
+    def test_a_tag_shown_by_hand_on_the_line_stays_shown(self):
+        # (seed 5042: ticking Tag in the Properties panel for a block on the line did
+        # nothing, the line hid it again at once)
+        es, nc, no = self.stack()
+        win = self.win
+        e = self.now(no)
+        with self.p.edit("show by hand") as ed:
+            for sh, c in win.attribute_changes(self.p, self.s, e, dict(e.attrs),
+                                               {"hidden": frozenset(e.hidden) - {"TAG"}}):
+                ed.change(sh, c)
+        self.assertNotIn("TAG", self.now(no).hidden)
+        with self.p.edit("nudge") as ed:                    # (still on the line)
+            ed.change(self.s, self.now(no).moved(0.0, 0.0))
+        self.assertNotIn("TAG", self.now(no).hidden)
+        self.assertIn("TAG", self.now(nc).hidden)           # (the other one: as it was)
+        e = self.now(no)
+        with self.p.edit("hide by hand") as ed:
+            for sh, c in win.attribute_changes(self.p, self.s, e, dict(e.attrs),
+                                               {"hidden": frozenset(e.hidden) | {"TAG"}}):
+                ed.change(sh, c)
+        self.assertIn("TAG", self.now(no).hidden)
+        self.assertNotIn("TAGLINK", self.now(no).attrs)
+
     def test_saved_and_opened(self):
         import os
         import tempfile

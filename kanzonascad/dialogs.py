@@ -765,6 +765,17 @@ def project_properties(parent, project, tab=0):
     fp_h.setToolTip("How tall what footprints show on them is, on paper (every footprint in "
                     "the project)")
     form.addRow("Footprint label height (on paper)", fp_h)
+    # (0.28: Terminal wire labels, a panel sheet's footprint terminals with their wires)
+    from . import panelwiring
+    fp_wh = QDoubleSpinBox()
+    fp_wh.setObjectName("fp_wire_label_height")
+    fp_wh.setDecimals(4)
+    fp_wh.setRange(0.01, 5)
+    fp_wh.setSuffix(" in")
+    fp_wh.setValue(panelwiring.label_height(project))
+    fp_wh.setToolTip("How tall the wire labels on footprint terminals are, on paper (Terminal "
+                     "wire labels, Panel tab: 6001 → CR101:A1)")
+    form.addRow("Terminal wire label height (on paper)", fp_wh)
     # (the owner, 0.18.7: footprints are mostly on layer 0, white: "I want the tagname to be
     # discernible")
     fp_c_on = QCheckBox("In a color of their own:")
@@ -907,6 +918,7 @@ def project_properties(parent, project, tab=0):
     settings["xref_height"] = xref_h.value()
     settings["xref_device"] = xdev.isChecked()
     settings["fp_label_height"] = fp_h.value()
+    settings[panelwiring.HEIGHT] = fp_wh.value()
     settings["fp_label_color"] = fp_c.color if fp_c_on.isChecked() and fp_c.color not in (
         None, M.ADAPTIVE) else ""
     settings[missing_fp.SETTING] = fp_marks.isChecked()

@@ -29,7 +29,7 @@ import math
 from .model import Arc, Circle, Line, Text
 from .symbols_jic import (PIN, POLES, RATING3_Y, TAG, TAG3_Y, _contact, _heater, _heater_link,
                           _link, _pb_terminals, _rating, _sym, _three, _three_pins, io_module,
-                          _io_terminals)
+                          _io_terminals, show_contact_pins)
 
 AB = "Allen-Bradley"
 CHECK = "Check Rockwell's selection guide before ordering"
@@ -117,6 +117,7 @@ def ab_symbols():
                   description="Pilot light, its lens color's letter in it (COLOR: R red, "
                               "G green, A amber, W white, B blue)",
                   attr_texts=[{"attr": "COLOR", "pos": (0.0, -0.035), "height": 0.08}]))
+    show_contact_pins(S)
     S += ab_io_modules()
     return S
 

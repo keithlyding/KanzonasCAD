@@ -65,6 +65,9 @@ DEFAULT_SETTINGS = {
                                 # discernible")
     # devices without a footprint marked orange on the drawing (missing_fp.py; 0.25)
     "fp_missing_marks": True,
+    # footprint terminals' wire labels (Terminal wire labels: panelwiring.py; 0.28), paper
+    # inches
+    "fp_wire_label_height": 0.05,
     "size": "ANSI B (17 x 11)",
     "cols": 10, "rows": 8, "col_start": 1, "row_start": 0,
     "xref_auto": True,          # cross-references follow every change (else: Update command)
@@ -2268,6 +2271,8 @@ CONTACTS = ("", "NO", "NC", "NOTC", "NCTO", "NOTO", "NCTC")
 # the same name are one wire, whatever sheet they're on)
 WIRINGS = ("", "distribution", "link", "pdb")
 ATTR_NAMES = ["TAG", "DESC", "MFR", "CAT"]       # what every block reference can carry
+# a copy's own number for its block's pin n (1 the first): TERM01, TERM02... (Insert.pin_number)
+PIN_NUMBER = "TERM%02d"
 # a block's optional maker details: who makes it, and its catalog (part) number
 MAKER_FIELDS = ("manufacturer", "family", "series", "catalog")
 
@@ -2758,6 +2763,21 @@ class Insert(Entity):
             return []
         return [(p["name"], self.to_world(p["pos"])) for p in self.defn.pins]
 
+    def pin_number(self, name):
+        """The number this copy shows for its block's pin name: a contact numbered on its device
+        (13 and 14 on its pins 1 and 2, 0.28: pinnumbers.py) keeps its own in attributes
+        TERM01, TERM02... (AutoCAD Electrical's names: TERM01 the block's first pin), else the
+        pin's own name. Wires, snaps and grips go by the block's names (pin_points); what
+        people read (pin names on the drawing, the wiring list, terminal wire labels, cross-
+        references, Trace) by these."""
+        d = self.defn
+        if d is None or d.kind != "symbol" or not self.attrs:
+            return name
+        for i, p in enumerate(d.pins):
+            if p["name"] == name:
+                return self.attrs.get(PIN_NUMBER % (i + 1)) or name
+        return name
+
     def shown_names(self):
         """The attributes this block can show on the drawing, in its order: its tag (a symbol
         with a tag spot), then its block's attribute spots (Show or hide attributes)."""
@@ -2782,21 +2802,23 @@ class Insert(Entity):
         h = 0.6 * (self.tag_h or d.tag_height) * self.scale
         g = 0.35 * h
         out = []
-        for p in d.pins:
+        for i, p in enumerate(d.pins):
             x, y = self.to_world(p["pos"])
+            # (a contact's own numbers, 13 and 14, where it has them: pin_number)
+            name = self.attrs.get(PIN_NUMBER % (i + 1)) or p["name"]
             if p.get("align") or p.get("valign"):
                 # (justified in the block's tab: as set there, on the pin)
-                out.append(Text((x, y), p["name"], h, 0.0, p.get("align", "left"),
+                out.append(Text((x, y), name, h, 0.0, p.get("align", "left"),
                                 p.get("valign", "baseline")))
                 continue
             ix, iy = d.pin_inward(p["name"])
             wx, wy = self.to_world((p["pos"][0] + ix, p["pos"][1] + iy))
             dx, dy = wx - x, wy - y
             if abs(dx) >= abs(dy):
-                out.append(Text((x + (g if dx >= 0 else -g), y + g), p["name"], h, 0.0,
+                out.append(Text((x + (g if dx >= 0 else -g), y + g), name, h, 0.0,
                                 "left" if dx >= 0 else "right", "bottom"))
             else:
-                out.append(Text((x + g, y + (g if dy >= 0 else -g)), p["name"], h, 0.0,
+                out.append(Text((x + g, y + (g if dy >= 0 else -g)), name, h, 0.0,
                                 "left", "bottom" if dy >= 0 else "top"))
         return out
 
@@ -2957,6 +2979,9 @@ class Insert(Entity):
             if not v:
                 # (the footprint block's own, as the bill of materials takes it)
                 v = {"cat": d.catalog, "desc": d.description}.get(key, "")
+            if key == "tag" and v and self.attrs.get("TERM", "").strip():
+                # (a terminal's footprint: its strip and number, TB1-4; 0.28)
+                v = "%s-%s" % (v, self.attrs["TERM"].strip())
             return v or "?"
         v = self.attrs.get(key, "")
         return attr_display(key, v) if v.strip() else None
@@ -3445,6 +3470,9 @@ class Sheet:
         self.xref_frozen = False            # cross-references kept as they were (issued sheet)
         self.xref_shown = None              # the cross-references shown while frozen (or while
                                             # the project's aren't automatic): xrefs.py
+        # a panel sheet's footprint terminals labeled with their wires and where they go
+        # (Terminal wire labels, panelwiring.py; 0.28: per sheet, decided there)
+        self.terminal_labels = False
         self.no_dots = []                   # junction dots deleted (Delete dot): [(x, y)]
         # arrays that stay arrays (arrays.py): {id: {mode, vals, center, source, items}}
         self.arrays = {}
@@ -3698,6 +3726,8 @@ class Sheet:
                            for k, a in self.arrays.items()}
         if self.report:
             d["report"] = self.report
+        if self.terminal_labels:
+            d["terminal_labels"] = True
         if self.pin_order:
             d["pin_order"] = list(self.pin_order)
         if self.pin_layers:
@@ -3756,6 +3786,7 @@ class Sheet:
                            if v}
         self.arrays = _arrays(d.get("arrays"))
         self.report = str(d.get("report", "") or "")
+        self.terminal_labels = bool(d.get("terminal_labels", False))
         self.version += 1
 
     @classmethod

@@ -618,6 +618,9 @@ def sync_children(ed, project):
                 if p is not None:
                     ed.change(s, e.copy(attrs=link_attrs(e.attrs, p)))
     number_terminals(ed, project)
+    # contacts placed or linked to another device: their pin numbers there (13-14, 21-22...)
+    from .pinnumbers import number_contacts
+    number_contacts(ed, project)
 
 
 def is_linked_box(e):
