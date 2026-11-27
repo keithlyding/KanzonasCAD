@@ -15,6 +15,7 @@ AutoCAD Electrical's wire connection attributes (X?TERMnn) become pins, its TAG1
 spot (fileio.layout_defn)."""
 
 import os
+import threading
 
 from . import fileio
 from . import model as M
@@ -59,13 +60,38 @@ def drawing_files(folder, subfolders=False):
     return sorted(out, key=lambda p: os.path.relpath(p, folder).lower())
 
 
-def read_blocks(path):
-    """Every block of one file, as Found rows; a file that can't be read is one row with the
-    reason (never raised: one damaged file among many is listed, the others still come in)."""
-    stem = os.path.splitext(os.path.basename(path))[0]
+_DWG_READER = threading.Lock()          # (one DWG read at a time: load)
+
+
+def load(path):
+    """What reading a file needs of the disk, done on a thread so the event loop never waits
+    on it (import_blocks_window.scan; 0.29: one step of 0.12 s on the Windows build, opening
+    a file just written): a DXF's bytes, ("dxf", bytes); a DWG read whole, ("dwg", what
+    fileio.dwg_document gives), its reader reading the file itself, one DWG at a time; or
+    ("error", the exception), for read_blocks to list. No Qt, nothing shared but the lock."""
     try:
         if path.lower().endswith(".dwg"):
-            doc, units, _left, _reader = fileio.dwg_document(path)
+            with _DWG_READER:
+                return "dwg", fileio.dwg_document(path)
+        with open(path, "rb") as f:
+            return "dxf", f.read()
+    except Exception as ex:     # (whatever the reader raised: listed by read_blocks, with why)
+        return "error", ex
+
+
+def read_blocks(path, loaded=None):
+    """Every block of one file, as Found rows; a file that can't be read is one row with the
+    reason (never raised: one damaged file among many is listed, the others still come in).
+    loaded: what load(path) gave, read from it with no disk (the same rows)."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    what, got = loaded if loaded is not None else (None, None)
+    try:
+        if what == "error":
+            raise got
+        if path.lower().endswith(".dwg"):
+            doc, units, _left, _reader = got if what == "dwg" else fileio.dwg_document(path)
+        elif what == "dxf":
+            doc, units = fileio.dxf_document_of(got, path), None
         else:
             doc, units = fileio.dxf_document(path), None
         got = blocks_of(doc, path, units)
