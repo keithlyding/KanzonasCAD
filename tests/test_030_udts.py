@@ -319,7 +319,7 @@ class UdtTest(unittest.TestCase):
         before = set(self.s.udts)
         self.v.set_selection(ids)
         self.v.run(C.CopyCmd)
-        type_in(self.v, "0,0", "%g,%g" % to)
+        type_in(self.v, "0,0", "%.12g,%.12g" % to)
         if self.v.cmd is not None:
             self.v.cmd.enter()
         new = set(self.s.udts) - before
@@ -354,6 +354,22 @@ class UdtTest(unittest.TestCase):
         self.p.undo()
         self.p.undo()
         self.assertEqual(len(self.s.udts), 1)
+
+    def test_copy_far_off_keeps_its_exact_place(self):
+        # (the long battery, 0.30, seed 5202: a copy put 3155.51210538" off took its place
+        # rounded to 6 places, 4e-7" off its own parts: its phases no longer met the points
+        # the UDT starts them from, and a rebuild would have drawn the new parts there)
+        gid = self.place(self.udt(), (2.0, 10.0))
+        dx = 3155.51210538
+        new = self.copy_cmd(gid, (dx, 0.0))
+        inst = self.s.udts[new]
+        self.assertAlmostEqual(inst["at"][0], 2.0 + dx, places=9)
+        self.assertAlmostEqual(inst["at"][1], 10.0, places=9)
+        BC.udt_motor_circuit(self.p, self.s, U.type_of(self.s, inst), inst)
+        # (rebuilt with a part added, the new part's wires meet the copy's own)
+        self.props(new, {"Line reactor": U.INCLUDED})
+        inst = self.s.udts[new]
+        BC.udt_motor_circuit(self.p, self.s, U.type_of(self.s, inst), inst)
 
     def test_copy_turned_rebuilds_where_it_is(self):
         gid = self.place(self.udt(), (2.0, 10.0))

@@ -1111,6 +1111,26 @@ def pdf_links_right(project, path, sheets):
 
 
 # ---- a source arrow's wire number (0.19.11) ----------------------------------------------------
+def _beside_outlet_wire(project, sheet, wire, q, want):
+    """Whether wire, on an outlet's terminal at q, is a group of its own beside another wire on
+    that terminal numbered want (the outlet's): with the taps kept apart (Tap numbers: suffix
+    or own), a wire passing over the terminal and one ending on it aren't joined (two wires
+    ending there are, and wires crossing there never), and the outlet's letter goes to one."""
+    from kanzonascad import wirenums
+    taps = wirenums.tap_mode(project) == "same"
+
+    def end(w):
+        return any(abs(a[0] - q[0]) <= 1e-6 and abs(a[1] - q[1]) <= 1e-6
+                   for a in (w.points[0], w.points[-1]))
+    for o in sheet.wires():
+        if o.id == wire.id or o.num != want or not o.touches(q):
+            continue
+        joined = (end(o) and end(wire)) or (taps and (end(o) or end(wire)))
+        if not joined:
+            return True
+    return False
+
+
 def own_wire_number_wrong(project, sheet, wire, split, page=None):
     """Why the number of a wire of its own (not a tap) at a source arrow is wrong, or None:
     a number of its page; but a wire on a distribution block outlet's T pin takes its block's
@@ -1145,9 +1165,17 @@ def own_wire_number_wrong(project, sheet, wire, split, page=None):
             if len(phase) != 1:
                 return None             # (no block, or its phase not numbered: nothing to say)
             want = phase.pop() + letter
+            if num != want and _beside_outlet_wire(project, sheet, wire, q, want):
+                break
             CHECKED["a source's wire on a distribution outlet takes its phase's number"] += 1
             return None if num == want else "a source arrow's wire on outlet %s's %s took %s, " \
                 "not %s" % (k, n, num, want)
+        else:
+            continue
+        # (a second wire on the outlet's terminal, kept apart from the outlet's own: numbered
+        # as a wire of its own, below)
+        CHECKED["a source's wire beside an outlet's wire on its terminal: its own number"] += 1
+        break
     got = split(num)
     if got is None or got[0] != (page or project.sheet_number(sheet)):
         return "a source arrow's wire on page %s took %s from a destination's page" % (
@@ -1637,6 +1665,34 @@ def udt_snapshot(project, sheet, gid):
                       if _is_terminal(e) and e.attrs.get("TERM") and e.attrs.get("TAG")}}
 
 
+def _joined_locked(sheet, start, taps):
+    """The numbers of the locked wires on sheet joined to the wires start (them included),
+    worked out from their points: two wires join where an end of one is an end of the other,
+    and, a tap numbered as the wire it taps (taps), where an end of one lands on the other."""
+    def same(a, b):
+        return abs(a[0] - b[0]) <= 1e-6 and abs(a[1] - b[1]) <= 1e-6
+
+    def joined(w, o):
+        ends_w, ends_o = (w.points[0], w.points[-1]), (o.points[0], o.points[-1])
+        if any(same(a, b) for a in ends_w for b in ends_o):
+            return True
+        return taps and (any(o.distance(a) <= 1e-6 for a in ends_w) or
+                         any(w.distance(b) <= 1e-6 for b in ends_o))
+    seen = {w.id for w in start}
+    todo = list(start)
+    out = set()
+    while todo:
+        w = todo.pop()
+        if w.num_lock and w.num:
+            out.add(w.num)
+        x0, y0, x1, y1 = w.bbox()
+        for o in sheet.query((x0 - 1e-6, y0 - 1e-6, x1 + 1e-6, y1 + 1e-6)):
+            if isinstance(o, M.Wire) and o.id not in seen and joined(w, o):
+                seen.add(o.id)
+                todo.append(o)
+    return out
+
+
 def udt_copied(project, sheet, was, to, gid, intact=False):
     """A placed UDT copied whole (was: udt_snapshot of it on sheet) is a new placed UDT gid on
     sheet to: the same UDT, choices, values, rating rules and overrides; all of its members
@@ -1685,7 +1741,11 @@ def udt_copied(project, sheet, was, to, gid, intact=False):
                                           b["angle"] == a["angle"]):
         def numbers(objs):
             return {e.num for e in objs if isinstance(e, M.Wire) and e.num and not e.num_lock}
-        locked = {e.num for e in on.values() if isinstance(e, M.Wire) and e.num_lock}
+        # (the locked numbers its wires are joined to on its sheet, its own or not: a wire of
+        # the original edited by hand, cut up by the clean-up when pasted, may leave its typed
+        # number on a piece that is no member, still joined to the copy's wire; seed 5201)
+        locked = _joined_locked(to, [e for e in on.values() if isinstance(e, M.Wire)],
+                                wirenums.tap_mode(project) == "same")
         nums = numbers(on.values()) - locked
         theirs = numbers(U.members(sheet, a["id"]).values()) if a["id"] in sheet.udts else set()
         assert not (nums & theirs), "a copy has the original's wire numbers %s" % (
@@ -2058,6 +2118,12 @@ def panel_wiring_right(project):
                 for nums, to in got or [(None, None)]:
                     want[(u["name"], name, nums, ", ".join(to) if to is not None else None,
                           u["loc"])] += 1
+
+    # (a pin left out is left out of both: the list's rows say only the unit's name and the
+    # pin's, so a terminal drawn in two places, one of them with a wire numbered on its own,
+    # can't be told apart; the long battery, 0.30, seed 5201)
+    for k in [k for k in want if (k[0], k[1]) in skip]:
+        del want[k]
 
     def split(t):
         return frozenset(x for x in t.split(", ") if x) if t else frozenset()

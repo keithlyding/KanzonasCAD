@@ -111,6 +111,36 @@ class PdbTest(unittest.TestCase):
         lone = M.Wire([(8.0, 8.0), (9.0, 8.0)], num="1099")
         self.assertIsNotNone(BC.own_wire_number_wrong(self.p, s2, lone, wirenums.split))
 
+    def test_battery_check_a_second_wire_on_an_outlet_terminal(self):
+        # (the long battery, 0.30, seed 5201: taps kept apart, a wire passing over outlet 1's
+        # T1 and one ending on it are two groups; the outlet's letter goes to one, 1001A, and
+        # the other is a wire of its own, 1004; the check wanted 1001A of both)
+        from tests import battery_checks as BC
+        with self.p.edit("taps") as ed:
+            ed.project_settings({"tap_numbers": "own"})
+        pdb = self.place(self.par, (5.0, 5.0))
+        self.wire_pins(pdb)
+        o1 = self.place(self.out, (3.0, 1.0), pdb.attrs["TAG"])
+        self.wire_pins(o1, out=True)
+        q = dict(o1.pin_points())["T1"]
+        with self.p.edit("over the terminal") as ed:
+            ed.add(self.s, M.Wire([(q[0], q[1] + 2.0), (q[0], q[1] - 2.0)]))
+        self.number()
+        base = self.num_at(self.s, dict(self.s.entities[pdb.id].pin_points())["L1"])
+        on = [w for w in self.s.wires() if w.touches(q)]
+        self.assertEqual(sorted(w.num == base + "A" for w in on), [False, True])
+        other = next(w for w in on if w.num != base + "A")
+        self.assertEqual(wirenums.split(other.num)[0], "1")
+        self.assertIsNone(BC.own_wire_number_wrong(self.p, self.s, other, wirenums.split))
+        # (still wrong: a number of another page, or the letter on neither wire)
+        self.assertIsNotNone(BC.own_wire_number_wrong(
+            self.p, self.s, other.copy(num="2001"), wirenums.split))
+        with self.p.edit("letter gone") as ed:
+            for w in on:
+                if w.id != other.id:
+                    ed.change(self.s, w.copy(num="1077", num_lock=True))
+        self.assertIsNotNone(BC.own_wire_number_wrong(self.p, self.s, other, wirenums.split))
+
     def test_too_many_outlets_are_flagged(self):
         pdb = self.place(self.par, (5.0, 5.0))
         with self.p.edit("outlets") as ed:

@@ -715,20 +715,24 @@ def located(project, sheet, inst, udt, names=None):
     were moved or turned together since (Move, Rotate on all of it), where most of them say it
     is now."""
     at, angle, scale = tuple(inst["at"]), float(inst["angle"]), float(inst["scale"])
-    votes, n = _votes(udt, members(sheet, inst["id"]), scale)
+    votes, n, exact = _votes(udt, members(sheet, inst["id"]), scale)
     if not votes:
         return at, angle, scale
     here = (round(angle, 4) % 360.0, round(at[0], 6), round(at[1], 6))
     best = max(votes, key=lambda k: (votes[k], k == here))
     if best == here or votes.get(here, 0) >= votes[best] or 2 * votes[best] <= n:
         return at, angle, scale
-    return (best[1], best[2]), best[0], scale
+    return exact[best], best[0], scale
 
 
 def _votes(udt, on, scale):
     """({(angle, x, y): how many of its symbols put the UDT's base point there}, how many
-    symbols voted) of a placed UDT's members on ({role: object})."""
-    votes, n = {}, 0
+    symbols voted, {(angle, x, y): where the first of them puts the base point, not
+    rounded}) of a placed UDT's members on ({role: object}). (The keys are rounded to gather
+    the votes; the base point kept is the exact one: a copy's, rounded to 6 places, was 4e-7"
+    off its own wires, and rebuilt there it would be drawn off them; the long battery, 0.30,
+    seed 5202.)"""
+    votes, n, exact = {}, 0, {}
     for role, e in on.items():
         m = udt.member(role)
         if m is None or not isinstance(e, M.Insert) or m["entity"].get("kind") != "insert":
@@ -742,7 +746,8 @@ def _votes(udt, on, scale):
         rx, ry = G.rotate_point((px, py), (0.0, 0.0), a)
         key = (round(a, 4) % 360.0, round(e.pos[0] - rx, 6), round(e.pos[1] - ry, 6))
         votes[key] = votes.get(key, 0) + 1
-    return votes, n
+        exact.setdefault(key, (e.pos[0] - rx, e.pos[1] - ry))
+    return votes, n, exact
 
 
 class Plan:
@@ -1089,10 +1094,10 @@ def adopt_copies(ed, project, sheet, found, made):
         inst = dict(old, id=uuid.uuid4().hex[:12], members={r: e.id for r, e in got.items()})
         inst["gone"] = sorted(set(old.get("gone", ())) |
                               (set(old["members"]) - set(got)))
-        votes, _n = _votes(udt, got, float(old["scale"]))
+        votes, _n, exact = _votes(udt, got, float(old["scale"]))
         if votes:
             best = max(votes, key=lambda k: votes[k])
-            inst["at"], inst["angle"] = [best[1], best[2]], best[0]
+            inst["at"], inst["angle"] = list(exact[best]), best[0]
         udts[inst["id"]] = inst
         types.setdefault(inst["type"], kind)            # (the copied one's, as it was kept)
         out.append(inst["id"])

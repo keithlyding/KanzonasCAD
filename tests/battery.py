@@ -4610,7 +4610,12 @@ def random_editing(log, out, ops, seed, drawing=None):
             finish()
             new = [e for i, e in s.entities.items() if i not in before and tags_mod.is_footprint(e)]
             if typed is not None:
-                assert len(new) == 1 and new[0].attrs.get("PARENT") == typed[0].attrs["DEV"] \
+                # (on a strip of the tag typed: a strip's tag typed and locked is kept by its
+                # copies, so two strips can share it, and the tag names either; the long
+                # battery, 0.30, seed 5202)
+                devs = {e.attrs["DEV"] for e in tbs if e.attrs.get("DEV") and
+                        e.attrs["TAG"].strip().upper() == typed[0].attrs["TAG"].strip().upper()}
+                assert len(new) == 1 and new[0].attrs.get("PARENT") in devs \
                     and new[0].attrs.get("TERM") == typed[1], \
                     "a terminal block placed as %s-%s: %r" % (
                         typed[0].attrs["TAG"], typed[1], new and new[0].attrs)
