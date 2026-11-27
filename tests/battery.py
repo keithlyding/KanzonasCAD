@@ -3743,7 +3743,7 @@ def random_editing(log, out, ops, seed, drawing=None):
         ents = list(s.entities.values())
         if not ents:
             return
-        # (now and then an arrow, its name typed: kept, or refused with the reason; the
+        # (now and then an arrow, its name typed: kept, or its wire renumbered; the
         # battery, 0.26, seed 202611263)
         arrows = [e for e in ents if isinstance(e, M.Insert) and e.block in wirenums.ARROWS]
         aim = bool(arrows) and rnd.random() < 0.25
@@ -3849,30 +3849,63 @@ def random_editing(log, out, ops, seed, drawing=None):
             want = value
         before = {e.id: e.to_dict() for e in pick}
         n = len(p.undo_stack)
-        # (a name typed for an arrow may be refused, with the reason, only where one of them is
-        # a source arrow on a numbered wire, named by that number, or the name typed is a source
-        # arrow's already (it would join that pair); a destination arrow linked by hand takes
-        # it, no longer linked: never put back silently, the battery, 0.26, seed 202611263)
-        may_refuse = key == "TAG" and wirenums.enabled(p) and any(
-            e.block == wirenums.ARROWS[0] and any(
-                getattr(w, "kind", "") == "wire" and w.num and w.touches(q, 1e-6)
-                for _n, q in e.pin_points() for w in s.query_point(q, 1e-6))
-            for e in pick if isinstance(e, M.Insert)) or key == "TAG" and any(
-            c.block == wirenums.ARROWS[0] and (c.attrs.get("TAG") or "").upper() == value
-            for sh in p.sheets for c in sh.inserts())
+        # (a name typed for a source arrow on a numbered wire numbers the wire, as typed on
+        # the wire: the owner, Nov 27 2026, "Renumber the wire"; with several selected it is
+        # refused, said; a destination arrow linked by hand takes it, no longer linked: never
+        # put back silently, the battery, 0.26, seed 202611263)
+        renum = wirenums.renumbers(p, s, pick[0], value) if key == "TAG" and \
+            len(pick) == 1 else None
+        several = key == "TAG" and len(pick) > 1 and any(
+            wirenums.renumbers(p, s, e, value) is not None for e in pick)
+        asked, told = [], []
+        how = rnd.choice([None, "same", "source", "destination"])
+        if renum is not None:
+            old = (pick[0].attrs.get("TAG") or "").strip().upper()
+            link = wirenums.link_to(s, pick[0])
+            dests = [(sh, c.id) for sh in p.sheets for c in sh.inserts()
+                     if c.block == wirenums.ARROWS[1] and (
+                         c.attrs.get("FROM") == link or not c.attrs.get("FROM") and
+                         (c.attrs.get("TAG") or "").strip().upper() == old)]
+            others = wirenums.others_numbered(p, s, renum, value) if value.strip() else []
+            win.ask_cross_reference = lambda num, where: asked.append(num) or how
         win.statusBar().clearMessage()
-        props_set(key, value)
-        if key == "TAG" and any(isinstance(e, M.Insert) and e.block in wirenums.ARROWS
-                                for e in pick) and \
-                any(model_value(key, s.entities[e.id], s) != want for e in pick):
-            said = win.statusBar().currentMessage()
-            assert may_refuse, "Properties: %s set to %r on %s: not kept (%r said)" % (
-                key, value, [e.block for e in pick if isinstance(e, M.Insert)], said)
-            assert "wire's number" in said, "Properties: %r refused without a reason (%r)" % (
-                value, said)
+        real_info = QMessageBox.information
+        QMessageBox.information = staticmethod(lambda *a, **k: told.append(a[2]))
+        try:
+            props_set(key, value)
+        finally:
+            QMessageBox.information = real_info
+            win.__dict__.pop("ask_cross_reference", None)
+        said = win.statusBar().currentMessage()
+        if renum is not None:
+            # (as the number typed on the wire: asked only when another wire has it; not
+            # taken only when that question is cancelled or the wire has no open end for a
+            # connector, said in a message, and then nothing changes)
+            assert bool(asked) == bool(others), "Properties: %r for a source arrow asked %r" % (
+                value, asked)
+            if asked and how is None or told:
+                assert all(s.entities[e.id].to_dict() == before[e.id] for e in pick) and \
+                    len(p.undo_stack) == n, "Properties: %r not taken, but something " \
+                    "changed (%r)" % (value, told)
+                BC.CHECKED["properties: a source arrow's name not taken, as on its wire"] += 1
+                return
+            wire = s.entities[renum.id]
+            assert (wire.num, wire.num_lock) == (value, True), \
+                "Properties: source arrow named %r; its wire is %r (locked %r)" % (
+                    value, wire.num, wire.num_lock)
+            got = [sh.entities[i].attrs.get("TAG") for sh, i in dests if i in sh.entities]
+            assert all(t == value for t in got), \
+                "Properties: source arrow named %r; its destinations show %r" % (value, got)
+            assert len(p.undo_stack) == n + 1, "Properties: a source arrow's name took %d " \
+                "steps" % (len(p.undo_stack) - n)
+            BC.CHECKED["properties: a source arrow's name numbered its wire%s" % (
+                " (asked: %s)" % how if asked else "")] += 1
+        elif several:
+            assert "select it alone" in said, "Properties: %r for several with a source " \
+                "arrow: %r said" % (value, said)
             assert all(s.entities[e.id].to_dict() == before[e.id] for e in pick) and \
                 len(p.undo_stack) == n, "Properties: %r refused, but something changed" % value
-            BC.CHECKED["properties: an arrow's name refused, with the reason"] += 1
+            BC.CHECKED["properties: a source arrow's name with others, refused, said"] += 1
             return
         now = [s.entities.get(e.id) for e in pick]
         for e in now:

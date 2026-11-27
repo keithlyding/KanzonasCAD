@@ -3614,12 +3614,20 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         attrs = attributes_dialog(self, self.library, ins, v.project, v.sheet(), shown, others)
         if attrs is None:
             return
+        from . import wirenums
         typed = (attrs.get("TAG") or "").strip()
-        if ins.defn is not None and ins.defn.wiring == "link" and \
+        if wirenums.renumbers(v.project, v.sheet(), ins, typed) is not None:
+            # (a source arrow's name on a numbered wire: the wire's new number, with the rest
+            # of the answer in its step; the owner, Nov 27 2026)
+            kept = dict(attrs, TAG=ins.attrs.get("TAG", ""))
+            rest = self.attribute_changes(v.project, v.sheet(), ins, kept, shown, others)
+            if self.arrow_renumbers(v, ins, typed, rest):
+                return
+            attrs = kept                # (not taken, as on the wire: the rest of the answer)
+        elif ins.defn is not None and ins.defn.wiring == "link" and \
                 typed.upper() != (ins.attrs.get("TAG") or "").strip().upper():
             # (an arrow's name numbering would put back: the rest of the answer kept, its
             # name left as it was, and why said; as the Properties panel refuses it)
-            from . import wirenums
             try:
                 with v.project.edit("Attributes") as ed:
                     for sh, e in self.attribute_changes(v.project, v.sheet(), ins, attrs,
@@ -3994,11 +4002,15 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                                             bool(num))
         self.apply_wire_number(v, cur, num, lock, own, was, style, on_pin)
 
-    def apply_wire_number(self, v, cur, num, lock, own="", was="", style=None, on_pin=False):
+    def apply_wire_number(self, v, cur, num, lock, own="", was="", style=None, on_pin=False,
+                          before=(), name="Wire number"):
         """A wire's number as the Wire number window answers it (num, locked or not; own:
         "own", "same" or "" for how it numbers as a tap, was: as it did; style: its tap
         suffix's), one step; a number another wire has asks whether it is a cross-reference.
-        The Properties panel's Wire number goes through it too. Returns whether it changed."""
+        The Properties panel's Wire number goes through it too, and a name typed for a source
+        arrow on a numbered wire (arrow_renumbers): before, [(sheet, changed copy)] made in
+        the same step (the rest of an attributes window's answer). Returns whether it
+        changed."""
         from . import wirenums
         if style is None:
             style = cur.tap_style
@@ -4008,17 +4020,20 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             return False
         go_same = False
         if num and num != (cur.num or ""):
-            go = self._cross_reference(v, cur, num, lock)
+            go = self._cross_reference(v, cur, num, lock, before)
             go_same = go == "lock"
-            if not go:
-                return False
+            if not go or go == "done":
+                return bool(go)
             if go == "lock" and not lock:
                 # (two wires with one number: only a locked one stays, numbering gives an
                 # unlocked one a free number again; the battery, 0.17.5, seed 77)
                 lock = True
                 self._say("Wire %s locked: another wire has that number, and numbering "
                           "would change an unlocked one" % num)
-        with v.project.edit("Wire number") as ed:
+        with v.project.edit(name) as ed:
+            for sh, e in before:
+                ed.change(sh, e)
+                cur = v.sheet().entities[cur.id]
             if style != cur.tap_style:
                 # (every wire of its group: one style for the tap, whichever is clicked)
                 got_g = wirenums.group_of(v.project, v.sheet(), cur)
@@ -4042,14 +4057,30 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                     ed.project_settings({"same_numbers": kept + [num]})
         return True
 
-    def _cross_reference(self, v, cur, num, lock):
+    def arrow_renumbers(self, v, ins, typed, before=()):
+        """A name typed for a source arrow on a numbered wire (its attributes window, or Tag in
+        the Properties panel) numbers the wire, as that number typed on the wire does (the
+        owner, Nov 27 2026: "Renumber the wire"): locked, the cross-reference question when
+        another wire has it, and its destination arrows follow; before (the rest of an
+        attributes window's answer) in the same step. Returns whether it was taken; when
+        not, the reason was said or asked as typing it on the wire says it."""
+        from . import wirenums
+        wire = wirenums.renumbers(v.project, v.sheet(), ins, typed)
+        if wire is None:
+            return False
+        num = (typed or "").strip()
+        was = "own" if wire.own_num else "same" if wire.same_num else ""
+        return self.apply_wire_number(v, wire, num, bool(num), was, was, before=before,
+                                      name="Attributes" if before else "Wire number")
+
+    def _cross_reference(self, v, cur, num, lock, before=()):
         """A number typed that another wire already has: asked whether this is a cross-
         reference (the owner, 0.17.5: "it should ask me if it's a cross reference and whether
         it's a source or destination"). Source or destination: off-sheet connectors of a new
         name on the open ends of both, and the number on the one wire they make, in one step;
         True to go on as typed (no other wire has it), "lock" to go on with it locked ("just
-        the same number": only a locked number stays beside another wire's); False when it is
-        done here or cancelled."""
+        the same number": only a locked number stays beside another wire's); "done" when it is
+        done here (with before, apply_wire_number's, in its step), False when cancelled."""
         from . import wirenums
         project, sheet = v.project, v.sheet()
         others = wirenums.others_numbered(project, sheet, cur, num)
@@ -4078,6 +4109,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         out_def = self.library.get("symbol", "Source arrow")
         in_def = self.library.get("symbol", "Destination arrow")
         with project.edit("Cross-reference") as ed:
+            for sh, e in before:
+                ed.change(sh, e)
             name = wirenums.cross_reference(ed, project, here, there, out_def, in_def,
                                             how == "source")
             wirenums.set_number(ed, project, sheet, sheet.entities[cur.id], num, lock)
@@ -4090,7 +4123,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                     lock = True
         self._say("Wire %s%s: connectors %s here and at %s (Undo takes them back)"
                   % (num, " (locked: numbering would change it)" if lock else "", name, where))
-        return False
+        return "done"
 
     def ask_cross_reference(self, num, where):
         """A number already used: "source", "destination", "same" or None (a test replaces

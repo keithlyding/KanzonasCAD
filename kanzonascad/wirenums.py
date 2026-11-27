@@ -708,22 +708,34 @@ def unlink_renamed(project, ins, attrs):
     return {k: x for k, x in attrs.items() if k != "FROM"}
 
 
+def renumbers(project, sheet, ins, typed):
+    """The wire a name typed for the placed block ins renumbers, or None: a source arrow on a
+    numbered wire is named by the wire's number (the owner, 0.18.6), so a name typed for it is
+    the wire's new number, typed as on the wire (the owner, Nov 27 2026: "Renumber the wire").
+    None when wire numbers are off, it isn't a source arrow on a numbered wire, or the name
+    typed is the one it has."""
+    if ins.block != ARROWS[0] or not enabled(project) or \
+            (typed or "").strip().upper() == (ins.attrs.get("TAG") or "").strip().upper():
+        return None
+    return numbered_wire(sheet, ins)
+
+
 class NameRefused(ValueError):
     """A name typed for an arrow that numbering would put back (name_refused)."""
 
 
 def name_refused(ed, project, sheet, iid, typed):
     """None when the arrow (or off-sheet connector) iid, just given the name typed in ed, keeps
-    it once numbering has run; else why not: a source arrow on a numbered wire is named by the
-    wire's number (the owner, 0.18.6), so a name typed for it would be put back, or its wire
-    given a new number. The caller undoes the step (raises NameRefused) and says why."""
+    it once numbering has run; else why not (never put back silently: the battery, 0.26, seed
+    202611263). A source arrow on a numbered wire doesn't come here: its name renumbers the
+    wire (renumbers). The caller undoes the step (raises NameRefused) and says why."""
     sync(ed, project)
     e = sheet.entities.get(iid)
     now = (e.attrs.get("TAG") or "").strip().upper() if e is not None else ""
-    if e is None or now == (typed or "").strip().upper():
+    want = (typed or "").strip().upper()
+    if e is None or now == want:
         return None
-    return ("an arrow on a numbered wire is named by the wire's number: type the new number "
-            "on the wire (Wire number) instead")
+    return "numbering names it %s" % now
 
 
 def sync(ed, project, renumber=None):
@@ -966,11 +978,17 @@ ARROWS = ("Source arrow", "Destination arrow")
 
 def number_at(sheet, ins):
     """The number of the wire on a connector's pin ("" when none)."""
+    w = numbered_wire(sheet, ins)
+    return w.num if w is not None else ""
+
+
+def numbered_wire(sheet, ins):
+    """The numbered wire on a connector's pin, or None."""
     for _n, q in ins.pin_points():
         for w in sheet.query_point(q, TOL):
             if getattr(w, "kind", "") == "wire" and w.num and w.touches(q, TOL):
-                return w.num
-    return ""
+                return w
+    return None
 
 
 def match_arrow_layers(ed, project, name):

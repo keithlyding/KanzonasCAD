@@ -1,13 +1,15 @@
 """A name typed for a source or destination arrow (the Properties panel's Tag, or its
-attributes window) is kept, or refused with the reason: never put back silently, never a new
-number for the wire (the nightly battery, 0.26, seed 202611263, step 1005: a destination arrow
-linked by hand to its source was given CR942 in the Properties panel and still read 1048, its
-source's name; a source arrow given a name read 1076, a new number for its wire).
+attributes window) is kept, or numbers the wire: never put back silently (the nightly battery,
+0.26, seed 202611263, step 1005: a destination arrow linked by hand to its source was given
+CR942 in the Properties panel and still read 1048, its source's name; a source arrow given a
+name read 1076, a new number for its wire).
 
 A destination arrow linked by hand follows its source arrow's name, so a name typed for it
 drops that link: it is then paired by its name, as Automatic in its attributes window pairs it.
 A source arrow on a numbered wire is named by the wire's number (the owner, 0.18.6): a name
-typed for it is refused, with the reason, and nothing changes."""
+typed for it is the wire's new number, as typed on the wire (the owner, Nov 27 2026: "Renumber
+the wire"): locked, the cross-reference question when another wire has it, its destinations
+following, one step."""
 import unittest
 
 from PySide6.QtWidgets import QComboBox, QDialog
@@ -103,16 +105,95 @@ class ArrowNameTypedTest(unittest.TestCase):
         self.assertEqual(got.attrs["TAG"], name)
         self.assertNotIn("FROM", got.attrs)
 
-    def test_panel_source_on_a_numbered_wire_refused_with_the_reason(self):
+    def renumbered(self, num):
+        """The wire carries num, locked, and the source and its destination show it."""
+        self.assertEqual(self.num(), num)
+        self.assertTrue(self.s1.entities[self.wa.id].num_lock)
+        self.assertEqual(self.s1.entities[self.src.id].attrs["TAG"], num)
+        dst = self.s2.entities[self.dst.id]
+        self.assertEqual(dst.attrs["TAG"], num)
+        self.assertEqual(dst.attrs.get("FROM"), wirenums.link_to(self.s1, self.s1.entities[
+            self.src.id]))
+        dw = next(w for w in self.s2.wires())
+        self.assertEqual(dw.num, num)                       # (the destination's wire follows)
+
+    def test_panel_source_on_a_numbered_wire_renumbers_the_wire(self):
+        # (the owner, Nov 27 2026: "Renumber the wire"; it was put back, or refused)
         src, dst = self.linked()
-        num, n = self.num(), len(self.p.undo_stack)
+        n = len(self.p.undo_stack)
         self.panel_tag(self.s1, src, "CR942")
+        self.renumbered("CR942")
+        self.assertEqual(len(self.p.undo_stack), n + 1)     # (one step)
+        self.assertEqual(self.win.props_panel.widgets["TAG"].text(), "CR942")
+        self.p.undo()
         self.assertEqual(self.s1.entities[src.id].to_dict(), src.to_dict())
         self.assertEqual(self.s2.entities[dst.id].to_dict(), dst.to_dict())
-        self.assertEqual(self.num(), num)                   # (not a new number for its wire)
+        self.linked()
+        self.p.redo()
+        self.renumbered("CR942")
+
+    def test_panel_source_given_another_wires_number_asks_as_the_wire_does(self):
+        # (a number another wire has: the cross-reference question, as typed on the wire;
+        # cancelled, nothing changes; "just the same number", the wire takes it, locked)
+        src, dst = self.linked()
+        with self.p.edit("w") as ed:
+            other = ed.add(self.s1, M.Wire([(2.0, 1.0), (6.0, 1.0)]))
+        with self.p.edit("n") as ed:
+            wirenums.set_number(ed, self.p, self.s1, self.s1.entities[other.id], "1077")
+        asked = []
+        self.win.ask_cross_reference = lambda num, where: asked.append(num)
+        try:
+            src, dst = self.linked()
+            n = len(self.p.undo_stack)
+            self.panel_tag(self.s1, src, "1077")
+            self.assertEqual(asked, ["1077"])
+            self.assertEqual(self.s1.entities[src.id].to_dict(), src.to_dict())
+            self.assertEqual(self.s2.entities[dst.id].to_dict(), dst.to_dict())
+            self.assertEqual(len(self.p.undo_stack), n)
+            self.assertEqual(self.win.props_panel.widgets["TAG"].text(), src.attrs["TAG"])
+            self.win.ask_cross_reference = lambda num, where: asked.append(num) or "same"
+            self.panel_tag(self.s1, src, "1077")
+            self.renumbered("1077")
+            self.assertEqual(len(self.p.undo_stack), n + 1)
+            self.assertEqual(self.s1.entities[other.id].num, "1077")
+        finally:
+            self.win.__dict__.pop("ask_cross_reference", None)
+
+    def test_panel_several_selected_with_a_source_says_why(self):
+        # (its name is its wire's number: one at a time, as a wire's number is typed)
+        src, dst = self.linked()
+        with self.p.edit("w") as ed:
+            ed.add(self.s1, M.Wire([(2.0, 3.0), (6.0, 3.0)]))
+        other = self.place(self.s1, SRC, (6.0, 3.0))
+        other = self.s1.entities[other.id]
+        num, n = self.num(), len(self.p.undo_stack)
+        self.v.show_sheet(self.s1.id)
+        if self.win.props_dock.isHidden():
+            self.win.properties()
+        self.v.set_selection({src.id, other.id})
+        self.win._props_wait.stop()
+        self.win.props_fill()
+        w = self.win.props_panel.widgets["TAG"]
+        w.setText("CR942")
+        w.setModified(True)
+        w.editingFinished.emit()
+        self.assertEqual(self.num(), num)
+        self.assertEqual(self.s1.entities[other.id].to_dict(), other.to_dict())
         self.assertEqual(len(self.p.undo_stack), n)
-        self.assertIn("wire's number", self.win.statusBar().currentMessage())
-        self.assertEqual(self.win.props_panel.widgets["TAG"].text(), num)
+        self.assertIn("select it alone", self.win.statusBar().currentMessage())
+
+    def test_source_on_no_wire_takes_the_name(self):
+        # (no wire to number: its name, one step; not the question a wire's number asks)
+        self.linked()
+        lone = self.s1.entities[self.place(self.s1, SRC, (9.0, 9.0), "ZZ").id]
+        n = len(self.p.undo_stack)
+        self.win.ask_cross_reference = lambda num, where: self.fail("asked")
+        try:
+            self.panel_tag(self.s1, lone, "CR942")
+        finally:
+            self.win.__dict__.pop("ask_cross_reference", None)
+        self.assertEqual(self.s1.entities[lone.id].attrs["TAG"], "CR942")
+        self.assertEqual(len(self.p.undo_stack), n + 1)
 
     # ---- its attributes window -----------------------------------------------------------
     def window_tag(self, sheet, ent, value):
@@ -164,19 +245,19 @@ class ArrowNameTypedTest(unittest.TestCase):
         self.assertEqual(got.attrs.get("FROM"), wirenums.link_to(self.s1, other))
         self.assertEqual(got.attrs["TAG"], self.s1.entities[other.id].attrs["TAG"])
 
-    def test_window_source_on_a_numbered_wire_keeps_its_name_and_says_why(self):
+    def test_window_source_on_a_numbered_wire_renumbers_the_wire(self):
         src, dst = self.linked()
-        num = self.num()
+        n = len(self.p.undo_stack)
         self.window_tag(self.s1, src, "CR942")
-        self.assertEqual(self.s1.entities[src.id].attrs["TAG"], num)
-        self.assertEqual(self.s2.entities[dst.id].to_dict(), dst.to_dict())
-        self.assertEqual(self.num(), num)
-        self.assertIn("wire's number", self.win.cmdline.history.toPlainText())
+        self.renumbered("CR942")
+        self.assertEqual(len(self.p.undo_stack), n + 1)
+        self.p.undo()
+        self.linked()
 
-    def test_window_source_name_refused_other_changes_kept(self):
-        # (its description typed with it: that stays, the name doesn't)
+    def test_window_source_renumbers_with_its_other_changes_in_one_step(self):
+        # (its manufacturer typed with it: both in one step, one Undo takes both back)
         src, _dst = self.linked()
-        num = self.num()
+        num, n = self.num(), len(self.p.undo_stack)
         from PySide6.QtWidgets import QLabel, QLineEdit
 
         def answer(dlg):
@@ -194,6 +275,41 @@ class ArrowNameTypedTest(unittest.TestCase):
             self.win.edit_attributes(self.s1.entities[src.id])
         finally:
             QDialog.exec = old
+        self.renumbered("CR942")
+        self.assertEqual(self.s1.entities[src.id].attrs.get("MFR"), "ACME")
+        self.assertEqual(len(self.p.undo_stack), n + 1)
+        self.p.undo()
+        self.assertEqual(self.s1.entities[src.id].to_dict(), src.to_dict())
+        self.assertEqual(self.num(), num)
+
+    def test_window_source_given_another_wires_number_cancelled_keeps_the_rest(self):
+        # (the cross-reference question cancelled, as on the wire: the name stays, the rest
+        # of the answer is taken)
+        src, _dst = self.linked()
+        num = self.num()
+        with self.p.edit("w") as ed:
+            other = ed.add(self.s1, M.Wire([(2.0, 1.0), (6.0, 1.0)]))
+        with self.p.edit("n") as ed:
+            wirenums.set_number(ed, self.p, self.s1, self.s1.entities[other.id], "1077")
+        from PySide6.QtWidgets import QLabel, QLineEdit
+        asked = []
+        self.win.ask_cross_reference = lambda n, where: asked.append(n)
+
+        def answer(dlg):
+            edits = dlg.findChildren(QLineEdit)
+            next(e for e in edits if e.text() == num).setText("1077")
+            next(lb.buddy() for lb in dlg.findChildren(QLabel)
+                 if lb.text().startswith("Manufacturer")).setText("ACME")
+            return QDialog.Accepted
+        old = QDialog.exec
+        QDialog.exec = answer
+        try:
+            self.v.show_sheet(self.s1.id)
+            self.win.edit_attributes(self.s1.entities[src.id])
+        finally:
+            QDialog.exec = old
+            self.win.__dict__.pop("ask_cross_reference", None)
+        self.assertEqual(asked, ["1077"])
         got = self.s1.entities[src.id]
         self.assertEqual((got.attrs["TAG"], got.attrs.get("MFR")), (num, "ACME"))
         self.assertEqual(self.num(), num)
