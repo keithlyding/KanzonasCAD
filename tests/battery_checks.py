@@ -357,6 +357,10 @@ def _turned_side(sheet, o):
     symbol, or None: its pin; a wire starting or ending on such a pin (that end, or a run
     routed from it)."""
     if isinstance(o, M.Insert):
+        if o.defn is not None and o.defn.kind == "footprint" and o.defn.pins:
+            # (a footprint's terminals are at its part's real screw places, off the grid by
+            # design: 0.28's relays, a 14-pin base's screws 1.2548" from its middle)
+            return "a pin of a footprint"
         return "a pin of a turned symbol" if _turned(o) else None
     if isinstance(o, M.Wire) and (_on_turned_pin(sheet, o.points[0]) or
                                   _on_turned_pin(sheet, o.points[-1])):
@@ -406,7 +410,8 @@ def near_misses_unflagged(sheet):
     [near miss], [(key, point)]). A near miss is accepted only when the program marks it and
     one side of it is off the grid by a symbol turned off the right angles (a pin of one, a
     wire end on such a pin, a run of a wire from such a pin, or such a wire's coordinates
-    carried off the pin since: _carried_off): the owner, Nov 26 2026, "Warn on
+    carried off the pin since: _carried_off), or is a footprint's pin (drawn at real size, its
+    screws where the part has them, 0.28): the owner, Nov 26 2026, "Warn on
     the drawing": a turned symbol's pin, or a wire routed from one, can stop a few thousandths
     from an unrelated wire, and joining them would wire two circuits together. Anything else
     (upright geometry: the program's own slop, as Move and Copy leaving an end 0.0037" short,
@@ -1242,6 +1247,83 @@ def twins_apart(project):
         CHECKED["a symbol and a footprint of one name kept apart"] += 1
 
 
+# ---- contact pin numbers (0.28): worked out here from the attributes, not pinnumbers.py -------
+_SECOND = {"NC": "12", "NO": "34", "NCTO": "56", "NCTC": "56", "NOTC": "78", "NOTO": "78"}
+
+
+def _contact(e):
+    """Whether a placed symbol is a contact numbered on its device: a contact kind, two pins
+    named with digits, not a strip's terminal."""
+    d = getattr(e, "defn", None)
+    return isinstance(e, M.Insert) and d is not None and d.kind == "symbol" and \
+        d.contact in _SECOND and len(d.pins) == 2 and \
+        all(p["name"].isdigit() for p in d.pins) and \
+        not any(a["attr"] in ("TERM", "OUTLET") for a in d.attr_texts) and \
+        not (d.wiring == "pdb" and d.role == "child")
+
+
+def _contact_device(e):
+    return (e.attrs.get("PARENT") if e.defn.role == "child" else
+            e.attrs.get("DEV") if e.defn.prefix else None) or None
+
+
+def _shown_numbers(e):
+    return [e.attrs.get("TERM%02d" % (i + 1)) or p["name"] for i, p in enumerate(e.defn.pins)]
+
+
+def contact_numbers_apart(project):
+    """(0.28) No pin number twice among the contacts of one device (those with numbers of their
+    own: TERM01 and TERM02; a contact of before 0.28 shows its block's 1 and 2)."""
+    by = collections.defaultdict(list)
+    for s in project.sheets:
+        for e in s.inserts():
+            if _contact(e) and e.attrs.get("TERM01") and e.attrs.get("TERM02"):
+                dev = _contact_device(e)
+                if dev:
+                    by[dev].append((s, e))
+    for dev, items in by.items():
+        seen = {}
+        for s, e in items:
+            for n in _shown_numbers(e):
+                assert n not in seen, "pin number %s twice on device %s: %s and %s" % (
+                    n, (e.attrs.get("TAG") or "?"), seen[n], (s.id, e.id, e.block))
+                seen[n] = (s.id, e.id, e.block)
+        if len(items) > 1:
+            CHECKED["contact pin numbers apart on a device"] += 1
+
+
+def contact_numbers_placed(project, e):
+    """(0.28) A contact just placed holds the numbers the rule gives (the owner, Nov 27 2026:
+    the first NO 13-14, the first NC 21-22, else the lowest sequence free on its device; NC
+    1-2, NO 3-4, timed 5-6 and 7-8; an overload's 95-96 and 97-98 while free), from the other
+    contacts of its device across the project."""
+    if not _contact(e):
+        return
+    dev = _contact_device(e)
+    used = set()
+    for s in project.sheets:
+        for o in s.inserts():
+            if o is not e and dev and _contact(o) and _contact_device(o) == dev:
+                used.update(_shown_numbers(o))
+    kind = e.defn.contact
+    lo, hi = _SECOND[kind]
+    want = None
+    if (e.defn.prefix or "").upper() == "OL":
+        pair = ("95", "96") if kind.startswith("NC") else ("97", "98")
+        if not used & set(pair):
+            want = list(pair)
+    if want is None:
+        seqs = {int(n[:-1]) for n in used if len(n) >= 2 and n.isdigit()}
+        seq = {"NO": 1, "NC": 2}.get(kind)
+        if seq is None or seq in seqs:
+            seq = min(k for k in range(1, len(seqs) + 2) if k not in seqs)
+        want = ["%d%s" % (seq, lo), "%d%s" % (seq, hi)]
+    got = [e.attrs.get("TERM01"), e.attrs.get("TERM02")]
+    assert got == want, "%s placed on %s numbered %s, not %s (its device's others: %s)" % (
+        e.block, e.attrs.get("TAG") or "its own", got, want, sorted(used))
+    CHECKED["contact numbered as placed"] += 1
+
+
 TOL = 1e-6
 
 
@@ -1509,8 +1591,11 @@ def panel_wiring_right(project):
     ends_of = {}
     for key, u in units.items():
         for _k, s, e in u["syms"]:
+            # (a pin named as people read it: a contact's own number, TERM01..., 0.28)
+            shown = dict(zip([p["name"] for p in e.defn.pins], _shown_numbers(e)))
             for name, q in e.pin_points():
                 got = pin_ends(s, e, name, q, u["loc"])
+                name = shown.get(name, name)
                 if got is None:
                     skip.add((u["name"], name))
                     continue

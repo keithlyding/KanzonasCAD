@@ -833,6 +833,18 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
             e.setPlaceholderText("a number shows as %s" % M.attr_display(k, "5"))
         form.addRow({"TERM": "Terminal number", "ADDR": "Address (I:0/3, %I0.3...)",
                      "RATING": "Rating"}.get(k, unit[0] if unit else k), e)
+    pin_nums = None
+    from . import pinnumbers
+    if pinnumbers.numberable(ins):
+        # (a contact's pin numbers, 13-14: numbered on its device as it was placed, 0.28;
+        # typed ones are kept as typed)
+        pin_nums = QLineEdit(pinnumbers.text(ins))
+        pin_nums.setObjectName("pin_numbers")
+        pin_nums.setPlaceholderText("its block's: %s" % "-".join(
+            p["name"] for p in ins.defn.pins))
+        pin_nums.setToolTip("Its two pins' numbers as the device marks them (13-14 NO, 21-22 "
+                            "NC...); blank: its block's")
+        form.addRow("Pin numbers", pin_nums)
     if kind_of(ins) == "symbol":
         e = QLineEdit(ins.attrs.get("LOC", ""))
         e.setObjectName("location")
@@ -1129,6 +1141,10 @@ def attributes_dialog(parent, library, ins, project=None, sheet=None, shown=None
             out.pop("XDEV", None)
         else:
             out["XDEV"] = far.currentData()
+    if pin_nums is not None:
+        nums = pinnumbers.parse(pin_nums.text())
+        if nums is not None:                # (not two numbers: left as they were)
+            out = pinnumbers.with_numbers(out, nums)
     if part_id[0]:
         out["PART"] = part_id[0]
     if lock.isChecked():

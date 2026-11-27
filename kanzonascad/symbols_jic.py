@@ -714,4 +714,9 @@ def builtin_symbols():
                   pins=[{"name": "1", "pos": (0, 0)}], tag=None,
                   description="Destination arrow: where a wire arrives from its source arrow "
                               "(the one of the same name)", wiring="link"))
+    # a contact shows its pin numbers beside its pins (13 and 14, numbered on its device as it
+    # is placed: pinnumbers.py, 0.28); hidden on a copy by Show or hide attributes' Pin names
+    for b in S:
+        if b.contact and len(b.pins) == 2 and all(p["name"].isdigit() for p in b.pins):
+            b.show_pins = True
     return S

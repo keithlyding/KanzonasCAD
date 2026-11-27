@@ -170,8 +170,11 @@ class PdfLinksTest(unittest.TestCase):
         coil, src, dst = self.now(s1, self.coil), self.now(s1, self.src), self.now(s2, self.dst)
         z = self.p.zone_text
         # under the coil: a line for each contact, to the contact
-        self.check_link(reader, 0, s1, self.ref(s1, "NO " + z(s2, *no.pos)), 1, s2, no, path)
-        self.check_link(reader, 0, s1, self.ref(s1, "NC " + z(s3, *nc.pos)), 2, s3, nc, path)
+        # (each with its pin numbers, 0.28)
+        self.check_link(reader, 0, s1, self.ref(s1, "NO 13-14 " + z(s2, *no.pos)), 1, s2, no,
+                        path)
+        self.check_link(reader, 0, s1, self.ref(s1, "NC 21-22 " + z(s3, *nc.pos)), 2, s3, nc,
+                        path)
         # under each contact (on a turned sheet, on a scaled one): to the coil
         self.check_link(reader, 1, s2, self.ref(s2, z(s1, *coil.pos)), 0, s1, coil, path)
         self.check_link(reader, 2, s3, self.ref(s3, z(s1, *coil.pos)), 0, s1, coil, path)
@@ -185,7 +188,7 @@ class PdfLinksTest(unittest.TestCase):
         _path, reader, n = self.export([self.s1, self.s2])
         self.assertEqual(n, 2)
         nc = self.now(self.s3, self.nc)
-        item = self.ref(self.s1, "NC " + self.p.zone_text(self.s3, *nc.pos))
+        item = self.ref(self.s1, "NC 21-22 " + self.p.zone_text(self.s3, *nc.pos))
         tb = xrefs.text_item(item).bbox()
         mid = page_xy(self.s1, (tb[0] + tb[2]) / 2.0, (tb[1] + tb[3]) / 2.0)
         rects = [[float(v) for v in a["/Rect"]] for a in self.annots(reader.pages[0])]

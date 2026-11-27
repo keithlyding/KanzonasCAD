@@ -320,7 +320,7 @@ nobody understands).
     Footprint column and on the command line, never guessed. The program's own terminal blocks,
     1- and 3-pole breakers and fuse holders, motor protector, rotary disconnect, contactors
     and overload relay got pins (decided here: typical screw places, so the labels work out of
-    the box; the others, relays, power supplies, PLCs, have none yet).
+    the box; the relays got theirs too, below; power supplies and PLCs have none yet).
   - **A terminal's footprint** is a footprint with the terminal's number (TERM) linked to its
     strip: placing a footprint, the device typed as TB1-4 (decided here, the strip's tag, a
     dash, the number); a terminal block's footprint is asked even when every device already
@@ -341,6 +341,30 @@ nobody understands).
     height, the wire layers) and kept with it until the next; the view's picture key already
     changes with the project's revision. In the footprint label color when the project has
     one. Printed, in PDF, and in DXF (layer PANEL).
+  - **Confirmed by the owner (Nov 27 2026):** Terminal wire label height 0.05" to start, a
+    terminal's footprint typed as TB1-4 as it is now, and terminal wire labels per sheet, off
+    to start.
+  - **Contact pin numbers: 13/14 and 21/22** (the owner, Nov 27 2026; pinnumbers.py). A
+    contact placed is numbered on its device the makers' way (Schneider TeSys, Sprecher +
+    Schuh CA7): first digit its sequence on the device, second 1-2 NC, 3-4 NO; decided here:
+    5-6 timed NC and 7-8 timed NO (EN 50005's special-function digits), the device's first NO
+    13-14 and first NC 21-22 whichever is drawn first (sequences 1 and 2, as a contactor's own
+    auxiliaries), any other contact the lowest sequence free on its device across the whole
+    project; an overload contact 95-96 (NC), 97-98 (NO) while free. A contact on no device is
+    numbered as the first of its kind; a pushbutton, switch or sensor is numbered on itself
+    with its contact blocks. Decided here: a contact added with numbers (Copy, Paste) or
+    linked to another device keeps them unless that device has them, then the next free pair;
+    typed numbers (Pin numbers, attributes window and Properties panel) are kept; drawings of
+    before 0.28 keep 1-2 (nothing renumbered on open, move or edit). Kept per copy as
+    attributes TERM01/TERM02 (AutoCAD Electrical's pin number attributes: they go out to DXF
+    and come back); shown beside the pins, under the coil ("NO 13-14 6-D3"), in Trace, the
+    wiring list and the terminal labels; wires and snaps keep the block's pin names.
+  - **Control relays got pins** (the owner, Nov 27 2026), and the contactors' auxiliaries
+    (13-14, 21-22) and the overload relay's 95-98. Decided here: the ice cube relays (8-pin: 2
+    poles; 14-pin: 4) and the slim relay (1) are changeover poles, pole n's common named both n1
+    and n3, its NC screw n2, its NO n4, so a NO contact 13-14 and an NC 21-22 land on real
+    screws whatever the order; the timer relay's two poles 15/17, 16, 18 and 25/27, 26, 28;
+    A1 and A2 at the bottom.
   - Not done: labels that move out of each other's way where terminals are closer than the
     text, a drawn point-to-point diagram (the owner's no), footprints placed for every
     terminal of a strip at once.

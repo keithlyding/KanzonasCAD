@@ -713,6 +713,8 @@ def random_editing(log, out, ops, seed, drawing=None):
     dump_at = int(os.environ["BATTERY_DUMP_AT"]) if os.environ.get("BATTERY_DUMP_AT") else None
     lib = win.library
     syms = ["Contact NO", "Contact NC", "Relay coil", "Pushbutton NO", "Pushbutton NC",
+            # (0.28: numbered 17-18 and x5-x6 on their device; a pushbutton's contact block)
+            "Contact NO timed close", "Contact NC timed open", "Pushbutton contact NC",
             "Pilot light", "Fuse", "Circuit breaker 1-pole", "Terminal", "Overload contact NC",
             "Disconnect 3-pole", "Fuses 3-pole", "Circuit breaker 3-pole",
             "Fused disconnect 3-pole", "Starter 3-pole", "Drive control terminals",
@@ -1279,6 +1281,8 @@ def random_editing(log, out, ops, seed, drawing=None):
             got = new[0].attrs.get("PARENT", "")
             assert got == linked, "%s's device: %r, not %r" % (name, got, linked)
             BC.CHECKED["contact linked as asked" if linked else "contact on its own"] += 1
+        if len(new) == 1:
+            BC.contact_numbers_placed(p, new[0])          # (0.28: 13-14, 21-22...)
         if v.cmd is None and rnd.random() < 0.25:
             # Enter: the same symbol again (0.16), held by its first pin
             before = set(s.entities)
@@ -3693,6 +3697,10 @@ def random_editing(log, out, ops, seed, drawing=None):
             return e.attrs.get(key, "")
         if key.startswith("attr_"):
             return e.attrs.get(key[5:], "")
+        if key == "pin_numbers":
+            # (0.28: a contact's own, TERM01 and TERM02; none: blank)
+            got = [e.attrs.get("TERM01", ""), e.attrs.get("TERM02", "")]
+            return "-".join(got) if all(got) else ""
         if key == "nofp":
             return missing_fp.not_needed(e)
         if key == "lock":
@@ -3809,7 +3817,11 @@ def random_editing(log, out, ops, seed, drawing=None):
                          ["", "FIELD", "MCP", "JB-1"]),
                      "gauge": rnd.choice(["", "12", "14", "1/0"]),
                      "wire_num": "9%03d" % rnd.randint(0, 999),
-                     "text": "T%d" % rnd.randint(1, 99)}.get(key, rnd.choice(
+                     "text": "T%d" % rnd.randint(1, 99),
+                     # (typed pin numbers: kept as typed; never a pair the program gives,
+                     # nor one typed before, so a number twice on a device is the program's)
+                     "pin_numbers": rnd.choice(["", "X%dA-X%dB" % ((rnd.randint(100, 10 ** 6),)
+                                                                * 2)])}.get(key, rnd.choice(
                          ["", "PUMP", "5", "480V"]))
             if key == "wire_num":
                 if len(pick) > 1 or wirenums.others_numbered(p, s, pick[0], value) or \
@@ -5705,6 +5717,7 @@ def random_editing(log, out, ops, seed, drawing=None):
                 BC.twins_apart(p)
                 BC.strips_right(p)
                 BC.panel_wiring_right(p)
+                BC.contact_numbers_apart(p)
             if i % 50 == 49:
                 v.repaint()
                 APP.processEvents()

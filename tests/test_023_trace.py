@@ -96,8 +96,8 @@ class TraceTest(unittest.TestCase):
         got = [(r.sheet_id, r.ids, r.role, r.name) for r in self.rows()]
         self.assertEqual(got, [
             (self.s1.id, (self.coil.id,), "Coil", self.tag),
-            (self.s1.id, (self.no.id,), "NO contact", self.tag),
-            (self.s2.id, (self.nc.id,), "NC contact", self.tag),
+            (self.s1.id, (self.no.id,), "NO contact 13-14", self.tag),     # (0.28: its pins)
+            (self.s2.id, (self.nc.id,), "NC contact 21-22", self.tag),
             (self.panel.id, (self.fp.id,), "Footprint", self.tag)])
         r = self.rows()[2]
         self.assertEqual(r.where, self.p.zone_text(self.s2, *self.nc.pos))
@@ -161,7 +161,9 @@ class TraceTest(unittest.TestCase):
         self.assertEqual(sorted(got), sorted([
             (self.s1.id, "Wire", num), (self.s1.id, "Coil", "%s pin %s" % (self.tag, pin)),
             (self.s1.id, "Source arrow", self.src.attrs["TAG"]),
-            (self.s2.id, "Wire", num), (self.s2.id, "NC contact", "%s pin %s" % (self.tag, pin2)),
+            # (the contact's pin by its own number, 0.28: 21 for its block's 1)
+            (self.s2.id, "Wire", num), (self.s2.id, "NC contact 21-22", "%s pin %s" % (
+                self.tag, self.s2.entities[self.nc.id].pin_number(pin2))),
             (self.s2.id, "Destination arrow", self.dst.attrs["TAG"])]))
         self.assertEqual(self.rows()[0].role, "Wire")       # (its wire first on its sheet)
         arrow = [r for r in self.rows() if r.role == "Source arrow"][0]
@@ -233,7 +235,7 @@ class TraceTest(unittest.TestCase):
         self.relay()
         self.select(self.s1, self.coil)
         self.trace()
-        r = [x for x in self.rows() if x.role == "NC contact"][0]
+        r = [x for x in self.rows() if x.role == "NC contact 21-22"][0]
         self.v.scale = 0.5                              # (zoomed far out)
         self.assertTrue(self.win.trace_go(r))
         self.assertEqual(self.v.sheet_id, self.s2.id)
@@ -264,7 +266,7 @@ class TraceTest(unittest.TestCase):
         self.relay()
         self.select(self.s1, self.coil)
         self.trace()
-        r = [x for x in self.rows() if x.role == "NC contact"][0]
+        r = [x for x in self.rows() if x.role == "NC contact 21-22"][0]
         with self.p.edit("erase") as ed:
             ed.remove(self.s2, self.nc.id)
         self.assertFalse(self.win.trace_go(r))

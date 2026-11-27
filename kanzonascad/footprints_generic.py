@@ -57,6 +57,34 @@ def _screws(w, h, n, inset=0.18, r=None):
     return out
 
 
+def _dots(pins, r=0.06):
+    """A screw drawn on each pin (pins at one place: one screw)."""
+    seen = []
+    for p in pins:
+        if p["pos"] not in seen:
+            seen.append(p["pos"])
+    return [Circle(q, r) for q in seen]
+
+
+def _relay_pins(w, h, poles, timed=False):
+    """A relay's screws, a column a pole: its NC and NO screws along the top (NC the top
+    row), its common under them at the bottom over the coil's A1 and A2 (A1 left, A2 right).
+    Pole n's common is n1 and n3 (a timer's n5 and n7), its NC screw n2 (n6), its NO n4 (n8)."""
+    nc, no = ("5", "6"), ("7", "8")
+    if not timed:
+        nc, no = ("1", "2"), ("3", "4")
+    top, row = h / 2.0 - 0.12, 0.2
+    out = []
+    for i in range(poles):
+        n = str(i + 1)
+        x = -w / 2.0 + w * (i + 0.5) / poles
+        out += [{"name": n + nc[1], "pos": (x, top)}, {"name": n + no[1], "pos": (x, top - row)},
+                {"name": n + nc[0], "pos": (x, -top + row)},
+                {"name": n + no[0], "pos": (x, -top + row)}]
+    out += [{"name": "A1", "pos": (-w / 4.0, -top)}, {"name": "A2", "pos": (w / 4.0, -top)}]
+    return out
+
+
 def _poles(w, h, n):
     """A modular device of n poles: the poles' joins and screws."""
     out = _screws(w, h, n)
@@ -105,29 +133,53 @@ def builtin_footprints():
     for name, w, h, what in (("Contactor 9-18 A", 45, 80, "Contactor, 3 pole, 9 to 18 A"),
                              ("Contactor 25-38 A", 54, 90, "Contactor, 3 pole, 25 to 38 A")):
         w, h = w * MM, h * MM
-        # (its coil's A1 and A2 on the left side, under and over the power screws)
-        coil = [{"name": "A1", "pos": (-w / 2.0 + 0.12, h / 2.0 - 0.5)},
-                {"name": "A2", "pos": (-w / 2.0 + 0.12, -h / 2.0 + 0.5)}]
+        # (its coil's A1 and A2 on the left side, under and over the power screws; its own
+        # auxiliary contacts on the right, NO 13-14 and NC 21-22, as the makers mark them and
+        # as its contacts are numbered on the schematic: pinnumbers.py, 0.28)
+        x0, x1 = -w / 2.0 + 0.12, w / 2.0 - 0.12
+        coil = [{"name": "A1", "pos": (x0, h / 2.0 - 0.5)},
+                {"name": "A2", "pos": (x0, -h / 2.0 + 0.5)}]
+        aux = [{"name": "13", "pos": (x1, h / 2.0 - 0.5)}, {"name": "14", "pos": (x1, -h / 2.0 + 0.5)},
+               {"name": "21", "pos": (x1, h / 2.0 - 0.72)},
+               {"name": "22", "pos": (x1, -h / 2.0 + 0.72)}]
         out.append(_fp(name, "Control", w, h,
-                       _screws(w, h, 3) + [_rect(-w * 0.3, -0.25, w * 0.3, 0.25)], what,
-                       pins=_screw_pins(w, h, *LT) + coil))
-    out.append(_fp("Overload relay 9-18 A", "Control", 45 * MM, 66 * MM,
-                   _screws(45 * MM, 66 * MM, 3, inset=0.15) + [Circle((0.0, 0.0), 0.15)],
+                       _screws(w, h, 3) + [_rect(-w * 0.3, -0.25, w * 0.3, 0.25)] +
+                       _dots(coil + aux), what,
+                       pins=_screw_pins(w, h, *LT) + coil + aux))
+    # (its contacts on the right, under the T1-T3 screws: NC 95-96, NO 97-98)
+    w, h = 45 * MM, 66 * MM
+    ol = [{"name": n, "pos": (w / 2.0 - 0.12, y)}
+          for n, y in (("97", 0.75), ("95", 0.5), ("96", -0.5), ("98", -0.75))]
+    out.append(_fp("Overload relay 9-18 A", "Control", w, h,
+                   _screws(w, h, 3, inset=0.15) + [Circle((0.0, 0.0), 0.15)] + _dots(ol),
                    "Overload relay, mounted under its contactor or on the rail",
-                   pins=_screw_pins(45 * MM, 66 * MM, *LT, inset=0.15)))
-    for name, h, what in (("Relay, ice cube 8-pin with base", 75, "8-pin plug-in relay on its "
-                                                                  "DIN-rail base"),
-                          ("Relay, ice cube 14-pin with base", 80, "14-pin plug-in relay on its "
-                                                                   "DIN-rail base")):
+                   pins=_screw_pins(w, h, *LT, inset=0.15) + ol))
+    # relays: a changeover contact a pole, each pole's common, NC and NO screws named as
+    # its contacts are numbered on the schematic (pinnumbers.py): pole 1's common is both
+    # 11 (of NC contact 11-12) and 13 (of NO contact 13-14), its NC screw 12, its NO screw
+    # 14; pole 2's 21/23, 22, 24... (a timer's timed contacts: 15/17, 16, 18); A1 and A2 the
+    # coil's
+    for name, h, poles, what in (("Relay, ice cube 8-pin with base", 75, 2,
+                                  "8-pin plug-in relay on its DIN-rail base, 2 changeover "
+                                  "contacts"),
+                                 ("Relay, ice cube 14-pin with base", 80, 4,
+                                  "14-pin plug-in relay on its DIN-rail base, 4 changeover "
+                                  "contacts")):
         w, h = 27 * MM, h * MM
+        pins = _relay_pins(w, h, poles)
         out.append(_fp(name, "Control", w, h,
-                       _screws(w, h, 2, inset=0.12) + [_rect(-w * 0.4, -0.55, w * 0.4, 0.55)],
-                       what))
-    out.append(_fp("Relay, slim interface 6 mm", "Control", 6.2 * MM, H,
-                   _screws(6.2 * MM, H, 1, inset=0.15), "Slim interface relay, 6.2 mm"))
+                       [_rect(-w * 0.4, -0.55, w * 0.4, 0.55)] + _dots(pins), what, pins=pins))
+    # (one column: NC, NO and common along the top, the coil at the bottom)
+    top = H / 2.0 - 0.12
+    pins = [{"name": n, "pos": (0.0, y)} for n, y in (
+        ("12", top), ("14", top - 0.2), ("11", top - 0.4), ("13", top - 0.4), ("A1", -top + 0.2),
+        ("A2", -top))]
+    out.append(_fp("Relay, slim interface 6 mm", "Control", 6.2 * MM, H, _dots(pins, 0.05),
+                   "Slim interface relay, 6.2 mm, 1 changeover contact", pins=pins))
+    pins = _relay_pins(22.5 * MM, H, 2, timed=True)
     out.append(_fp("Timer relay 22.5 mm", "Control", 22.5 * MM, H,
-                   _screws(22.5 * MM, H, 2) + [Circle((0.0, 0.2), 0.12)],
-                   "Timer or monitoring relay, 22.5 mm"))
+                   [Circle((0.0, 0.2), 0.12)] + _dots(pins),
+                   "Timer or monitoring relay, 22.5 mm, 2 changeover contacts", pins=pins))
     # ---- power supplies --------------------------------------------------------------------
     for amps, w in ((2.5, 40), (5, 50), (10, 66)):
         w, h = w * MM, 125 * MM

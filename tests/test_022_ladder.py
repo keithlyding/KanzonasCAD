@@ -96,16 +96,16 @@ class LadderTest(unittest.TestCase):
         contact = self.place("Contact NC", (5, 7.0), tag_of=coil)  # (rung 105)
         self.assertEqual(contact.attrs.get("PARENT"), coil.attrs["DEV"])
         grid = [t[2] for t in xrefs.live(self.p, self.s)]
-        self.assertIn("NC " + self.p.zone_text(self.s, 5, 7.0), grid)
-        self.assertNotIn("NC 105", grid)                        # (grid to start)
+        self.assertIn("NC 21-22 " + self.p.zone_text(self.s, 5, 7.0), grid)   # (0.28: 21-22)
+        self.assertNotIn("NC 21-22 105", grid)                  # (grid to start)
         self.set(referencing="ladder")
         got = [t[2] for t in xrefs.live(self.p, self.s)]
-        self.assertIn("NC 105", got)                            # (under the coil)
+        self.assertIn("NC 21-22 105", got)                      # (under the coil)
         self.assertIn("101", got)                               # (beside the contact)
         # (a sheet of its own by grid)
         with self.p.edit("sheet") as ed:
             ed.sheet_meta(self.s, referencing="grid")
-        self.assertIn("NC " + self.p.zone_text(self.s, 5, 7.0),
+        self.assertIn("NC 21-22 " + self.p.zone_text(self.s, 5, 7.0),
                       [t[2] for t in xrefs.live(self.p, self.s)])
         self.assertTrue(self.p.zone_text(self.s, 5, 7.0).startswith("1-"))
 

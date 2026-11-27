@@ -218,7 +218,9 @@ class Wiring:
         out = []
         for s, e in u.symbols:
             for name, q in e.pin_points():
-                pin = Pin(s, e, name)
+                # (named as people read it, a contact by its own number, 13: as its
+                # footprint's terminals are)
+                pin = Pin(s, e, e.pin_number(name))
                 by_net = {}
                 for w, net in strips.pin_wires(ctx, s, q):
                     end = by_net.get(net)

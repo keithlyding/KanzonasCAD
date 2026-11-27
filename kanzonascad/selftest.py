@@ -424,7 +424,8 @@ def run(log_path):
         k = max((e for e in sheet.entities.values() if tags.is_child(e)), key=lambda e: e.id)
         assert k.attrs.get("PARENT") == c.attrs["DEV"], k.attrs
         texts = [t[2] for t in xrefs.live(p, sheet)]
-        want = ["NC " + p.zone_text(sheet, 14, 4), p.zone_text(sheet, 12, 9)]
+        # (numbered on its coil as placed, its first NC 21-22: pinnumbers.py, 0.28)
+        want = ["NC 21-22 " + p.zone_text(sheet, 14, 4), p.zone_text(sheet, 12, 9)]
         assert all(t in texts for t in want), (texts, want)
         v.repaint()
         return "contact linked to %s; %s" % (c.attrs["TAG"], ", ".join(want))
