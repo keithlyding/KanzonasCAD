@@ -37,6 +37,16 @@ build fails without them.
 - A bus that fans onto a device's pins no longer leaves a wire that runs out and straight back
   over itself (a hidden corner).
 
+## 0.27.2
+
+**Fixed**
+- Typing a name for a source arrow on a numbered wire (Tag in the Properties panel, or its
+  attributes window) now renumbers the wire, as typing the number on the wire does: the wire
+  takes it, locked, and its destination arrows follow. If another wire has that number, you
+  are asked whether it is a cross-reference. One Undo takes it all back.
+- Typing a new name for a destination arrow linked to its source now pairs it with the source
+  of that name. Before, the old name came straight back.
+
 ## 0.27.1
 
 **New**

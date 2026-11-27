@@ -56,7 +56,9 @@ class Field:
     """One property: its key (the widget's name is "prop_" + key), label, widget kind ("text",
     "size": a paper size or blank, "number", "check", "choice", "info"), how it reads an
     object (get: its value, or NA when it hasn't one) and how it is set (put(ed, s, cur, value),
-    inside the panel's one step; or alone(cur, value), a step of its own: a wire's number)."""
+    inside the panel's one step; or alone(cur, value), a step of its own: a wire's number, or
+    a source arrow's name renumbering its wire, with it selected alone: one that also has a
+    put returns False when it leaves the value to put)."""
 
     def __init__(self, key, label, kind, get, put=None, alone=None, choices=(), lo=-1e9,
                  hi=1e9, step=0.125, decimals=4, suffix="", tip="", blank="", row=None,
@@ -157,7 +159,7 @@ def general_fields(project):
 def _attr_put(win, project, k):
     """A put changing one attribute of a placed block through the attributes window's code
     (Location left blank: none of its own, its sheet's)."""
-    from . import tags
+    from . import tags, wirenums
 
     def put(ed, s, cur, value):
         attrs = dict(cur.attrs)
@@ -171,7 +173,19 @@ def _attr_put(win, project, k):
         if k in tags.LINKED_ATTRS and tags.is_footprint(cur) and \
                 tags.parent_of(project, cur) is not None:
             shown["device"] = {k: value}    # (a linked footprint's rating is its device's)
+        if k == "TAG" and wirenums.renumbers(project, s, cur, value) is not None:
+            # (a source arrow's name renumbers its wire, a step of its own: tag_alone, with
+            # it selected alone)
+            raise ValueError("a source arrow's name is its wire's number: select it alone to "
+                             "renumber the wire")
         apply_changes(ed, win.attribute_changes(project, s, cur, attrs, shown))
+        if k == "TAG" and cur.defn is not None and cur.defn.wiring == "link" and \
+                value.upper() != (cur.attrs.get("TAG") or "").strip().upper():
+            # (a name numbering would put back: refused, the step undone, with the reason;
+            # never put back silently, the battery, 0.26, seed 202611263)
+            why = wirenums.name_refused(ed, project, s, cur.id, value)
+            if why:
+                raise wirenums.NameRefused(why)
     return put
 
 
@@ -215,7 +229,7 @@ def _text_size(e, sheet, n):
 def block_fields(win, project, sheet, ents):
     """A symbol's or footprint's fields (every selected one a symbol, or every one a
     footprint)."""
-    from . import missing_fp, tags
+    from . import missing_fp, tags, wirenums
     fp = kind_of(ents[0]) == "footprint"
     out = [Field("block", "Block", "info", lambda e: e.block_name)]
     names = {"TAG": "Tag", "DESC": "Description", "MFR": "Manufacturer",
@@ -223,7 +237,15 @@ def block_fields(win, project, sheet, ents):
 
     def tag_get(e):
         return NA if tags.is_child(e) else e.attrs.get("TAG", "")
+    def tag_alone(cur, value):
+        # (a source arrow on a numbered wire: its name typed is the wire's new number, as
+        # typed on the wire; the owner, Nov 27 2026: "Renumber the wire")
+        if wirenums.renumbers(project, sheet, cur, (value or "").strip()) is None:
+            return False
+        win.arrow_renumbers(win.view(), cur, value)
+        return True
     out.append(Field("TAG", "Tag", "text", tag_get, _attr_put(win, project, "TAG"),
+                     alone=tag_alone,
                      tip="Its device tag; typed, it is locked (numbering leaves it alone)"
                      if not fp else "The device it is: typed, the device with that tag"))
     out.append(Field("parent", "Belongs to", "info",
@@ -981,9 +1003,9 @@ class Properties:
         try:
             if isinstance(value, ValueError):
                 raise value
-            if f.alone is not None:
-                f.alone(ents[0], value)
-            else:
+            taken = f.alone is not None and (f.put is None or len(ents) == 1) and \
+                f.alone(ents[0], value) is not False
+            if not taken:
                 with v.project.edit("Properties: %s" % f.label) as ed:
                     s = s
                     for e in ents:
