@@ -1,8 +1,8 @@
 """Library > Import blocks from folder...: the window that lists the blocks found in a folder
 of DWG and DXF files (or one drawing), and puts the ticked ones in the library
 (block_import.py does the reading and writing, without Qt). Files are read one at a time and
-blocks written one at a time (each on a thread of its own, the event loop turning meanwhile:
-only the library's files are written there), under a progress window with Cancel, so the
+blocks written a few at a time on threads (the event loop turning meanwhile: only the
+library's files are written there), under a progress window with Cancel, so the
 program never stops answering."""
 
 import os
@@ -23,6 +23,7 @@ KINDS = (("symbol", "Schematic symbol"), ("footprint", "Panel footprint"))
 CHOICE_LABELS = (("skip", "Skip it"), ("replace", "Replace it"), ("both", "Keep both"))
 THUMB = 40
 FILL_ROWS = 25          # (rows listed between two turns of the event loop)
+WRITERS = 8             # (block files written at once: put_in)
 COLUMNS = ("Block", "Kind", "Pins", "File", "Status", "Name already in the library")
 
 
@@ -81,31 +82,74 @@ def scan(parent, paths):
         prog.close()
 
 
-def _beside(prog, fn):
-    """fn() run on a thread of its own while the event loop keeps turning (the window answers
-    and the progress window repaints); its result. For work that only writes files: a block
-    file written to disk safely (flushed, fsync) took 0.22 s at a time on the Windows build,
-    a step that held up the window (the self-test's speed budget, 0.24)."""
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as Late
-    with ThreadPoolExecutor(1) as pool:
-        fut = pool.submit(fn)
-        while True:
-            try:
-                return fut.result(timeout=0.01)
-            except Late:
-                prog.turn()
+class _Cancelled(Exception):
+    """Cancel pressed while blocks were being put in."""
+
+
+def _wait(prog, fut):
+    """The event loop turned until fut (a write on its thread) is done; its error or None."""
+    from concurrent.futures import wait
+    while not wait([fut], timeout=0.01).done:
+        prog.turn()
+    return fut.exception()
 
 
 def put_in(parent, importer):
-    """The importer's blocks written one at a time, each on a thread of its own (block_import
-    only writes the library's files: no Qt, no project), the event loop turning meanwhile;
+    """The importer's blocks put in the library: each decided on the event loop
+    (Importer.next_write), its file written on a thread (Importer.write: no Qt, no project,
+    only the library's file), up to WRITERS at a time, the event loop turning meanwhile;
     Cancel puts the library back as it was. Returns (finished, the longest time the event
-    loop waited, in seconds)."""
+    loop waited, in seconds).
+
+    A block file is flushed to disk (fsync) before it takes its name, a wait on the disk: one
+    took 0.22 s on the Windows build, and the self-test's 200, one after the other, took 12
+    and 15 s there on a busy disk (2 s on a quiet one). Written a few at a time, the waits
+    overlap."""
+    from collections import deque
+    from concurrent.futures import ThreadPoolExecutor
     prog = Progress(parent, "Putting %d block%s in the library..." % (
         importer.total(), "" if importer.total() == 1 else "s"), importer.total())
+    busy = deque()              # [(write, its future)], oldest first
+    done = 0
+
+    def finish_oldest():
+        nonlocal done
+        w, fut = busy.popleft()
+        error = _wait(prog, fut)
+        if error is not None and not isinstance(error, OSError):
+            raise error
+        importer.wrote(w, error)
+        done += 1
+        if not prog.tick(done):
+            raise _Cancelled
+
     try:
-        while _beside(prog, importer.step):
-            if not prog.tick(importer.at):
+        with ThreadPoolExecutor(WRITERS) as pool:
+            try:
+                while True:
+                    w = importer.next_write()
+                    if w is False:
+                        break
+                    if w is None:               # (skipped)
+                        done += 1
+                        if not prog.tick(done):
+                            raise _Cancelled
+                        continue
+                    # (a file a row before this one is still writing: that one first)
+                    while busy and (len(busy) >= WRITERS or
+                                    any(os.path.normcase(o.path) == os.path.normcase(w.path)
+                                        for o, _f in busy)):
+                        finish_oldest()
+                    busy.append((w, pool.submit(importer.write, w)))
+                while busy:
+                    finish_oldest()
+            except _Cancelled:
+                for _w, fut in busy:            # (those not started yet aren't)
+                    fut.cancel()
+                for _w, fut in busy:            # (those started finish before rollback)
+                    if not fut.cancelled():
+                        _wait(prog, fut)
+                busy.clear()
                 importer.rollback()
                 return False, prog.longest
         return True, prog.longest

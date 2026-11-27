@@ -456,6 +456,80 @@ class WindowTest(unittest.TestCase):
         self.assertGreater(len(turns), 10)          # (the event loop turned while it wrote)
         self.assertLess(longest, 0.1)
 
+    def test_a_slow_disk_doesnt_make_a_big_import_slow(self):
+        # (0.27.1: 200 block files, each flushed to disk, one after the other took 12 s and
+        # 15 s on the Windows build where they had taken 2 s: the disk's waits added up.
+        # Written several at a time they overlap: here 40 files of 0.05 s each, 2 s one
+        # after the other)
+        import threading
+        from kanzonascad import library as L
+        folder = tempfile.mkdtemp()
+        for i in range(40):
+            coil_dxf(os.path.join(folder, "HCR%03d.dxf" % i))
+        rows, _step = IB.scan(self.win, BI.drawing_files(folder))
+        imp = BI.Importer(self.lib, rows)
+        real = L._write_json
+        lock = threading.Lock()
+        at_once = {"now": 0, "most": 0}
+
+        def slow(path, data):
+            with lock:
+                at_once["now"] += 1
+                at_once["most"] = max(at_once["most"], at_once["now"])
+            time.sleep(0.05)
+            with lock:
+                at_once["now"] -= 1
+            real(path, data)
+        APP.processEvents()
+        try:
+            L._write_json = slow
+            t0 = time.perf_counter()
+            done, longest = IB.put_in(self.win, imp)
+            dt = time.perf_counter() - t0
+        finally:
+            L._write_json = real
+        self.assertTrue(done)
+        self.assertEqual([n for _r, n in imp.imported], ["HCR%03d" % i for i in range(40)])
+        own, bad = Library(self.lib.folder)._own_blocks("symbol")
+        self.assertEqual((len(own), bad), (41, []))     # (and HCR1, there before)
+        self.assertGreater(at_once["most"], 1)
+        self.assertLessEqual(at_once["most"], IB.WRITERS)
+        self.assertLess(dt, 1.0, "40 slow writes took %.2f s" % dt)
+        self.assertLess(longest, 0.1)
+
+    def test_one_name_twice_written_in_order(self):
+        # (two rows of one name, both Replace it: written one after the other, never at
+        # once, the second one last; rolled back, the library's own is back)
+        from kanzonascad import library as L
+        a, b = (BI.Found("HCR1", "/x/%s.dxf" % k, M.BlockDef(
+            "HCR1", "symbol", [M.Line((0, 0), (w, 0))])) for k, w in (("a", 1), ("b", 3)))
+        for r in (a, b):
+            r.choice = "replace"
+        before = snapshot(self.lib.folder)
+        real = L._write_json
+        writing = []
+
+        def slow(path, data):
+            writing.append(path)
+            clash = len(set(writing)) != len(writing)
+            time.sleep(0.05)
+            real(path, data)
+            writing.remove(path)
+            if clash:
+                raise OSError("two writes of %s at once" % path)
+        try:
+            L._write_json = slow
+            imp = BI.Importer(self.lib, [a, b], "Twice")
+            done, _longest = IB.put_in(self.win, imp)
+        finally:
+            L._write_json = real
+        self.assertTrue(done)
+        self.assertEqual((imp.failed, [n for _r, n in imp.imported]), ([], ["HCR1", "HCR1"]))
+        got = Library(self.lib.folder).get("symbol", "HCR1")
+        self.assertEqual((got.category, got.extents()[2]), ("Twice", 3))
+        imp.rollback()
+        self.assertEqual(snapshot(self.lib.folder), before)
+
     def test_imported_symbol_takes_a_wire(self):
         IB.ImportBlocksDialog.exec = lambda dlg: QDialog.Accepted
         self.win.import_blocks()

@@ -1511,26 +1511,33 @@ def run(log_path):
         gc.collect()
         t0 = time.perf_counter()
         rows, read_step = IB.scan(w, BI.drawing_files(src))
+        t_read = time.perf_counter()
         dlg = IB.ImportBlocksDialog(w, lib)
         dlg.folder = src
         dlg.set_rows(rows)
         listed = dlg.fill_step
         imp = dlg.importer()
+        t_list = time.perf_counter()
         done, put_step = IB.put_in(w, imp)
         dt = time.perf_counter() - t0
+        # (where the time went: on the Windows build 200 files flushed to disk one after the
+        # other once took 12 s, their steps all short)
+        parts = "reading %.2f s, listing %.2f s, writing %.2f s" % (
+            t_read - t0, t_list - t_read, t0 + dt - t_list)
         dlg.deleteLater()
         assert done and len(imp.imported) == 200, (done, len(imp.imported), imp.failed)
         got = Library(lib.folder).get("symbol", "HCR117")
         assert [(q["name"], q["pos"]) for q in got.pins] == [("A1", (-0.5, 0.0)),
                                                              ("A2", (0.5, 0.0))], got.pins
         step = max(read_step, put_step, listed)
-        assert dt < BUDGET["block_folder"], "200 block files imported in %.2f s" % dt
+        assert dt < BUDGET["block_folder"], "200 block files imported in %.2f s (%s)" % (
+            dt, parts)
         assert step < BUDGET["block_folder_step"], \
             "a step of %.3f s (reading %.3f, listing %.3f, writing %.3f)" % (
                 step, read_step, listed, put_step)
-        return ("200 block files read, listed and put in the library %.2f s; longest step "
-                "%.3f s (reading %.3f, listing %.3f, writing %.3f)" % (
-                    dt, step, read_step, listed, put_step))
+        return ("200 block files read, listed and put in the library %.2f s (%s); longest "
+                "step %.3f s (reading %.3f, listing %.3f, writing %.3f)" % (
+                    dt, parts, step, read_step, listed, put_step))
     log.check("speed budget (import blocks)", block_folder)
 
     w = state.get("win")
