@@ -6,6 +6,28 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.28
+
+**New**
+- Device wiring list... (Sheets menu; Panel and Output tabs): every device and terminal, pin
+  by pin, with its wire number, size, color and layer, where the wire goes (CR101:A1, across
+  sheets) and where the pin is on its panel footprint. Save it as CSV or Excel, or draw it on
+  a report sheet.
+- Terminal wire labels (Panel tab): on a panel sheet, each footprint terminal is labeled with
+  its wire number and where it goes, such as 6001 → CR101:A1. The labels follow every change
+  to the schematic, stay readable when a footprint is turned, and print. Their size is in
+  Panel settings.
+- A footprint's terminals are its block's pins, named as the device's. The program's own
+  terminal blocks, breakers, fuse holders, contactors, overload relay, motor protector and
+  disconnect now have them. A footprint without them is named in the wiring list and on the
+  command line.
+- A terminal block's footprint can be a strip's terminal: type TB1-4 when placing it, or set
+  its Terminal number.
+
+**Fixed**
+- A bus that fans onto a device's pins no longer leaves a wire that runs out and straight back
+  over itself (a hidden corner).
+
 ## 0.27.1
 
 **New**
