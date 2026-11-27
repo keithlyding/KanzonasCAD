@@ -19,8 +19,10 @@ number of its sheet and a two-digit count on that page: CR601, CR602, M601; on p
   its IEC 81346-2 class letter instead of its symbol's US prefix (prefix_for(): K601 for a
   relay, Q601 for a contactor or a breaker, X601 for a terminal strip; IEC_LETTERS). The symbol's
   prefix still says what kind of device it is to the program (PLC, TB...). A tag made of the
-  other letters (one from before the project's standard was changed) is kept as it is and
-  still follows its page (tag_prefix); Renumber sheet and a copy give the project's letters.
+  other letters (one from before the project's standard was changed, No said to retagging)
+  is kept as it is and still follows its page (tag_prefix); Renumber sheet and a copy give the
+  project's letters, and so does Yes when the standard is changed (retag_letters). A device or
+  contact with no tag yet shows the project's letter and "?" (K?: BlockDef.tag_letter).
 """
 
 import re
@@ -73,10 +75,13 @@ IEC_LETTERS = {"CR": "K", "TR": "K", "PLC": "K",
 IEC_ROLE_LETTERS = {("PS", "parent"): "B"}
 
 
-def prefix_for(project, defn):
+def prefix_for(project, defn, standard=None):
     """What a device of defn's tag is made of in project: its symbol's prefix (CR, M, PB...), or
-    its IEC 81346-2 letter (IEC_LETTERS) in a project of IEC 60617 symbols."""
-    if not defn.prefix or project is None or standard_of(project) != "iec":
+    its IEC 81346-2 letter (IEC_LETTERS) in a project of IEC 60617 symbols. standard: as if the
+    project's symbol standard were that one ("jic" or "iec")."""
+    if standard is None:
+        standard = standard_of(project) if project is not None else "jic"
+    if not defn.prefix or standard != "iec":
         return defn.prefix
     return _letter(defn)
 
@@ -86,15 +91,43 @@ def _letter(defn):
                                                                              defn.prefix)
 
 
-def tag_prefix(project, e):
+def tag_prefix(project, e, standard=None):
     """The prefix device e's tag is made of: the project's (prefix_for()), or, for a tag made
-    of the other standard's letters (from before the project's standard was changed), those."""
-    pre = prefix_for(project, e.defn)
+    of the other standard's letters (from before the project's standard was changed), those.
+    standard: as prefix_for's."""
+    pre = prefix_for(project, e.defn, standard)
     tag = e.attrs.get("TAG", "")
     for other in (pre, e.defn.prefix, _letter(e.defn)):
         if other and split(tag, other) is not None:
             return other
     return pre
+
+
+def other_letters(project, e, standard=None):
+    """Device e is unlocked and its tag is made of the other standard's letters (CR601 in a
+    project of IEC 60617 symbols, K601 in a JIC one): Yes to "Retag the unlocked devices"
+    gives it the project's (retag_letters). standard: as prefix_for's."""
+    if not is_device(e) or locked(e):
+        return False
+    pre = tag_prefix(project, e, standard)
+    return pre != prefix_for(project, e.defn, standard) and \
+        split(e.attrs.get("TAG", ""), pre) is not None
+
+
+def to_retag(project, standard=None):
+    """[(sheet, device)]: the devices other_letters() finds in project."""
+    return [(s, e) for s in project.sheets for e in s.inserts()
+            if other_letters(project, e, standard)]
+
+
+def retag_letters(ed, project):
+    """The project's symbol standard was changed (Project properties) and Yes said to "Retag
+    the unlocked devices with the <new> letters?": every unlocked device whose tag is made of
+    the other standard's letters takes the project's, its page and count kept when free
+    (CR601 becomes K601; TR601 beside it K602), as Update numbers fixes a sheet (fix_sheet).
+    Contacts, terminals (X601-1) and the arrows' devices follow it as for any new tag; locked
+    tags stay. Returns how many changed."""
+    return sum(fix_sheet(ed, project, s, letters=True) for s in project.sheets)
 
 
 def locked(e):
@@ -271,10 +304,14 @@ def renumber_sheet(ed, project, sheet):
     pos = {e.id: key(e.pos, [q for _n, q in e.pin_points()]) for e in devices}
     changed = 0
     pre = {e.id: prefix_for(project, e.defn) for e in devices}
+    # (every unlocked device here is given a tag: the one it has holds no count, of any
+    # prefix; the battery, seed 2903: a contactor's JIC M101 in an IEC project, about to be
+    # Q101, held 01 for the motors numbered before it, M sorting before Q)
+    mine = {e.id for e in devices if not locked(e)}
     for p in sorted(set(pre.values())):
         group = [e for e in devices if pre[e.id] == p and not locked(e)]
         group.sort(key=lambda e: pos[e.id])
-        taken = used_counts(project, p, page, skip={e.id for e in group}, on=sheet)
+        taken = used_counts(project, p, page, skip=mine, on=sheet)
         n = 0
         for e in group:
             n = lowest_free(taken | set(range(1, n + 1)))
@@ -305,11 +342,12 @@ def set_locks(ed, sheet, ents, lock):
     return n
 
 
-def fix_sheet(ed, project, sheet):
+def fix_sheet(ed, project, sheet, letters=False):
     """Update numbers and cross-references' "keep, only fix" (0.18): the sheet's unlocked
     devices keep their tags; one with no tag (or only its prefix and ?) or a tag not of this
-    sheet's page takes one (its count kept when free here, else the lowest free one). Returns
-    how many changed."""
+    sheet's page takes one (its count kept when free here, else the lowest free one). letters:
+    only the devices whose tags are made of the other standard's letters (other_letters) are
+    fixed, given the project's (retag_letters). Returns how many changed."""
     page = project.sheet_number(sheet)
     changed = 0
     key = order_key(sheet, sheet.number_order)
@@ -319,14 +357,21 @@ def fix_sheet(ed, project, sheet):
             if is_device(e) and (s is not sheet or locked(e))}
     for e in sorted((e for e in sheet.entities.values() if is_device(e) and not locked(e)),
                     key=lambda e: key(e.pos, [q for _n, q in e.pin_points()])):
-        # (a tag of the other standard's letters is kept, and fixed in them)
-        pre = tag_prefix(project, e)
-        got = split(e.attrs.get("TAG", ""), pre)
-        if got is not None and got[0] == page and e.attrs.get("TAG") not in seen:
-            seen.add(e.attrs["TAG"])
-            continue
+        # (a tag of the other standard's letters is kept, and fixed in them; with letters,
+        # given the project's)
+        if letters:
+            if not other_letters(project, e):
+                continue
+            pre = prefix_for(project, e.defn)
+            got = split(e.attrs.get("TAG", ""), tag_prefix(project, e))
+        else:
+            pre = tag_prefix(project, e)
+            got = split(e.attrs.get("TAG", ""), pre)
+            if got is not None and got[0] == page and e.attrs.get("TAG") not in seen:
+                seen.add(e.attrs["TAG"])
+                continue
         taken = used_counts(project, pre, page, skip={e.id}, on=sheet)
-        if got is not None and got[0] == page:
+        if got is not None and got[0] == page and not letters:
             taken.add(got[1])                   # (a duplicate: not its own count again)
         n = got[1] if got is not None and got[1] not in taken else lowest_free(taken)
         attrs = dict(e.attrs, TAG=make(pre, page, n))

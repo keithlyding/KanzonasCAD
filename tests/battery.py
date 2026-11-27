@@ -5493,19 +5493,76 @@ def random_editing(log, out, ops, seed, drawing=None):
 
     def op_symbol_standard():
         # (0.29) the project's symbol standard changed (Project properties, Schematic): JIC
-        # or IEC 60617, whose tags are made of IEC 81346-2 letters; the tags already placed
-        # stay as they are, and each still reads as its device's (of either standard's)
+        # or IEC 60617, whose tags are made of IEC 81346-2 letters. With unlocked devices
+        # tagged in the other standard's letters it asks "Retag the unlocked devices with the
+        # <new> letters?" (the owner, Nov 27 2026), answered here at random: Yes retags them
+        # all in the one Undo step (locked tags untouched, contacts following), No keeps every
+        # tag, Cancel changes nothing; with none, it doesn't ask
+        from unittest import mock
+        from PySide6.QtWidgets import QComboBox
+        from kanzonascad import dialogs
+
         def device_tags():
-            return {(sh.id, e.id): e.attrs.get("TAG") for sh in p.sheets
+            return {(sh.id, e.id): (e.attrs.get("TAG"), tags_mod.locked(e)) for sh in p.sheets
                     for e in sh.entities.values() if tags_mod.is_device(e)}
-        before = device_tags()
+        before, whole, steps = device_tags(), norm(p.to_dict()), len(p.undo_stack)
         now = p.settings.get("symbol_standard", "jic")
-        with p.edit("Project properties") as ed:
-            ed.project_settings({"symbol_standard": "jic" if now == "iec" else "iec"})
+        new = "jic" if now == "iec" else "iec"
+        retag = {(sh.id, e.id) for sh, e in tags_mod.to_retag(p, new)}
+        answer = rnd.choice([QMessageBox.Yes, QMessageBox.No, QMessageBox.Cancel])
+        asked = []
+
+        def exec_(dlg):
+            box = dlg.findChild(QComboBox, "symbol_standard")
+            box.setCurrentIndex(box.findData(new))
+            return QDialog.Accepted
+
+        def question(_parent, _title, text, *_a):
+            asked.append(text)
+            return answer
+        with mock.patch.object(dialogs.QDialog, "exec", exec_), \
+                mock.patch.object(QMessageBox, "question", side_effect=question):
+            win.project_properties(1)
+        assert bool(asked) == bool(retag), "asked %r with %d to retag" % (asked, len(retag))
+        if asked and answer == QMessageBox.Cancel:
+            assert norm(p.to_dict()) == whole and len(p.undo_stack) == steps, \
+                "Cancel changed the project"
+            BC.CHECKED["the symbol standard: Cancel changed nothing"] += 1
+            return
+        assert p.settings.get("symbol_standard") == new, p.settings.get("symbol_standard")
         after = device_tags()
-        moved = {k: (before[k], after.get(k)) for k in before if before[k] != after.get(k)}
-        assert not moved, "the symbol standard changed tags: %r" % sorted(moved.values())[:6]
-        BC.CHECKED["the symbol standard changed, the tags kept"] += 1
+        for k, (tag, lock) in before.items():
+            got = after.get(k)
+            if k in retag and answer == QMessageBox.Yes:
+                sh = p.sheet_by_id(k[0])
+                e = sh.entities[k[1]]
+                pre = tags_mod.prefix_for(p, e.defn)
+                assert got[1] is False and tags_mod.split(got[0], pre) is not None, \
+                    "%s not retagged with %s: %r" % (tag, pre, got)
+            else:
+                assert got == (tag, lock), "the symbol standard changed %r to %r" % (tag, got)
+        if retag and answer == QMessageBox.Yes:
+            assert not tags_mod.to_retag(p), "left in the other letters: %r" % [
+                e.attrs.get("TAG") for _s, e in tags_mod.to_retag(p)][:6]
+            index = tags_mod.devices(p)
+            for sh in p.sheets:
+                for e in sh.inserts():
+                    if tags_mod.is_child(e) and e.attrs.get("PARENT") in index:
+                        par = index[e.attrs["PARENT"]][1]
+                        assert e.attrs.get("TAG") == par.attrs.get("TAG"), \
+                            "contact %s of %s" % (e.attrs.get("TAG"), par.attrs.get("TAG"))
+            BC.CHECKED["the symbol standard: Yes retagged the unlocked devices"] += 1
+        elif retag:
+            BC.CHECKED["the symbol standard: No kept the tags"] += 1
+        else:
+            BC.CHECKED["the symbol standard changed, nothing to ask, the tags kept"] += 1
+        assert len(p.undo_stack) == steps + 1, "%d steps" % (len(p.undo_stack) - steps)
+        done = norm(p.to_dict())
+        p.undo()
+        assert norm(p.to_dict()) == whole, "one Undo didn't restore the symbol standard's change"
+        p.redo()
+        assert norm(p.to_dict()) == done, "Redo didn't give the symbol standard's change back"
+        BC.CHECKED["the symbol standard: one Undo restored everything"] += 1
 
     table = [(op_wire, 18), (op_bus, 3), (op_symbol, 14), (op_line, 4), (op_text, 3),
              (op_move, 6), (op_copy, 4), (op_rotate, 3), (op_erase, 4), (op_trim, 6),

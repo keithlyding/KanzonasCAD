@@ -111,6 +111,23 @@ class IECProjectTest(unittest.TestCase):
         self.assertEqual(sorted(e.attrs["TAG"] for e in self.s.inserts()
                                 if tags.is_device(e)), ["K201", "K202"])
 
+    def test_renumber_frees_the_counts_of_tags_it_retags(self):
+        # (the battery, seed 2903, step 1965: a contactor's JIC tag M101, kept in an IEC
+        # project, held 01 for the motors renumbered before it, M sorting before Q: the motor
+        # took M102 and the contactor became Q101, 01 left free)
+        with self.p.edit("JIC") as ed:
+            ed.project_settings(dict(self.p.settings, symbol_standard="jic"))
+        km = self.place("Contactor coil (IEC)", "8,5")
+        self.assertEqual(km.attrs["TAG"], "M101")
+        with self.p.edit("IEC") as ed:
+            ed.project_settings(dict(self.p.settings, symbol_standard="iec"))
+        motor = self.place("Motor 3-phase (IEC)", "3,2")
+        self.assertEqual(motor.attrs["TAG"], "M102")         # (01 taken by the contactor)
+        with self.p.edit("renumber") as ed:
+            tags.renumber_sheet(ed, self.p, self.s)
+        self.assertEqual([self.s.entities[e.id].attrs["TAG"] for e in (km, motor)],
+                         ["Q101", "M101"])
+
     def test_copies_and_saved_circuits_take_the_letters(self):
         coil = self.place("Relay coil (IEC)", "8,5")
         old = M.Insert("Relay coil (IEC)", (8, 3), defn=coil.defn,

@@ -3539,13 +3539,24 @@ class InsertCmd(Command):
             return tags.link_footprint(self.attrs, device, self.defn)
         return tags.link_attrs(self.attrs, device)
 
-    def _make(self, p, defn, mirror=None):
+    def _make(self, p, defn, mirror=None, attrs=None):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
         tag_h = self.ctx.project.settings.get("tag_height") * self.ctx.sheet().k() \
             if self.defn.kind == "symbol" else None
         return M.Insert(defn.name, p, self.angle, 1.0,
-                        self.mirror if mirror is None else mirror, self.attrs, defn,
-                        tag_h, layer=layer)
+                        self.mirror if mirror is None else mirror,
+                        self.attrs if attrs is None else attrs, defn, tag_h, layer=layer)
+
+    def _ghost_attrs(self):
+        """The attributes the ghost shows: with no tag yet, in a project of IEC symbols, the
+        project's letter and "?" (K?, as the copy placed shows it: Project.sync_tag_letters;
+        the block from the library still says CR?)."""
+        d = self.defn
+        if d.kind != "symbol" or not d.prefix or self.attrs.get("TAG"):
+            return None
+        from . import tags
+        pre = tags.prefix_for(self.ctx.project, d)
+        return None if pre == d.prefix else dict(self.attrs, TAG=pre + "?")
 
     def _on_rail(self, p):
         """A footprint's insertion point, its rail point locked onto a DIN rail it comes
@@ -3558,9 +3569,9 @@ class InsertCmd(Command):
 
     def preview(self, p):
         if self.pending is not None:
-            return [self._make(self.pending, self.defn, self.placed_mirror)]
+            return [self._make(self.pending, self.defn, self.placed_mirror, self._ghost_attrs())]
         at, m = self._fit(p)
-        return [self._make(self._on_rail(at), self.defn, m)]
+        return [self._make(self._on_rail(at), self.defn, m, self._ghost_attrs())]
 
     def _sized_to_bus(self, p):
         """A power distribution block (or its outlet) picked on a bus whose phases are spaced

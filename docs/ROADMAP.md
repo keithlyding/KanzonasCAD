@@ -324,9 +324,19 @@ nobody understands).
      float switches B (81346-2: sensing a condition), not S as the owner's list had them;
      power supplies T (converting AC to DC), not G; PLC K, not A; drives T; solenoids M.
      Devices of one letter share its counts on a page; your own prefixes are kept. A tag of
-     the other letters (the project's standard changed) is kept and follows its page until
-     Renumber sheet; copies take the project's letters. No project from before had IEC
-     symbols, so nothing is renumbered on open. Still to come: vertical (IEC-style,
+     the other letters (the project's standard changed, No to retagging) is kept and follows
+     its page until Renumber sheet; copies take the project's letters. No project from before had IEC
+     symbols, so nothing is renumbered on open. The owner confirmed (Nov 27 2026): the
+     letters as built (B for sensing switches, T for power supplies and drives, K for PLCs);
+     terminal strips by page (X601, its terminals X601-1); switching the standard asks
+     "Retag the unlocked devices with the <new> letters?" (Yes retags them all in the same
+     Undo step, each keeping its page and count when free, contacts, terminals,
+     cross-references and arrows following, locked tags never changed; No keeps them;
+     Cancel cancels the whole Project properties change; not asked when there are none:
+     tags.retag_letters, through Update numbers' fix_sheet); a device or contact with no tag
+     yet shows the project's letter, K?, X?, Q? (BlockDef.tag_letter, set by the project).
+     PLC modules' screw numbers: being sourced from Rockwell's documents via mirror sites
+     (allen_bradley.TERMINALS still empty). Still to come: vertical (IEC-style,
      top-to-bottom) layouts, and IEC versions of the limit, pressure, temperature and float
      switches, the fused disconnect and starter combinations, drive terminals and the
      distribution blocks.

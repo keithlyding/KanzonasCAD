@@ -117,7 +117,9 @@ Ladder: places given by rung; see Ladders), <b>Rung numbers</b> and the <b>Rung 
 new ladders, and the height of new text.</li>
 <li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
 uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
-(changing it resizes every tag), and the symbol color.</li>
+(changing it resizes every tag), the <b>Symbol standard</b> (JIC/NFPA or IEC 60617, and the
+letters device tags are made of: changing it can ask to retag the unlocked devices, see IEC
+60617 symbols), and the symbol color.</li>
 <li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors, and
 <b>Mark devices without a footprint on the drawing</b> (on to start: see Devices without a
 footprint).</li>
@@ -418,8 +420,16 @@ with L1/T1 on top). In an IEC project, device tags are made of <b>IEC 81346-2 le
 instead of the US prefixes (Device tags, below): K601 for a relay, Q601 for a contactor, S601
 for a pushbutton, X601 for a terminal strip; the JIC and other symbols placed in it too.
 Contacts, cross-references, terminals, wire numbers and reports work the same. Changing the
-standard leaves the symbols already placed, and their tags, as they are (Renumber sheet gives
-the tags the new letters).</li>
+standard leaves the symbols already placed as they are. When unlocked devices have tags made of
+the other standard's letters, OK asks <b>Retag the unlocked devices with the IEC 81346-2
+letters?</b> (or the JIC letters, going back): <b>Yes</b> gives them all the new letters, each
+keeping its page and count when that number is free (CR601 becomes K601; of a relay CR601 and
+a timer TR601, the second in the sheet's order becomes K602), in the same single Undo step as the change of standard; their contacts, terminals
+(TB601-1 becomes X601-1), cross-references and arrows follow, and locked tags are never
+changed. <b>No</b> keeps their tags (Renumber sheet gives a sheet's the new letters later).
+<b>Cancel</b> cancels the whole Project properties change. With no such tags it doesn't ask.
+A device or contact with no tag yet shows the project's letter and a question mark: K?, X?,
+Q? in an IEC project (CR?, TB? in a JIC one).</li>
 <li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.
 KanzonasCAD comes with generic ones at typical sizes, in the Generic categories: breakers 1, 2
 and 3 pole, fuse holders, a motor protector, a surge protector and a rotary disconnect
@@ -790,7 +800,8 @@ block...</b> to change its drawing, move or add pins (Add pin) and move its tag 
 <p>Every device you place gets its tag by itself: the symbol's prefix, the page number and a
 two-digit count on that page. On page 6 that's <b>CR601</b>, CR602, <b>M601</b>, PB601...; on
 page 12, CR1201. The <code>CR?</code> you may have seen before means a device still waiting
-for a number (Renumber sheet gives it one).</p>
+for a number (Renumber sheet gives it one); in an IEC project it shows its letter, <code>K?</code>.
+A contact not yet linked to a device shows the same.</p>
 <p><b>IEC 81346 letters</b>: in a project whose <b>Symbol standard</b> is IEC 60617 (Project
 properties, Schematic), the tag is made of the device's IEC 81346-2 class letter instead of its
 symbol's prefix, by what the device does: <b>K</b> control relays, timing relays and PLC
@@ -803,9 +814,10 @@ its terminals X601-1, X601-2...) and distribution blocks. Devices of one letter 
 counts on a page (a contactor Q601, a breaker Q602). A symbol of yours with a prefix of its
 own keeps it. The symbol's prefix (Block properties) still says what kind of device it is:
 which contacts are offered for it, a PLC module, a terminal strip. A tag made of the other
-letters, from before the project's standard was changed, is kept and still follows its page
-(Update numbers keeping the numbers keeps it too); <b>Renumber sheet</b> (or Update numbers
-renumbering) gives it the project's letters, and copies take them.</p>
+letters, from before the project's standard was changed (No to "Retag the unlocked devices"),
+is kept and still follows its page (Update numbers keeping the numbers keeps it too);
+<b>Renumber sheet</b> (or Update numbers renumbering) gives it the project's letters, and copies
+take them.</p>
 <ul>
 <li>A new device takes the <b>lowest free</b> number for its prefix on its page, so deleting
 CR602 frees 02 for the next relay.</li>
