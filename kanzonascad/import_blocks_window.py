@@ -98,8 +98,14 @@ def put_in(parent, importer):
     """The importer's blocks put in the library: each decided on the event loop
     (Importer.next_write), its file written on a thread (Importer.write: no Qt, no project,
     only the library's file), up to WRITERS at a time, the event loop turning meanwhile;
-    Cancel puts the library back as it was. Returns (finished, the longest time the event
-    loop waited, in seconds).
+    Cancel puts the library back as it was (on a thread too). Returns (finished, the
+    longest time the event loop waited, in seconds).
+
+    Nothing here waits on the disk on the event loop: Importer.next_write decides from the
+    library's files listed when the Importer was made, and every read, write, rename and
+    flush is the threads', and they do no Python work to speak of that the event loop would
+    wait its turn behind (0.27.1: one step of 0.45 s on the Windows build, the event loop
+    looking for each file and the threads making each file's text).
 
     A block file is flushed to disk (fsync) before it takes its name, a wait on the disk: one
     took 0.22 s on the Windows build, and the self-test's 200, one after the other, took 12
@@ -118,7 +124,7 @@ def put_in(parent, importer):
         error = _wait(prog, fut)
         if error is not None and not isinstance(error, OSError):
             raise error
-        importer.wrote(w, error)
+        importer.wrote(w, None if error else fut.result(), error)
         done += 1
         if not prog.tick(done):
             raise _Cancelled
@@ -146,11 +152,14 @@ def put_in(parent, importer):
             except _Cancelled:
                 for _w, fut in busy:            # (those not started yet aren't)
                     fut.cancel()
-                for _w, fut in busy:            # (those started finish before rollback)
+                for w, fut in busy:             # (those started finish before rollback)
                     if not fut.cancelled():
-                        _wait(prog, fut)
+                        error = _wait(prog, fut)
+                        importer.wrote(w, None if error else fut.result(), error)
                 busy.clear()
-                importer.rollback()
+                error = _wait(prog, pool.submit(importer.rollback))     # (the disk: a thread)
+                if error is not None:
+                    raise error
                 return False, prog.longest
         return True, prog.longest
     finally:
