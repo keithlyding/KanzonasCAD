@@ -413,10 +413,16 @@ nobody understands).
      number as its wiring diagram prints it, the point beside it ("2  IN 0"), commons and
      supplies too, only from Rockwell's own document, its publication named
      (allen_bradley.TERMINALS); a module not confirmed stays by point. Wire numbers by
-     address and Import I/O list read the point from the text beside the pin. Still to do:
-     the 1756, 1769, 5069 and 1734-IB4/OB4E modules' terminal numbers (Rockwell's literature
-     library refused the build machine: all 13 are still by point; the 1734 modules from
-     0.19 were numbered from the owner's Rockwell diagrams, terminals 0-7).
+     address and Import I/O list read the point from the text beside the pin. Done (Nov 27
+     2026): all 13 modules by their terminals, from Rockwell's installation instructions and
+     user manuals read through mirror sites (each publication, edition, page and URL in
+     allen_bradley.py). The owner's rules: pin name = the terminal number, the point beside
+     it as Rockwell prints it; 1756, 1734 and 5069 by their printed numbers (5069 0-17; the
+     5069-OB16's counted from the top); 1769, which prints none, by position 1-18 from the
+     top, said so in the manual; a pin for every screw, NC / No Connect / Not used ones
+     named so, none for the 1769-OF2's blacked-out positions; commons and supplies pins too.
+     An analog channel's V and I terminals are both its point; the wiring list and terminal
+     labels name the screw (PLC1:11). Footprints stay "(approximate)", no screw positions.
    - **IEC 60617 symbols as a project's symbol standard** (Project properties, Schematic:
      JIC/NFPA (US) or IEC 60617; every project from before and a new one JIC): a core set
      of 30 drawn here (coils, contacts and timed ones, pushbuttons, E-stop, selector, fuse,
@@ -449,8 +455,7 @@ nobody understands).
      Cancel cancels the whole Project properties change; not asked when there are none:
      tags.retag_letters, through Update numbers' fix_sheet); a device or contact with no tag
      yet shows the project's letter, K?, X?, Q? (BlockDef.tag_letter, set by the project).
-     PLC modules' screw numbers: being sourced from Rockwell's documents via mirror sites
-     (allen_bradley.TERMINALS still empty). Still to come: vertical (IEC-style,
+     PLC modules' screw numbers: entered (allen_bradley.TERMINALS, above). Still to come: vertical (IEC-style,
      top-to-bottom) layouts, and IEC versions of the limit, pressure, temperature and float
      switches, the fused disconnect and starter combinations, drive terminals and the
      distribution blocks.

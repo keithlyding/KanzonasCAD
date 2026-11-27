@@ -3,8 +3,8 @@ auto wire layer", to the mapping offered: PLC I/O on 24VDC BLU, commons on BLU-W
 drive terminals on 480 V, 120 V control on 120V RED; and per-pin defaults in the block editor).
 
 A pin's own wire layer (Pins..., in a block's tab) comes first; else the block's kind says:
-  - a PLC module's input or output point (or a PLC input or output symbol), its V: 24VDC BLU;
-    its common (C, COM, RTN-n, 0V, -V): 24VDC BLU-WHT;
+  - a PLC module's input or output point (or a PLC input or output symbol), its V or +VDC:
+    24VDC BLU; its common (C, COM, DC COM 1, GND-0, RTN-n, ANLG Com, 0V, -V): 24VDC BLU-WHT;
   - a motor's or drive's power terminal (L1-L3, T1-T3, U, V, W): 480V BLK; its ground (PE,
     GND): 480V GRN;
   - a control transformer's H terminals: 480V BLK; X1: 120V RED; X2: 120V WHT;
@@ -19,9 +19,13 @@ import re
 from . import geometry as G
 
 _TERMINAL = re.compile(r"^(\S+)\s+(.+)$")
-_POINT = re.compile(r"^(IN|OUT)([ -]?\d+)?$")
-_COMMON = re.compile(r"^(C|COM\S*|DC ?COM|RTN\S*|0 ?V|-V|DC-|V-)$")
-_SUPPLY = re.compile(r"^(V|\+V|V\+|24 ?V|VDC|DC\+)$")
+# (an analog channel's voltage or current terminal too, V IN 0+, IOUT-2; and the Allen-Bradley
+# modules' commons and supplies as Rockwell prints them, 0.29: DC COM 1, GND-0, RTN OUT-0,
+# ANLG COM, DC NEUT, LA-, an analog return, I RTN-0, V/I IN 0-; +VDC, DC-0(+), +24V DC, LA+)
+_POINT = re.compile(r"^([VI] ?)?(IN|OUT)([ -]?\d+)?\+?$")
+_COMMON = re.compile(r"^(C|COM\S*|DC ?COM( \d+)?|RTN\S*|RTN OUT-\d+|I RTN-\d+|V/I IN \d+-|"
+                     r"GND-\d+|ANLG COM|DC NEUT|LA-|0 ?V|-V|DC-|V-)$")
+_SUPPLY = re.compile(r"^(V|\+V|V\+|24 ?V|\+24 ?V( DC)?|\+?VDC|DC\+|DC-\d+\(\+\)|LA\+)$")
 _POWER = re.compile(r"^([LT][1-3]|[UVW][12]?)$")
 _GROUND = re.compile(r"^(PE\d*|GND|G|GRD)$")
 

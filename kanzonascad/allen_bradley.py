@@ -9,7 +9,8 @@ from. No Qt here.
   whole (ControlLogix 1756, CompactLogix 1769, Compact 5000 5069, POINT I/O 1734). A module's
   pins are named by Rockwell's terminal (screw) numbers, the point beside each ("2  IN 0"),
   for a module whose terminal assignment is in TERMINALS, taken from Rockwell's own wiring
-  diagram for it (the owner, Nov 27 2026: "Both"); any other module's pins are named by point
+  diagram for it (the owner, Nov 27 2026: "Both"; a 1769 module's by position from the top,
+  Rockwell printing none on its blocks); any other module's pins are named by point
   (0, 1, 2...), its commons left out (Edit block renames its terminals). Wire numbers by
   address and Import I/O list read the point from the text beside the pin, so they work
   either way.
@@ -147,20 +148,168 @@ IO = [
 
 
 # {catalog: (Rockwell publication it is from, [(terminal number, what it is)])}: a module's
-# terminal block as Rockwell's wiring diagram for it prints it, every terminal (points,
-# commons, supplies), in the order it is drawn here. Only from Rockwell's own document, its
-# publication named: a module not here is drawn by point. (Empty in 0.29: Rockwell's
-# literature library, literature.rockwellautomation.com, could not be read where these were
-# built, so no terminal number could be checked against it.)
-TERMINALS = {}
+# terminal block as Rockwell's wiring diagram for it prints it, every screw (points, commons,
+# supplies, the ones not used), in terminal-number order. Only from Rockwell's own documents,
+# each module's publication, edition, page and where it was read named beside it (read in Nov
+# 2026 from mirrors of Rockwell's PDFs: Rockwell's literature library refused the machine these
+# were built on). The point beside a terminal is written as Rockwell prints it ("IN-0", "OUT 3",
+# "V in 0+", "VOUT-2"): wirenums.io_points reads the point from it. A module not here is drawn
+# by point (_io_terminals). The owner's rules (Nov 27 2026): the printed terminal numbers for
+# 1756, 1734 and 5069; for 1769, which prints none, the positions 1-18 counted from the top as
+# the door label lays them out (alternating right and left column); a pin for every screw,
+# "No Connect", "Not used" and NC ones too, named so; none where there is no screw.
+TERMINALS = {
+    # 1756-UM058G-EN-P, ControlLogix Digital I/O Modules User Manual, November 2012, page 142
+    # (https://www.manualsdir.com/manuals/579413/rockwell-automation-1756-xxxx-controllogix-
+    # digital-i_o-modules.html?page=142: its labels readable, most terminal numbers lost from
+    # the text, those left, 1, 10, 11, 20, fitting); every number from 1492-SG121E-EN-P, I/O
+    # Wiring Conversion Systems, PLC-5 1771 to ControlLogix 1756, July 2016, page 24
+    # ("1771-IBD to 1756-IB16", https://docs.rs-online.com/591c/A700000007707241.pdf). The
+    # 20-pin block: odd terminals in its right column, even in its left; GND-0 (9, 10) and
+    # GND-1 (19, 20) each joined inside.
+    "1756-IB16": ("1756-UM058G-EN-P, Nov 2012, p. 142; 1492-SG121E-EN-P, Jul 2016, p. 24",
+                  [(str(i + 1), "IN-%d" % i) for i in range(8)] +
+                  [("9", "GND-0"), ("10", "GND-0")] +
+                  [(str(i + 3), "IN-%d" % i) for i in range(8, 16)] +
+                  [("19", "GND-1"), ("20", "GND-1")]),
+    # 1756-UM058G-EN-P, November 2012, page 162, every number legible
+    # (https://www.manualsdir.com/manuals/579413/rockwell-automation-1756-xxxx-controllogix-
+    # digital-i_o-modules.html?page=162); the same in 1492-SG121E-EN-P, July 2016, page 51
+    # ("1771-OBD to 1756-OB16E"). Group 0 OUT-0 to 7 (RTN OUT-0, DC-0(+)), group 1 OUT-8 to 15.
+    "1756-OB16E": ("1756-UM058G-EN-P, Nov 2012, p. 162; 1492-SG121E-EN-P, Jul 2016, p. 51",
+                   [(str(i + 1), "OUT-%d" % i) for i in range(8)] +
+                   [("9", "RTN OUT-0"), ("10", "DC-0(+)")] +
+                   [(str(i + 3), "OUT-%d" % i) for i in range(8, 16)] +
+                   [("19", "RTN OUT-1"), ("20", "DC-1(+)")]),
+    # 1756-UM009C-EN-P, ControlLogix Analog I/O Modules User Manual, December 2010, pages 74-77
+    # (https://www.manualsdir.com/manuals/579376/rockwell-automation-1756-xxxx-controllogix-
+    # analog-i_o-modules.html?page=74, and 75-77: its four wiring examples, the same labels).
+    # The 36-pin block. Caveat: in the right column (3/5/7, 23-31, 33/35) the source's text ran
+    # the labels together ("i RTN-1i RTN-2i RTN-3"); they were split in order from the top,
+    # as the left column and the module's pattern have them. Drawn single-ended (8 channels:
+    # channel x is IN-x, its return RTN; for current, i RTN-x wired to RTN); differential
+    # pairs IN-0(+)/IN-1(-)... All RTN joined inside.
+    "1756-IF8": ("1756-UM009C-EN-P, Dec 2010, pp. 74-77",
+                 [t for i in range(4) for t in ((str(2 * i + 1), "i RTN-%d" % i),
+                                                (str(2 * i + 2), "IN-%d" % i))] +
+                 [("9", "RTN"), ("10", "RTN")] +
+                 [t for i in range(4, 8) for t in ((str(2 * i + 3), "i RTN-%d" % i),
+                                                   (str(2 * i + 4), "IN-%d" % i))] +
+                 [(str(i), "Not used") for i in range(19, 27)] +
+                 [("27", "RTN"), ("28", "RTN")] +
+                 [(str(i), "Not used") for i in range(29, 37)]),
+    # 1756-UM009C-EN-P, December 2010, page 158 (its current and voltage examples agree;
+    # https://www.manualsdir.com/manuals/579376/rockwell-automation-1756-xxxx-controllogix-
+    # analog-i_o-modules.html?page=158). The 20-pin block: channels 0-3 in the right column,
+    # 4-7 in the left; a voltage load on VOUT-x and RTN, a current load on IOUT-x and RTN (both
+    # are channel x's point); all RTN joined inside.
+    "1756-OF8": ("1756-UM009C-EN-P, Dec 2010, p. 158",
+                 [("1", "VOUT-0"), ("2", "VOUT-4"), ("3", "IOUT-0"), ("4", "IOUT-4"),
+                  ("5", "RTN"), ("6", "RTN"), ("7", "VOUT-1"), ("8", "VOUT-5"),
+                  ("9", "IOUT-1"), ("10", "IOUT-5"), ("11", "VOUT-2"), ("12", "VOUT-6"),
+                  ("13", "IOUT-2"), ("14", "IOUT-6"), ("15", "RTN"), ("16", "RTN"),
+                  ("17", "VOUT-3"), ("18", "VOUT-7"), ("19", "IOUT-3"), ("20", "IOUT-7")]),
+    # 1769 blocks: Rockwell prints no screw numbers; the 18 positions counted from the top,
+    # right and left columns alternating (the right one higher), as each door label shows.
+    # 1769-IN007B-EN-P, Compact 24V dc Sink/Source Input Module Installation Instructions, June
+    # 2000: door label page 2, wiring diagram page 8 (https://www.manualsdir.com/manuals/
+    # 579509/rockwell-automation-1769-iq16-compact-24v-dc-sink_source-input-module.html?page=8);
+    # the same in 1769-SG002C-EN-P, March 2004, page 8
+    # (https://docs.rs-online.com/0e60/0900766b804a34cf.pdf). The order turns after DC COM 1:
+    # IN 9 above IN 8. Group 1 IN 0-7 with DC COM 1, group 2 IN 8-15 with DC COM 2.
+    "1769-IQ16": ("1769-IN007B-EN-P, Jun 2000, pp. 2 and 8",
+                  [(str(i + 1), "IN %d" % i) for i in range(8)] + [("9", "DC COM 1")] +
+                  [("10", "IN 9"), ("11", "IN 8"), ("12", "IN 11"), ("13", "IN 10"),
+                   ("14", "IN 13"), ("15", "IN 12"), ("16", "IN 15"), ("17", "IN 14"),
+                   ("18", "DC COM 2")]),
+    # 1769-IN054A-EN-P, Compact Solid State 24V dc Source Output Module Installation
+    # Instructions, April 2001, page 8 (https://www.manualsdir.com/manuals/579848/rockwell-
+    # automation-1769-ob16-compact-solid-state-24v-dc-source-output-module.html?page=8). +VDC
+    # to +DC, DC COM to -DC. Caveat: 1769-SG002C-EN-P (page 11) prints the first one "+VAC", a
+    # typo: the installation instructions' "+VDC" is used.
+    "1769-OB16": ("1769-IN054A-EN-P, Apr 2001, p. 8",
+                  [("1", "+VDC")] + [(str(i + 2), "OUT %d" % i) for i in range(16)] +
+                  [("18", "DC COM")]),
+    # 1769-IN051A-EN-P, Compact AC/DC Relay Output Module Installation Instructions, April
+    # 2001: door label page 2, wiring diagram page 8 (https://www.manualsdir.com/manuals/
+    # 579415/rockwell-automation-1769-ow8-compact-ac_dc-relay-output-module.html?page=8).
+    # Positions 1-4 and 15-18 are drawn blank, no label (not "NC"): pins named "(blank)". Group
+    # 1 OUT 0-3 with VAC-VDC 1, group 2 OUT 4-7 with VAC-VDC 2, each to L1 or +DC.
+    "1769-OW8": ("1769-IN051A-EN-P, Apr 2001, pp. 2 and 8",
+                 [(str(i), "(blank)") for i in range(1, 5)] +
+                 [("5", "VAC-VDC 1"), ("6", "OUT 0"), ("7", "OUT 1"), ("8", "OUT 2"),
+                  ("9", "OUT 3"), ("10", "VAC-VDC 2"), ("11", "OUT 5"), ("12", "OUT 4"),
+                  ("13", "OUT 7"), ("14", "OUT 6")] +
+                 [(str(i), "(blank)") for i in range(15, 19)]),
+    # 1769-IN048A-EN-P, Compact Analog Input Module (Series B or later) Installation
+    # Instructions, December 2000, pages 2 and 11-13 (https://www.manualsdir.com/manuals/
+    # 579288/rockwell-automation-1769-if4-compact-series-b-or-later-analog-input-module.html?
+    # page=12); the same list in 1769-SG002C-EN-P, page 16. Differential voltage on V in x+
+    # and V/I in x-, current on I in x+ and V/I in x- (V in x+ and I in x+ both channel x's
+    # point); all ANLG Com joined inside; +24V dc and dc NEUT an optional external supply.
+    "1769-IF4": ("1769-IN048A-EN-P, Dec 2000, pp. 2 and 11-13",
+                 [t for i in range(4) for t in (
+                     (str(4 * i + 1), "V in %d+" % i), (str(4 * i + 2), "V/I in %d-" % i),
+                     (str(4 * i + 3), "I in %d+" % i), (str(4 * i + 4), "ANLG Com"))] +
+                 [("17", "+24V dc"), ("18", "dc NEUT")]),
+    # 1769-UM002B-EN-P, Compact I/O Analog Modules User Manual, July 2005, page 48, Figure 2.19
+    # "1769-OF2 Terminal Layout" (https://www.manualsdir.com/manuals/579674/rockwell-automation-
+    # 1769-of2-compact-i_o-analog-modules-1769-of8c-compact-i_o-analog-modules-1769-of8v-
+    # compact-i_o-analog-modules-1769-if4-compact-i_o-analog-modules-1769-if8-compact-i_o-
+    # analog-modules.html?page=48); it agrees with 1769-IN049A-EN-P, December 2000, pages 2
+    # and 11. Positions 1-4 and 15-18 are blacked out, no screw: no pin for them. NC (8, 12):
+    # not to be used as connection points. Caveat: 1769-SG002C (page 20) prints positions 9
+    # and 10 "V out 0+" and "I out 0+" a second time; the manual's "V out 1+", "I out 1+" are
+    # used.
+    "1769-OF2": ("1769-UM002B-EN-P, Jul 2005, p. 48",
+                 [("5", "V out 0+"), ("6", "I out 0+"), ("7", "ANLG Com"), ("8", "NC"),
+                  ("9", "V out 1+"), ("10", "I out 1+"), ("11", "ANLG Com"), ("12", "NC"),
+                  ("13", "+24V dc"), ("14", "dc NEUT")]),
+    # 5069-IN004E-EN-P, Compact 5000 Digital 16-point Sinking Input Modules Installation
+    # Instructions, June 2022, page 8, "Wiring Diagram", terminals printed 0-17 from the top
+    # (https://docs.plcexchange.net/allen-bradley/compact-5000/5069-IN004_ib16-install.pdf);
+    # 5069-UM004H-EN-P, March 2026, page 111 agrees (IN 0-15, then two not used). No common
+    # on the block: the inputs return through the module to SA (-) of the SA power terminal
+    # block (the controller's, an adapter's or a 5069-FPD's).
+    "5069-IB16": ("5069-IN004E-EN-P, Jun 2022, p. 8",
+                  [(str(i), "IN %d" % i) for i in range(16)] +
+                  [("16", "No Connect"), ("17", "No Connect")]),
+    # 5069-IN007E-EN-P, Compact 5000 Digital 16-point Sourcing Output Modules Installation
+    # Instructions, June 2022, page 8, "Wiring Diagram"
+    # (https://docs.plcexchange.net/allen-bradley/compact-5000/5069-IN007_ob16-install.pdf);
+    # 5069-UM004H-EN-P, March 2026, page 112 agrees (OUT 0-15, LA+, LA-). Caveat: this
+    # diagram prints no numbers; they are the positions counted from the top, 0-17, as the
+    # same 5069-RTB18 block is numbered in 5069-IN004E. LA+ and LA- (24V DC) feed the outputs.
+    "5069-OB16": ("5069-IN007E-EN-P, Jun 2022, p. 8 (numbers counted from the top)",
+                  [(str(i), "OUT %d" % i) for i in range(16)] +
+                  [("16", "LA+"), ("17", "LA-")]),
+    # 1734-IN051H-EN-E, POINT I/O Input Modules (1734-IB2, -IB4, -IB8, Series C), April 2013,
+    # pages 12 and 14 (https://www.manualsdir.com/manuals/579333/rockwell-automation-1734-
+    # ib2_ib4_ib8-series-c-point-i_o-sink-input-module.html?page=14). Channels 0 and 2 with
+    # C 4 and V 6, 1 and 3 with C 5 and V 7; V from the module's power bus.
+    "1734-IB4": ("1734-IN051H-EN-E, Apr 2013, pp. 12 and 14",
+                 [(str(i), "In %d" % i) for i in range(4)] +
+                 [("4", "C"), ("5", "C"), ("6", "V"), ("7", "V")]),
+    # 1734-IN056H-EN-P, POINT I/O Protected Output Modules (1734-OB2E/OB4E/OB8E, Series C), May
+    # 2013, pages 12-13 (https://www.manualsdir.com/manuals/579686/rockwell-automation-1734-
+    # ob2e_4e_8e-series-c-point-i_o-protected-output-module-installation-instructions.html?
+    # page=13). Commons: channel 0 on 6, 1 on 7, 2 on 4, 3 on 5.
+    "1734-OB4E": ("1734-IN056H-EN-P, May 2013, pp. 12-13",
+                  [(str(i), "Out %d" % i) for i in range(4)] +
+                  [(str(i), "C") for i in range(4, 8)]),
+}
 
 
 def _module_terminals(cat, word, n):
     """(terminals, what the description says of them) of a module: Rockwell's terminal numbers
-    (TERMINALS) or, without them, its points."""
+    (TERMINALS; a 1769 module's positions from the top) or, without them, its points."""
     got = TERMINALS.get(cat)
     if got:
         pub, terms = got
+        if cat.startswith("1769-"):
+            return terms, ("terminals numbered by position from the top, 1-18 (Rockwell "
+                           "prints no screw numbers on a 1769 block), as Rockwell's wiring "
+                           "diagram lays them out (%s)" % pub)
         return terms, "terminals as Rockwell's wiring diagram numbers them (%s)" % pub
     return (_io_terminals(word, n), "terminals named by point: its terminal numbers and "
             "commons are on Rockwell's wiring diagram (Edit block renames them)")

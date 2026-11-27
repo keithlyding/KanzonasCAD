@@ -165,7 +165,9 @@ new wire is still its own), and the rubber band shows it in that color as you dr
 joining wires of two different layers stays on the wire layer picked (or the default), and the command line warns
 that two conductors may be tied together. A wire on its own that starts on a symbol's pin (or, failing that, ends
 on one) takes <b>the layer the pin gives</b>, whatever layer is picked: a PLC module's input or
-output point, or its V, 24VDC BLU; its common (C, COM, RTN), 24VDC BLU-WHT; a motor's or
+output point (an analog channel's V or I terminal too), or its supply (V, +VDC, DC-0(+), +24V
+dc, LA+), 24VDC BLU; its common (C, COM, DC COM 1, GND-0, RTN, RTN OUT-0, ANLG Com, dc NEUT,
+LA-, an analog return), 24VDC BLU-WHT; its NC, Not used and No Connect ones nothing; a motor's or
 drive's power terminal (L1-L3, T1-T3, U, V, W), 480V BLK, and its ground (PE), 480V GRN; a
 control transformer's H terminals 480V BLK, X1 120V RED and X2 120V WHT; a power supply's L
 120V RED, N 120V WHT, + 24VDC BLU and - 24VDC BLU-WHT. A pin given a wire layer of its own
@@ -391,14 +393,28 @@ it), a <b>Pilot light with color letter</b> (its COLOR attribute, R, G, A..., sh
 lamp), and PLC I/O modules drawn whole by catalog number (ControlLogix 1756-IB16, 1756-OB16E,
 1756-IF8, 1756-OF8; CompactLogix 1769-IQ16, 1769-OB16, 1769-OW8, 1769-IF4, 1769-OF2; Compact
 5000 5069-IB16, 5069-OB16; POINT I/O 1734-IB4, 1734-OB4E, beside the 1734 ones from before).
-A module's pins are named by Rockwell's terminal (screw) numbers where they were taken from
-Rockwell's own wiring diagram for it, the point beside each (<b>2  IN 0</b>), its commons and
-supplies too; in 0.29 these modules are still named by point (0, 1, 2...: the point's number,
-<b>0  IN 0</b>), as their terminal numbers couldn't yet be checked against Rockwell's
-documents: a module's own terminal numbers and commons are on its wiring diagram, and Edit
-block renames them (the 1734 POINT I/O modules from before were already numbered by their
-terminals, 0 to 7). Either way, numbering wires by their PLC address and <b>Import I/O
-list...</b> go by the point written beside the pin, not by the pin's name. Every symbol is drawn by
+A module's pins are named by its terminal (screw) numbers as Rockwell's own wiring diagram for
+it gives them, the point beside each as Rockwell prints it (<b>2  IN-1</b>, <b>11  IN 8</b>,
+<b>3  IOUT-0</b>), every screw a pin: the points, the commons and supplies (GND-0, RTN OUT-0,
+DC-0(+), DC COM 1, +VDC, ANLG Com, +24V dc, LA+, LA-, V, C) and the ones not to be wired, named as
+Rockwell names them (Not used, No Connect, NC; (blank) where the 1769-OW8's diagram leaves a
+position unlabeled). Where the numbers come from: the 1756 modules (1 to 20; 1 to 36 on the
+1756-IF8) and the 1734 ones (0 to 7) as printed on their terminal blocks; the 5069 ones 0 to 17
+(printed on the 5069-IB16's block; on the 5069-OB16's the same 18 positions counted from the
+top, as its diagram prints no numbers). <b>The 1769 modules' numbers are positions, not printed
+numbers</b>: Rockwell prints no screw numbers on a 1769 terminal block, so its 18 positions are
+numbered 1 to 18 from the top, the right and left columns taken in turn, as the door label lays
+them out; the 1769-OF2's blacked-out positions (1 to 4 and 15 to 18, no screw) have no pin.
+Each module's description names the Rockwell publication and page its terminals are from
+(installation instructions and user manuals of 2000 to 2022): check them against the module's
+door label before wiring. An analog channel's voltage and current terminals (VOUT-0 and
+IOUT-0, V in 0+ and I in 0+) are both that channel's point; its returns (i RTN-0, V/I in 0-)
+are not points. The 1756-IF8 is drawn for single-ended wiring (channel x on IN-x). The 1734 POINT
+I/O modules from before 0.29 keep their terminals 0 to 7. Edit block renames any terminal.
+Numbering wires by their PLC address and <b>Import I/O
+list...</b> go by the point written beside the pin, not by the pin's name (position 11 of a
+1769-IQ16 in slot 4, IN 8, is I:4/8); the wiring list and the terminal wire labels name a
+module's pin by its screw number (<b>K201:11</b>, <b>PLC201:11</b>). Every symbol is drawn by
 KanzonasCAD from the standard conventions, none copied from a maker's or another program's
 drawings.
 A symbol of yours with the same name replaces a built-in one.</li>

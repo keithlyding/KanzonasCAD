@@ -4706,10 +4706,12 @@ def random_editing(log, out, ops, seed, drawing=None):
                     continue
                 pts = {}
                 for t in d.entities:
-                    m = isinstance(t, M.Text) and re.match(r"(\S+)\s+(IN|OUT)[ -](\d+)$",
-                                                           t.text.strip())
+                    # (0.29: Rockwell's point labels, of any case, an analog channel's V or I
+                    # terminal too: "IN-0", "In 0", "V in 0+", "IOUT-2"; never a return)
+                    m = isinstance(t, M.Text) and re.match(
+                        r"(\S+)\s+(?:[VI] ?)?(IN|OUT)[ -](\d+)\+?$", t.text.strip(), re.I)
                     if m:
-                        pts.setdefault(m.group(1), (m.group(2)[0], int(m.group(3))))
+                        pts.setdefault(m.group(1), (m.group(2)[0].upper(), int(m.group(3))))
                 addr_sym = any(a["attr"] == "ADDR" for a in d.attr_texts)
                 for name, q in e.pin_points():
                     if addr_sym:
@@ -4740,8 +4742,11 @@ def random_editing(log, out, ops, seed, drawing=None):
         o = clear_of_drawing(k)
         if o is None or not wirenums.enabled(p):
             return
+        # (0.29: Rockwell's modules by their terminal numbers, the points not in pin order,
+        # an analog channel's V and I terminals both its point)
         block = rnd.choice(["1734-OB8E module", "1734-IB8 module", "1734-OE4C module",
-                            "PLC digital output module, 16 points"])
+                            "PLC digital output module, 16 points", "1769-IQ16 module",
+                            "1756-OF8 module", "5069-OB16 module"])
         slot = rnd.choice(["", "1", "3", "7", "12"])
         before = set(s.entities)
         v.run(C.InsertCmd, lib.get("symbol", block), {"SLOT": slot} if slot else {})
