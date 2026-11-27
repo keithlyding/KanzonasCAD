@@ -4,6 +4,7 @@ Now what outlives a full collection is set aside, the next ones go only through 
 since, and a closed project is still given back."""
 import gc
 import unittest
+import time
 import weakref
 
 from PySide6.QtCore import QTimer
@@ -61,8 +62,15 @@ class GcPolicyTest(unittest.TestCase):
         del p
         QTimer.singleShot(0, lambda i=self.win.tabs.indexOf(d): self.win.close_tab(i))
         del d
-        QTimer.singleShot(300, APP.quit)
+        # (waited for until freed, three seconds at most, not a fixed 300 ms: how long the
+        # close and its sweep take depends on what else the test process holds)
+        deadline = time.monotonic() + 3.0
+        timer = QTimer()
+        timer.timeout.connect(lambda: (gone() is None or time.monotonic() > deadline)
+                              and APP.quit())
+        timer.start(20)
         APP.exec()
+        timer.stop()
         self.assertIsNone(gone(), "the closed project is still in memory")
 
     def test_a_sweep_frees_rings_set_aside(self):
