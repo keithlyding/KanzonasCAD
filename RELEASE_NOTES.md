@@ -40,6 +40,12 @@ build fails without them.
 **Fixed**
 - IEC and Allen-Bradley contacts now show their pin numbers (13-14) on the drawing, as JIC ones
   do.
+- In a narrow window every ribbon button now shrinks to its icon: Wire color label, Dimension
+  units, Edit array and Block tab kept their names, so the Schematic tab could run off a
+  1000-pixel-wide window.
+- Import blocks from folder stays responsive while it reads the drawings, even when the disk or
+  a virus scanner is slow to open them, and a large DWG no longer freezes the window while it's
+  read.
 
 ## 0.28
 
