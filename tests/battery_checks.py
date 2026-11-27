@@ -1059,10 +1059,10 @@ def circuit_placed(project, sheet, circuit, at, angle, scale, before):
         assert e.attrs.get("DEV") and e.attrs["DEV"] not in before["devs"], \
             "%s placed with an old hidden id" % tag
         if not tags.locked(e):
-            got = tags.split(tag, e.defn.prefix)
+            # (in the project's letters: an IEC project's 81346 ones)
+            got = tags.split(tag, tags.prefix_for(project, e.defn))
             assert got and got[0] == page, "%s placed on page %s" % (tag, page)
-            same = [x for x in devices if x is not e and x.attrs.get("TAG") == tag and
-                    x.defn.prefix == e.defn.prefix]
+            same = [x for x in devices if x is not e and x.attrs.get("TAG") == tag]
             assert not same, "%s placed twice" % tag
     # (only symbols found alone at their spot: two of one block on one spot can't be told
     # apart)

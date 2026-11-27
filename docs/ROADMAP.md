@@ -282,31 +282,54 @@ nobody understands).
      its tag cleared (decided here: its old tag would link it to an unrelated device of the
      project), unlocked wire numbers go (the sheet numbers them), connectors and arrows get
      new names, the same within the circuit (decided here: a pair stays a pair; a lone one
-     waits for its other end), one undo step.
+     waits for its other end), one undo step. The owner confirmed (Nov 27 2026): a lone contact
+     stays unlinked with its tag cleared.
    - **More symbols and footprints, leaning on Allen-Bradley**: symbols drawn here in the
      JIC style (motor protection circuit breaker, electronic overload and its NO contact,
      3-position selector and its contacts, pilot light with its color letter, PLC modules of
      ControlLogix, CompactLogix, Compact 5000 and POINT I/O drawn whole); built-in parts by
      catalog number (100-C, 140M, E300, 700-HA, 800F contact blocks, 1492-J, 1606-XLP,
      PowerFlex 525, the PLC modules, controllers and chassis), read-only as the built-in
-     blocks are (a part of yours with the same id takes its place). Decided here: catalog
-     numbers only where their numbering is sure (E300's depends on three modules: left
-     blank); PLC modules' terminals named by point, not by Rockwell's terminal numbers (on
-     its wiring diagrams; Edit block renames them); footprints only where none generic is
-     near: PowerFlex 525 frames at Rockwell's published nominal sizes, the PLC modules and
-     chassis as "(approximate)"; parts use the generic footprints otherwise.
+     blocks are (a part of yours with the same id takes its place). Catalog numbers only
+     where their numbering is sure (E300's depends on three modules: left blank);
+     footprints only where none generic is near: PowerFlex 525 frames at Rockwell's
+     published nominal sizes, the PLC modules and chassis as "(approximate)"; parts use the
+     generic footprints otherwise (the owner confirmed all three, Nov 27 2026: as built).
+     PLC modules' pins (the owner, Nov 27 2026: "Both"): named by Rockwell's terminal (screw)
+     number as its wiring diagram prints it, the point beside it ("2  IN 0"), commons and
+     supplies too, only from Rockwell's own document, its publication named
+     (allen_bradley.TERMINALS); a module not confirmed stays by point. Wire numbers by
+     address and Import I/O list read the point from the text beside the pin. Still to do:
+     the 1756, 1769, 5069 and 1734-IB4/OB4E modules' terminal numbers (Rockwell's literature
+     library refused the build machine: all 13 are still by point; the 1734 modules from
+     0.19 were numbered from the owner's Rockwell diagrams, terminals 0-7).
    - **IEC 60617 symbols as a project's symbol standard** (Project properties, Schematic:
      JIC/NFPA (US) or IEC 60617; every project from before and a new one JIC): a core set
      of 30 drawn here (coils, contacts and timed ones, pushbuttons, E-stop, selector, fuse,
      breaker, disconnector, thermal overload and its contact, lamp, motors 1~ and 3~,
      solenoid, transformer, 3-pole power devices, terminal, PE). Insert symbol offers the
      project's set in place of the other one's equivalents; the rest (PLC, drives,
-     connectors) in both. Decided here: laid out for horizontal rungs as the JIC set, and
-     with the JIC tag prefixes (CR, M, PB...), so tags, terminals, reports and
-     cross-references work unchanged. Still to come: IEC 81346 letter codes (K, Q, S, F, P,
-     X) as an option, vertical (IEC-style, top-to-bottom) layouts, and IEC versions of the
-     limit, pressure, temperature and float switches, the fused disconnect and starter
-     combinations, drive terminals and the distribution blocks.
+     connectors) in both. Decided here: laid out for horizontal rungs as the JIC set; the
+     symbols keep the JIC prefixes (CR, M, PB...), which say what kind of device each is to
+     the program.
+   - **IEC 81346-2 letter codes in an IEC project** (the owner, Nov 27 2026, into 0.29):
+     tags made of the device's class letter instead of the US prefix (tags.prefix_for), by
+     what it does (IEC 81346-2:2019 Table 1, from public summaries; the standard itself not
+     read): K control and timing relays and PLC modules; Q contactors (coil and main
+     contacts one device, one tag: 81346-2 puts power switching under Q, signal relays
+     under K), breakers, motor protection breakers, disconnects; S pushbuttons, selectors,
+     E-stops; F fuses and overload relays; P pilot lights; M motors and solenoids; T
+     transformers, power supplies and drives; X terminal strips (X601) and distribution
+     blocks. Decided here, open to the owner's change: limit, pressure, temperature and
+     float switches B (81346-2: sensing a condition), not S as the owner's list had them;
+     power supplies T (converting AC to DC), not G; PLC K, not A; drives T; solenoids M.
+     Devices of one letter share its counts on a page; your own prefixes are kept. A tag of
+     the other letters (the project's standard changed) is kept and follows its page until
+     Renumber sheet; copies take the project's letters. No project from before had IEC
+     symbols, so nothing is renumbered on open. Still to come: vertical (IEC-style,
+     top-to-bottom) layouts, and IEC versions of the limit, pressure, temperature and float
+     switches, the fused disconnect and starter combinations, drive terminals and the
+     distribution blocks.
 7. **UDTs** (0.30, the owner, Nov 26 2026; named "UDT" as in PLCs and Ignition, the owner's
    choice): a circuit type built on saved circuits, for example a whole motor circuit
    (disconnect, manual starter, VFD, terminal blocks, motor).

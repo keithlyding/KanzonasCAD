@@ -6,9 +6,10 @@ other program's library.
 
 They are laid out as the JIC symbols are (symbols_jic.py): for horizontal rungs, pins on the
 left and right at y = 0, 1/2 inch apart, the tag above; three-pole ones with their poles 1/2
-inch apart, L1/T1 on top. They keep the JIC symbols' tag prefixes (CR, M, PB, CB, FU, OL...),
-so tags, contacts, cross-references, terminals and reports work as in any project (Block
-properties changes a prefix: IEC 81346 letter codes, K, Q, S, F, P, X, are not set here).
+inch apart, L1/T1 on top. They keep the JIC symbols' prefixes (CR, M, PB, CB, FU, OL...),
+which say what kind of device each is to the program; in a project of IEC symbols the tags
+are made of the prefixes' IEC 81346-2 letters instead (K, Q, S, F, P, X...: tags.prefix_for),
+the JIC and other symbols' too.
 
 In a project of IEC symbols, Insert symbol offers these instead of the JIC symbols they stand
 for (IEC_FOR), and the JIC ones in a project of JIC symbols; the program's other symbols (PLC

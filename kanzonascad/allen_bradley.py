@@ -7,8 +7,12 @@ from. No Qt here.
   (Bulletin 140M), an electronic overload relay (Bulletin 193 / E300) and its contacts, a
   three-position selector switch, a pilot light showing its color, and PLC I/O modules drawn
   whole (ControlLogix 1756, CompactLogix 1769, Compact 5000 5069, POINT I/O 1734). A module's
-  terminals are named by point (0, 1, 2...): its terminal block's own numbers and commons are
-  on Rockwell's wiring diagram for it (Edit block renames its terminals).
+  pins are named by Rockwell's terminal (screw) numbers, the point beside each ("2  IN 0"),
+  for a module whose terminal assignment is in TERMINALS, taken from Rockwell's own wiring
+  diagram for it (the owner, Nov 27 2026: "Both"); any other module's pins are named by point
+  (0, 1, 2...), its commons left out (Edit block renames its terminals). Wire numbers by
+  address and Import I/O list read the point from the text beside the pin, so they work
+  either way.
 - Footprints of the parts with no generic one near their size: PowerFlex 525 drives by frame
   (Rockwell's published nominal widths and heights), and approximate outlines of the PLC
   modules, controllers and chassis, named "(approximate)": draw them from Rockwell's dimension
@@ -141,14 +145,35 @@ IO = [
 ]
 
 
+# {catalog: (Rockwell publication it is from, [(terminal number, what it is)])}: a module's
+# terminal block as Rockwell's wiring diagram for it prints it, every terminal (points,
+# commons, supplies), in the order it is drawn here. Only from Rockwell's own document, its
+# publication named: a module not here is drawn by point. (Empty in 0.29: Rockwell's
+# literature library, literature.rockwellautomation.com, could not be read where these were
+# built, so no terminal number could be checked against it.)
+TERMINALS = {}
+
+
+def _module_terminals(cat, word, n):
+    """(terminals, what the description says of them) of a module: Rockwell's terminal numbers
+    (TERMINALS) or, without them, its points."""
+    got = TERMINALS.get(cat)
+    if got:
+        pub, terms = got
+        return terms, "terminals as Rockwell's wiring diagram numbers them (%s)" % pub
+    return (_io_terminals(word, n), "terminals named by point: its terminal numbers and "
+            "commons are on Rockwell's wiring diagram (Edit block renames them)")
+
+
 def ab_io_modules():
-    """The Allen-Bradley PLC I/O modules drawn whole (symbols_jic.io_module), their terminals
-    named by point."""
-    return [io_module("%s module" % cat, _io_terminals(word, n),
-                      "%s (%s); terminals named by point: its terminal numbers and commons "
-                      "are on Rockwell's wiring diagram (Edit block renames them)" % (desc, fam),
-                      cat, AB, fam, right=word == "OUT")
-            for cat, fam, desc, word, n in IO]
+    """The Allen-Bradley PLC I/O modules drawn whole (symbols_jic.io_module): their pins named
+    by Rockwell's terminal numbers, the point beside each (TERMINALS), else by point."""
+    out = []
+    for cat, fam, desc, word, n in IO:
+        terms, said = _module_terminals(cat, word, n)
+        out.append(io_module("%s module" % cat, terms, "%s (%s); %s" % (desc, fam, said),
+                             cat, AB, fam, right=word == "OUT"))
+    return out
 
 
 # ---- footprints ----------------------------------------------------------------------------

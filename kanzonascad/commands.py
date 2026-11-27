@@ -3634,7 +3634,7 @@ class InsertCmd(Command):
                 return
             self.ctx.message("Nothing to link this %s to yet (a %s device): placed unlinked "
                              "(double-click it to link it later)"
-                             % (d.name.lower(), d.prefix or "parent"))
+                             % (d.name.lower(), tags.prefix_for(project, d) or "parent"))
         if d.kind == "footprint" and not self.attrs.get("TAG") and \
                 not self.attrs.get("PARENT"):
             # which schematic device it is: its tag shows on it, and follows it

@@ -1261,6 +1261,18 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert got == at, "%s held by pin %s: the pin went to %s, not %s" % (
                 name, held, got, at)
             BC.CHECKED["insert by its pin"] += 1
+        if len(new) == 1 and tags_mod.is_device(new[0]) and not tags_mod.locked(new[0]):
+            # (0.29: tagged with the project's prefix: an IEC project's 81346-2 letter, K for
+            # a relay, Q for a contactor, X for a terminal strip; worked out from the table)
+            d = new[0].defn
+            want = d.prefix
+            if p.settings.get("symbol_standard") == "iec":
+                want = tags_mod.IEC_ROLE_LETTERS.get((d.prefix, d.role)) or \
+                    tags_mod.IEC_LETTERS.get(d.prefix, d.prefix)
+            tag = new[0].attrs.get("TAG", "")
+            assert tags_mod.split(tag, want) is not None, "%s placed tagged %s, not %s..." % (
+                name, tag, want)
+            BC.CHECKED["a new device tagged with the project's letters"] += 1
         if linked is not None and len(new) == 1:
             got = new[0].attrs.get("PARENT", "")
             assert got == linked, "%s's device: %r, not %r" % (name, got, linked)
@@ -2534,7 +2546,9 @@ def random_editing(log, out, ops, seed, drawing=None):
                 page = p.sheet_number(sh)
                 for e in sh.entities.values():
                     if tags_mod.is_device(e) and not tags_mod.locked(e):
-                        got = tags_mod.split(e.attrs.get("TAG", ""), e.defn.prefix)
+                        # (a tag of the other standard's letters is kept: its own)
+                        got = tags_mod.split(e.attrs.get("TAG", ""),
+                                             tags_mod.tag_prefix(p, e))
                         assert got is not None and got[0] == page, \
                             "%s on sheet %s after Update numbers" % (e.attrs.get("TAG"), page)
                         k = e.attrs["TAG"]
@@ -2551,17 +2565,21 @@ def random_editing(log, out, ops, seed, drawing=None):
                 page = p.sheet_number(sh)
                 mine = [e for e in sh.entities.values()
                         if tags_mod.is_device(e) and not tags_mod.locked(e)]
-                for prefix in {e.defn.prefix for e in mine}:
+                # (by the project's prefixes: an IEC project's letters, K for its relays,
+                # timers and PLC modules alike; a count held by any device whose tag is made
+                # of the prefix)
+                for prefix in {tags_mod.prefix_for(p, e.defn) for e in mine}:
                     held = set()
                     for sx in p.sheets:
                         for e in sx.entities.values():
-                            if not tags_mod.is_device(e) or e.defn.prefix != prefix or \
+                            if not tags_mod.is_device(e) or \
+                                    tags_mod.tag_prefix(p, e) != prefix or \
                                     (sx is sh and not tags_mod.locked(e)):
                                 continue
                             got = tags_mod.split(e.attrs.get("TAG", ""), prefix)
                             if got and got[0] == page:
                                 held.add(got[1])
-                    group = [e for e in mine if e.defn.prefix == prefix]
+                    group = [e for e in mine if tags_mod.prefix_for(p, e.defn) == prefix]
                     want, n = [], 0
                     while len(want) < len(group):
                         n += 1
@@ -3112,7 +3130,14 @@ def random_editing(log, out, ops, seed, drawing=None):
         if got is None and WN.by_io_address(p):
             return                          # (numbered by a PLC point's address, O:3/0)
         if base == now[0].num:
-            assert got and got[0] == p.sheet_number(sh), \
+            # (of the first page with a source arrow of its name: a sheet duplicated with its
+            # arrows has a second source of one name, and the wires they join are one group,
+            # numbered from the first sheet in order; seed 2901, 0.29: page 51's source 29009,
+            # a copy of page 29's)
+            first = next(p.sheet_number(x) for x in p.sheets if any(
+                c.block == WN.ARROWS[0] and c.attrs.get("TAG") == src.attrs["TAG"]
+                for c in x.inserts()))
+            assert got and got[0] == first, \
                 "a source arrow's wire on page %s took %s from a destination's page" % (
                     p.sheet_number(sh), now[0].num)
         BC.CHECKED["a source's wire keeps its page's number"] += 1
@@ -5466,6 +5491,22 @@ def random_editing(log, out, ops, seed, drawing=None):
         for _i in range(rnd.randint(1, 4)):
             p.redo()
 
+    def op_symbol_standard():
+        # (0.29) the project's symbol standard changed (Project properties, Schematic): JIC
+        # or IEC 60617, whose tags are made of IEC 81346-2 letters; the tags already placed
+        # stay as they are, and each still reads as its device's (of either standard's)
+        def device_tags():
+            return {(sh.id, e.id): e.attrs.get("TAG") for sh in p.sheets
+                    for e in sh.entities.values() if tags_mod.is_device(e)}
+        before = device_tags()
+        now = p.settings.get("symbol_standard", "jic")
+        with p.edit("Project properties") as ed:
+            ed.project_settings({"symbol_standard": "jic" if now == "iec" else "iec"})
+        after = device_tags()
+        moved = {k: (before[k], after.get(k)) for k in before if before[k] != after.get(k)}
+        assert not moved, "the symbol standard changed tags: %r" % sorted(moved.values())[:6]
+        BC.CHECKED["the symbol standard changed, the tags kept"] += 1
+
     table = [(op_wire, 18), (op_bus, 3), (op_symbol, 14), (op_line, 4), (op_text, 3),
              (op_move, 6), (op_copy, 4), (op_rotate, 3), (op_erase, 4), (op_trim, 6),
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
@@ -5481,7 +5522,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1),
              (op_paste_same_place, 2),
              (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2),
-             (op_circuit, 3)]
+             (op_circuit, 3), (op_symbol_standard, 2)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")

@@ -503,8 +503,10 @@ def project_properties(parent, project, tab=0):
         std.addItem(label, key)
     std.setCurrentIndex(max(std.findData(standard_of(project)), 0))
     std.setToolTip("The symbols Insert symbol offers for this project: JIC/NFPA (US) or IEC "
-                   "60617. Symbols already placed stay as they are; your own symbols are "
-                   "offered either way.")
+                   "60617, and the letters its device tags are made of: US prefixes (CR, M, "
+                   "PB...) or IEC 81346-2 letters (K, Q, S...). Symbols and tags already "
+                   "placed stay as they are (Renumber gives the new letters); your own symbols "
+                   "are offered either way.")
     form.addRow("Symbol standard", std)
     wire_nums = QCheckBox("Number wires (page number + 3 digits: 6001, 6002...)")
     wire_nums.setChecked(bool(st.get("wire_numbers", True)))

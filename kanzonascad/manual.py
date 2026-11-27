@@ -389,8 +389,14 @@ it), a <b>Pilot light with color letter</b> (its COLOR attribute, R, G, A..., sh
 lamp), and PLC I/O modules drawn whole by catalog number (ControlLogix 1756-IB16, 1756-OB16E,
 1756-IF8, 1756-OF8; CompactLogix 1769-IQ16, 1769-OB16, 1769-OW8, 1769-IF4, 1769-OF2; Compact
 5000 5069-IB16, 5069-OB16; POINT I/O 1734-IB4, 1734-OB4E, beside the 1734 ones from before).
-Their terminals are named by point (0, 1, 2...): a module's own terminal numbers and commons
-are on Rockwell's wiring diagram for it, and Edit block renames them. Every symbol is drawn by
+A module's pins are named by Rockwell's terminal (screw) numbers where they were taken from
+Rockwell's own wiring diagram for it, the point beside each (<b>2  IN 0</b>), its commons and
+supplies too; in 0.29 these modules are still named by point (0, 1, 2...: the point's number,
+<b>0  IN 0</b>), as their terminal numbers couldn't yet be checked against Rockwell's
+documents: a module's own terminal numbers and commons are on its wiring diagram, and Edit
+block renames them (the 1734 POINT I/O modules from before were already numbered by their
+terminals, 0 to 7). Either way, numbering wires by their PLC address and <b>Import I/O
+list...</b> go by the point written beside the pin, not by the pin's name. Every symbol is drawn by
 KanzonasCAD from the standard conventions, none copied from a maker's or another program's
 drawings.
 A symbol of yours with the same name replaces a built-in one.</li>
@@ -408,10 +414,12 @@ thermal overload, motor 3-phase (M 3~), terminal and protective earth. In an IEC
 project the JIC ones; the program's other symbols (PLC modules, drives, power supply,
 distribution blocks, connectors and arrows) and your own are offered in both. They are laid out
 as the JIC ones are, for horizontal rungs (pins left and right, 1/2 inch apart; three-pole ones
-with L1/T1 on top), and they keep the JIC tag prefixes (CR, M, PB, CB, FU, OL, LT...), so tags,
-contacts, cross-references, terminals, wire numbers and reports work the same; Block properties
-changes a prefix (to an IEC 81346 letter, K or Q, say). Changing the standard leaves the
-symbols already placed as they are.</li>
+with L1/T1 on top). In an IEC project, device tags are made of <b>IEC 81346-2 letters</b>
+instead of the US prefixes (Device tags, below): K601 for a relay, Q601 for a contactor, S601
+for a pushbutton, X601 for a terminal strip; the JIC and other symbols placed in it too.
+Contacts, cross-references, terminals, wire numbers and reports work the same. Changing the
+standard leaves the symbols already placed, and their tags, as they are (Renumber sheet gives
+the tags the new letters).</li>
 <li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.
 KanzonasCAD comes with generic ones at typical sizes, in the Generic categories: breakers 1, 2
 and 3 pole, fuse holders, a motor protector, a surge protector and a rotary disconnect
@@ -783,6 +791,21 @@ block...</b> to change its drawing, move or add pins (Add pin) and move its tag 
 two-digit count on that page. On page 6 that's <b>CR601</b>, CR602, <b>M601</b>, PB601...; on
 page 12, CR1201. The <code>CR?</code> you may have seen before means a device still waiting
 for a number (Renumber sheet gives it one).</p>
+<p><b>IEC 81346 letters</b>: in a project whose <b>Symbol standard</b> is IEC 60617 (Project
+properties, Schematic), the tag is made of the device's IEC 81346-2 class letter instead of its
+symbol's prefix, by what the device does: <b>K</b> control relays, timing relays and PLC
+modules (K601, K602); <b>Q</b> contactors (coil and main contacts, one device), circuit
+breakers, motor protection circuit breakers and disconnects; <b>S</b> pushbuttons, selector
+switches and emergency stops; <b>B</b> limit, pressure, temperature and float switches
+(sensors); <b>F</b> fuses and overload relays; <b>P</b> pilot lights; <b>M</b> motors and
+solenoids; <b>T</b> transformers, power supplies and drives; <b>X</b> terminal strips (X601,
+its terminals X601-1, X601-2...) and distribution blocks. Devices of one letter share its
+counts on a page (a contactor Q601, a breaker Q602). A symbol of yours with a prefix of its
+own keeps it. The symbol's prefix (Block properties) still says what kind of device it is:
+which contacts are offered for it, a PLC module, a terminal strip. A tag made of the other
+letters, from before the project's standard was changed, is kept and still follows its page
+(Update numbers keeping the numbers keeps it too); <b>Renumber sheet</b> (or Update numbers
+renumbering) gives it the project's letters, and copies take them.</p>
 <ul>
 <li>A new device takes the <b>lowest free</b> number for its prefix on its page, so deleting
 CR602 frees 02 for the next relay.</li>
