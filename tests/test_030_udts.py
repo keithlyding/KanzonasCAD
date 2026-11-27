@@ -279,16 +279,460 @@ class UdtTest(unittest.TestCase):
         self.assertEqual(inst["angle"], 90.0)
         BC.udt_motor_circuit(self.p, self.s, U.type_of(self.s, inst), inst)
 
-    def test_copies_are_plain_parts(self):
+    # ---- copies (the owner, Nov 27 2026: "Copy/paste of a placed UDT makes a new instance") --
+    def udt_tags(self, gid, sheet=None):
+        return sorted(e.attrs.get("TAG", "") for e in U.members(sheet or self.s, gid).values()
+                      if isinstance(e, M.Insert) and e.defn.role != "child")
+
+    def assert_new_instance(self, src, gid, sheet=None, src_sheet=None):
+        """gid (on sheet) a placed UDT of its own copied from src: the same UDT, choices,
+        values, rating rules and overrides; its own objects, tags and wire numbers; its
+        contacts on its own devices; wired as its UDT draws it."""
+        sheet, src_sheet = sheet or self.s, src_sheet or self.s
+        a, b = src_sheet.udts[src], sheet.udts[gid]
+        for k in ("udt", "type", "choices", "values", "ratings", "overrides", "strip"):
+            self.assertEqual(b.get(k), a.get(k), k)
+        self.assertEqual(set(b["members"]), set(a["members"]))
+        self.assertEqual(sheet.udt_types[b["type"]], src_sheet.udt_types[a["type"]])
+        mine = U.members(sheet, gid)
+        self.assertEqual(len(mine), len(a["members"]))
+        theirs = U.members(src_sheet, src)
+        if sheet is src_sheet:
+            self.assertFalse(set(e.id for e in mine.values()) &
+                             set(e.id for e in theirs.values()))
+        tags_all = [e.attrs.get("TAG") for x in self.p.sheets for e in x.inserts()
+                    if e.attrs.get("TAG") and e.defn.role != "child"]
+        self.assertFalse(set(self.udt_tags(gid, sheet)) & set(self.udt_tags(src, src_sheet)))
+        self.assertEqual(len(tags_all), len(set(tags_all)), tags_all)
+        nums = [e.num for e in mine.values() if isinstance(e, M.Wire)]
+        self.assertFalse(set(nums) & {e.num for e in theirs.values() if isinstance(e, M.Wire)})
+        devs = {e.attrs["DEV"]: e for e in mine.values()
+                if isinstance(e, M.Insert) and e.attrs.get("DEV")}
+        for e in mine.values():
+            if isinstance(e, M.Insert) and e.attrs.get("PARENT"):
+                self.assertIn(e.attrs["PARENT"], devs, "a contact left on the original")
+                self.assertEqual(e.attrs["TAG"], devs[e.attrs["PARENT"]].attrs["TAG"])
+        BC.udt_motor_circuit(self.p, sheet, U.type_of(sheet, b), b)
+
+    def copy_cmd(self, gid, to=(0.0, -5.0)):
+        ids = set(self.s.udts[gid]["members"].values())
+        before = set(self.s.udts)
+        self.v.set_selection(ids)
+        self.v.run(C.CopyCmd)
+        type_in(self.v, "0,0", "%g,%g" % to)
+        if self.v.cmd is not None:
+            self.v.cmd.enter()
+        new = set(self.s.udts) - before
+        self.assertEqual(len(new), 1)
+        return new.pop()
+
+    def test_copy_makes_a_new_instance(self):
+        gid = self.place(self.udt(DOL), (2.0, 10.0), {"Protection": "Circuit breaker"},
+                         {"HP": "10"})
+        ol = [r for r, e in self.by_role(gid).items() if getattr(e, "block", "") ==
+              "Overload heaters 3-pole"][0]
+        self.props(gid, overrides={ol: {"AMPS": "13"}})
+        n_undo = len(self.p.undo_stack)
+        new = self.copy_cmd(gid)
+        self.assertEqual(len(self.p.undo_stack), n_undo + 1)        # (one step)
+        self.assertEqual(self.s.udts[new]["at"], [2.0, 5.0])
+        self.assert_new_instance(gid, new)
+        self.assertEqual(self.by_role(new)[ol].attrs["AMPS"], "13")
+        # (its own: UDT properties on the copy rebuilds the copy only)
+        before = self.blocks_of(gid)
+        self.props(new, {"Protection": "Fuses"})
+        self.assertIn("Fuses 3-pole", self.blocks_of(new))
+        self.assertEqual(self.blocks_of(gid), before)
+        inst = self.s.udts[new]
+        BC.udt_motor_circuit(self.p, self.s, U.type_of(self.s, inst), inst)
+        # (and Apply to all and Update from UDT see it as any other)
+        self.assertEqual(len(U.instances(self.p, DOL)), 2)
+        plans, _shown = self.props(gid, values={"HP": "25"}, all_=True)
+        self.assertEqual(len(plans), 2)
+        self.assertEqual(self.s.udts[new]["values"]["HP"], "25")
+        self.p.undo()
+        self.p.undo()
+        self.p.undo()
+        self.assertEqual(len(self.s.udts), 1)
+
+    def test_copy_turned_rebuilds_where_it_is(self):
         gid = self.place(self.udt(), (2.0, 10.0))
         ids = set(self.s.udts[gid]["members"].values())
         self.v.set_selection(ids)
         self.v.run(C.CopyCmd)
+        type_in(self.v, "0,0", "20,0")
+        if self.v.cmd is not None:
+            self.v.cmd.enter()
+        new = [g for g in self.s.udts if g != gid][0]
+        made = set(self.s.udts[new]["members"].values())
+        self.v.set_selection(made)
+        self.v.run(C.RotateCmd)
+        type_in(self.v, "22,10", "90")
+        plans, _shown = self.props(new, {"Protection": "Fuses"})
+        self.assertEqual(plans[0].warnings, [])
+        inst = self.s.udts[new]
+        self.assertEqual(inst["angle"], 90.0)
+        BC.udt_motor_circuit(self.p, self.s, U.type_of(self.s, inst), inst)
+
+    def test_copy_of_part_of_it_stays_plain_parts(self):
+        gid = self.place(self.udt(), (2.0, 10.0))
+        syms = [e.id for e in self.by_role(gid).values() if isinstance(e, M.Insert)]
+        self.v.set_selection(set(syms[:3]))
+        self.v.run(C.CopyCmd)
         type_in(self.v, "0,0", "0,-5")
-        new = set(self.s.entities) - ids
-        self.assertTrue(new)
-        self.assertTrue(all(U.find(self.s, i) is None for i in new))
         self.assertEqual(len(self.s.udts), 1)
+
+    def test_copy_without_its_wires_leaves_them_out(self):
+        gid = self.place(self.udt(), (2.0, 10.0))
+        syms = {r for r, e in self.by_role(gid).items() if isinstance(e, M.Insert)}
+        ids = {e.id for r, e in self.by_role(gid).items() if r in syms}
+        self.v.set_selection(ids)
+        self.v.run(C.CopyCmd)
+        type_in(self.v, "0,0", "0,-5")
+        new = [g for g in self.s.udts if g != gid][0]
+        inst = self.s.udts[new]
+        self.assertEqual(set(inst["members"]), syms)
+        self.assertEqual(set(inst["gone"]), set(self.s.udts[gid]["members"]) - syms)
+        # (a rebuild doesn't put the wires back: left behind, as erased by hand)
+        plans, _shown = self.props(new, values={"HP": "15"})
+        self.assertEqual(plans[0].add, [])
+
+    def test_clipboard_paste_and_paste_in_place(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        gid = self.place(self.udt(DOL), (2.0, 10.0), {"Protection": "Circuit breaker"})
+        self.v.set_selection(set(self.s.udts[gid]["members"].values()))
+        self.assertTrue(self.win.copy_clip())
+        self.win.paste()
+        type_in(self.v, "%g,%g" % (self.v.cmd.base_pt[0], self.v.cmd.base_pt[1] - 6.0))
+        self.assertEqual(len(self.s.udts), 2)
+        new = [g for g in self.s.udts if g != gid][0]
+        self.assert_new_instance(gid, new)
+        self.assertAlmostEqual(self.s.udts[new]["at"][1], 4.0)
+        # (pasted with Enter on another sheet: where it was, a placed UDT of that sheet)
+        with self.p.edit("sheet") as ed:
+            other = self.p.make_sheet("Two")
+            ed.add_sheet(other)
+        self.v.show_sheet(other.id)
+        self.win.paste()
+        QTest.keyClick(self.v, Qt.Key_Return)
+        self.assertIsNone(self.v.cmd)
+        self.assertEqual(len(other.udts), 1)
+        g2 = list(other.udts)[0]
+        self.assertEqual(other.udts[g2]["at"], [2.0, 10.0])
+        self.assert_new_instance(gid, g2, other)
+        self.assertTrue(all(t.startswith(("CB2", "DS2", "MTR2", "M2", "OL2"))
+                            for t in self.udt_tags(g2, other)), self.udt_tags(g2, other))
+
+    def test_paste_into_another_project(self):
+        from tests.util import window as new_window
+        gid = self.place(self.udt(DOL), (2.0, 10.0))
+        self.v.set_selection(set(self.s.udts[gid]["members"].values()))
+        self.assertTrue(self.win.copy_clip())
+        win2, v2 = new_window()
+        try:
+            win2.paste()
+            type_in(v2, "5,5")
+            s2 = v2.sheet()
+            self.assertEqual(len(s2.udts), 1)
+            g2 = list(s2.udts)[0]
+            inst = s2.udts[g2]
+            self.assertEqual(inst["type"], self.s.udts[gid]["type"])
+            self.assertEqual(U.type_of(s2, inst).name, DOL)
+            BC.udt_motor_circuit(v2.project, s2, U.type_of(s2, inst), inst)
+            # (UDT properties there works on it)
+            v2.set_selection({list(inst["members"].values())[0]})
+            plan = U.plan(v2.project, s2, g2, {"Protection": "Circuit breaker"})
+            self.assertEqual(plan.warnings, [])
+        finally:
+            v2.project.saved_at = len(v2.project.undo_stack)
+            win2.close()
+
+    def test_duplicate_sheet_and_ctrl_drag(self):
+        gid = self.place(self.udt(), (2.0, 10.0))
+        self.win.duplicate_sheet()
+        other = self.v.sheet()
+        self.assertIsNot(other, self.s)
+        self.assertEqual(len(other.udts), 1)
+        g2 = list(other.udts)[0]
+        self.assertNotEqual(g2, gid)
+        self.assertEqual(set(other.udts[g2]["members"].values()) - set(other.entities), set())
+        self.assert_new_instance(gid, g2, other)
+        # (Ctrl+drag: a copy, a placed UDT of its own too; let go with Ctrl held)
+        from PySide6.QtCore import QEvent, QPointF, Qt
+        from PySide6.QtGui import QMouseEvent
+        self.v.show_sheet(self.s.id)
+        ids = set(self.s.udts[gid]["members"].values())
+        self.v.set_selection(ids)
+        self.v._drag = {"start": (2.0, 10.0), "moved": True,
+                        "ents": [self.s.entities[i] for i in sorted(ids)]}
+        at = self.v.to_screen((2.0, 4.0))
+        self.v.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, QPointF(at),
+                                             QPointF(at), Qt.LeftButton, Qt.NoButton,
+                                             Qt.ControlModifier))
+        self.assertEqual(len(self.s.udts), 2)
+        new = [g for g in self.s.udts if g != gid][0]
+        self.assert_new_instance(gid, new)
+
+    # ---- the terminals' strip (the owner, Nov 27 2026) ---------------------------------------
+    def terms(self, gid):
+        u = U.type_of(self.s, self.s.udts[gid])
+        on = self.by_role(gid)
+        return [on[m["role"]] for m in u.members if m["role"] in on and
+                getattr(on[m["role"]], "block", "").startswith("Terminal")]
+
+    def insert_on(self, udt, at, strip, choices=None):
+        self.win.ask_udt = lambda: (udt, choices or {}, {}, strip)
+        before = set(self.s.udts)
+        try:
+            self.win.insert_udt()
+        finally:
+            self.win.__dict__.pop("ask_udt", None)
+        type_in(self.v, "%g,%g" % at)
+        return (set(self.s.udts) - before).pop()
+
+    def test_terminals_blank_strip_left_for_later(self):
+        gid = self.insert_on(self.udt(), (2.0, 10.0), "")
+        got = self.terms(gid)
+        self.assertEqual(len(got), 3)
+        self.assertTrue(all(not t.attrs.get("TAG") and not t.attrs.get("TERM") for t in got))
+        from kanzonascad import strips
+        self.assertEqual([st.tag for st in strips.find(self.p, wires=False)], ["TB?"])
+        self.assertEqual(self.p.settings.get(U.STRIP_SETTING, ""), "")
+
+    def test_terminals_on_a_new_strip_then_its_next_numbers(self):
+        new = U.new_strip_tag(self.p, self.s)
+        self.assertEqual(new, "TB101")
+        a = self.insert_on(self.udt(), (2.0, 10.0), new)
+        self.assertEqual([(t.attrs["TAG"], t.attrs["TERM"]) for t in self.terms(a)],
+                         [("TB101", "1"), ("TB101", "2"), ("TB101", "3")])
+        self.assertEqual(self.p.settings[U.STRIP_SETTING], "TB101")    # (remembered)
+        self.assertEqual(U.new_strip_tag(self.p, self.s), "TB102")
+        b = self.insert_on(self.udt(DOL), (2.0, 4.0), "TB101")
+        self.assertEqual([t.attrs["TERM"] for t in self.terms(b)], ["4", "5", "6"])
+        from kanzonascad import strips
+        st = [x for x in strips.find(self.p) if x.tag == "TB101"][0]
+        self.assertEqual([r.num for r in st.rows], ["1", "2", "3", "4", "5", "6"])
+        # (a copy's terminals: the strip's next numbers)
+        c = self.copy_cmd(a, (12.0, 0.0))
+        self.assertEqual([(t.attrs["TAG"], t.attrs["TERM"]) for t in self.terms(c)],
+                         [("TB101", "7"), ("TB101", "8"), ("TB101", "9")])
+        self.p.undo()
+        # (a rebuild keeps them: on their strip, their numbers)
+        self.props(b, {"Protection": "Circuit breaker"})
+        self.assertEqual([t.attrs["TERM"] for t in self.terms(b)], ["4", "5", "6"])
+        # (Update from UDT replacing a terminal: its strip and number kept)
+        d = self.udt(DOL).to_dict()
+        t = [m for m in d["members"] if m["entity"].get("block") == "Terminal"][1]
+        t["entity"]["attrs"] = {"DESC": "Field"}
+        plans = U.update_plans(self.p, U.Udt.from_dict(d))
+        with self.p.edit("update") as ed:
+            for pl in plans:
+                U.apply(ed, self.p, pl)
+        self.assertEqual([(x.attrs["TAG"], x.attrs["TERM"]) for x in self.terms(b)],
+                         [("TB101", "4"), ("TB101", "5"), ("TB101", "6")])
+        # (undone: the project's last choice back as it was)
+        self.p.undo()
+        self.p.undo()
+        self.p.undo()
+        self.p.undo()
+        self.assertEqual(self.p.settings.get(U.STRIP_SETTING, ""), "")
+
+    def test_terminals_on_a_strip_device_after_its_spares(self):
+        from kanzonascad import strips, tags
+        sd = self.lib.get("symbol", "Terminal strip")
+        with self.p.edit("strip") as ed:
+            ed.block(sd)
+            dev = ed.add(self.s, M.Insert(sd.name, (1, 1), defn=self.p.blocks[sd.name],
+                                          attrs=tags.new_attrs(self.p, self.s, sd, {})))
+            ed.project_settings({strips.SETTING: {dev.attrs["DEV"]: {"spares": ["1", "3"]}}})
+        gid = self.insert_on(self.udt(), (2.0, 10.0), dev.attrs["TAG"])
+        got = self.terms(gid)
+        self.assertEqual([t.attrs["TERM"] for t in got], ["2", "4", "5"])
+        self.assertTrue(all(t.attrs["PARENT"] == dev.attrs["DEV"] and
+                            t.attrs["TAG"] == dev.attrs["TAG"] for t in got))
+        st = [x for x in strips.find(self.p) if x.tag == dev.attrs["TAG"]][0]
+        self.assertIs(st.dev[1].id, dev.id)
+
+    def test_terminals_on_a_tag_two_strips_share(self):
+        # (two strips of one tag, a strip symbol's typed twice, say: the numbers of both taken)
+        from kanzonascad import tags
+        sd, td = self.lib.get("symbol", "Terminal strip"), self.lib.get("symbol", "Terminal")
+        with self.p.edit("strips") as ed:
+            for b in (sd, td):
+                ed.block(b)
+            for i in range(2):
+                dev = ed.add(self.s, M.Insert(sd.name, (1, 1 + i), defn=self.p.blocks[sd.name],
+                                              attrs=tags.new_attrs(self.p, self.s, sd, {
+                                                  "TAG": "TB9", "TAG_LOCK": "1"})))
+                ed.add(self.s, M.Insert(td.name, (3, 1 + i), defn=self.p.blocks[td.name],
+                                        attrs={"TAG": "TB9", "PARENT": dev.attrs["DEV"],
+                                               "TERM": str(1 + 3 * i)}))
+        gid = self.insert_on(self.udt(), (2.0, 10.0), "TB9")
+        self.assertEqual([t.attrs["TERM"] for t in self.terms(gid)], ["2", "3", "5"])
+
+    def test_loose_terminals_numbered_in_the_strip_window(self):
+        # (a UDT's terminals on no strip yet: three without a number, TB?; one numbered in the
+        # Terminal strips window was shown where it was, under the other two, but the strip
+        # read back from the drawing has it first: a strip's order is kept by number)
+        from kanzonascad import strip_window, strips
+        self.insert_on(self.udt(), (2.0, 10.0), "")
+        dlg = strip_window.StripEditorDialog(self.win, self.p)
+        try:
+            dlg.show_strip(0)
+            t = dlg.table
+            self.assertEqual([t.item(i, 0).text() for i in range(3)], ["?", "?", "?"])
+            t.item(2, 0).setText("7")
+            shown = [t.item(i, 0).text() for i in range(t.rowCount())]
+            self.assertEqual(shown, ["7", "?", "?"])
+            self.assertEqual(dlg.picked(), [0])                # (the row typed, still picked)
+            lay = dlg.layout_of(0)
+            lay.move([0], 1)                                   # (down among the loose: stays)
+            self.assertEqual([r["num"] for r in lay.rows], ["7", "", ""])
+            at = lay.add_spare(1)                              # (after a loose one)
+            self.assertEqual((at, lay.rows[at]["num"]), (1, "8"))
+            self.assertEqual([r["num"] for r in lay.rows], ["7", "8", "", ""])
+            with self.p.edit("strips") as ed:
+                strips.apply(ed, self.p, dlg.changed())
+        finally:
+            dlg.deleteLater()
+        st = strips.find(self.p, wires=False)[0]
+        self.assertEqual([r.num for r in st.rows], ["7", "8", "", ""])
+
+    def test_browser_offers_the_strips_and_the_last_choice(self):
+        from kanzonascad.udt_window import UdtBrowser
+        self.insert_on(self.udt(), (2.0, 10.0), "TB101")
+        dlg = UdtBrowser(self.win, self.lib, project=self.p, sheet=self.s)
+        try:
+            items = [dlg.strip.itemData(i) for i in range(dlg.strip.count())]
+            self.assertEqual(items, ["", "TB101", "TB102"])      # (none, TB101, a new one)
+            self.assertEqual(dlg.strip.currentData(), "TB101")    # (the last choice)
+            self.assertFalse(dlg.strip_box.isHidden())
+            dlg.strip.setCurrentIndex(2)
+            dlg.insert()
+            self.assertEqual(dlg.chosen[3], "TB102")
+        finally:
+            dlg.deleteLater()
+        mine = self.udt().copy(name="No terminals", members=[
+            m for m in self.udt().to_dict()["members"]
+            if m["entity"].get("block") != "Terminal"])
+        self.assertFalse(U.has_terminals(mine))
+        self.lib.save_udt(mine)
+        dlg = UdtBrowser(self.win, self.lib, project=self.p, sheet=self.s)
+        try:
+            it = [dlg.tree.topLevelItem(0).child(i) for i in
+                  range(dlg.tree.topLevelItem(0).childCount())]
+            dlg.tree.setCurrentItem([x for x in it if x.data(0, 0x0100) == "No terminals"][0])
+            self.assertTrue(dlg.strip_box.isHidden())
+            self.assertIsNone(dlg.strip_choice())
+        finally:
+            dlg.deleteLater()
+
+    # ---- an IEC 60617 project (the owner, Nov 27 2026) --------------------------------------
+    def iec(self):
+        with self.p.edit("standard") as ed:
+            ed.project_settings({"symbol_standard": "iec"})
+
+    def test_iec_project_takes_iec_symbols_and_letters(self):
+        self.iec()
+        gid = self.insert_on(self.udt(DOL), (2.0, 10.0), "")
+        blocks = self.blocks_of(gid)
+        self.assertEqual(blocks, sorted([
+            "Disconnector 3-pole (IEC)", "Fuses 3-pole (IEC)",
+            "Contactor main contacts 3-pole (IEC)", "Thermal overload 3-pole (IEC)",
+            "Terminal (IEC)", "Terminal (IEC)", "Terminal (IEC)", "Motor 3-phase (IEC)",
+            "Contactor coil (IEC)", "Overload contact NC (IEC)"]))
+        tags_ = self.udt_tags(gid)
+        self.assertEqual(tags_, ["F101", "F102", "M101", "Q101", "Q102"], tags_)
+        inst = self.s.udts[gid]
+        BC.udt_motor_circuit(self.p, self.s, U.type_of(self.s, inst), inst)
+        # (the drive and reactors have no IEC symbol here: JIC, tagged with IEC letters)
+        g2 = self.insert_on(self.udt(VFD), (2.0, 4.0), "", {"Line reactor": U.INCLUDED})
+        self.assertIn("Variable frequency drive", self.blocks_of(g2))
+        lr = [e for e in self.by_role(g2).values() if getattr(e, "block", "") ==
+              "Reactor 3-pole"][0]
+        self.assertEqual(lr.attrs["TAG"], "R101")       # (81346-2's R: a reactor)
+        self.assertIn("Motor protection circuit breaker 3-pole", self.blocks_of(g2))
+        self.assertIn("Motor 3-phase (IEC)", self.blocks_of(g2))
+        vfd = [e for e in self.by_role(g2).values() if getattr(e, "block", "") ==
+               "Variable frequency drive"][0]
+        self.assertEqual(vfd.attrs["TAG"], "T101")
+        inst = self.s.udts[g2]
+        BC.udt_motor_circuit(self.p, self.s, U.type_of(self.s, inst), inst)
+        # (its choice rebuilt, as in a JIC project; Update from UDT finds nothing changed)
+        self.props(gid, {"Protection": "Circuit breaker"})
+        self.assertIn("Circuit breaker 3-pole (IEC)", self.blocks_of(gid))
+        seen = []
+        self.win.confirm_udt_changes = lambda title, intro, plans, *a, **k: (
+            seen.append(plans) or (plans, {}))
+        try:
+            self.v.set_selection(set())
+            self.assertIsNone(self.win.update_from_udt())
+        finally:
+            self.win.__dict__.pop("confirm_udt_changes", None)
+        self.assertEqual(seen, [[]])
+        self.assertEqual(U.new_strip_tag(self.p, self.s), "X101")
+
+    def test_jic_udt_brought_to_iec_by_update(self):
+        gid = self.insert_on(self.udt(DOL), (2.0, 10.0), "")
+        tags_ = self.udt_tags(gid)
+        self.iec()
+        self.win.confirm_udt_changes = lambda title, intro, plans, *a, **k: (plans, {})
+        try:
+            self.v.set_selection(set())
+            plans = self.win.update_from_udt()
+        finally:
+            self.win.__dict__.pop("confirm_udt_changes", None)
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].warnings, [])
+        self.assertIn("Motor 3-phase (IEC)", self.blocks_of(gid))
+        self.assertEqual(self.udt_tags(gid), tags_)        # (kept: Retag gives the letters)
+        inst = self.s.udts[gid]
+        BC.udt_motor_circuit(self.p, self.s, U.type_of(self.s, inst), inst)
+
+    def test_swap_only_where_the_pins_line_up(self):
+        u = self.udt(DOL)
+
+        def lookup(name):
+            d = self.lib.get("symbol", name)
+            if d is not None and name == "Fuses 3-pole (IEC)":
+                d = M.BlockDef.from_dict(dict(d.to_dict(), pins=[
+                    dict(p, pos=(p["pos"][0] - 0.25, p["pos"][1])) for p in d.to_dict()["pins"]]))
+            return d
+        got = U.swaps(u, "iec", lookup)
+        self.assertNotIn("Fuses 3-pole", got)             # (moved pins: left JIC)
+        self.assertEqual(got["Motor 3-phase"].name, "Motor 3-phase (IEC)")
+        def sym(name):
+            return self.lib.get("symbol", name)
+        self.assertIs(U.for_standard(u, "jic", sym), u)
+        back = U.for_standard(U.for_standard(u, "iec", sym), "jic", sym)
+        self.assertEqual(back.key(), u.key())
+
+    # ---- with 0.28's pin numbers and 0.27's near misses --------------------------------------
+    def test_contact_pin_numbers_are_not_hand_edits(self):
+        gid = self.place(self.udt(DOL), (2.0, 10.0))
+        olc = [e for e in self.by_role(gid).values() if getattr(e, "block", "") ==
+               "Overload contact NC"][0]
+        self.assertEqual((olc.attrs["TERM01"], olc.attrs["TERM02"]), ("95", "96"))
+        d = self.udt(DOL).to_dict()
+        m = [m for m in d["members"] if m["entity"].get("block") == "Overload contact NC"][0]
+        m["entity"]["attrs"] = dict(m["entity"]["attrs"], DESC="OL trip")
+        plans = U.update_plans(self.p, U.Udt.from_dict(d))
+        self.assertEqual(plans[0].warnings, [])
+        self.assertEqual([r for r, _i, _m in plans[0].replace], [m["role"]])
+        with self.p.edit("update") as ed:
+            U.apply(ed, self.p, plans[0])
+        olc = self.by_role(gid)[m["role"]]
+        self.assertEqual((olc.attrs["TERM01"], olc.attrs["TERM02"], olc.attrs["DESC"]),
+                         ("95", "96", "OL trip"))
+
+    def test_no_near_misses_placed_any_way(self):
+        from kanzonascad import nearmiss
+        for i, (name, typed) in enumerate(((VFD, ()), (DOL, ("R",)), (VFD, ("R", "R")))):
+            self.place(self.udt(name), (2.0 + 12 * i, 10.0), None, None, *typed)
+        self.iec()
+        self.place(self.udt(DOL), (2.0, 2.0))
+        self.assertEqual(nearmiss.found(self.s), [])
 
     def test_detach(self):
         gid = self.place(self.udt(), (2.0, 10.0))
@@ -525,7 +969,8 @@ class UdtTest(unittest.TestCase):
             w.setChecked(True)
             dlg.form.edits["HP"].setText("7-1/2")
             dlg.insert()
-            udt, choices, values = dlg.chosen
+            udt, choices, values, strip = dlg.chosen
+            self.assertIsNone(strip)                            # (no project: not asked)
             self.assertEqual(udt.name, VFD)
             self.assertEqual(choices["Line reactor"], U.INCLUDED)
             self.assertEqual(values["HP"], "7-1/2")

@@ -1420,12 +1420,18 @@ def connected(sheet, box):
     return lambda a, b: find(k(a)) == find(k(b))
 
 
+def _jic_name(name):
+    """A built-in symbol's name with its IEC 60617 stand-in's " (IEC)" taken off."""
+    return name[:-len(" (IEC)")] if name.endswith(" (IEC)") else name
+
+
 def udt_motor_circuit(project, sheet, udt, inst, motor_block="Motor 3-phase"):
     """What a placed motor-circuit UDT must be, from its UDT's drawing: each member of the
     choices made where its base point puts it (none of the alternatives not chosen there),
     each phase joined from its incoming end (L1, L2, L3 at the base point, 1/2" apart) to its
     motor terminal (T1, T2, T3) and to no other phase's, and the motor's FLA and the fuses'
-    rating as the NEC table gives (unless overridden)."""
+    rating as the NEC table gives (unless overridden). An IEC 60617 stand-in (" (IEC)", in an
+    IEC project) counts as the JIC symbol it stands for."""
     at, angle, scale = inst["at"], inst["angle"], inst["scale"]
     defs = udt.defs()
     by_spot = {}
@@ -1451,7 +1457,7 @@ def udt_motor_circuit(project, sheet, udt, inst, motor_block="Motor 3-phase"):
             continue
         if chosen:
             assert here, "%s of the UDT isn't where it goes (%s)" % (name, _key(name, q))
-            if name == motor_block:
+            if _jic_name(name) == motor_block:
                 motor = here[0]
         else:
             shared = [x for x in udt.members if x is not m and x["entity"].get("kind") ==
@@ -1484,16 +1490,216 @@ def udt_motor_circuit(project, sheet, udt, inst, motor_block="Motor 3-phase"):
         r = role_of.get(e.id)
         if r is None or ov.get(r):
             continue
-        if e.block_name == motor_block:
+        if _jic_name(e.block_name) == motor_block:
             assert float(e.attrs.get("FLA", "nan")) == flc, (e.attrs, flc)
             CHECKED["UDT: motor FLA from the NEC table"] += 1
-        elif e.block_name == "Fuses 3-pole":
+        elif _jic_name(e.block_name) == "Fuses 3-pole":
             pct = [x["percent"] for x in inst["ratings"] if x["role"] == r and
                    x["attr"] == "RATING"]
             if pct:
                 want = "%dA" % next_fuse(flc * pct[0] / 100.0)
                 assert e.attrs.get("RATING") == want, (e.attrs.get("RATING"), want)
                 CHECKED["UDT: fuses at the next standard size"] += 1
+
+
+
+# ---- UDTs and the owner's answers (Nov 27 2026): strips, copies, an IEC project ------------
+def _is_terminal(e):
+    return isinstance(e, M.Insert) and e.defn is not None and \
+        any(a.get("attr") == "TERM" for a in e.defn.attr_texts)
+
+
+def _strip_devices(project, tag):
+    """{hidden id: device} of the devices tagged tag (a Terminal strip, or any device its
+    terminals belong to: a distribution block's, say)."""
+    from kanzonascad import tags
+    return {e.attrs["DEV"]: e for s in project.sheets for e in s.inserts()
+            if tags.is_device(e) and e.attrs.get("DEV") and
+            (e.attrs.get("TAG") or "").upper() == tag.upper()}
+
+
+def strip_numbers(project, tag):
+    """The numbers taken on the strip tagged tag: its drawn terminals' (those belonging to a
+    device of that tag, and those of that tag belonging to no device) and the spares kept
+    for it in the project's settings."""
+    from kanzonascad import tags
+    devs = _strip_devices(project, tag)
+    every = {e.attrs["DEV"] for s in project.sheets for e in s.inserts()
+             if tags.is_device(e) and e.attrs.get("DEV")}
+    out = set()
+    for s in project.sheets:
+        for e in s.inserts():
+            if not _is_terminal(e) or not e.attrs.get("TERM"):
+                continue
+            par = e.attrs.get("PARENT")
+            if par in devs or (par not in every and
+                               (e.attrs.get("TAG") or "").upper() == tag.upper()):
+                out.add(e.attrs["TERM"])
+    kept = project.settings.get("strips") or {}
+    for key in list(devs) + ["tag:" + tag.upper()]:
+        out.update(str(n) for n in (kept.get(key) or {}).get("spares") or ())
+    return out
+
+
+def _udt_order(udt, on):
+    """A placed UDT's members ({role: object}) in its UDT's order."""
+    return [on[m["role"]] for m in udt.members if m["role"] in on]
+
+
+def udt_strip(project, sheet, gid, tag, was):
+    """Insert UDT with the strip tag picked ("" none yet): its terminals on that strip (its
+    device's, linked to it), each taking the lowest number free there before (was), in the
+    UDT's order; none: no strip, no number. The project remembers the choice."""
+    from kanzonascad import udts as U
+    inst = sheet.udts[gid]
+    terms = [e for e in _udt_order(U.type_of(sheet, inst), U.members(sheet, gid))
+             if _is_terminal(e)]
+    assert (project.settings.get("udt_strip") or "") == tag, "the strip picked not remembered"
+    if not tag:
+        assert all(not e.attrs.get("TAG") and not e.attrs.get("TERM") for e in terms), \
+            "terminals put on a strip with none picked"
+        CHECKED["UDT: terminals left on no strip"] += 1
+        return
+    want, n = [], 1
+    for _e in terms:
+        while str(n) in was:
+            n += 1
+        want.append(str(n))
+        n += 1
+    got = [e.attrs.get("TERM") for e in terms]
+    assert got == want, "the UDT's terminals on %s numbered %s, not %s" % (tag, got, want)
+    devs = _strip_devices(project, tag)
+    for e in terms:
+        assert (e.attrs.get("TAG") or "").upper() == tag.upper(), (e.attrs, tag)
+        if devs:
+            assert e.attrs.get("PARENT") in devs, "not linked to the strip's device"
+    if terms:
+        CHECKED["UDT: terminals on the strip picked, its next numbers"] += 1
+
+
+def _iec_stand_ins(lib):
+    """{JIC symbol: its IEC 60617 stand-in} of the library's built-in symbols whose pins are
+    the same names in the same places (worked out here from the blocks)."""
+    from kanzonascad.symbols_iec import IEC_FOR
+
+    def pins(d):
+        return sorted((q["name"], round(q["pos"][0], 6), round(q["pos"][1], 6))
+                      for q in d.pins)
+    out = {}
+    for iec, jic in IEC_FOR.items():
+        a, b = lib.get("symbol", iec), lib.get("symbol", jic)
+        if a is not None and b is not None and pins(a) == pins(b):
+            out[jic] = iec
+    return out
+
+
+def udt_standard(project, sheet, gid, lib):
+    """A UDT placed in a project of IEC 60617 symbols: each of its symbols that has an IEC
+    stand-in with the same pins is that stand-in (in a JIC project, the other way round), and
+    every device's tag is made of the project's letters."""
+    from kanzonascad import tags, udts as U
+    iec = project.settings.get("symbol_standard", "jic") == "iec"
+    swap = _iec_stand_ins(lib)
+    if not iec:
+        swap = {b: a for a, b in swap.items()}
+    on = U.members(sheet, gid)
+    for e in on.values():
+        if not isinstance(e, M.Insert):
+            continue
+        assert e.block_name not in swap, "%s placed in a%s project instead of %s" % (
+            e.block_name, "n IEC" if iec else " JIC", swap[e.block_name])
+        if tags.is_device(e) and not tags.locked(e) and e.defn.prefix:
+            pre = tags.IEC_LETTERS.get(e.defn.prefix, e.defn.prefix) if iec else \
+                e.defn.prefix
+            if (e.defn.prefix, e.defn.role) == ("PS", "parent") and iec:
+                pre = "B"
+            assert tags.split(e.attrs.get("TAG", ""), pre), "%s tagged %s in a%s project" % (
+                e.block_name, e.attrs.get("TAG"), "n IEC" if iec else " JIC")
+    CHECKED["UDT: symbols and letters of the project's standard" +
+            (" (IEC)" if iec else "")] += 1
+
+
+def udt_snapshot(project, sheet, gid):
+    """What a copy of a placed UDT is checked against: the placed UDT, its UDT, its devices'
+    tags and hidden ids, its terminals' numbers, and every group id (its wires' numbers are
+    taken after: a sheet's wires are numbered again in their order as it changes)."""
+    from kanzonascad import udts as U
+    on = U.members(sheet, gid)
+    return {"inst": sheet.udts[gid], "type": sheet.udt_types[sheet.udts[gid]["type"]],
+            "gids": {g for s in project.sheets for g in s.udts},
+            "roles": set(on), "ids": {e.id for e in on.values()},
+            "tags": {e.attrs.get("TAG") for e in on.values() if isinstance(e, M.Insert) and
+                     e.attrs.get("DEV") and e.attrs.get("TAG")},
+            "devs": {e.attrs["DEV"] for e in on.values() if isinstance(e, M.Insert) and
+                     e.attrs.get("DEV")},
+            "terms": {((e.attrs.get("PARENT") or e.attrs.get("TAG") or "").upper(),
+                       e.attrs.get("TERM")) for e in on.values()
+                      if _is_terminal(e) and e.attrs.get("TERM") and e.attrs.get("TAG")}}
+
+
+def udt_copied(project, sheet, was, to, gid, intact=False):
+    """A placed UDT copied whole (was: udt_snapshot of it on sheet) is a new placed UDT gid on
+    sheet to: the same UDT, choices, values, rating rules and overrides; all of its members
+    that were on the sheet, new objects (intact: the one copied as its UDT draws it; else
+    edited by hand, a wire of the copy may have been joined to another by the sheet's
+    clean-up, kept as erased by hand); its own tags, hidden ids, wire numbers and terminal
+    numbers; its contacts linked to its own devices."""
+    from kanzonascad import udts as U
+    a, b = was["inst"], to.udts[gid]
+    for k in ("udt", "type", "choices", "values", "ratings", "overrides"):
+        assert b.get(k) == a.get(k), "a copied UDT's %s: %r, not %r" % (k, b.get(k), a.get(k))
+    assert to.udt_types[b["type"]] == was["type"], "a copied UDT's UDT changed"
+    on = U.members(to, gid)
+    udt = U.Udt.from_dict(was["type"])
+    # (the members it had on the sheet: one erased by hand since it was placed isn't copied)
+    left = was["roles"] - set(on)
+    if not intact or (to is sheet and b["at"] == a["at"] and b["angle"] == a["angle"]):
+        # (pasted in place onto the original itself: its wires lie on the original's, which
+        # the sheet's clean-up joins; or the original edited by hand, its wires joined when
+        # copied; every symbol is still copied, and each wire not there is kept as erased by
+        # hand, not put back)
+        kinds = {r: udt.member(r)["entity"].get("kind") for r in left}
+        assert all(k == "wire" for k in kinds.values()), \
+            "a UDT copied lost its symbols %s" % sorted(
+                r for r, k in kinds.items() if k != "wire")
+        assert left <= set(b["gone"]) | set(b["members"]), \
+            "a copied UDT's wires %s neither its members nor gone" % sorted(
+                left - set(b["gone"]) - set(b["members"]))
+    else:
+        assert set(on) == was["roles"], \
+            "a copied UDT's members: %s, not %s" % (sorted(on), sorted(was["roles"]))
+    if to is sheet:
+        assert not ({e.id for e in on.values()} & was["ids"]), "a copy shares an object"
+    devs = {e.attrs["DEV"]: e for e in on.values() if isinstance(e, M.Insert) and
+            e.attrs.get("DEV")}
+    assert not (set(devs) & was["devs"]), "a copy's device kept the original's hidden id"
+    new_tags = {e.attrs.get("TAG") for e in devs.values() if e.attrs.get("TAG_LOCK") != "1"}
+    assert not (new_tags & was["tags"]), "a copy took the original's tags %s" % (
+        new_tags & was["tags"])
+    # (numbered as the project numbers wires, the original's as they are now: a sheet's
+    # wires are numbered again in their order, the copy's may come first; a number typed and
+    # locked is copied as typed, and the wires joined to that wire share it; a copy pasted
+    # onto the original itself is joined to its wires, and shares their numbers)
+    from kanzonascad import wirenums
+    if wirenums.enabled(project) and not (to is sheet and b["at"] == a["at"] and
+                                          b["angle"] == a["angle"]):
+        def numbers(objs):
+            return {e.num for e in objs if isinstance(e, M.Wire) and e.num and not e.num_lock}
+        locked = {e.num for e in on.values() if isinstance(e, M.Wire) and e.num_lock}
+        nums = numbers(on.values()) - locked
+        theirs = numbers(U.members(sheet, a["id"]).values()) if a["id"] in sheet.udts else set()
+        assert not (nums & theirs), "a copy has the original's wire numbers %s" % (
+            sorted(nums & theirs)[:3])
+    for e in on.values():
+        if isinstance(e, M.Insert) and e.attrs.get("PARENT") in was["devs"]:
+            raise AssertionError("a copy's contact %s left on the original's device" %
+                                 e.block_name)
+    terms = {((e.attrs.get("PARENT") or e.attrs.get("TAG") or "").upper(),
+              e.attrs.get("TERM")) for e in on.values()
+             if _is_terminal(e) and e.attrs.get("TERM") and e.attrs.get("TAG")}
+    assert not (terms & was["terms"]), "a copy's terminals took the original's numbers"
+    CHECKED["UDT copied: a placed UDT of its own" + (" (another sheet)" if to is not sheet
+                                                     else "")] += 1
 
 
 # ---- contact pin numbers (0.28): worked out here from the attributes, not pinnumbers.py -------

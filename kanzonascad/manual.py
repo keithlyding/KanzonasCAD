@@ -580,7 +580,23 @@ for each, a tick for an optional part) and values: the picture shows it as it wi
 <b>Insert</b>: it follows the mouse; type R to turn it 90 degrees (any way round: its tags and
 ratings stay readable), S then a number to scale it, and click where its base point goes. It
 is placed as a saved circuit is (new tags of the sheet, contacts linked to their own coil, the
-sheet's wire numbers, wires under its symbols cut), in one step.</li>
+sheet's wire numbers, wires under its symbols cut), in one step. Its contacts are numbered on
+their devices as any contact placed is (the overload's 95-96).</li>
+<li><b>Terminal strip</b> (in Insert UDT, for a UDT with terminals, such as the motor
+circuits' field terminals): one of the project's strips (TB101, X101... with how many
+terminals each has), <b>New strip</b> (the next free strip tag of the sheet's page), or
+<b>None yet</b> (the terminals show TB?, X? in an IEC project, for a strip given later). On a
+strip, its terminals take that strip's lowest free numbers, in the UDT's order (L1, L2, L3), a
+spare's number taken too, and are linked to its Terminal strip symbol when it has one. The
+project remembers the choice: the next Insert UDT offers it first.</li>
+<li>In a project of <b>IEC 60617</b> symbols (Project properties), each device of a UDT is
+placed as the IEC symbol standing for its JIC one (disconnector, fuses, breaker, contactor,
+thermal overload, motor, terminals, the coil and its contact), where that symbol has the same
+pins in the same places, so every wire still lands on its pin (all of the built-in ones do);
+a device with no IEC symbol here (the drive, the manual motor starter, the reactors) stays JIC.
+Its tags take the project's IEC 81346-2 letters (Q101, F101, M101, T101 for the drive, R101 for
+a reactor). Update from UDT... brings a UDT placed before the project's standard changed to
+the new symbols, each keeping its tag.</li>
 <li><b>UDT properties...</b> (Library menu; typed UDTPROPS): select any object of a placed
 UDT, then change its choices, its values and its ratings. It is rebuilt in place, in one step
 (Undo takes it back): devices that stay keep their tags and wires their numbers; those of a
@@ -590,8 +606,15 @@ left out is bridged by straight wires, so the circuit stays connected. Moved or 
 <li>A member <b>edited by hand</b> (moved on its own, an attribute typed, a part assigned) keeps
 the edit: where the rebuild would take it away or replace it, it is left as it is, no longer
 part of the UDT, and the window says so before anything changes (erase it if it isn't wanted).
-A member erased by hand isn't put back. Copies of a placed UDT's objects (Copy, Paste) are
-plain parts: place the UDT again with Insert UDT... to have another.</li>
+A member erased by hand isn't put back.</li>
+<li><b>Copies</b> of a placed UDT (Copy, Ctrl+C and Ctrl+V, Paste with Enter where it was
+copied from, Ctrl+drag, Duplicate sheet, into another sheet or another project) make a new
+placed UDT: the same UDT, the same choices, values and ratings (those overridden too) as the
+one copied, with its own new tags, wire numbers and terminal numbers (on the same strip), its
+contacts on its own devices. UDT properties..., Update from UDT... and applying to all treat
+it as any other. A copy needs all of the UDT's symbols (its wires may be left behind: those
+count as erased by hand); a copy of only some of them, Mirror and Array copies are plain
+parts.</li>
 <li><b>Detach UDT</b> (Library menu; typed DETACHUDT): the selected placed UDTs become plain
 parts, nothing changed on the drawing.</li>
 <li><b>Make UDT...</b> (Library menu; typed MAKEUDT): select a circuit you drew, click its base
@@ -1748,7 +1771,9 @@ with how many terminals each has; on the right the one picked, terminal by termi
 order:</p>
 <ul>
 <li><b>Terminal</b>: its number (? while it has none). Double-click it to type another; a
-number already on the strip is refused.</li>
+number already on the strip is refused. Terminals without a number (a UDT's placed on no
+strip yet) stay after the numbered ones: the order is kept by number, so one numbered moves up
+to them, and one can't be moved down among them.</li>
 <li><b>Internal wire</b> and <b>Internal to</b>, <b>External wire</b> and <b>External to</b>:
 the wire numbers on each side and the devices' pins they go to (<b>CR1:A1</b>; another terminal
 as <b>TB2-4</b>), worked out from the schematic each time, across sheets through off-sheet

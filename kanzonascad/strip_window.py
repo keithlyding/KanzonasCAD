@@ -250,10 +250,12 @@ class StripEditorDialog(QDialog):
         if self._filling or self.cur is None or it.column() != 0:
             return
         lay = self.layout_of(self.cur)
+        row = lay.rows[it.row()]
         why = lay.set_number(it.row(), it.text())
         if why:
             QMessageBox.warning(self, TITLE, why)
-        self.fill([it.row()])
+        # (numbered, a terminal that had none goes up to the numbered ones: Layout._loose_last)
+        self.fill([next(i for i, r in enumerate(lay.rows) if r is row)])
 
     def changed(self):
         """The strips edited that differ from the drawing (strips.Layout)."""

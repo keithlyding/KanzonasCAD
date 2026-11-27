@@ -108,6 +108,8 @@ BUDGET = {
     "udt_rebuild": 0.3,         # one rebuilt with another choice and value (UDT properties)
     "udt_undo": 0.3,            # that undone
     "udt_all": 1.5,             # a value applied to all 100 (one step)
+    "udt_copy": 1.5,            # 10 of them copied (Copy's step: each a placed UDT of its own)
+    "udt_copy_undo": 1.0,       # that undone
 }
 
 
@@ -1759,9 +1761,14 @@ def run(log_path):
         slow = 0.0
         for i in range(100):
             t0 = time.perf_counter()
+            # (each on a terminal strip, taking its next numbers: 300 on it by the last)
             with p.edit("Insert UDT") as ed:
-                U.place(ed, p, s, u, (-200.0 + (i % 10) * 12.0, 2.0 + (i // 10) * 3.0))
+                U.place(ed, p, s, u, (-200.0 + (i % 10) * 12.0, 2.0 + (i // 10) * 3.0),
+                        strip="TB101")
             slow = max(slow, time.perf_counter() - t0)
+        nums = sorted(int(e.attrs["TERM"]) for e in s.inserts() if e.attrs.get("TAG") ==
+                      "TB101")
+        assert nums == list(range(1, 301)), "the UDTs' terminals not numbered on their strip"
         gid = sorted(s.udts)[0]
         t0 = time.perf_counter()
         with p.edit("UDT properties") as ed:
@@ -1781,12 +1788,28 @@ def run(log_path):
                 U.apply(ed, p, pl)
         dall = time.perf_counter() - t0
         assert all(s.udts[g]["values"]["HP"] == "15" for g in s.udts), "not applied to all"
+        # 10 copied in one step, as Copy does it: each a placed UDT of its own
+        from .tags import retag_copies
+        src = [e for g in sorted(s.udts)[:10] for e in U.members(s, g).values()]
+        t0 = time.perf_counter()
+        found = U.copied(s, [e.id for e in src])
+        with p.edit("Copy") as ed:
+            made = [ed.add(s, e) for e in retag_copies(p, s, [e.moved(0.0, -40.0)
+                                                              for e in src])]
+            U.adopt_copies(ed, p, s, found, {e.id: c for e, c in zip(src, made)})
+        dcopy = time.perf_counter() - t0
+        assert len(s.udts) == 110, "copies not placed UDTs of their own: %d" % len(s.udts)
+        t0 = time.perf_counter()
+        p.undo()
+        dcundo = time.perf_counter() - t0
+        assert len(s.udts) == 100
         for key, dt in (("udt_place", slow), ("udt_rebuild", drebuild), ("udt_undo", dundo),
-                        ("udt_all", dall)):
+                        ("udt_all", dall), ("udt_copy", dcopy), ("udt_copy_undo", dcundo)):
             assert dt < BUDGET[key], "%s took %.3f s" % (key, dt)
-        return ("on a sheet of 2,100 devices, 100 UDTs placed (the slowest %.3f s), one "
-                "rebuilt %.3f s, undone %.3f s; a value applied to all 100 %.2f s" % (
-                    slow, drebuild, dundo, dall))
+        return ("on a sheet of 2,100 devices, 100 UDTs placed on a strip (the slowest "
+                "%.3f s), one rebuilt %.3f s, undone %.3f s; a value applied to all 100 "
+                "%.2f s; 10 copied %.2f s, undone %.2f s" % (slow, drebuild, dundo, dall,
+                                                             dcopy, dcundo))
     log.check("speed budget (UDTs)", udt_speed)
 
     w = state.get("win")

@@ -779,6 +779,8 @@ class CopyCmd(_TwoPoint):
         from .tags import retag_copies
         from .wires import pull_on
         sheet = self.ctx.sheet()
+        from . import udts
+        found = udts.copied(sheet, [e.id for e in self.ents])
         with self.ctx.edit("Copy") as ed:
             made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet,
                                                            self.result(p))]
@@ -787,6 +789,9 @@ class CopyCmd(_TwoPoint):
             # Stretch does: the long battery, seed 5052, 0.0037" from a wire)
             pull_on(ed, sheet, [(e.id, i) for e in made if isinstance(e, M.Wire)
                                 for i in (0, -1)])
+            # (a placed UDT copied whole: a placed UDT of its own, 0.30)
+            udts.adopt_copies(ed, self.ctx.project, sheet, found,
+                              {e.id: c for e, c in zip(self.ents, made)})
         self.last = p
 
 
@@ -1211,11 +1216,12 @@ class PasteCmd(Command):
     name, title = "PASTE", "Paste"
     repeatable = False
 
-    def __init__(self, ctx, ents, base, blocks=None, layers=None):
+    def __init__(self, ctx, ents, base, blocks=None, layers=None, udts=None):
         super().__init__(ctx)
         self.ents, self.base_pt = ents, base
         self.blocks = blocks or {}
         self.layers = layers or {}          # {name: Layer dict} copied with them
+        self.udts = udts or []              # (the placed UDTs copied whole: udts.copied)
 
     def begin(self):
         self.ctx.prompt("Specify insertion point (Enter: where they were copied from)")
@@ -1271,6 +1277,10 @@ class PasteCmd(Command):
             made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet, placed)]
             ids.update(e.id for e in made)
             _cut_under(self.ctx, ed, sheet, made)
+            # (a placed UDT copied whole: a placed UDT of its own here, 0.30)
+            from .udts import adopt_copies
+            adopt_copies(ed, self.ctx.project, sheet, self.udts,
+                         {e.id: c for e, c in zip(self.ents, made) if e.id is not None})
         self.ctx.set_selection(ids)
         self.finish()
 
@@ -3318,10 +3328,11 @@ class InsertUdtCmd(InsertCircuitCmd):
     as a circuit's are, then kept together as a placed UDT (udts.place)."""
     name, title = "INSERTUDT", "Insert UDT"
 
-    def __init__(self, ctx, udt, choices=None, values=None):
+    def __init__(self, ctx, udt, choices=None, values=None, strip=None):
         super().__init__(ctx, udt.circuit(choices))
-        self.repeat_args = (udt, choices, values)
+        self.repeat_args = (udt, choices, values, strip)
         self.udt, self.choices, self.values = udt, choices, values
+        self.strip = strip      # (its terminals' strip: a tag, "" none yet, None not asked)
 
     def _ask(self):
         if self.asking_scale:
@@ -3332,12 +3343,17 @@ class InsertUdtCmd(InsertCircuitCmd):
     def point(self, p):
         if self.asking_scale:
             return
-        from .udts import place
+        from .udts import STRIP_SETTING, place
         sheet = self.ctx.sheet()
+        project = self.ctx.project
         with self.ctx.edit("Insert UDT %s" % self.udt.name) as ed:
-            _gid, made = place(ed, self.ctx.project, sheet, self.udt, p, self.angle,
-                               self.scale, self.choices, self.values)
+            _gid, made = place(ed, project, sheet, self.udt, p, self.angle,
+                               self.scale, self.choices, self.values, self.strip or "")
             _cut_under(self.ctx, ed, sheet, made)
+            if self.strip is not None and project.settings.get(STRIP_SETTING, "") != \
+                    self.strip:
+                # (the project's last choice of strip: offered first at the next insert)
+                ed.project_settings({STRIP_SETTING: self.strip})
         self.ctx.set_selection({e.id for e in made if e.id in sheet.entities})
         self.ctx.message("UDT %s placed: %d object(s); UDT properties... changes its "
                          "choices, values and ratings" % (self.udt.name, len(made)))

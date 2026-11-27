@@ -1,8 +1,8 @@
 """UDTs' windows (udts.py does the work, without Qt):
 
 - UdtBrowser: Library > Insert UDT...: the program's UDTs and yours by category, each with a
-  picture; the one picked shown with its choices and values as they will be placed; Insert,
-  Edit..., New from saved circuit..., Delete;
+  picture; the one picked shown with its choices and values as they will be placed, and the
+  terminal strip its terminals go on; Insert, Edit..., New from saved circuit..., Delete;
 - UdtEditor: a UDT's members, its choices and optional parts, its values and rating rules;
 - UdtPropertiesDialog: UDT properties... of a placed UDT: its choices, values and ratings
   (each worked out, or typed over), and the option of giving all the others of its UDT the
@@ -98,14 +98,19 @@ class _Choices(QWidget):
 
 
 class UdtBrowser(QDialog):
-    """The UDTs: pick one, its choices and values, to insert (chosen: (udt, choices,
-    values)); edit (editor(udt): the edited UDT, or None) or delete your own."""
+    """The UDTs: pick one, its choices and values, and its terminals' strip, to insert
+    (chosen: (udt, choices, values, strip): strip_choice()); edit (editor(udt): the edited
+    UDT, or None) or delete your own."""
 
-    def __init__(self, parent, library, dark=False, editor=None, circuits=None):
+    def __init__(self, parent, library, dark=False, editor=None, circuits=None, project=None,
+                 sheet=None, shown=None):
         super().__init__(parent)
         self.setObjectName("udt_browser")
         self.setWindowTitle(TITLE)
         self.library, self.dark, self.editor = library, dark, editor
+        self.project, self.sheet = project, sheet
+        # (shown(udt): the UDT as it will be placed, in the project's symbols, for its picture)
+        self.shown = shown or (lambda u: u)
         self.circuits = circuits        # (from_circuit(): a saved circuit picked, or None)
         self.chosen = None
         self.udts, self.bad = {}, []
@@ -114,6 +119,17 @@ class UdtBrowser(QDialog):
         v, split, rv = browser_parts(self, "udt", PICTURE)
         self.form = _Choices(None, self._repicture)
         rv.addWidget(self.form)
+        # its terminals' strip (the owner, Nov 27 2026): one of the project's, a new one, or
+        # none yet (TB?, X?: given later); the project's last choice first
+        self.strip_box = QGroupBox("Terminals")
+        sf = QFormLayout(self.strip_box)
+        self.strip = QComboBox()
+        self.strip.setObjectName("udt_strip")
+        self.strip.setToolTip("The terminal strip its terminals go on, taking that strip's "
+                              "next free numbers")
+        sf.addRow("Terminal strip", self.strip)
+        rv.addWidget(self.strip_box)
+        self._fill_strips()
         split.setSizes([300, 520])
         v.addWidget(split, 1)
         row = QHBoxLayout()
@@ -166,7 +182,7 @@ class UdtBrowser(QDialog):
             it.setData(0, Qt.UserRole, name)
             key = (name, THUMB)
             if key not in self._pictures:
-                self._pictures[key] = _picture(u, None, THUMB, THUMB, self.dark,
+                self._pictures[key] = _picture(self.shown(u), None, THUMB, THUMB, self.dark,
                                                self.devicePixelRatioF())
             it.setIcon(0, QIcon(self._pictures[key]))
             it.setToolTip(0, u.description or name)
@@ -183,6 +199,36 @@ class UdtBrowser(QDialog):
         self.status.setText(msg)
         self._show()
 
+    def _fill_strips(self):
+        self.strip.clear()
+        p = self.project
+        if p is None:
+            return
+        pre = U.strip_prefix(p)
+        self.strip.addItem("None yet (%s?: give it later)" % pre, "")
+        have = set()
+        for tag, n in U.strip_tags(p):
+            self.strip.addItem("%s (%d terminal%s)" % (tag, n, "" if n == 1 else "s"), tag)
+            have.add(tag.upper())
+        last = str(p.settings.get(U.STRIP_SETTING, "") or "")
+        if last and last.upper() not in have:
+            self.strip.addItem("%s (new)" % last, last)       # (picked last time, not drawn)
+            have.add(last.upper())
+        if self.sheet is not None:
+            new = U.new_strip_tag(p, self.sheet)
+            if new.upper() not in have:
+                self.strip.addItem("New strip %s" % new, new)
+        i = self.strip.findData(last)
+        self.strip.setCurrentIndex(max(0, i))
+
+    def strip_choice(self):
+        """The strip picked for the UDT's terminals (a tag; "" none yet), or None when the
+        UDT has no terminals (nothing asked)."""
+        u = self.current()
+        if u is None or self.project is None or not U.has_terminals(u):
+            return None
+        return self.strip.currentData() or ""
+
     def current_name(self):
         it = self.tree.currentItem() if hasattr(self, "tree") else None
         return it.data(0, Qt.UserRole) if it is not None else None
@@ -197,6 +243,8 @@ class UdtBrowser(QDialog):
             b.setEnabled(u is not None)
         self.b_delete.setEnabled(u is not None and self.library.udt_where(u.name) in
                                  ("first", "second"))
+        self.strip_box.setVisible(u is not None and self.project is not None and
+                                  U.has_terminals(u))
         if u is None:
             self.picture.clear()
             self.info.setText("")
@@ -211,13 +259,13 @@ class UdtBrowser(QDialog):
     def _repicture(self):
         u = self.current()
         if u is not None:
-            self.picture.setPixmap(_picture(u, self.form.choices(), PICTURE[0], PICTURE[1],
-                                            self.dark, self.devicePixelRatioF()))
+            self.picture.setPixmap(_picture(self.shown(u), self.form.choices(), PICTURE[0],
+                                            PICTURE[1], self.dark, self.devicePixelRatioF()))
 
     def insert(self):
         u = self.current()
         if u is not None:
-            self.chosen = (u, self.form.choices(), self.form.values())
+            self.chosen = (u, self.form.choices(), self.form.values(), self.strip_choice())
             self.accept()
 
     def edit(self):

@@ -2482,9 +2482,12 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             if isinstance(e, M.Insert) and e.defn is not None:
                 used.update(x.layer for x in e.defn.entities)
         lays = v.project.layers
+        from . import udts
         data = {"base": [bb[0], bb[1]], "entities": [e.to_dict() for e in ents],
                 "blocks": list(blocks.values()),
-                "layers": [lays[n].to_dict() for n in sorted(used) if n in lays]}
+                "layers": [lays[n].to_dict() for n in sorted(used) if n in lays],
+                # (placed UDTs copied whole: pasted, each a placed UDT of its own, 0.30)
+                "udts": udts.copied(v.sheet(), [e.id for e in ents])}
         mime = QMimeData()
         mime.setData(CLIP_MIME, json.dumps(data).encode("utf-8"))
         mime.setText("%d KanzonasCAD object(s)" % len(ents))
@@ -2519,7 +2522,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             return
         layers = {d["name"]: d for d in data.get("layers", []) or []
                   if isinstance(d, dict) and d.get("name")}
-        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks, layers)
+        found = data.get("udts") if isinstance(data.get("udts"), list) else []
+        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks, layers,
+              [f for f in found if isinstance(f, dict) and "inst" in f and "type" in f])
         v.setFocus()
 
     def select_all(self):
@@ -2999,7 +3004,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             return
         from . import tags
         meta = cur.meta_dict()
-        for k in ("id", "number", "xref_shown", "xref_frozen", "no_dots", "number_from"):
+        for k in ("id", "number", "xref_shown", "xref_frozen", "no_dots", "number_from",
+                  "udts", "udt_types"):
             meta.pop(k, None)
         meta["title"] = copy_title(cur.title, [x.title for x in p.sheets])
         s = p.make_sheet(meta["title"])
@@ -3012,8 +3018,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             while str(n) in used:
                 n += 1
             s.number = str(n)
-        ents = []
-        for e in cur.entities.values():
+        ents, src = [], list(cur.entities.values())
+        for e in src:
             c = e.copy()
             c.id = None
             if isinstance(c, M.Wire):
@@ -3026,10 +3032,14 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                 c = c.copy(attrs=attrs)
                 c.id = None
             ents.append(c)
+        from . import udts
+        found = udts.copied(cur, cur.entities)
         with p.edit("Duplicate sheet") as ed:
             ed.add_sheet(s, p.sheets.index(cur) + 1)
-            for e in tags.retag_copies(p, s, ents):
-                ed.add(s, e)
+            made = {o.id: ed.add(s, e) for o, e in zip(src, tags.retag_copies(p, s, ents))}
+            # (its placed UDTs: each one of its own on the copy, its members the copies,
+            # 0.30)
+            udts.adopt_copies(ed, p, s, found, made)
         v.show_sheet(s.id)
         self._fill_sheets()
         self.cmdline.add_history("Duplicated %s as %s (page %s)" % (
@@ -3427,22 +3437,37 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
 
     # ---- UDTs (udts.py, udt_window.py) ------------------------------------------------------
     def ask_udt(self):
-        """Insert UDT's browser: (UDT, choices, values) picked, or None."""
+        """Insert UDT's browser: (UDT, choices, values, terminal strip) picked, or None."""
         from .udt_window import UdtBrowser
+        v = self.view()
         dlg = UdtBrowser(self, self.library, theme.is_dark(), editor=self.edit_udt_definition,
-                         circuits=self.ask_circuit)
+                         circuits=self.ask_circuit,
+                         project=v.project if v is not None else None,
+                         sheet=v.sheet() if v is not None else None,
+                         shown=(lambda u: self.udt_for_project(v.project, u))
+                         if v is not None else None)
         got = dlg.chosen if dlg.exec() else None
         dlg.deleteLater()
         return got
 
+    def udt_for_project(self, project, udt):
+        """udt with the project's symbols (an IEC 60617 project: IEC symbols where they
+        stand in pin for pin, udts.for_standard)."""
+        from . import udts
+        from .symbols_iec import standard_of
+        return udts.for_standard(udt, standard_of(project),
+                                 lambda n: self.library.get("symbol", n))
+
     def insert_udt(self):
-        """Library > Insert UDT...: pick a UDT and its choices, then where it goes."""
+        """Library > Insert UDT...: pick a UDT, its choices and its terminals' strip, then
+        where it goes."""
         v = self.view()
         if v is None:
             return None
         got = self.ask_udt()
         if got is None:
             return None
+        got = (self.udt_for_project(v.project, got[0]),) + tuple(got[1:])
         cmd = v.run(C.InsertUdtCmd, *got)
         v.setFocus()
         return cmd
@@ -3591,6 +3616,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             return None
         lib, _bad = self.library.udts()
         names = sorted({s.udts[g]["udt"] for s, g in picked})
+        # (in the project's symbols, as Insert UDT places them: an IEC project's IEC ones)
+        lib = {n: self.udt_for_project(v.project, lib[n]) for n in names if n in lib}
         missing = [n for n in names if n not in lib]
 
         def make(opts):

@@ -460,6 +460,125 @@ def _rated(inst, udt, role, attrs, existing, replace=False, cleared=()):
     return out, notes
 
 
+# ---- a project's symbol standard (the owner, Nov 27 2026) ------------------------------------
+def _pins_of(defn):
+    return sorted((p["name"], round(p["pos"][0], 6), round(p["pos"][1], 6)) for p in defn.pins)
+
+
+def swaps(udt, standard, lookup):
+    """{block of the UDT: its stand-in} for a project of this symbol standard ("iec": the
+    JIC symbols that have an IEC 60617 equivalent, symbols_iec.IEC_FOR; "jic": the other
+    way round), only where the stand-in's pins have the same names in the same places, so
+    every wire still lands on its pin (one that doesn't line up stays as drawn).
+    lookup(name): the BlockDef of a symbol (the library's), or None."""
+    from .symbols_iec import IEC_FOR, iec_symbols
+    if not IEC_FOR:
+        iec_symbols()
+    other = {j: i for i, j in IEC_FOR.items()} if standard == "iec" else dict(IEC_FOR)
+    out = {}
+    for name, d in udt.defs().items():
+        to = other.get(name)
+        got = lookup(to) if to else None
+        if got is not None and got.kind == d.kind and _pins_of(got) == _pins_of(d):
+            out[name] = got
+    return out
+
+
+def for_standard(udt, standard, lookup):
+    """udt as it is placed in a project of this symbol standard: each device in the
+    standard's own symbol where it has one with the same pins (swaps), else as drawn (the
+    drive and the reactors, which IEC 60617 has no symbol of here, stay JIC). Its tags take
+    the project's letters as any device's do (tags.prefix_for). The same UDT when nothing
+    swaps."""
+    got = swaps(udt, standard, lookup)
+    if not got:
+        return udt
+    d = udt.to_dict()
+    for m in d["members"]:
+        ent = m["entity"]
+        if ent.get("kind") == "insert" and ent.get("block") in got:
+            ent["block"] = got[ent["block"]].name
+    keep = [b for b in d["blocks"] if b["name"] not in got]
+    have = {b["name"] for b in keep}
+    for b in got.values():
+        if b.name not in have:
+            keep.append(b.to_dict())
+            have.add(b.name)
+    d["blocks"] = keep
+    return Udt.from_dict(d, udt.builtin)
+
+
+# ---- terminal strips (the owner, Nov 27 2026: Insert UDT asks which strip) -----------------
+STRIP_SETTING = "udt_strip"     # (the project's last choice, offered first next time)
+
+
+def is_terminal_def(defn):
+    """A block placed as a terminal of a strip (a TERM attribute: the Terminal symbol)."""
+    return defn is not None and defn.kind == "symbol" and \
+        any(a.get("attr") == "TERM" for a in defn.attr_texts)
+
+
+def has_terminals(udt):
+    """Does any of the UDT's members (in any choice) put a terminal on the sheet?"""
+    defs = udt.defs()
+    return any(m["entity"].get("kind") == "insert" and
+               is_terminal_def(defs.get(m["entity"].get("block"))) for m in udt.members)
+
+
+def strip_prefix(project):
+    """A strip's tag prefix in project: TB, X in a project of IEC 60617 symbols."""
+    from .symbols_iec import standard_of
+    from .tags import IEC_LETTERS
+    return IEC_LETTERS["TB"] if standard_of(project) == "iec" else "TB"
+
+
+def strip_tags(project):
+    """[(tag, terminals)] of the project's terminal strips (strips.find; TB? left out)."""
+    from . import strips
+    return [(st.tag, len([r for r in st.rows if r.num or r.places]))
+            for st in strips.find(project, wires=False) if st.tag != "TB?"]
+
+
+def new_strip_tag(project, sheet):
+    """The tag a new strip on sheet takes: the strip prefix, the page and the lowest count no
+    device or strip there has (TB101, X101 on page 1), as a new device's tag is made."""
+    from . import tags
+    pre, page = strip_prefix(project), project.sheet_number(sheet)
+    taken = tags.used_counts(project, pre, page)
+    for tag, _n in strip_tags(project):
+        got = tags.split(tag.upper(), pre)
+        if got and got[0] == page:
+            taken.add(got[1])
+    return tags.make(pre, page, tags.lowest_free(taken))
+
+
+def _role_n(role):
+    """A role's place in its UDT (r2 before r10)."""
+    return (int(role[1:]) if role[1:].isdigit() else 0, role)
+
+
+def _onto_strip(ed, project, sheet, tag, terms):
+    """In edit ed: terminals terms (just placed, in the UDT's order) put on the strip tagged
+    tag, taking its lowest free numbers (a spare's number is taken); on a strip with a
+    Terminal strip symbol, they link themselves to it by its tag as the edit ends, as any
+    contact does (tags.sync_children). Returns the terminals changed."""
+    from . import strips
+    key = tag.strip().upper()
+    # (every strip of that tag: a Terminal strip's, and terminals of the tag on none yet,
+    # which link themselves to it)
+    used = {r.num for st in strips.find(project, wires=False) if st.tag.upper() == key
+            for r in st.rows if r.num}
+    out, n = [], 1
+    for e in terms:
+        while str(n) in used:
+            n += 1
+        used.add(str(n))
+        attrs = dict(e.attrs, TAG=tag.strip(), TERM=str(n))
+        attrs.pop("PARENT", None)
+        out.append(ed.change(sheet, e.copy(attrs=attrs)))
+    return out
+
+
 # ---- placed UDTs -------------------------------------------------------------------------------
 _TYPES = {}         # (key -> Udt): a sheet's copies read once
 
@@ -495,9 +614,13 @@ def instances(project, name=None):
     a member left."""
     out = []
     for s in project.sheets:
-        for gid, inst in sorted(s.udts.items()):
-            if (name is None or inst["udt"] == name) and members(s, gid):
-                out.append((s, gid))
+        got = []
+        for gid, inst in s.udts.items():
+            on = members(s, gid)
+            if (name is None or inst["udt"] == name) and on:
+                got.append((min(e.id for e in on.values()), gid))
+        # (in the order they were drawn, their objects' ids: a group id is random)
+        out += [(s, gid) for _i, gid in sorted(got)]
     return out
 
 
@@ -550,8 +673,8 @@ def hand_edited(cur, exp, managed=()):
                 or cur.mirror != exp.mirror:
             return True
         skip = _OWN_ATTRS | set(managed)
-        a = {k: v for k, v in cur.attrs.items() if k not in skip and v}
-        b = {k: v for k, v in exp.attrs.items() if k not in skip and v}
+        a = {k: v for k, v in cur.attrs.items() if k not in skip and v and not _pin_number(k)}
+        b = {k: v for k, v in exp.attrs.items() if k not in skip and v and not _pin_number(k)}
         return a != b
     if isinstance(cur, M.Wire):
         p, q = [list(t) for t in cur.points], [list(t) for t in exp.points]
@@ -560,6 +683,13 @@ def hand_edited(cur, exp, managed=()):
     a.pop("id", None)
     b.pop("id", None)
     return not _close(a, b)
+
+
+def _pin_number(k):
+    """An attribute holding a contact's pin number (TERM01, TERM02: pinnumbers.py, 0.28),
+    which the program gives a contact as it is placed (95-96 on an overload's): not a hand
+    edit."""
+    return len(k) == 6 and k.startswith("TERM") and k[4:].isdigit()
 
 
 def _left_there(project, sheet, exp):
@@ -585,9 +715,21 @@ def located(project, sheet, inst, udt, names=None):
     were moved or turned together since (Move, Rotate on all of it), where most of them say it
     is now."""
     at, angle, scale = tuple(inst["at"]), float(inst["angle"]), float(inst["scale"])
-    names = names if names is not None else _names(project, udt)
+    votes, n = _votes(udt, members(sheet, inst["id"]), scale)
+    if not votes:
+        return at, angle, scale
+    here = (round(angle, 4) % 360.0, round(at[0], 6), round(at[1], 6))
+    best = max(votes, key=lambda k: (votes[k], k == here))
+    if best == here or votes.get(here, 0) >= votes[best] or 2 * votes[best] <= n:
+        return at, angle, scale
+    return (best[1], best[2]), best[0], scale
+
+
+def _votes(udt, on, scale):
+    """({(angle, x, y): how many of its symbols put the UDT's base point there}, how many
+    symbols voted) of a placed UDT's members on ({role: object})."""
     votes, n = {}, 0
-    for role, e in members(sheet, inst["id"]).items():
+    for role, e in on.items():
         m = udt.member(role)
         if m is None or not isinstance(e, M.Insert) or m["entity"].get("kind") != "insert":
             continue
@@ -600,13 +742,7 @@ def located(project, sheet, inst, udt, names=None):
         rx, ry = G.rotate_point((px, py), (0.0, 0.0), a)
         key = (round(a, 4) % 360.0, round(e.pos[0] - rx, 6), round(e.pos[1] - ry, 6))
         votes[key] = votes.get(key, 0) + 1
-    if not votes:
-        return at, angle, scale
-    here = (round(angle, 4) % 360.0, round(at[0], 6), round(at[1], 6))
-    best = max(votes, key=lambda k: (votes[k], k == here))
-    if best == here or votes.get(here, 0) >= votes[best] or 2 * votes[best] <= n:
-        return at, angle, scale
-    return (best[1], best[2]), best[0], scale
+    return votes, n
 
 
 class Plan:
@@ -649,12 +785,13 @@ class Plan:
         return out
 
 
-def _new_inst(udt, at, angle, scale, choices, values):
+def _new_inst(udt, at, angle, scale, choices, values, strip=""):
     return {"id": uuid.uuid4().hex[:12], "udt": udt.name, "type": udt.key(),
             "at": [float(at[0]), float(at[1])], "angle": float(angle) % 360.0,
             "scale": float(scale), "choices": udt.choices(choices),
             "values": udt.default_values(values), "ratings": copy.deepcopy(udt.ratings),
-            "overrides": {}, "members": {}, "written": {}, "gone": []}
+            "overrides": {}, "members": {}, "written": {}, "gone": [],
+            "strip": str(strip or "").strip()}
 
 
 def plan(project, sheet, gid, choices=None, values=None, ratings=None, overrides=None,
@@ -794,8 +931,22 @@ def apply(ed, project, p):
                     attrs[k] = was.attrs[k]
             dev_back[e.attrs.get("DEV")] = attrs.get("DEV")
             by_role[role] = ed.change(sheet, e.copy(attrs=attrs))
+        elif isinstance(e, M.Insert) and isinstance(was, M.Insert) and \
+                is_terminal_def(e.defn) and was.attrs.get("TERM"):
+            # (a terminal replaced: its strip and number kept)
+            attrs = dict(e.attrs)
+            for k in ("TAG", "PARENT", "TERM"):
+                if was.attrs.get(k):
+                    attrs[k] = was.attrs[k]
+            by_role[role] = ed.change(sheet, e.copy(attrs=attrs))
         elif isinstance(e, M.Wire) and isinstance(was, M.Wire) and was.num_lock:
             by_role[role] = ed.change(sheet, e.copy(num=was.num, num_lock=True))
+    # terminals added: on the strip picked when the UDT was placed (none: TB? for later)
+    if inst.get("strip"):
+        terms = [by_role[m["role"]] for m in p.add if isinstance(by_role[m["role"]], M.Insert)
+                 and is_terminal_def(by_role[m["role"]].defn)]
+        for e in _onto_strip(ed, project, sheet, inst["strip"], terms):
+            by_role[next(r for r, x in by_role.items() if x.id == e.id)] = e
     # a contact added whose device stayed: linked to that device (place links only those whose
     # device came with them); one whose device was replaced: to its kept hidden id
     dev_role = {}
@@ -859,13 +1010,95 @@ def _keep(ed, sheet, gid, inst, udt):
     ed.sheet_meta(sheet, udts=udts, udt_types=types)
 
 
-def place(ed, project, sheet, udt, at, angle=0.0, scale=1.0, choices=None, values=None):
+def place(ed, project, sheet, udt, at, angle=0.0, scale=1.0, choices=None, values=None,
+          strip=""):
     """In edit ed: udt put on sheet with its base point at at, with these choices and values
-    (the defaults for the rest). Returns (group id, the objects added)."""
-    inst = _new_inst(udt, at, angle, scale, choices, values)
+    (the defaults for the rest), its terminals on the strip tagged strip (blank: on none yet,
+    TB?). Returns (group id, the objects added)."""
+    inst = _new_inst(udt, at, angle, scale, choices, values, strip)
     p = Plan(sheet, inst["id"], udt, inst)
     p.add = udt.active(inst["choices"])
     return inst["id"], apply(ed, project, p)
+
+
+# ---- copies (the owner, Nov 27 2026: "Copy/paste of a placed UDT makes a new instance") ----
+def copied(sheet, ids):
+    """What a copy of objects ids of sheet takes along of its placed UDTs: [{"inst": the
+    placed UDT, "type": its UDT}] of each whose every symbol is among them (its wires may be
+    left behind: a copy of part of its symbols stays plain parts). Kept on the clipboard as
+    it is (JSON) for Paste into any sheet or project."""
+    ids = set(ids)
+    out = []
+    for gid, inst in sorted(sheet.udts.items()):
+        on = members(sheet, gid)
+        syms = [e.id for e in on.values() if isinstance(e, M.Insert)]
+        if syms and set(syms) <= ids and inst["type"] in sheet.udt_types:
+            # (its devices' hidden ids, by role: the copies' contacts are linked to the
+            # copies of their devices by them)
+            devs = {r: e.attrs["DEV"] for r, e in on.items()
+                    if isinstance(e, M.Insert) and e.attrs.get("DEV")}
+            out.append({"inst": copy.deepcopy(inst), "devs": devs,
+                        "type": copy.deepcopy(sheet.udt_types[inst["type"]])})
+    return out
+
+
+def adopt_copies(ed, project, sheet, found, made):
+    """In edit ed: the copies just added to sheet (made: {id copied: the copy}) of the placed
+    UDTs found (copied()) made placed UDTs of their own: the same UDT, choices, values,
+    rating rules and overridden ratings as the one copied, where the copies are (moved,
+    turned), their own tags and wire numbers as any copy's; its contacts follow the copies
+    of its devices (a plain copy's stay with the original: circuits._relinked links them),
+    its terminals take the next free numbers of their strip. A member not copied (a wire
+    left behind, one erased by hand before) is one erased by hand: not put back. Returns the
+    new group ids."""
+    if not found:
+        return []
+    from .tags import is_device
+    out, adopted = [], []
+    for f in found:
+        old = copy.deepcopy(f["inst"])
+        try:
+            udt = Udt.from_dict(f["type"])
+        except (ValueError, KeyError, TypeError):
+            continue                # (a UDT this version can't read: the copies stay plain)
+        was = {r: f.get("devs", {}).get(r) for r in old["members"]}
+        got = {r: sheet.entities[made[i].id] for r, i in old["members"].items()
+               if i in made and getattr(made[i], "id", None) in sheet.entities}
+        if not any(isinstance(e, M.Insert) for e in got.values()):
+            continue
+        # contacts linked to the copies of their devices; terminals numbered on their strip
+        new_dev = {was[r]: e for r, e in got.items() if was.get(r) and is_device(e)}
+        for r, e in got.items():
+            if not isinstance(e, M.Insert) or e.attrs.get("PARENT") not in new_dev:
+                continue                # (a contact of a device outside the UDT stays its)
+            attrs = CI._relinked(e, new_dev, {})
+            if attrs is not None and attrs != e.attrs:
+                got[r] = e = ed.change(sheet, e.copy(attrs=attrs))
+        for tag in sorted({e.attrs.get("TAG", "") for e in got.values()
+                           if isinstance(e, M.Insert) and is_terminal_def(e.defn) and
+                           e.attrs.get("TAG") and not e.attrs.get("TERM")}):
+            terms = [(r, e) for r, e in sorted(got.items(), key=lambda t: _role_n(t[0]))
+                     if isinstance(e, M.Insert) and is_terminal_def(e.defn) and
+                     e.attrs.get("TAG") == tag and not e.attrs.get("TERM")]
+            for (r, _e), e in zip(terms, _onto_strip(ed, project, sheet, tag,
+                                                     [e for _r, e in terms])):
+                got[r] = e
+        adopted.append((old, udt, got, f["type"]))
+    udts, types = dict(sheet.udts), dict(sheet.udt_types)
+    for old, udt, got, kind in adopted:
+        inst = dict(old, id=uuid.uuid4().hex[:12], members={r: e.id for r, e in got.items()})
+        inst["gone"] = sorted(set(old.get("gone", ())) |
+                              (set(old["members"]) - set(got)))
+        votes, _n = _votes(udt, got, float(old["scale"]))
+        if votes:
+            best = max(votes, key=lambda k: votes[k])
+            inst["at"], inst["angle"] = [best[1], best[2]], best[0]
+        udts[inst["id"]] = inst
+        types.setdefault(inst["type"], kind)            # (the copied one's, as it was kept)
+        out.append(inst["id"])
+    if out:
+        ed.sheet_meta(sheet, udts=udts, udt_types=types)
+    return out
 
 
 def detach(ed, sheet, gid):
