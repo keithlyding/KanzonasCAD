@@ -37,7 +37,7 @@ build fails without them.
 - A bus that fans onto a device's pins no longer leaves a wire that runs out and straight back
   over itself (a hidden corner).
 
-## 0.27.2
+## 0.27.3
 
 **Fixed**
 - Typing a name for a source arrow on a numbered wire (Tag in the Properties panel, or its
@@ -46,6 +46,8 @@ build fails without them.
   are asked whether it is a cross-reference. One Undo takes it all back.
 - Typing a new name for a destination arrow linked to its source now pairs it with the source
   of that name. Before, the old name came straight back.
+- Importing blocks from a folder no longer makes the window pause now and then on a slow or
+  busy disk.
 
 ## 0.27.1
 
