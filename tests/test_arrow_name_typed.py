@@ -1,0 +1,326 @@
+"""A name typed for a source or destination arrow (the Properties panel's Tag, or its
+attributes window) is kept, or numbers the wire: never put back silently (the nightly battery,
+0.26, seed 202611263, step 1005: a destination arrow linked by hand to its source was given
+CR942 in the Properties panel and still read 1048, its source's name; a source arrow given a
+name read 1076, a new number for its wire).
+
+A destination arrow linked by hand follows its source arrow's name, so a name typed for it
+drops that link: it is then paired by its name, as Automatic in its attributes window pairs it.
+A source arrow on a numbered wire is named by the wire's number (the owner, 0.18.6): a name
+typed for it is the wire's new number, as typed on the wire (the owner, Nov 27 2026: "Renumber
+the wire"): locked, the cross-reference question when another wire has it, its destinations
+following, one step."""
+import unittest
+
+from PySide6.QtWidgets import QComboBox, QDialog
+
+from tests.util import APP, window, type_in
+
+from kanzonascad import commands as C
+from kanzonascad import model as M
+from kanzonascad import wirenums
+from kanzonascad.wirenums import ARROWS
+
+SRC, DST = ARROWS
+
+
+class ArrowNameTypedTest(unittest.TestCase):
+    def setUp(self):
+        self.win, self.v = window()
+        self.v.osnap_on = self.v.snap_on = self.v.ortho_on = self.v.polar_on = False
+        self.p = self.v.project
+        self.lib = self.win.library
+        with self.p.edit("sheets") as ed:
+            ed.add_sheet(self.p.make_sheet("Two"))
+        self.s1, self.s2 = self.p.sheets
+        with self.p.edit("w") as ed:
+            self.wa = ed.add(self.s1, M.Wire([(2.0, 5.0), (6.0, 5.0)]))
+            ed.add(self.s2, M.Wire([(2.0, 5.0), (6.0, 5.0)]))
+        self.src = self.place(self.s1, SRC, (6.0, 5.0))
+        self.win.pick_connector = lambda cands: next((s, c) for s, c in cands
+                                                     if c.id == self.src.id)
+        self.dst = self.place(self.s2, DST, (2.0, 5.0), C.PAIR_LIST)
+        self.win.props_dock.hide()
+
+    def tearDown(self):
+        self.win.__dict__.pop("pick_connector", None)
+        self.p.saved_at = len(self.p.undo_stack)
+        self.win.close()
+        self.assertTrue(APP)
+
+    def place(self, sheet, name, at, *answers):
+        before = set(sheet.entities)
+        self.v.show_sheet(sheet.id)
+        self.v.run(C.InsertCmd, self.lib.get("symbol", name), {})
+        type_in(self.v, "%g,%g" % at, *answers)
+        return [e for i, e in sheet.entities.items() if i not in before and
+                isinstance(e, M.Insert)][0]
+
+    def num(self):
+        return self.s1.entities[self.wa.id].num
+
+    def linked(self):
+        """The two arrows as set up: the source named by its wire's number, the destination
+        linked to it by hand and named the same."""
+        src, dst = self.s1.entities[self.src.id], self.s2.entities[self.dst.id]
+        self.assertTrue(self.num())
+        self.assertEqual(src.attrs["TAG"], self.num())
+        self.assertEqual(dst.attrs.get("FROM"), wirenums.link_to(self.s1, src))
+        self.assertEqual(dst.attrs["TAG"], self.num())
+        return src, dst
+
+    # ---- the Properties panel ------------------------------------------------------------
+    def panel_tag(self, sheet, ent, value):
+        self.v.show_sheet(sheet.id)
+        if self.win.props_dock.isHidden():
+            self.win.properties()
+        self.v.set_selection({ent.id})
+        self.win._props_wait.stop()
+        self.win.props_fill()
+        w = self.win.props_panel.widgets["TAG"]
+        w.setText(value)
+        w.setModified(True)
+        w.editingFinished.emit()
+
+    def test_panel_destination_takes_the_name_typed(self):
+        _src, dst = self.linked()
+        n = len(self.p.undo_stack)
+        self.panel_tag(self.s2, dst, "CR942")
+        got = self.s2.entities[dst.id]
+        self.assertEqual(got.attrs["TAG"], "CR942")
+        self.assertNotIn("FROM", got.attrs)                 # (no longer linked: paired by name)
+        self.assertEqual(len(self.p.undo_stack), n + 1)
+        self.assertEqual(self.win.props_panel.widgets["TAG"].text(), "CR942")
+        self.p.undo()
+        self.linked()
+
+    def test_panel_destination_given_another_sources_name_pairs_with_it(self):
+        _src, dst = self.linked()
+        with self.p.edit("w") as ed:
+            ed.add(self.s1, M.Wire([(2.0, 3.0), (6.0, 3.0)]))
+        other = self.place(self.s1, SRC, (6.0, 3.0))
+        name = self.s1.entities[other.id].attrs["TAG"]
+        self.panel_tag(self.s2, dst, name)
+        got = self.s2.entities[dst.id]
+        self.assertEqual(got.attrs["TAG"], name)
+        self.assertNotIn("FROM", got.attrs)
+
+    def renumbered(self, num):
+        """The wire carries num, locked, and the source and its destination show it."""
+        self.assertEqual(self.num(), num)
+        self.assertTrue(self.s1.entities[self.wa.id].num_lock)
+        self.assertEqual(self.s1.entities[self.src.id].attrs["TAG"], num)
+        dst = self.s2.entities[self.dst.id]
+        self.assertEqual(dst.attrs["TAG"], num)
+        self.assertEqual(dst.attrs.get("FROM"), wirenums.link_to(self.s1, self.s1.entities[
+            self.src.id]))
+        dw = next(w for w in self.s2.wires())
+        self.assertEqual(dw.num, num)                       # (the destination's wire follows)
+
+    def test_panel_source_on_a_numbered_wire_renumbers_the_wire(self):
+        # (the owner, Nov 27 2026: "Renumber the wire"; it was put back, or refused)
+        src, dst = self.linked()
+        n = len(self.p.undo_stack)
+        self.panel_tag(self.s1, src, "CR942")
+        self.renumbered("CR942")
+        self.assertEqual(len(self.p.undo_stack), n + 1)     # (one step)
+        self.assertEqual(self.win.props_panel.widgets["TAG"].text(), "CR942")
+        self.p.undo()
+        self.assertEqual(self.s1.entities[src.id].to_dict(), src.to_dict())
+        self.assertEqual(self.s2.entities[dst.id].to_dict(), dst.to_dict())
+        self.linked()
+        self.p.redo()
+        self.renumbered("CR942")
+
+    def test_panel_source_given_another_wires_number_asks_as_the_wire_does(self):
+        # (a number another wire has: the cross-reference question, as typed on the wire;
+        # cancelled, nothing changes; "just the same number", the wire takes it, locked)
+        src, dst = self.linked()
+        with self.p.edit("w") as ed:
+            other = ed.add(self.s1, M.Wire([(2.0, 1.0), (6.0, 1.0)]))
+        with self.p.edit("n") as ed:
+            wirenums.set_number(ed, self.p, self.s1, self.s1.entities[other.id], "1077")
+        asked = []
+        self.win.ask_cross_reference = lambda num, where: asked.append(num)
+        try:
+            src, dst = self.linked()
+            n = len(self.p.undo_stack)
+            self.panel_tag(self.s1, src, "1077")
+            self.assertEqual(asked, ["1077"])
+            self.assertEqual(self.s1.entities[src.id].to_dict(), src.to_dict())
+            self.assertEqual(self.s2.entities[dst.id].to_dict(), dst.to_dict())
+            self.assertEqual(len(self.p.undo_stack), n)
+            self.assertEqual(self.win.props_panel.widgets["TAG"].text(), src.attrs["TAG"])
+            self.win.ask_cross_reference = lambda num, where: asked.append(num) or "same"
+            self.panel_tag(self.s1, src, "1077")
+            self.renumbered("1077")
+            self.assertEqual(len(self.p.undo_stack), n + 1)
+            self.assertEqual(self.s1.entities[other.id].num, "1077")
+        finally:
+            self.win.__dict__.pop("ask_cross_reference", None)
+
+    def test_panel_several_selected_with_a_source_says_why(self):
+        # (its name is its wire's number: one at a time, as a wire's number is typed)
+        src, dst = self.linked()
+        with self.p.edit("w") as ed:
+            ed.add(self.s1, M.Wire([(2.0, 3.0), (6.0, 3.0)]))
+        other = self.place(self.s1, SRC, (6.0, 3.0))
+        other = self.s1.entities[other.id]
+        num, n = self.num(), len(self.p.undo_stack)
+        self.v.show_sheet(self.s1.id)
+        if self.win.props_dock.isHidden():
+            self.win.properties()
+        self.v.set_selection({src.id, other.id})
+        self.win._props_wait.stop()
+        self.win.props_fill()
+        w = self.win.props_panel.widgets["TAG"]
+        w.setText("CR942")
+        w.setModified(True)
+        w.editingFinished.emit()
+        self.assertEqual(self.num(), num)
+        self.assertEqual(self.s1.entities[other.id].to_dict(), other.to_dict())
+        self.assertEqual(len(self.p.undo_stack), n)
+        self.assertIn("select it alone", self.win.statusBar().currentMessage())
+
+    def test_source_on_no_wire_takes_the_name(self):
+        # (no wire to number: its name, one step; not the question a wire's number asks)
+        self.linked()
+        lone = self.s1.entities[self.place(self.s1, SRC, (9.0, 9.0), "ZZ").id]
+        n = len(self.p.undo_stack)
+        self.win.ask_cross_reference = lambda num, where: self.fail("asked")
+        try:
+            self.panel_tag(self.s1, lone, "CR942")
+        finally:
+            self.win.__dict__.pop("ask_cross_reference", None)
+        self.assertEqual(self.s1.entities[lone.id].attrs["TAG"], "CR942")
+        self.assertEqual(len(self.p.undo_stack), n + 1)
+
+    # ---- its attributes window -----------------------------------------------------------
+    def window_tag(self, sheet, ent, value):
+        """Its attributes window answered with the tag typed (nothing else changed)."""
+        from PySide6.QtWidgets import QLineEdit
+
+        def answer(dlg):
+            box = next(e for e in dlg.findChildren(QLineEdit)
+                       if e.text() == ent.attrs.get("TAG"))
+            box.setText(value)
+            return QDialog.Accepted
+        old = QDialog.exec
+        QDialog.exec = answer
+        try:
+            self.v.show_sheet(sheet.id)
+            self.win.edit_attributes(sheet.entities[ent.id])
+        finally:
+            QDialog.exec = old
+
+    def test_window_destination_takes_the_name_typed(self):
+        _src, dst = self.linked()
+        self.window_tag(self.s2, dst, "CR942")
+        got = self.s2.entities[dst.id]
+        self.assertEqual(got.attrs["TAG"], "CR942")
+        self.assertNotIn("FROM", got.attrs)
+
+    def test_window_destination_given_another_source_by_comes_from_follows_it(self):
+        # (a source chosen in Comes from: the link it makes wins over a name typed with it)
+        src, dst = self.linked()
+        with self.p.edit("w") as ed:
+            ed.add(self.s1, M.Wire([(2.0, 3.0), (6.0, 3.0)]))
+        other = self.place(self.s1, SRC, (6.0, 3.0))
+        from PySide6.QtWidgets import QLineEdit
+
+        def answer(dlg):
+            came = dlg.findChild(QComboBox, "comes_from")
+            came.setCurrentIndex(came.findData(wirenums.link_to(self.s1, other)))
+            next(e for e in dlg.findChildren(QLineEdit)
+                 if e.text() == dst.attrs["TAG"]).setText("CR942")
+            return QDialog.Accepted
+        old = QDialog.exec
+        QDialog.exec = answer
+        try:
+            self.v.show_sheet(self.s2.id)
+            self.win.edit_attributes(self.s2.entities[dst.id])
+        finally:
+            QDialog.exec = old
+        got = self.s2.entities[dst.id]
+        self.assertEqual(got.attrs.get("FROM"), wirenums.link_to(self.s1, other))
+        self.assertEqual(got.attrs["TAG"], self.s1.entities[other.id].attrs["TAG"])
+
+    def test_window_source_on_a_numbered_wire_renumbers_the_wire(self):
+        src, dst = self.linked()
+        n = len(self.p.undo_stack)
+        self.window_tag(self.s1, src, "CR942")
+        self.renumbered("CR942")
+        self.assertEqual(len(self.p.undo_stack), n + 1)
+        self.p.undo()
+        self.linked()
+
+    def test_window_source_renumbers_with_its_other_changes_in_one_step(self):
+        # (its manufacturer typed with it: both in one step, one Undo takes both back)
+        src, _dst = self.linked()
+        num, n = self.num(), len(self.p.undo_stack)
+        from PySide6.QtWidgets import QLabel, QLineEdit
+
+        def answer(dlg):
+            edits = dlg.findChildren(QLineEdit)
+            next(e for e in edits if e.text() == num).setText("CR942")
+            got = [lb.buddy() for lb in dlg.findChildren(QLabel)
+                   if lb.text().startswith("Manufacturer") and lb.buddy() in edits]
+            self.assertTrue(got, [lb.text() for lb in dlg.findChildren(QLabel)])
+            got[0].setText("ACME")
+            return QDialog.Accepted
+        old = QDialog.exec
+        QDialog.exec = answer
+        try:
+            self.v.show_sheet(self.s1.id)
+            self.win.edit_attributes(self.s1.entities[src.id])
+        finally:
+            QDialog.exec = old
+        self.renumbered("CR942")
+        self.assertEqual(self.s1.entities[src.id].attrs.get("MFR"), "ACME")
+        self.assertEqual(len(self.p.undo_stack), n + 1)
+        self.p.undo()
+        self.assertEqual(self.s1.entities[src.id].to_dict(), src.to_dict())
+        self.assertEqual(self.num(), num)
+
+    def test_window_source_given_another_wires_number_cancelled_keeps_the_rest(self):
+        # (the cross-reference question cancelled, as on the wire: the name stays, the rest
+        # of the answer is taken)
+        src, _dst = self.linked()
+        num = self.num()
+        with self.p.edit("w") as ed:
+            other = ed.add(self.s1, M.Wire([(2.0, 1.0), (6.0, 1.0)]))
+        with self.p.edit("n") as ed:
+            wirenums.set_number(ed, self.p, self.s1, self.s1.entities[other.id], "1077")
+        from PySide6.QtWidgets import QLabel, QLineEdit
+        asked = []
+        self.win.ask_cross_reference = lambda n, where: asked.append(n)
+
+        def answer(dlg):
+            edits = dlg.findChildren(QLineEdit)
+            next(e for e in edits if e.text() == num).setText("1077")
+            next(lb.buddy() for lb in dlg.findChildren(QLabel)
+                 if lb.text().startswith("Manufacturer")).setText("ACME")
+            return QDialog.Accepted
+        old = QDialog.exec
+        QDialog.exec = answer
+        try:
+            self.v.show_sheet(self.s1.id)
+            self.win.edit_attributes(self.s1.entities[src.id])
+        finally:
+            QDialog.exec = old
+            self.win.__dict__.pop("ask_cross_reference", None)
+        self.assertEqual(asked, ["1077"])
+        got = self.s1.entities[src.id]
+        self.assertEqual((got.attrs["TAG"], got.attrs.get("MFR")), (num, "ACME"))
+        self.assertEqual(self.num(), num)
+
+    def test_no_wire_numbers_a_source_takes_the_name(self):
+        with self.p.edit("off") as ed:
+            ed.project_settings({"wire_numbers": False})
+        src = self.s1.entities[self.src.id]
+        self.panel_tag(self.s1, src, "CR942")
+        self.assertEqual(self.s1.entities[src.id].attrs["TAG"], "CR942")
+
+
+if __name__ == "__main__":
+    unittest.main()
