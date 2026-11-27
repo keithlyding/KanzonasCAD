@@ -426,13 +426,13 @@ class WindowTest(unittest.TestCase):
         dlg.folder = self.folder
         dlg.set_rows(rows)
         imp = dlg.importer()
-        real = L._write_json
+        real = L._write_text
         turns = []
         real_turn = IB.Progress.turn
 
-        def slow(path, data):
+        def slow(path, text):
             time.sleep(0.3)
-            real(path, data)
+            real(path, text)
 
         def turn(prog):
             turns.append(1)
@@ -444,11 +444,11 @@ class WindowTest(unittest.TestCase):
         # event loop: let it run before the wait is timed, as test_023_trace does)
         APP.processEvents()
         try:
-            L._write_json = slow
+            L._write_text = slow
             IB.Progress.turn = turn
             done, longest = IB.put_in(self.win, imp)
         finally:
-            L._write_json = real
+            L._write_text = real
             IB.Progress.turn = real_turn
         dlg.deleteLater()
         self.assertTrue(done)
@@ -468,26 +468,26 @@ class WindowTest(unittest.TestCase):
             coil_dxf(os.path.join(folder, "HCR%03d.dxf" % i))
         rows, _step = IB.scan(self.win, BI.drawing_files(folder))
         imp = BI.Importer(self.lib, rows)
-        real = L._write_json
+        real = L._write_text
         lock = threading.Lock()
         at_once = {"now": 0, "most": 0}
 
-        def slow(path, data):
+        def slow(path, text):
             with lock:
                 at_once["now"] += 1
                 at_once["most"] = max(at_once["most"], at_once["now"])
             time.sleep(0.05)
             with lock:
                 at_once["now"] -= 1
-            real(path, data)
+            real(path, text)
         APP.processEvents()
         try:
-            L._write_json = slow
+            L._write_text = slow
             t0 = time.perf_counter()
             done, longest = IB.put_in(self.win, imp)
             dt = time.perf_counter() - t0
         finally:
-            L._write_json = real
+            L._write_text = real
         self.assertTrue(done)
         self.assertEqual([n for _r, n in imp.imported], ["HCR%03d" % i for i in range(40)])
         own, bad = Library(self.lib.folder)._own_blocks("symbol")
@@ -506,28 +506,86 @@ class WindowTest(unittest.TestCase):
         for r in (a, b):
             r.choice = "replace"
         before = snapshot(self.lib.folder)
-        real = L._write_json
+        real = L._write_text
         writing = []
 
-        def slow(path, data):
+        def slow(path, text):
             writing.append(path)
             clash = len(set(writing)) != len(writing)
             time.sleep(0.05)
-            real(path, data)
+            real(path, text)
             writing.remove(path)
             if clash:
                 raise OSError("two writes of %s at once" % path)
         try:
-            L._write_json = slow
+            L._write_text = slow
             imp = BI.Importer(self.lib, [a, b], "Twice")
             done, _longest = IB.put_in(self.win, imp)
         finally:
-            L._write_json = real
+            L._write_text = real
         self.assertTrue(done)
         self.assertEqual((imp.failed, [n for _r, n in imp.imported]), ([], ["HCR1", "HCR1"]))
         got = Library(self.lib.folder).get("symbol", "HCR1")
         self.assertEqual((got.category, got.extents()[2]), ("Twice", 3))
         imp.rollback()
+        self.assertEqual(snapshot(self.lib.folder), before)
+
+    def slow_disk(self):
+        """Every file call (looking for a file, opening, listing, renaming, flushing) made
+        0.3 s slow, on whichever thread makes it: a context manager."""
+        import builtins
+        import contextlib
+
+        def slowed(fn):
+            def call(*a, **k):
+                time.sleep(0.3)
+                return fn(*a, **k)
+            return call
+        where = [(os.path, "exists"), (os.path, "isdir"), (os, "stat"), (os, "listdir"),
+                 (os, "makedirs"), (os, "replace"), (os, "remove"), (os, "fsync"),
+                 (os, "access"), (builtins, "open")]
+
+        @contextlib.contextmanager
+        def slow():
+            real = [getattr(m, n) for m, n in where]
+            try:
+                for (m, n), fn in zip(where, real):
+                    setattr(m, n, slowed(fn))
+                yield
+            finally:
+                for (m, n), fn in zip(where, real):
+                    setattr(m, n, fn)
+        return slow()
+
+    def test_the_event_loop_never_waits_on_the_disk(self):
+        # (0.27.2's Windows build: one step of 0.45 s between two turns of the event loop
+        # while the blocks were written: the event loop looked on the disk for each block's
+        # file and read the one it replaced. Now only the threads touch the disk: replacing
+        # a block, and Cancel's rollback, too)
+        rows, _step = IB.scan(self.win, BI.drawing_files(self.folder))
+        for r in rows:
+            r.choice = "replace"
+        before = snapshot(self.lib.folder)
+        imp = BI.Importer(self.lib, rows)
+        APP.processEvents()
+        with self.slow_disk():
+            done, longest = IB.put_in(self.win, imp)
+        self.assertTrue(done)
+        self.assertIn("HCR1", [n for _r, n in imp.imported])        # (replaced)
+        self.assertLess(longest, 0.1)
+        imp.rollback()
+        self.assertEqual(snapshot(self.lib.folder), before)
+        # (Cancel after the first block: the rollback on a thread)
+        imp = BI.Importer(self.lib, rows)
+        real = IB.Progress.tick
+        IB.Progress.tick = lambda prog, done, text=None: real(prog, done, text) and done < 1
+        try:
+            with self.slow_disk():
+                done, longest = IB.put_in(self.win, imp)
+        finally:
+            IB.Progress.tick = real
+        self.assertFalse(done)
+        self.assertLess(longest, 0.1)
         self.assertEqual(snapshot(self.lib.folder), before)
 
     def test_imported_symbol_takes_a_wire(self):
