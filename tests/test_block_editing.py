@@ -66,12 +66,15 @@ class MakerFieldsTest(unittest.TestCase):
         lib.save_part(Part(manufacturer="Phoenix Contact", catalog="3044102"))
         self.assertEqual(lib.maker_values("manufacturer"),
                          ["Allen-Bradley", "Phoenix Contact", "Siemens"])
-        # (and the program's own Allen-Bradley POINT I/O modules, 0.19)
+        # (and the program's own Allen-Bradley POINT I/O modules, 0.19, and its CompactLogix,
+        # Compact 5000 I/O modules and PowerFlex 525 footprints, 0.29)
         self.assertEqual(lib.maker_values("family", "Allen-Bradley"),
-                         ["ControlLogix", "POINT I/O", "PowerFlex 525"])
+                         ["Compact 5000 I/O", "CompactLogix", "ControlLogix", "POINT I/O",
+                          "PowerFlex 525"])
         self.assertEqual(lib.maker_values("family", "Siemens"), ["SIMATIC S7-1500"])
         self.assertEqual(lib.maker_values("family"),
-                         ["ControlLogix", "POINT I/O", "PowerFlex 525", "SIMATIC S7-1500"])
+                         ["Compact 5000 I/O", "CompactLogix", "ControlLogix", "POINT I/O",
+                          "PowerFlex 525", "SIMATIC S7-1500"])
         self.assertEqual(lib.maker_values("series", "Allen-Bradley", "ControlLogix"), ["B"])
         self.assertEqual(lib.maker_values("series", "Siemens", "ControlLogix"), [])
         # the dialog's lists follow what is typed
@@ -157,8 +160,11 @@ class BlockWindowTest(unittest.TestCase):
                 top = tree.topLevelItem(i)
                 out += [top.child(j).data(0, Qt.UserRole) for j in range(top.childCount())]
             return sorted(out)
+        # (with the program's own CompactLogix modules, 0.29)
+        from kanzonascad.allen_bradley import IO
+        clx = ["%s module" % m[0] for m in IO if m[1] == "CompactLogix"]
         panel.search.setText("compactlogix")
-        self.assertEqual(shown(), ["AB in"])
+        self.assertEqual(shown(), sorted(["AB in"] + clx))
         panel.search.setText("siemens")
         self.assertEqual(shown(), ["S7 in"])
         panel.search.setText("")
@@ -168,13 +174,15 @@ class BlockWindowTest(unittest.TestCase):
         mf.setCurrentIndex(mf.findData("Allen-Bradley"))
         # (with the program's own Allen-Bradley POINT I/O modules, 0.19)
         from kanzonascad.symbols_jic import IO_MODULES
-        ours = ["%s module" % m[0] for m in IO_MODULES]
+        ours = ["%s module" % m[0] for m in IO_MODULES] + ["%s module" % m[0] for m in IO]
         self.assertEqual(shown(), sorted(["AB in", "AB out"] + ours))
         ff = panel.family_filter
         self.assertEqual([ff.itemText(i) for i in range(ff.count())],
-                         ["All families", "CompactLogix", "ControlLogix", "POINT I/O"])
+                         ["All families", "Compact 5000 I/O", "CompactLogix", "ControlLogix",
+                          "POINT I/O", "PowerFlex 525"])
         ff.setCurrentIndex(ff.findData("ControlLogix"))
-        self.assertEqual(shown(), ["AB out"])
+        self.assertEqual(shown(), sorted(["AB out"] + ["%s module" % m[0] for m in IO
+                                                       if m[1] == "ControlLogix"]))
         mf.setCurrentIndex(0)
         ff.setCurrentIndex(0)
         self.assertGreater(len(shown()), 30)                # the built-in ones are back

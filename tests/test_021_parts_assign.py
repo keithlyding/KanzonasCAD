@@ -52,7 +52,12 @@ class PartsTest(unittest.TestCase):
             return self.sie.id, "Siemens"
         self.win.ask_part = ask
         self.assertEqual(self.win.assign_part(), 3)
-        self.assertEqual(offered[0], (["100-C09D10", "3RT2015"], ""))
+        # (yours, and the program's own Allen-Bradley parts of the selected symbols since
+        # 0.29: yours standing for the built-in one of its catalog number)
+        builtin = sorted(p.catalog for p in self.lib.builtin_parts().values()
+                         if p.symbol in ("Contactor coil", "Relay coil") and
+                         p.catalog != "100-C09D10")
+        self.assertEqual(offered[0], (["100-C09D10"] + builtin + ["3RT2015"], ""))
         for e in self.m:
             a = self.s.entities[e.id].attrs
             self.assertEqual((a["MFR"], a["CAT"], a["PART"]), ("Siemens", "3RT2015",
@@ -64,7 +69,8 @@ class PartsTest(unittest.TestCase):
         self.assertEqual(self.p.settings["brand"], "Siemens")
         # (the brand first next time)
         self.assertEqual([p.catalog for p in PA.candidates(self.lib, self.m, "siemens")],
-                         ["3RT2015", "100-C09D10"])
+                         ["3RT2015", "100-C09D10"] + [c for c in builtin
+                                                      if c.startswith("100-")])
         # (the library's part gone: the drawing keeps its own copy)
         self.lib.delete_part(self.sie.id)
         self.assertEqual(self.p.settings["parts"][self.sie.id]["manufacturer"], "Siemens")
@@ -75,9 +81,14 @@ class PartsTest(unittest.TestCase):
         self.v.set_selection(set())
         self.assertEqual(self.win.assign_part(), 0)
         self.assertTrue(any("select the devices" in t for t in self.said))
-        self.v.set_selection({self.cr.id})
+        # (a symbol no part uses, built-in parts included: a relay coil has some since 0.29)
+        timer = self.lib.get("symbol", "Timer coil")
+        with self.p.edit("timer") as ed:
+            tr = ed.add(self.s, M.Insert(timer.name, (6.0, 5.0), 0.0, 1.0, False,
+                                         {"TAG": "TR1"}, timer, 0.1))
+        self.v.set_selection({tr.id})
         self.assertEqual(self.win.assign_part(), 0)
-        self.assertTrue(any("No part in your library uses Relay coil" in t for t in self.said))
+        self.assertTrue(any("No part in your library uses Timer coil" in t for t in self.said))
 
     def test_save_to_library_as_part(self):
         self.v.set_selection({self.cr.id})

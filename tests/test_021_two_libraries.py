@@ -30,7 +30,7 @@ class TwoLibrariesTest(unittest.TestCase):
         self.assertIsNotNone(self.lib.get("symbol", "Personal coil"))
         self.assertEqual(self.lib.where("symbol", "Personal coil"), "second")
         self.assertEqual(self.lib.where("symbol", "Relay coil"), "built in")
-        self.assertEqual([p.catalog for p in self.lib.parts()], ["P1"])
+        self.assertEqual([p.catalog for p in self.lib.parts(builtin=False)], ["P1"])
         self.assertEqual(len(self.lib.second_parts), 1)
 
     def test_saved_back_where_it_is_and_new_where_asked(self):
@@ -44,13 +44,13 @@ class TwoLibrariesTest(unittest.TestCase):
         self.lib.save_second = True
         self.lib.save_block(_block("Mine too"))
         self.assertTrue(Library(self.b).has_own("symbol", "Mine too"))
-        part = self.lib.parts()[0]
+        part = self.lib.parts(builtin=False)[0]
         part.description = "updated"
         self.lib.save_part(part)
-        self.assertEqual(Library(self.b).parts()[0].description, "updated")
-        self.assertEqual(Library(self.a).parts(), [])
+        self.assertEqual(Library(self.b).parts(builtin=False)[0].description, "updated")
+        self.assertEqual(Library(self.a).parts(builtin=False), [])
         self.lib.delete_part(part.id)
-        self.assertEqual(self.lib.parts(), [])
+        self.assertEqual(self.lib.parts(builtin=False), [])
 
     @unittest.skipIf(sys.platform == "win32" or os.geteuid() == 0,
                      "read-only folders aren't read-only to root (or as such on Windows)")

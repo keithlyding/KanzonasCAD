@@ -724,7 +724,12 @@ def random_editing(log, out, ops, seed, drawing=None):
             # of it as a contact of its coil)
             "PLC analog input module, 4 channels IN/RTN",
             "PLC digital input module, 16 points, points 0-7",
-            "PLC digital input module, points 8-15 continued"]
+            "PLC digital input module, points 8-15 continued",
+            # (0.29: IEC symbols, and the Allen-Bradley ones)
+            "Relay coil (IEC)", "Contact NO (IEC)", "Contact NC (IEC)",
+            "Circuit breaker 3-pole (IEC)", "Motor protection circuit breaker 3-pole",
+            "Overload relay, electronic 3-pole", "Selector switch 3-position",
+            "Selector switch 3-position contact, closed right", "1769-IF4 module"]
     syms = [n for n in syms if lib.get("symbol", n) is not None]
     start = norm(p.to_dict())
     counts = {}
@@ -1277,6 +1282,18 @@ def random_editing(log, out, ops, seed, drawing=None):
             assert got == at, "%s held by pin %s: the pin went to %s, not %s" % (
                 name, held, got, at)
             BC.CHECKED["insert by its pin"] += 1
+        if len(new) == 1 and tags_mod.is_device(new[0]) and not tags_mod.locked(new[0]):
+            # (0.29: tagged with the project's prefix: an IEC project's 81346-2 letter, K for
+            # a relay, Q for a contactor, X for a terminal strip; worked out from the table)
+            d = new[0].defn
+            want = d.prefix
+            if p.settings.get("symbol_standard") == "iec":
+                want = tags_mod.IEC_ROLE_LETTERS.get((d.prefix, d.role)) or \
+                    tags_mod.IEC_LETTERS.get(d.prefix, d.prefix)
+            tag = new[0].attrs.get("TAG", "")
+            assert tags_mod.split(tag, want) is not None, "%s placed tagged %s, not %s..." % (
+                name, tag, want)
+            BC.CHECKED["a new device tagged with the project's letters"] += 1
         if linked is not None and len(new) == 1:
             got = new[0].attrs.get("PARENT", "")
             assert got == linked, "%s's device: %r, not %r" % (name, got, linked)
@@ -2562,7 +2579,9 @@ def random_editing(log, out, ops, seed, drawing=None):
                 page = p.sheet_number(sh)
                 for e in sh.entities.values():
                     if tags_mod.is_device(e) and not tags_mod.locked(e):
-                        got = tags_mod.split(e.attrs.get("TAG", ""), e.defn.prefix)
+                        # (a tag of the other standard's letters is kept: its own)
+                        got = tags_mod.split(e.attrs.get("TAG", ""),
+                                             tags_mod.tag_prefix(p, e))
                         assert got is not None and got[0] == page, \
                             "%s on sheet %s after Update numbers" % (e.attrs.get("TAG"), page)
                         k = e.attrs["TAG"]
@@ -2579,17 +2598,21 @@ def random_editing(log, out, ops, seed, drawing=None):
                 page = p.sheet_number(sh)
                 mine = [e for e in sh.entities.values()
                         if tags_mod.is_device(e) and not tags_mod.locked(e)]
-                for prefix in {e.defn.prefix for e in mine}:
+                # (by the project's prefixes: an IEC project's letters, K for its relays,
+                # timers and PLC modules alike; a count held by any device whose tag is made
+                # of the prefix)
+                for prefix in {tags_mod.prefix_for(p, e.defn) for e in mine}:
                     held = set()
                     for sx in p.sheets:
                         for e in sx.entities.values():
-                            if not tags_mod.is_device(e) or e.defn.prefix != prefix or \
+                            if not tags_mod.is_device(e) or \
+                                    tags_mod.tag_prefix(p, e) != prefix or \
                                     (sx is sh and not tags_mod.locked(e)):
                                 continue
                             got = tags_mod.split(e.attrs.get("TAG", ""), prefix)
                             if got and got[0] == page:
                                 held.add(got[1])
-                    group = [e for e in mine if e.defn.prefix == prefix]
+                    group = [e for e in mine if tags_mod.prefix_for(p, e.defn) == prefix]
                     want, n = [], 0
                     while len(want) < len(group):
                         n += 1
@@ -3140,7 +3163,14 @@ def random_editing(log, out, ops, seed, drawing=None):
         if got is None and WN.by_io_address(p):
             return                          # (numbered by a PLC point's address, O:3/0)
         if base == now[0].num:
-            why = BC.own_wire_number_wrong(p, sh, now[0], WN.split)
+            # (of the first page with a source arrow of its name: a sheet duplicated with its
+            # arrows has a second source of one name, and the wires they join are one group,
+            # numbered from the first sheet in order; seed 2901, 0.29: page 51's source 29009,
+            # a copy of page 29's)
+            first = next(p.sheet_number(x) for x in p.sheets if any(
+                c.block == WN.ARROWS[0] and c.attrs.get("TAG") == src.attrs["TAG"]
+                for c in x.inserts()))
+            why = BC.own_wire_number_wrong(p, sh, now[0], WN.split, first)
             assert why is None, why
         BC.CHECKED["a source's wire keeps its page's number"] += 1
 
@@ -4676,10 +4706,12 @@ def random_editing(log, out, ops, seed, drawing=None):
                     continue
                 pts = {}
                 for t in d.entities:
-                    m = isinstance(t, M.Text) and re.match(r"(\S+)\s+(IN|OUT)[ -](\d+)$",
-                                                           t.text.strip())
+                    # (0.29: Rockwell's point labels, of any case, an analog channel's V or I
+                    # terminal too: "IN-0", "In 0", "V in 0+", "IOUT-2"; never a return)
+                    m = isinstance(t, M.Text) and re.match(
+                        r"(\S+)\s+(?:[VI] ?)?(IN|OUT)[ -](\d+)\+?$", t.text.strip(), re.I)
                     if m:
-                        pts.setdefault(m.group(1), (m.group(2)[0], int(m.group(3))))
+                        pts.setdefault(m.group(1), (m.group(2)[0].upper(), int(m.group(3))))
                 addr_sym = any(a["attr"] == "ADDR" for a in d.attr_texts)
                 for name, q in e.pin_points():
                     if addr_sym:
@@ -4710,8 +4742,11 @@ def random_editing(log, out, ops, seed, drawing=None):
         o = clear_of_drawing(k)
         if o is None or not wirenums.enabled(p):
             return
+        # (0.29: Rockwell's modules by their terminal numbers, the points not in pin order,
+        # an analog channel's V and I terminals both its point)
         block = rnd.choice(["1734-OB8E module", "1734-IB8 module", "1734-OE4C module",
-                            "PLC digital output module, 16 points"])
+                            "PLC digital output module, 16 points", "1769-IQ16 module",
+                            "1756-OF8 module", "5069-OB16 module"])
         slot = rnd.choice(["", "1", "3", "7", "12"])
         before = set(s.entities)
         v.run(C.InsertCmd, lib.get("symbol", block), {"SLOT": slot} if slot else {})
@@ -4881,6 +4916,70 @@ def random_editing(log, out, ops, seed, drawing=None):
             got, want, p.sheet_number(src), p.sheet_number(to))
         BC.CHECKED["paste with Enter: where it was copied from" +
                    (" (another sheet)" if to is not src else "")] += 1
+
+    def op_circuit():
+        # (0.29: Save circuit on a handful of objects, then Insert circuit, as the owner would:
+        # select, Save circuit..., its base point (Enter: the lower left corner, or clicked),
+        # a name; Insert circuit..., R and S as wanted, where it goes. What it must have done
+        # worked out from the circuit and the project before: BC.circuit_placed)
+        ents = some(rnd.randint(1, 8))
+        kids = {e.attrs.get("PARENT") for e in s.inserts() if e.attrs.get("PARENT")}
+        devs = [e for e in s.inserts() if tags_mod.is_device(e) and e.attrs.get("DEV") in kids]
+        if devs and rnd.random() < 0.6:
+            # (a device with its contacts on this sheet, as a rung is saved, and maybe one
+            # contact without its device)
+            dev = rnd.choice(devs)
+            ents += [dev] + [e for e in s.inserts()
+                             if e.attrs.get("PARENT") == dev.attrs["DEV"] and
+                             rnd.random() < 0.8]
+        ents = list({e.id: e for e in ents}.values())
+        if not ents:
+            return
+        v.set_selection({e.id for e in ents})
+        name = "Battery circuit %d" % rnd.randint(1, 4)
+        win.ask_circuit_details = lambda name_="": (name, rnd.choice(["Control", ""]), "")
+        try:
+            v.run(C.SaveCircuitCmd)
+            if rnd.random() < 0.5:
+                v.input_text("")
+            else:
+                v.input_text(fmt(pt()))
+        finally:
+            win.__dict__.pop("ask_circuit_details", None)
+        finish()
+        got = win.library.circuits()[0].get(name)
+        assert got is not None, "Save circuit didn't keep %s" % name
+        if rnd.random() < 0.3:
+            to = rnd.choice(p.sheets)
+            if to is not v.sheet():
+                v.show_sheet(to.id)
+        sh = v.sheet()
+        v.set_selection(set())
+        before = {"ids": set(sh.entities), "undo": len(p.undo_stack),
+                  "devs": {e.attrs.get("DEV") for x in p.sheets for e in x.inserts()},
+                  "links": set(wirenums.connectors(p))}
+        win.ask_circuit = lambda: got
+        try:
+            win.insert_circuit()
+        finally:
+            win.__dict__.pop("ask_circuit", None)
+        assert isinstance(v.cmd, C.InsertCircuitCmd), "Insert circuit didn't start"
+        angle, scale = 0.0, 1.0
+        for _i in range(rnd.randint(0, 3)):
+            v.input_text("R")
+            angle = (angle + 90.0) % 360.0
+        if rnd.random() < 0.3:
+            scale = rnd.choice([0.5, 2.0, 1.5])
+            v.input_text("S")
+            v.input_text("%g" % scale)
+        at = pt()
+        v.input_text(fmt(at))
+        assert v.cmd is None, "Insert circuit still running after its point"
+        BC.circuit_placed(p, sh, got, at, angle, scale, before)
+        if rnd.random() < 0.2:
+            p.undo()
+            assert set(sh.entities) == before["ids"], "Undo left part of the circuit"
+            BC.CHECKED["circuit undone in one step"] += 1
 
     def op_same_name_pins():
         # a symbol with two pins of one name, a wire on each pin, off on its own; moved,
@@ -5742,6 +5841,79 @@ def random_editing(log, out, ops, seed, drawing=None):
         for _i in range(rnd.randint(1, 4)):
             p.redo()
 
+    def op_symbol_standard():
+        # (0.29) the project's symbol standard changed (Project properties, Schematic): JIC
+        # or IEC 60617, whose tags are made of IEC 81346-2 letters. With unlocked devices
+        # tagged in the other standard's letters it asks "Retag the unlocked devices with the
+        # <new> letters?" (the owner, Nov 27 2026), answered here at random: Yes retags them
+        # all in the one Undo step (locked tags untouched, contacts following), No keeps every
+        # tag, Cancel changes nothing; with none, it doesn't ask
+        from unittest import mock
+        from PySide6.QtWidgets import QComboBox
+        from kanzonascad import dialogs
+
+        def device_tags():
+            return {(sh.id, e.id): (e.attrs.get("TAG"), tags_mod.locked(e)) for sh in p.sheets
+                    for e in sh.entities.values() if tags_mod.is_device(e)}
+        before, whole, steps = device_tags(), norm(p.to_dict()), len(p.undo_stack)
+        now = p.settings.get("symbol_standard", "jic")
+        new = "jic" if now == "iec" else "iec"
+        retag = {(sh.id, e.id) for sh, e in tags_mod.to_retag(p, new)}
+        answer = rnd.choice([QMessageBox.Yes, QMessageBox.No, QMessageBox.Cancel])
+        asked = []
+
+        def exec_(dlg):
+            box = dlg.findChild(QComboBox, "symbol_standard")
+            box.setCurrentIndex(box.findData(new))
+            return QDialog.Accepted
+
+        def question(_parent, _title, text, *_a):
+            asked.append(text)
+            return answer
+        with mock.patch.object(dialogs.QDialog, "exec", exec_), \
+                mock.patch.object(QMessageBox, "question", side_effect=question):
+            win.project_properties(1)
+        assert bool(asked) == bool(retag), "asked %r with %d to retag" % (asked, len(retag))
+        if asked and answer == QMessageBox.Cancel:
+            assert norm(p.to_dict()) == whole and len(p.undo_stack) == steps, \
+                "Cancel changed the project"
+            BC.CHECKED["the symbol standard: Cancel changed nothing"] += 1
+            return
+        assert p.settings.get("symbol_standard") == new, p.settings.get("symbol_standard")
+        after = device_tags()
+        for k, (tag, lock) in before.items():
+            got = after.get(k)
+            if k in retag and answer == QMessageBox.Yes:
+                sh = p.sheet_by_id(k[0])
+                e = sh.entities[k[1]]
+                pre = tags_mod.prefix_for(p, e.defn)
+                assert got[1] is False and tags_mod.split(got[0], pre) is not None, \
+                    "%s not retagged with %s: %r" % (tag, pre, got)
+            else:
+                assert got == (tag, lock), "the symbol standard changed %r to %r" % (tag, got)
+        if retag and answer == QMessageBox.Yes:
+            assert not tags_mod.to_retag(p), "left in the other letters: %r" % [
+                e.attrs.get("TAG") for _s, e in tags_mod.to_retag(p)][:6]
+            index = tags_mod.devices(p)
+            for sh in p.sheets:
+                for e in sh.inserts():
+                    if tags_mod.is_child(e) and e.attrs.get("PARENT") in index:
+                        par = index[e.attrs["PARENT"]][1]
+                        assert e.attrs.get("TAG") == par.attrs.get("TAG"), \
+                            "contact %s of %s" % (e.attrs.get("TAG"), par.attrs.get("TAG"))
+            BC.CHECKED["the symbol standard: Yes retagged the unlocked devices"] += 1
+        elif retag:
+            BC.CHECKED["the symbol standard: No kept the tags"] += 1
+        else:
+            BC.CHECKED["the symbol standard changed, nothing to ask, the tags kept"] += 1
+        assert len(p.undo_stack) == steps + 1, "%d steps" % (len(p.undo_stack) - steps)
+        done = norm(p.to_dict())
+        p.undo()
+        assert norm(p.to_dict()) == whole, "one Undo didn't restore the symbol standard's change"
+        p.redo()
+        assert norm(p.to_dict()) == done, "Redo didn't give the symbol standard's change back"
+        BC.CHECKED["the symbol standard: one Undo restored everything"] += 1
+
     table = [(op_wire, 18), (op_bus, 3), (op_symbol, 14), (op_line, 4), (op_text, 3),
              (op_move, 6), (op_copy, 4), (op_rotate, 3), (op_erase, 4), (op_trim, 6),
              (op_trim_plain, 2), (op_delwire, 3), (op_delcomp, 4), (op_clean, 2),
@@ -5757,7 +5929,7 @@ def random_editing(log, out, ops, seed, drawing=None):
              (op_same_name, 3), (op_lock_file, 1), (op_block_piece_color, 1),
              (op_paste_same_place, 2),
              (op_dash_poly, 2), (op_join, 3), (op_bus_swap, 2), (op_fp_label_hidden, 2),
-             (op_strips, 4), (op_panel_wiring, 6)]
+             (op_circuit, 3), (op_symbol_standard, 2), (op_strips, 4), (op_panel_wiring, 6)]
     fns = [f for f, w in table for _i in range(w)]
     roundtrips = 0
     path = os.path.join(out, "random.kzcad")
@@ -6172,6 +6344,37 @@ def mixed_project(win):
     got = {t.text for t in panelwiring.labels(p, panel)}
     assert any(t.endswith("TB1:1") or "→" in t for t in got) and len(got) >= 2, got
     v.show_sheet(p.sheets[0].id)
+    # (0.29) IEC symbols (a coil and its contact) and an Allen-Bradley module, then a saved
+    # circuit of the coil's rung placed again through the commands, as the owner would
+    s = p.sheets[0]
+    v.run(C.InsertCmd, lib.get("symbol", "Relay coil (IEC)"), {})
+    type_in(v, "20,10")
+    v.run(C.InsertCmd, lib.get("symbol", "Contact NO (IEC)"), {})
+    type_in(v, "17,10")
+    iec = [e for e in s.inserts() if e.block == "Relay coil (IEC)"][0]
+    type_in(v, iec.attrs["TAG"])
+    v.run(C.InsertCmd, lib.get("symbol", "1769-IF4 module"), {"TAG": "PLC2", "SLOT": "3"})
+    type_in(v, "26,8")
+    while v.cmd is not None:
+        v.cmd.enter()
+    rung = {e.id for e in s.inserts() if e.block in ("Relay coil (IEC)", "Contact NO (IEC)")}
+    v.set_selection(rung)
+    win.ask_circuit_details = lambda name="": ("Mixed rung", "Control", "battery")
+    try:
+        v.run(C.SaveCircuitCmd)
+        v.input_text("")
+    finally:
+        win.__dict__.pop("ask_circuit_details", None)
+    circuit = lib.circuits()[0]["Mixed rung"]
+    win.ask_circuit = lambda: circuit
+    try:
+        win.insert_circuit()
+    finally:
+        win.__dict__.pop("ask_circuit", None)
+    type_in(v, "17,11")
+    coils = [e for e in s.inserts() if e.block == "Relay coil (IEC)"]
+    assert len(coils) == 2 and len({e.attrs["TAG"] for e in coils}) == 2, coils
+    v.set_selection(set())
     # (0.21) a picture kept in the project (a logo), on the first sheet
     fileio.import_picture(p, p.sheets[0], picture_file(tempfile.mkdtemp()), (13.0, 8.0))
     return p

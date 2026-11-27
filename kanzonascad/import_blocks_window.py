@@ -1,9 +1,9 @@
 """Library > Import blocks from folder...: the window that lists the blocks found in a folder
 of DWG and DXF files (or one drawing), and puts the ticked ones in the library
-(block_import.py does the reading and writing, without Qt). Files are read one at a time and
-blocks written a few at a time on threads (the event loop turning meanwhile: only the
-library's files are written there), under a progress window with Cancel, so the
-program never stops answering."""
+(block_import.py does the reading and writing, without Qt). Files are read a few ahead on
+threads and their blocks made one file at a time, and blocks written a few at a time on
+threads (the event loop turning meanwhile: only the disk is the threads'), under a progress
+window with Cancel, so the program never stops answering."""
 
 import os
 import time
@@ -24,6 +24,7 @@ CHOICE_LABELS = (("skip", "Skip it"), ("replace", "Replace it"), ("both", "Keep 
 THUMB = 40
 FILL_ROWS = 25          # (rows listed between two turns of the event loop)
 WRITERS = 8             # (block files written at once: put_in)
+READ_AHEAD = 4          # (files read ahead at once: scan)
 COLUMNS = ("Block", "Kind", "Pins", "File", "Status", "Name already in the library")
 
 
@@ -67,18 +68,38 @@ class Progress:
 
 def scan(parent, paths):
     """The blocks of these files (Found rows), read one file at a time; None when Cancel was
-    pressed. Returns (rows, the longest step in seconds)."""
+    pressed. Returns (rows, the longest step in seconds).
+
+    The disk is the threads' (block_import.load: a DXF's bytes, READ_AHEAD files ahead; a DWG
+    read whole), the event loop turning while it waits for one; the event loop makes the
+    blocks of each file from what was read (block_import.read_blocks), with no disk: a file
+    just written can take a while to open, the computer's virus scanner looking at it first
+    (0.29: one step of 0.12 s on the Windows build, the others 0.01 s)."""
+    from collections import deque
+    from concurrent.futures import ThreadPoolExecutor
     prog = Progress(parent, "Reading %d drawing%s..." % (len(paths), "" if len(paths) == 1
                                                           else "s"), len(paths))
     rows = []
+    pool = ThreadPoolExecutor(READ_AHEAD)
+    ahead = deque()             # [(path, its load's future)], in order
+    todo = iter(paths)
     try:
-        for i, (path, got) in enumerate(BI.read_all(paths)):
-            rows += got
+        for i in range(len(paths)):
+            while len(ahead) < READ_AHEAD:
+                path = next(todo, None)
+                if path is None:
+                    break
+                ahead.append((path, pool.submit(BI.load, path)))
+            path, fut = ahead.popleft()
+            _wait(prog, fut)
+            rows += BI.read_blocks(path, fut.result())
             if not prog.tick(i + 1, "Reading %s (%d of %d)..." % (
                     os.path.basename(path), i + 1, len(paths))):
                 return None, prog.longest
         return rows, prog.longest
     finally:
+        # (Cancel: the reads not started aren't; one under way finishes on its own)
+        pool.shutdown(wait=False, cancel_futures=True)
         prog.close()
 
 

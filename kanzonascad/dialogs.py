@@ -380,6 +380,37 @@ def _color_button(color):
     return b
 
 
+# (the letters Yes to ask_retag gives, by the standard switched to)
+RETAG_LETTERS = {"iec": "IEC 81346-2", "jic": "JIC"}
+
+
+def ask_retag(parent, project, standard):
+    """The project's symbol standard is being changed to standard: asks "Retag the unlocked
+    devices with the <new> letters?" when some unlocked devices have tags made of the other
+    standard's letters. True: retag them (tags.retag_letters); False: keep them (or there are
+    none: not asked); None: Cancel, the whole change cancelled."""
+    from .tags import make, prefix_for, split, tag_prefix, to_retag
+    found = to_retag(project, standard)
+    if not found:
+        return False
+    e = found[0][1]
+    got = split(e.attrs.get("TAG", ""), tag_prefix(project, e, standard))
+    r = QMessageBox.question(
+        parent, "Project properties",
+        "Retag the unlocked devices with the %s letters?\n\n%d %s of the other letters (%s "
+        "becomes %s when that number is free). Their contacts, terminals and "
+        "cross-references follow, in the same Undo step; locked tags stay as they are.\n\n"
+        "No: they keep their tags (Renumber sheet gives them the new letters later). Cancel: "
+        "nothing is changed." % (
+            RETAG_LETTERS.get(standard, standard), len(found),
+            "device has a tag" if len(found) == 1 else "devices have tags", e.attrs["TAG"],
+            make(prefix_for(project, e.defn, standard), got[0], got[1])),
+        QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, QMessageBox.Yes)
+    if r == QMessageBox.Yes:
+        return True
+    return False if r == QMessageBox.No else None
+
+
 def project_properties(parent, project, tab=0):
     """What belongs to the whole project, in four tabs: General (title block fields,
     revision, grid references, text size), Schematic (sheet size and zones, tags, wires),
@@ -495,6 +526,20 @@ def project_properties(parent, project, tab=0):
     tag_h.setSuffix(" in")
     tag_h.setValue(float(st["tag_height"]))
     form.addRow("Device tag height", tag_h)
+    # (the owner, 0.22.1: "also put in IEC symbols"; a project's own, JIC to start)
+    from .symbols_iec import STANDARDS, standard_of
+    std = QComboBox()
+    std.setObjectName("symbol_standard")
+    for key, label in STANDARDS.items():
+        std.addItem(label, key)
+    std.setCurrentIndex(max(std.findData(standard_of(project)), 0))
+    std.setToolTip("The symbols Insert symbol offers for this project: JIC/NFPA (US) or IEC "
+                   "60617, and the letters its device tags are made of: US prefixes (CR, M, "
+                   "PB...) or IEC 81346-2 letters (K, Q, S...). Symbols already placed stay as "
+                   "they are; OK asks whether to retag the unlocked devices with the new "
+                   "letters when some have the other ones. Your own symbols are offered "
+                   "either way.")
+    form.addRow("Symbol standard", std)
     wire_nums = QCheckBox("Number wires (page number + 3 digits: 6001, 6002...)")
     wire_nums.setChecked(bool(st.get("wire_numbers", True)))
     form.addRow("Wire numbers", wire_nums)
@@ -849,6 +894,7 @@ def project_properties(parent, project, tab=0):
     settings["show_border"] = show_border.isChecked()
     settings["show_title_block"] = show_tb.isChecked()
     settings["tag_height"] = tag_h.value()
+    settings["symbol_standard"] = std.currentData()
     settings["wire_numbers"] = wire_nums.isChecked()
     settings["wire_numbers_io"] = wire_io.isChecked()
     settings["wire_number_height"] = num_h.value()
@@ -893,6 +939,13 @@ def project_properties(parent, project, tab=0):
     if fields == project.fields and fmt == project.zone_format and settings == st \
             and not changed_colors and not swap.isChecked() and not taps_all.isChecked():
         return False
+    retag = False
+    if settings["symbol_standard"] != standard_of(project):
+        # (the owner, Nov 27 2026: switching asks, when tags of the other standard's letters
+        # would be left; Cancel cancels the whole change)
+        retag = ask_retag(parent, project, settings["symbol_standard"])
+        if retag is None:
+            return False
     with project.edit("Project properties") as ed:
         if fields != project.fields or fmt != project.zone_format:
             ed.project_fields(fields, fmt)
@@ -925,6 +978,9 @@ def project_properties(parent, project, tab=0):
             settings["tb_kept"] = kept
         if settings != st:
             ed.project_settings(settings)
+        if retag:
+            from .tags import retag_letters
+            retag_letters(ed, project)
         if taps_all.isChecked():
             # (every tap follows the project's tap numbers again: its own choice cleared, its
             # number given again; the owner, 0.18.4: "I had already changed all these wires

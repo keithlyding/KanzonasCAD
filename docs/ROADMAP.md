@@ -383,6 +383,113 @@ nobody understands).
 6. Saved circuits dropped in whole ("not a bad idea"), and more symbols and footprints (0.29):
    "lean heavy on the Allen Bradley stuff", and IEC symbols too (see 0.22.1). Templates
    library: not now.
+   Done in 0.29 (decisions marked "decided here" are open to the owner's change):
+   - **Saved circuits** (Library > Save circuit..., Insert circuit...): one file a circuit in
+     the library's circuits folder, in either library as blocks and parts are, holding its
+     objects around its base point and its own copies of their blocks and layers. Decided
+     here: its picture is drawn from the circuit itself when the browser lists it, not kept as
+     a picture file beside it (nothing to fall out of step when it is renamed, or synced
+     half-way); its base point is clicked as Make block's is (Enter: the lower left corner);
+     R and S (a typed scale) as it is placed, no flip (a flipped rung reads backwards). Placed,
+     its devices take the sheet's lowest free tags (a locked tag kept), contacts whose device
+     came with it link to the new copy, one whose device was left out is placed unlinked with
+     its tag cleared (decided here: its old tag would link it to an unrelated device of the
+     project), unlocked wire numbers go (the sheet numbers them), connectors and arrows get
+     new names, the same within the circuit (decided here: a pair stays a pair; a lone one
+     waits for its other end), one undo step. The owner confirmed (Nov 27 2026): a lone contact
+     stays unlinked with its tag cleared.
+   - **More symbols and footprints, leaning on Allen-Bradley**: symbols drawn here in the
+     JIC style (motor protection circuit breaker, electronic overload and its NO contact,
+     3-position selector and its contacts, pilot light with its color letter, PLC modules of
+     ControlLogix, CompactLogix, Compact 5000 and POINT I/O drawn whole); built-in parts by
+     catalog number (100-C, 140M, E300, 700-HA, 800F contact blocks, 1492-J, 1606-XLP,
+     PowerFlex 525, the PLC modules, controllers and chassis), read-only as the built-in
+     blocks are (a part of yours with the same id takes its place). Catalog numbers only
+     where their numbering is sure (E300's depends on three modules: left blank);
+     footprints only where none generic is near: PowerFlex 525 frames at Rockwell's
+     published nominal sizes, the PLC modules and chassis as "(approximate)"; parts use the
+     generic footprints otherwise (the owner confirmed all three, Nov 27 2026: as built).
+     PLC modules' pins (the owner, Nov 27 2026: "Both"): named by Rockwell's terminal (screw)
+     number as its wiring diagram prints it, the point beside it ("2  IN 0"), commons and
+     supplies too, only from Rockwell's own document, its publication named
+     (allen_bradley.TERMINALS); a module not confirmed stays by point. Wire numbers by
+     address and Import I/O list read the point from the text beside the pin. Done (Nov 27
+     2026): all 13 modules by their terminals, from Rockwell's installation instructions and
+     user manuals read through mirror sites (each publication, edition, page and URL in
+     allen_bradley.py). The owner's rules: pin name = the terminal number, the point beside
+     it as Rockwell prints it; 1756, 1734 and 5069 by their printed numbers (5069 0-17; the
+     5069-OB16's counted from the top); 1769, which prints none, by position 1-18 from the
+     top, said so in the manual; a pin for every screw, NC / No Connect / Not used ones
+     named so, none for the 1769-OF2's blacked-out positions; commons and supplies pins too.
+     An analog channel's V and I terminals are both its point; the wiring list and terminal
+     labels name the screw (PLC1:11). Footprints stay "(approximate)", no screw positions.
+   - **IEC 60617 symbols as a project's symbol standard** (Project properties, Schematic:
+     JIC/NFPA (US) or IEC 60617; every project from before and a new one JIC): a core set
+     of 30 drawn here (coils, contacts and timed ones, pushbuttons, E-stop, selector, fuse,
+     breaker, disconnector, thermal overload and its contact, lamp, motors 1~ and 3~,
+     solenoid, transformer, 3-pole power devices, terminal, PE). Insert symbol offers the
+     project's set in place of the other one's equivalents; the rest (PLC, drives,
+     connectors) in both. Decided here: laid out for horizontal rungs as the JIC set; the
+     symbols keep the JIC prefixes (CR, M, PB...), which say what kind of device each is to
+     the program.
+   - **IEC 81346-2 letter codes in an IEC project** (the owner, Nov 27 2026, into 0.29):
+     tags made of the device's class letter instead of the US prefix (tags.prefix_for), by
+     what it does (IEC 81346-2:2019 Table 1, from public summaries; the standard itself not
+     read): K control and timing relays and PLC modules; Q contactors (coil and main
+     contacts one device, one tag: 81346-2 puts power switching under Q, signal relays
+     under K), breakers, motor protection breakers, disconnects; S pushbuttons, selectors,
+     E-stops; F fuses and overload relays; P pilot lights; M motors and solenoids; T
+     transformers, power supplies and drives; X terminal strips (X601) and distribution
+     blocks. Decided here, open to the owner's change: limit, pressure, temperature and
+     float switches B (81346-2: sensing a condition), not S as the owner's list had them;
+     power supplies T (converting AC to DC), not G; PLC K, not A; drives T; solenoids M.
+     Devices of one letter share its counts on a page; your own prefixes are kept. A tag of
+     the other letters (the project's standard changed, No to retagging) is kept and follows
+     its page until Renumber sheet; copies take the project's letters. No project from before had IEC
+     symbols, so nothing is renumbered on open. The owner confirmed (Nov 27 2026): the
+     letters as built (B for sensing switches, T for power supplies and drives, K for PLCs);
+     terminal strips by page (X601, its terminals X601-1); switching the standard asks
+     "Retag the unlocked devices with the <new> letters?" (Yes retags them all in the same
+     Undo step, each keeping its page and count when free, contacts, terminals,
+     cross-references and arrows following, locked tags never changed; No keeps them;
+     Cancel cancels the whole Project properties change; not asked when there are none:
+     tags.retag_letters, through Update numbers' fix_sheet); a device or contact with no tag
+     yet shows the project's letter, K?, X?, Q? (BlockDef.tag_letter, set by the project).
+     PLC modules' screw numbers: entered (allen_bradley.TERMINALS, above). Still to come: vertical (IEC-style,
+     top-to-bottom) layouts, and IEC versions of the limit, pressure, temperature and float
+     switches, the fused disconnect and starter combinations, drive terminals and the
+     distribution blocks.
+7. **UDTs** (0.30, the owner, Nov 26 2026; named "UDT" as in PLCs and Ignition, the owner's
+   choice): a circuit type built on saved circuits, for example a whole motor circuit
+   (disconnect, manual starter, VFD, terminal blocks, motor).
+   - **Choices** (the manual starter swappable with fuses), **optional parts** that can be
+     added or left out (line and load reactors), and **ratings** for every device.
+   - Placed in any direction; its devices, wires and labels become ordinary objects with
+     their own tags, wire numbers, cross-references and parts, "as if it was a bunch of
+     individual parts like normal" (so reports, terminal strips and the battery see them as
+     any other), tied together by a hidden group id.
+   - Proposed (to confirm with the owner when it is started):
+     - A placed UDT keeps its type and choices: select it, change a choice (fuses for the
+       starter, add a load reactor) and it is rebuilt in place, devices that stay keeping
+       their tags and wire numbers.
+     - A device edited by hand inside one keeps the edit and the rebuild warns; Detach makes
+       it plain parts.
+     - A change to the type reaches placed ones only through a command (Update from type)
+       that shows what will change first, not silently.
+   - **Built-in UDTs and your own** (the owner, Nov 26 2026: "If I have two different
+     style motor circuits, I would use two different UDTs"): a few UDTs come with the
+     program, read-only as the built-in blocks and parts are (editing one saves your own
+     copy); you make your own from a saved circuit and keep them in either library folder.
+   - **Ratings are worked out automatically and can be overridden** (the owner: "I'm good
+     with overridable auto calculations"): from the motor's HP and voltage, the full-load
+     current from the NEC motor tables (430.247-430.250), then each device's rating from it
+     by a rule the UDT holds (for example a dual-element fuse at a percent of the table
+     current, per Table 430.52; the percent is the UDT's, editable, so a shop's own rule or
+     a drive maker's fuse table can be used). Any device's rating can be typed over; an
+     overridden one is kept through a rebuild and shown as overridden. Built-in tables are
+     marked to check against the code edition in force.
+   - Two phases: choices, optional parts and rebuild in place first; values and ratings
+     second.
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,
@@ -647,7 +754,9 @@ cross-references, wire numbers, off-sheet connectors, more symbols), then the pa
   X?TERMnn wire-connection attributes, a .wdp listing the sheets, and DWG files (ezdxf writes
   only DXF). The owner has AutoCAD Electrical to test it with if it comes back.
 - US practice: JIC/NFPA symbols, horizontal rungs, grid-style references (`6-D1`), zones A-H
-  down the left and 1-10 along the top to start (both editable).
+  down the left and 1-10 along the top to start (both editable). IEC 60617 symbols as a
+  project's choice since 0.29 (Symbol standard; the owner, 0.22.1: "also put in IEC
+  symbols"), JIC to start.
 - Drawing area black by default; PDF black on white to start. Export to PDF asks color or
   black and white in its window (Save as type) and keeps the last pick (the owner, 0.26: "the
   Export PDF window gets a Color / Black and white choice that remembers the last pick"; the

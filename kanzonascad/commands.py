@@ -3188,6 +3188,130 @@ class MakeBlockCmd(Command):
 PAIR_LIST, PAIR_PICK = "*LIST", "*PICK"     # (an arrow's pairing buttons: no name is either)
 
 
+class SaveCircuitCmd(Command):
+    """Save circuit: the selected objects (symbols, wires, text, a ladder...) kept in the
+    library as a circuit to place again whole (Insert circuit...): its base point (Enter: the
+    lower left corner of what is selected), then its name and category (circuits.py)."""
+    name, title = "SAVECIRCUIT", "Save circuit"
+    selects = True
+    repeatable = False
+
+    def begin(self):
+        self.ents = _selected(self.ctx)
+        if not self.ents:
+            self.finish()
+            return
+        self.ctx.prompt("Specify base point (the point the circuit is placed by; Enter: its "
+                        "lower left corner)")
+
+    def enter(self):
+        if self.selecting():
+            return Command.enter(self)
+        bb = None
+        for e in self.ents:
+            bb = G.bbox_union(bb, e.bbox())
+        self.point((bb[0], bb[1]))
+
+    def point(self, p):
+        self.base = p
+        host = getattr(self.ctx, "host", None)
+        if host is not None and hasattr(host, "save_circuit_from"):
+            host.save_circuit_from(self.ents, p)
+        self.finish()
+
+
+class InsertCircuitCmd(Command):
+    """Place a saved circuit (Insert circuit...) by its base point: R turns it 90 degrees, S
+    gives it a scale. One undoable step: its devices retagged for this sheet, its contacts
+    linked to its own devices' new copies, its wires numbered as this sheet's
+    (circuits.place)."""
+    name, title = "INSERTCIRCUIT", "Insert circuit"
+    repeatable = True       # (Enter: the same circuit again)
+
+    def __init__(self, ctx, circuit):
+        super().__init__(ctx)
+        self.repeat_args = (circuit,)
+        self.circuit = circuit
+        self.angle, self.scale = 0.0, 1.0
+        self.asking_scale = False
+        self._shown = None              # ((angle, scale, revision), objects around (0, 0))
+
+    def begin(self):
+        self._ask()
+
+    def _ask(self):
+        if self.asking_scale:
+            self.ctx.prompt("Scale factor <%g>" % self.scale)
+            return
+        self.ctx.prompt("Specify insertion point for circuit %s" % self.circuit.name,
+                        [("Rotate 90", "R"), ("Scale", "S")])
+
+    def text(self, s):
+        k = s.strip().upper()
+        if self.asking_scale:
+            return False
+        if k == "R":
+            from .circuits import turned
+            self.angle = turned(self.angle)
+            return True
+        if k == "S":
+            self.asking_scale = True
+            self._ask()
+            return True
+        return False
+
+    def number(self, v):
+        if not self.asking_scale:
+            return False
+        from .circuits import fits
+        if fits(v):
+            self.scale = float(v)
+            self.asking_scale = False
+            self._ask()
+        else:
+            self.ctx.message("A scale from 0.001 to 1000")
+        return True
+
+    def enter(self):
+        if self.asking_scale:
+            self.asking_scale = False       # (Enter: the scale as it was)
+            self._ask()
+            return
+        self.finish()
+
+    def _around(self):
+        """The circuit turned and scaled as it is now, around (0, 0) (kept while those and
+        the project stay the same: a mouse move only slides it)."""
+        key = (self.angle, self.scale, self.ctx.project.revision)
+        if self._shown is None or self._shown[0] != key:
+            from .circuits import preview
+            self._shown = (key, preview(self.ctx.project, self.circuit, (0.0, 0.0), self.angle,
+                                        self.scale))
+        return self._shown[1]
+
+    def shift(self, p):
+        """(objects, dx, dy): the preview slid to p (drawn once, not rebuilt per move)."""
+        if self.asking_scale:
+            return None
+        self.from_pt = p                # (the view's rubber band line: none, it ends here)
+        return self._around(), p[0], p[1]
+
+    def preview(self, p):
+        return []
+
+    def point(self, p):
+        if self.asking_scale:
+            return
+        from .circuits import place
+        sheet = self.ctx.sheet()
+        with self.ctx.edit("Insert circuit %s" % self.circuit.name) as ed:
+            made = place(ed, self.ctx.project, sheet, self.circuit, p, self.angle, self.scale)
+            _cut_under(self.ctx, ed, sheet, made)
+        self.ctx.set_selection({e.id for e in made if e.id in sheet.entities})
+        self.ctx.message("Circuit %s placed: %d object(s)" % (self.circuit.name, len(made)))
+        self.finish()
+
+
 class InsertCmd(Command):
     """Place a symbol or footprint (from the Library panel): pick where; R turns it 90
     degrees, F flips it side to side, V upside down. A symbol with pins is held by its first pin (L1, 1, A1...), so the
@@ -3443,13 +3567,24 @@ class InsertCmd(Command):
             return tags.link_footprint(self.attrs, device, self.defn)
         return tags.link_attrs(self.attrs, device)
 
-    def _make(self, p, defn, mirror=None):
+    def _make(self, p, defn, mirror=None, attrs=None):
         layer = "SYMBOLS" if self.defn.kind == "symbol" else "PANEL"
         tag_h = self.ctx.project.settings.get("tag_height") * self.ctx.sheet().k() \
             if self.defn.kind == "symbol" else None
         return M.Insert(defn.name, p, self.angle, 1.0,
-                        self.mirror if mirror is None else mirror, self.attrs, defn,
-                        tag_h, layer=layer)
+                        self.mirror if mirror is None else mirror,
+                        self.attrs if attrs is None else attrs, defn, tag_h, layer=layer)
+
+    def _ghost_attrs(self):
+        """The attributes the ghost shows: with no tag yet, in a project of IEC symbols, the
+        project's letter and "?" (K?, as the copy placed shows it: Project.sync_tag_letters;
+        the block from the library still says CR?)."""
+        d = self.defn
+        if d.kind != "symbol" or not d.prefix or self.attrs.get("TAG"):
+            return None
+        from . import tags
+        pre = tags.prefix_for(self.ctx.project, d)
+        return None if pre == d.prefix else dict(self.attrs, TAG=pre + "?")
 
     def _on_rail(self, p):
         """A footprint's insertion point, its rail point locked onto a DIN rail it comes
@@ -3462,9 +3597,9 @@ class InsertCmd(Command):
 
     def preview(self, p):
         if self.pending is not None:
-            return [self._make(self.pending, self.defn, self.placed_mirror)]
+            return [self._make(self.pending, self.defn, self.placed_mirror, self._ghost_attrs())]
         at, m = self._fit(p)
-        return [self._make(self._on_rail(at), self.defn, m)]
+        return [self._make(self._on_rail(at), self.defn, m, self._ghost_attrs())]
 
     def _sized_to_bus(self, p):
         """A power distribution block (or its outlet) picked on a bus whose phases are spaced
@@ -3538,7 +3673,7 @@ class InsertCmd(Command):
                 return
             self.ctx.message("Nothing to link this %s to yet (a %s device): placed unlinked "
                              "(double-click it to link it later)"
-                             % (d.name.lower(), d.prefix or "parent"))
+                             % (d.name.lower(), tags.prefix_for(project, d) or "parent"))
         if d.kind == "footprint" and not self.attrs.get("TAG") and \
                 not self.attrs.get("PARENT"):
             # which schematic device it is: its tag shows on it, and follows it
@@ -6172,11 +6307,14 @@ COMMANDS = {
     "DELWIRE": (DeleteWireCmd, ["DW"]),
     "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),
     "DELCOMP": (DeleteComponentCmd, ["AEERASECOMP"]),
+    "SAVECIRCUIT": (SaveCircuitCmd, ["CIRCSAVE", "AECIRCSAVE"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)
 OTHER = {"U": "undo", "UNDO": "undo", "REDO": "redo", "QSAVE": "save", "SAVE": "save",
-         "OPEN": "open", "NEW": "new", "QUIT": "quit", "EXIT": "quit"}
+         "OPEN": "open", "NEW": "new", "QUIT": "quit", "EXIT": "quit",
+         "INSERTCIRCUIT": "insert_circuit", "CIRCUIT": "insert_circuit",
+         "AECIRCUIT": "insert_circuit"}
 
 
 def lookup(text):

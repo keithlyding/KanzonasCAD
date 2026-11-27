@@ -6,6 +6,47 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.29
+
+**New**
+- Saved circuits: select part of a schematic and use Library > Save circuit... to keep it in your
+  library with a name and category. Library > Insert circuit... shows your circuits with
+  pictures and places one whole. Its devices get new tags for the sheet, its contacts stay
+  linked to their own coils, and its wires get the sheet's numbers. Rename or delete circuits
+  in the same window.
+- More Allen-Bradley: symbols for a motor protection circuit breaker (140M), an electronic
+  overload (E300/193), a 3-position selector switch and a pilot light showing its color, and
+  ControlLogix, CompactLogix, Compact 5000 and POINT I/O modules. PowerFlex 525 footprints by
+  frame, and about 60 built-in parts by catalog number (100-C, 140M, 700-HA, 800F, 1492,
+  1606, PowerFlex 525, PLC modules) that Assign part offers.
+- PLC modules show their real terminals: the screw number with the input or output beside it
+  ("11  IN 8"), plus the commons, supplies and unused terminals, taken from Rockwell's wiring
+  diagrams. CompactLogix 1769 terminals are numbered by position from the top, because Rockwell
+  doesn't print numbers on them. Wires on a PLC point are still numbered by its address, and
+  the device wiring list and terminal wire labels name the screw (PLC1:11).
+- IEC symbols: set Symbol standard to IEC 60617 in Project properties and Insert symbol offers
+  IEC symbols (coils, contacts, pushbuttons, breakers, fuses, overloads, motors, lamps,
+  transformer, terminals, protective earth). Existing projects stay JIC.
+- In an IEC project, devices are tagged with IEC 81346-2 letters: K for relays, timers and PLC
+  modules, Q for contactors, breakers and disconnects, S for pushbuttons and selector switches,
+  B for limit, pressure, temperature and float switches, F for fuses and overloads, P for pilot
+  lights, M for motors, T for transformers, power supplies and drives, X for terminal strips. A
+  device with no tag yet shows its letter and a question mark (K?, X?).
+- Changing a project's Symbol standard asks whether to retag the unlocked devices with the new
+  letters: Yes retags them all in one step you can undo (CR601 becomes K601, TB601 becomes X601
+  with its terminals; contacts and cross-references follow, locked tags stay), No keeps their
+  tags, Cancel changes nothing.
+
+**Fixed**
+- IEC and Allen-Bradley contacts now show their pin numbers (13-14) on the drawing, as JIC ones
+  do.
+- In a narrow window every ribbon button now shrinks to its icon: Wire color label, Dimension
+  units, Edit array and Block tab kept their names, so the Schematic tab could run off a
+  1000-pixel-wide window.
+- Import blocks from folder stays responsive while it reads the drawings, even when the disk or
+  a virus scanner is slow to open them, and a large DWG no longer freezes the window while it's
+  read.
+
 ## 0.28
 
 **New**

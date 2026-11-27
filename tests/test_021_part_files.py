@@ -22,9 +22,9 @@ class PartFilesTest(unittest.TestCase):
         self.lib.save_part(a)
         files = sorted(os.listdir(os.path.join(self.lib.folder, "parts")))
         self.assertEqual(files, sorted([a.id + ".json", b.id + ".json"]))
-        self.assertEqual([p.catalog for p in self.lib.parts()], ["100-C09", "3RT2015"])
+        self.assertEqual([p.catalog for p in self.lib.parts(builtin=False)], ["100-C09", "3RT2015"])
         self.lib.delete_part(a.id)
-        self.assertEqual([p.catalog for p in self.lib.parts()], ["3RT2015"])
+        self.assertEqual([p.catalog for p in self.lib.parts(builtin=False)], ["3RT2015"])
         self.assertFalse(os.path.exists(os.path.join(self.lib.folder, "parts.json")))
 
     def test_old_parts_json_read_and_moved(self):
@@ -33,10 +33,10 @@ class PartFilesTest(unittest.TestCase):
         with open(os.path.join(self.lib.folder, "parts.json"), "w", encoding="utf-8") as f:
             json.dump({"format": "kanzonascad-parts", "version": 1,
                        "parts": [p.to_dict() for p in old]}, f)
-        self.assertEqual([p.catalog for p in self.lib.parts()], ["700-HC", "AF09"])
+        self.assertEqual([p.catalog for p in self.lib.parts(builtin=False)], ["700-HC", "AF09"])
         self.lib.save_part(Part(manufacturer="X", catalog="NEW", symbol="Relay coil"))
         self.assertFalse(os.path.exists(os.path.join(self.lib.folder, "parts.json")))
-        self.assertEqual([p.catalog for p in self.lib.parts()], ["700-HC", "AF09", "NEW"])
+        self.assertEqual([p.catalog for p in self.lib.parts(builtin=False)], ["700-HC", "AF09", "NEW"])
 
     def test_conflict_copies_and_bad_files_reported(self):
         a = Part(manufacturer="AB", catalog="100-C09", symbol="Contactor coil")
@@ -48,7 +48,7 @@ class PartFilesTest(unittest.TestCase):
             f.write(text)
         with open(os.path.join(d, "broken.json"), "w", encoding="utf-8") as f:
             f.write("{not json")
-        self.assertEqual([p.catalog for p in self.lib.parts()], ["100-C09"])
+        self.assertEqual([p.catalog for p in self.lib.parts(builtin=False)], ["100-C09"])
         self.assertEqual(len(self.lib.part_problems), 2)
         self.assertTrue(any("sync app" in t for t in self.lib.part_problems))
         self.assertTrue(any(t.startswith("broken.json") for t in self.lib.part_problems))

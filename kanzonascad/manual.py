@@ -117,7 +117,9 @@ Ladder: places given by rung; see Ladders), <b>Rung numbers</b> and the <b>Rung 
 new ladders, and the height of new text.</li>
 <li><b>Schematic</b> (also <b>Schematic settings...</b>): the sheet size and zones every sheet
 uses unless it has its own (8 rows, A to H, and 10 columns to start), the device tag height
-(changing it resizes every tag), and the symbol color.</li>
+(changing it resizes every tag), the <b>Symbol standard</b> (JIC/NFPA or IEC 60617, and the
+letters device tags are made of: changing it can ask to retag the unlocked devices, see IEC
+60617 symbols), and the symbol color.</li>
 <li><b>Panel</b> (also <b>Panel settings...</b>): the footprint and dimension colors,
 <b>Mark devices without a footprint on the drawing</b> (on to start: see Devices without a
 footprint), and <b>Terminal wire label height</b> (see Panel wiring).</li>
@@ -163,7 +165,9 @@ new wire is still its own), and the rubber band shows it in that color as you dr
 joining wires of two different layers stays on the wire layer picked (or the default), and the command line warns
 that two conductors may be tied together. A wire on its own that starts on a symbol's pin (or, failing that, ends
 on one) takes <b>the layer the pin gives</b>, whatever layer is picked: a PLC module's input or
-output point, or its V, 24VDC BLU; its common (C, COM, RTN), 24VDC BLU-WHT; a motor's or
+output point (an analog channel's V or I terminal too), or its supply (V, +VDC, DC-0(+), +24V
+dc, LA+), 24VDC BLU; its common (C, COM, DC COM 1, GND-0, RTN, RTN OUT-0, ANLG Com, dc NEUT,
+LA-, an analog return), 24VDC BLU-WHT; its NC, Not used and No Connect ones nothing; a motor's or
 drive's power terminal (L1-L3, T1-T3, U, V, W), 480V BLK, and its ground (PE), 480V GRN; a
 control transformer's H terminals 480V BLK, X1 120V RED and X2 120V WHT; a power supply's L
 120V RED, N 120V WHT, + 24VDC BLU and - 24VDC BLU-WHT. A pin given a wire layer of its own
@@ -378,7 +382,70 @@ fuse, breaker, disconnect, overload heater and contact, pilot light, motor, sole
 transformer, terminal strip and terminal, ground, distribution block, off-sheet connector;
 three-phase: 3-pole breaker, disconnect and fuses, fused disconnect, contactor power contacts,
 overload heaters, starter, motor, drive control terminals, variable frequency drive; power supply; PLC I/O card with input and output points).
+Since 0.29 also: a <b>Motor protection circuit breaker 3-pole</b> (a manual motor starter
+such as Allen-Bradley's 140M: breaker poles and their thermal trip, L1-L3 in, T1-T3 out 1 inch
+away, its auxiliary contacts belonging to it), an <b>Overload relay, electronic 3-pole</b> (the
+wires through its current sensors, as an E300 or 193; its <b>Overload contact NC</b> and the
+new <b>Overload contact NO</b>, 97-98 alarm, belong to it), a <b>Selector switch
+3-position</b> (Hand-Off-Auto: an X over the position each contact is closed in; its contact
+blocks <b>Selector switch 3-position contact, closed left</b> and <b>closed right</b> belong to
+it), a <b>Pilot light with color letter</b> (its COLOR attribute, R, G, A..., shown in the
+lamp), and PLC I/O modules drawn whole by catalog number (ControlLogix 1756-IB16, 1756-OB16E,
+1756-IF8, 1756-OF8; CompactLogix 1769-IQ16, 1769-OB16, 1769-OW8, 1769-IF4, 1769-OF2; Compact
+5000 5069-IB16, 5069-OB16; POINT I/O 1734-IB4, 1734-OB4E, beside the 1734 ones from before).
+A module's pins are named by its terminal (screw) numbers as Rockwell's own wiring diagram for
+it gives them, the point beside each as Rockwell prints it (<b>2  IN-1</b>, <b>11  IN 8</b>,
+<b>3  IOUT-0</b>), every screw a pin: the points, the commons and supplies (GND-0, RTN OUT-0,
+DC-0(+), DC COM 1, +VDC, ANLG Com, +24V dc, LA+, LA-, V, C) and the ones not to be wired, named as
+Rockwell names them (Not used, No Connect, NC; (blank) where the 1769-OW8's diagram leaves a
+position unlabeled). Where the numbers come from: the 1756 modules (1 to 20; 1 to 36 on the
+1756-IF8) and the 1734 ones (0 to 7) as printed on their terminal blocks; the 5069 ones 0 to 17
+(printed on the 5069-IB16's block; on the 5069-OB16's the same 18 positions counted from the
+top, as its diagram prints no numbers). <b>The 1769 modules' numbers are positions, not printed
+numbers</b>: Rockwell prints no screw numbers on a 1769 terminal block, so its 18 positions are
+numbered 1 to 18 from the top, the right and left columns taken in turn, as the door label lays
+them out; the 1769-OF2's blacked-out positions (1 to 4 and 15 to 18, no screw) have no pin.
+Each module's description names the Rockwell publication and page its terminals are from
+(installation instructions and user manuals of 2000 to 2022): check them against the module's
+door label before wiring. An analog channel's voltage and current terminals (VOUT-0 and
+IOUT-0, V in 0+ and I in 0+) are both that channel's point; its returns (i RTN-0, V/I in 0-)
+are not points. The 1756-IF8 is drawn for single-ended wiring (channel x on IN-x). The 1734 POINT
+I/O modules from before 0.29 keep their terminals 0 to 7. Edit block renames any terminal.
+Numbering wires by their PLC address and <b>Import I/O
+list...</b> go by the point written beside the pin, not by the pin's name (position 11 of a
+1769-IQ16 in slot 4, IN 8, is I:4/8); the wiring list and the terminal wire labels name a
+module's pin by its screw number (<b>K201:11</b>, <b>PLC201:11</b>). Every symbol is drawn by
+KanzonasCAD from the standard conventions, none copied from a maker's or another program's
+drawings.
 A symbol of yours with the same name replaces a built-in one.</li>
+<li><b>IEC 60617 symbols</b>: a project can draw with IEC symbols instead of JIC ones:
+<b>Symbol standard</b> in Project properties (Schematic tab, also Schematic settings...), JIC/NFPA
+(US) or IEC 60617. Every project from before 0.29, and a new one, is JIC (a template saved
+with IEC gives new projects IEC). The IEC set, in the IEC categories, each named "(IEC)":
+relay, contactor and timer coils (a rectangle; the timer's with its delay box), make and break
+contacts and on-delay timed ones, pushbuttons (make, break), emergency stop, two-position
+selector switch, pushbutton contact blocks, fuse, circuit breaker and disconnector 1-pole,
+thermal overload and its break contact, indicator lamp, motor (M 1~), solenoid valve coil,
+control transformer, 3-pole circuit breaker, disconnector, fuses, contactor main contacts and
+thermal overload, motor 3-phase (M 3~), terminal and protective earth. In an IEC project,
+<b>Insert symbol...</b> offers these in place of the JIC symbols they stand for, and in a JIC
+project the JIC ones; the program's other symbols (PLC modules, drives, power supply,
+distribution blocks, connectors and arrows) and your own are offered in both. They are laid out
+as the JIC ones are, for horizontal rungs (pins left and right, 1/2 inch apart; three-pole ones
+with L1/T1 on top). In an IEC project, device tags are made of <b>IEC 81346-2 letters</b>
+instead of the US prefixes (Device tags, below): K601 for a relay, Q601 for a contactor, S601
+for a pushbutton, X601 for a terminal strip; the JIC and other symbols placed in it too.
+Contacts, cross-references, terminals, wire numbers and reports work the same. Changing the
+standard leaves the symbols already placed as they are. When unlocked devices have tags made of
+the other standard's letters, OK asks <b>Retag the unlocked devices with the IEC 81346-2
+letters?</b> (or the JIC letters, going back): <b>Yes</b> gives them all the new letters, each
+keeping its page and count when that number is free (CR601 becomes K601; of a relay CR601 and
+a timer TR601, the second in the sheet's order becomes K602), in the same single Undo step as the change of standard; their contacts, terminals
+(TB601-1 becomes X601-1), cross-references and arrows follow, and locked tags are never
+changed. <b>No</b> keeps their tags (Renumber sheet gives a sheet's the new letters later).
+<b>Cancel</b> cancels the whole Project properties change. With no such tags it doesn't ask.
+A device or contact with no tag yet shows the project's letter and a question mark: K?, X?,
+Q? in an IEC project (CR?, TB? in a JIC one).</li>
 <li><b>Panel footprints</b>: the outline of a real part, at real size, for panel layouts.
 KanzonasCAD comes with generic ones at typical sizes, in the Generic categories: breakers 1, 2
 and 3 pole, fuse holders, a motor protector, a surge protector and a rotary disconnect
@@ -390,9 +457,28 @@ for the back panel); 22 mm pushbuttons, pilot lights and selector switches and a
 emergency stop (Door devices). DIN-rail devices are 18 mm a pole and about 90 mm tall; each one's
 description gives its size. They are typical, not any maker's: for a part you buy, draw its
 own from its maker's drawing (Make block), or Edit block one of these and save it under your
-own name. A footprint of yours with the same name replaces a built-in one.</li>
+own name. In the Allen-Bradley categories (0.29): PowerFlex 525 drives by frame, A to E, at
+the widths and heights Rockwell publishes nominally (check its dimension drawing for the
+mounting holes), and outlines of a 1769 I/O module and controller, a 1756 module and
+chassis of 4, 7, 10, 13 and 17 slots, a 5069 module and a 1734 POINT I/O module on its base,
+each named "(approximate)": their sizes are approximate, so draw them from Rockwell's dimension
+drawings before laying out a real panel. A footprint of yours with the same name replaces a
+built-in one.</li>
 <li><b>Parts</b>: a manufacturer and catalog number linked to a schematic symbol and a panel
-footprint. Placing a part fills in its manufacturer, catalog number and description.</li>
+footprint. Placing a part fills in its manufacturer, catalog number and description. Built in
+(0.29), marked "(built in)" in the Parts tab: Allen-Bradley parts by catalog number, each with
+its symbol and footprint: 100-C contactors (100-C09D10 to 100-C43D00, 120V AC coil) and
+their 100-FA11 and 100-FA20 auxiliary contacts, 140M-C2E motor protection circuit breakers
+(1.6 A to 16 A) and the 140M-C-AFA11 auxiliary contact, the E300 electronic overload relay
+(its catalog number depends on the modules chosen: left blank), 700-HA plug-in relays (120V AC
+and 24V DC coils), 800F-X10 and 800F-X01 contact blocks, 1492-J3, J4 and JG3 terminal blocks
+with the 1492-EBJ3 end barrier and 1492-EAJ35 end anchor, 1606-XLP power supplies (30, 50,
+100 W), PowerFlex 525 drives (480V, 0.5 to 15 HP), the PLC modules above, the 1756-L83E and
+1769-L33ER controllers, the 1756-PA72 power supply, 1756 chassis and the 1734-AENT adapter.
+Each part's notes say what to check in Rockwell's selection guide before ordering (coil
+voltage, current range); where no footprint of its own is built in, it uses the generic one
+nearest its size. Assign part... offers them for the devices of their symbols. A built-in part
+can't be deleted; changed (double-click it), your copy takes its place.</li>
 <li><b>A symbol and a footprint with the same name</b> (a starter's schematic symbol and its
 panel footprint, both "Starter") stay apart in a project: placed from the Library, made with
 Make block, brought in by Import I/O list or pasted, the one that comes second is kept as
@@ -438,6 +524,38 @@ its poles). Select a symbol to see a grip on its tag (and on a Rating or other a
 shows at one spot): drag it anywhere, and it stays there on that copy, following the symbol
 when it is moved or turned (Undo puts it back). In the Parts tab, Insert asks whether to place
 the part's symbol or its footprint.</p>
+<h3>Saved circuits</h3>
+<p>A circuit you draw again and again (a motor starter rung, a 3-wire control, an E-stop
+string, a pilot light) can be kept in the library and placed whole, as AutoCAD Electrical's
+circuit builder does:</p>
+<ol>
+<li>Select it (symbols, wires, text, lines, a ladder: anything on the sheet), then <b>Save
+circuit...</b> (Library menu; also on the menu of the Schematic tab's Insert symbol button;
+typed SAVECIRCUIT or CIRCSAVE). Click its base point, the point it is placed by (Enter: the
+lower left corner of what is selected), and give it a name, a category (Motor control,
+Lighting...) and a description. It is a file of its own in the library's <b>circuits</b>
+folder, in the first library or, with Save new blocks and parts to the second library ticked,
+the second, with its own copies of the blocks it uses and its layers; a circuit of that name
+already there is replaced once you say so.</li>
+<li><b>Insert circuit...</b> (Library menu, and Insert symbol's button menu; typed
+INSERTCIRCUIT or CIRCUIT) lists the circuits of both libraries by category, each with its
+picture (drawn from the circuit itself), and a bigger picture of the one selected with what it
+holds; type in its search box to find one. <b>Rename...</b> changes a circuit's name, category
+or description; <b>Delete</b> takes it out of the library (drawings it was placed in keep what
+it put there). Double-click one, or <b>Insert</b>: it follows the mouse; type R to turn it 90
+degrees, S then a number to scale it, and click where its base point goes. Enter afterward
+places the same circuit again.</li>
+</ol>
+<p>Placed, it is one step (Undo takes it all back): every device takes a new tag of the sheet's
+page, the lowest free ones (CR101 saved on page 1 is CR701 on page 7, and never a tag already
+taken; a tag you typed and locked stays as it is) and a new hidden id; each contact whose
+coil came with it belongs to the new coil, so its cross-references work at once, while one
+whose device was left out is placed on its own, its tag cleared (double-click it to link it);
+its wires take the sheet's numbers, as if drawn there (numbers you typed and locked stay); its
+off-sheet connectors and source and destination arrows take new names, the same within the
+circuit, so a pair in it stays a pair and none joins a wire of the drawing by accident; its
+terminals number themselves on their strips; its tags and footprint labels take this
+project's heights; and the sheet's wires under its symbols are cut to them, as Paste does. A block the project already has keeps its own drawing.</p>
 <h3>Making your own</h3>
 <ol>
 <li>Draw it, or open the manufacturer's DXF and copy the view you want into your drawing
@@ -698,7 +816,24 @@ block...</b> to change its drawing, move or add pins (Add pin) and move its tag 
 <p>Every device you place gets its tag by itself: the symbol's prefix, the page number and a
 two-digit count on that page. On page 6 that's <b>CR601</b>, CR602, <b>M601</b>, PB601...; on
 page 12, CR1201. The <code>CR?</code> you may have seen before means a device still waiting
-for a number (Renumber sheet gives it one).</p>
+for a number (Renumber sheet gives it one); in an IEC project it shows its letter, <code>K?</code>.
+A contact not yet linked to a device shows the same.</p>
+<p><b>IEC 81346 letters</b>: in a project whose <b>Symbol standard</b> is IEC 60617 (Project
+properties, Schematic), the tag is made of the device's IEC 81346-2 class letter instead of its
+symbol's prefix, by what the device does: <b>K</b> control relays, timing relays and PLC
+modules (K601, K602); <b>Q</b> contactors (coil and main contacts, one device), circuit
+breakers, motor protection circuit breakers and disconnects; <b>S</b> pushbuttons, selector
+switches and emergency stops; <b>B</b> limit, pressure, temperature and float switches
+(sensors); <b>F</b> fuses and overload relays; <b>P</b> pilot lights; <b>M</b> motors and
+solenoids; <b>T</b> transformers, power supplies and drives; <b>X</b> terminal strips (X601,
+its terminals X601-1, X601-2...) and distribution blocks. Devices of one letter share its
+counts on a page (a contactor Q601, a breaker Q602). A symbol of yours with a prefix of its
+own keeps it. The symbol's prefix (Block properties) still says what kind of device it is:
+which contacts are offered for it, a PLC module, a terminal strip. A tag made of the other
+letters, from before the project's standard was changed (No to "Retag the unlocked devices"),
+is kept and still follows its page (Update numbers keeping the numbers keeps it too);
+<b>Renumber sheet</b> (or Update numbers renumbering) gives it the project's letters, and copies
+take them.</p>
 <ul>
 <li>A new device takes the <b>lowest free</b> number for its prefix on its page, so deleting
 CR602 frees 02 for the next relay.</li>
@@ -794,7 +929,9 @@ contact of that device uses, on any sheet: a second NC is <b>31-32</b>, then an 
 overload contact (Overload contact NC) is <b>95-96</b>, an overload's NO <b>97-98</b>, while
 those are free on its device. A pushbutton, an emergency stop, a selector switch or a limit
 switch is numbered on itself (13-14 for an NO, 21-22 for an NC) and its contact blocks with it;
-a contact on its own (no device) is numbered as the first of its kind. The numbers show beside
+a contact on its own (no device) is numbered as the first of its kind. The same in a project
+of IEC 60617 symbols: the IEC contacts are numbered on their device whatever its letters (K101's
+first NO is 13-14). The numbers show beside
 its pins (Shown on the drawing, <b>Pin names</b>, hides them on a copy), in the list under its
 device (<b>NO 13-14 6-D3</b>), in Trace (<b>NO contact 13-14</b>), in the wiring lists
 (<b>CR101:13</b>) and on the terminal wire labels, and go to DXF as the attributes TERM01 and
@@ -2525,7 +2662,8 @@ never closes it) with what is selected</td></tr>
 closes it) with every place the selected device, wire or PLC point is used; Enter or a
 double-click on a row goes there</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
-<tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same symbol)</td></tr>
+<tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same
+symbol; Insert circuit: the same circuit)</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection (anywhere in the window)</td></tr>
 <tr><td>Right-click</td><td>In a command: Enter (Bus: a menu of its options, Enter first); with
 none: the drawing's menu</td></tr>

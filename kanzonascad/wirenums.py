@@ -49,13 +49,17 @@ def by_io_address(project):
     return bool(project.settings.get("wire_numbers_io", False))
 
 
-_IO_TEXT = re.compile(r"^(\S+)\s+(IN|OUT)[ -](\d+)$")
+# a module's terminal text: its pin's name, then its point as Rockwell prints it, of any case:
+# IN 0, OUT-3, In 0; an analog one's voltage or current terminal, V in 0+, I out 1+, VOUT-2,
+# IOUT-2 (both the channel's point); never a return or common (V/I in 0-, i RTN-0, RTN OUT-0)
+_IO_TEXT = re.compile(r"^(\S+)\s+(?:[VI] ?)?(IN|OUT)[ -](\d+)\+?$", re.IGNORECASE)
 
 
 def io_points(defn):
     """{pin name: ("I" or "O", point number)} of a PLC module's input and output points: the
-    terminals whose text is "n  IN n", "n  OUT n" or "n  IN-n" (not V, C, RTN-n, power or
-    common terminals). Empty for any other block."""
+    terminals whose text is "n  IN n", "n  OUT n", "n  IN-n", an analog channel's "n  V in
+    n+", "n  IOUT-n" (_IO_TEXT; not V, C, RTN-n, power or common terminals). Empty for any
+    other block."""
     if defn is None or defn.prefix != "PLC":
         return {}
     return point_terminals(defn)
@@ -69,7 +73,7 @@ def point_terminals(defn):
         if isinstance(e, Text):
             m = _IO_TEXT.match(e.text.strip())
             if m and m.group(1) in names:
-                out.setdefault(m.group(1), ("I" if m.group(2) == "IN" else "O",
+                out.setdefault(m.group(1), ("I" if m.group(2).upper() == "IN" else "O",
                                             int(m.group(3))))
     return out
 

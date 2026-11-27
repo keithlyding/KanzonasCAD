@@ -56,6 +56,9 @@ XREF_HEIGHT_BEFORE_018 = 0.08   # (see Project.from_dict: such projects take the
 DEFAULT_SETTINGS = {
     "text_height": 0.125,       # new text
     "tag_height": 0.1,          # device tags on symbols
+    # the symbols Insert symbol offers: "jic" (JIC/NFPA, US) or "iec" (IEC 60617): a project's
+    # own (Project properties, Schematic; 0.29); every project from before is JIC
+    "symbol_standard": "jic",
     "fp_label_height": 0.08,    # what footprints show on them, paper inches (0.1 before 0.18.1)
     "fp_label_color": "",       # their color ("": the footprint's; the owner, 0.18.7: a
                                 # footprint on layer 0 is white, "I want the tagname to be
@@ -2345,6 +2348,10 @@ class BlockDef:
         # key, as label_size_key makes it: paper inches}; a line not listed takes the
         # project's Footprint label height
         self.label_sizes = clean_label_sizes(label_sizes)
+        # what a copy of it with no tag yet shows before its "?": "" its prefix (CR?), or the
+        # letter its project's tags are made of (K? in a project of IEC 60617 symbols). Not
+        # kept in the file: set by the project it is in (Project.sync_tag_letters)
+        self.tag_letter = ""
 
     def to_dict(self):
         return {"name": self.name, "kind": self.kind, "category": self.category,
@@ -2829,7 +2836,7 @@ class Insert(Entity):
         align, valign = "center", "baseline"
         a = self.angle % 180.0
         h = (self.tag_h or d.tag_height) * self.scale
-        text = tag or (d.prefix + "?" if d.prefix else "?")
+        text = tag or ((d.tag_letter or d.prefix) + "?" if d.prefix else "?")
         if d.wiring == "pdb" and d.role == "child":
             # (an outlet of a power distribution block: its block's tag and its own number)
             text = "%s-%s" % (text, self.attrs.get("OUTLET") or "?")
@@ -4167,6 +4174,7 @@ class Project:
     def _changed(self):
         self.revision += 1
         self.sync_reserve()
+        self.sync_tag_letters()
         for f in list(self.listeners):
             f()
 
@@ -4195,6 +4203,26 @@ class Project:
             if s.reserve != r:
                 s.reserve = r
                 s.version += 1
+
+    def sync_tag_letters(self):
+        """Each block's tag_letter: what its copies with no tag yet show before their "?" (an
+        IEC project's letter, K?; tags.prefix_for). The copies with no tag of a block whose
+        letter changed are put again, so their drawing follows (otherwise only the blocks are
+        looked at: this runs after every change)."""
+        from .tags import prefix_for
+        changed = set()
+        for name, d in self.blocks.items():
+            want = prefix_for(self, d) if d.prefix else ""
+            want = "" if want == d.prefix else want
+            if d.tag_letter != want:
+                d.tag_letter = want
+                changed.add(name)
+        if not changed:
+            return
+        for s in self.sheets:
+            for e in list(s.inserts()):
+                if e.block in changed and not e.attrs.get("TAG"):
+                    s._put(e.copy())
 
     def is_modified(self):
         return self.saved_at != len(self.undo_stack)
@@ -4340,6 +4368,7 @@ class Project:
         else:
             p._default_title_block()
         p.sync_reserve()
+        p.sync_tag_letters()
         return p
 
     def save(self, path, backups=None):

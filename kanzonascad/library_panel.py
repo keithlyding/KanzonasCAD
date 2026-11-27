@@ -175,6 +175,9 @@ class LibraryPanel(QWidget):
     def __init__(self, library, parent=None):
         super().__init__(parent)
         self.library = library
+        # the symbol standard of the project it inserts into (symbols_iec.standard_of): the
+        # program's own symbols of the other standard left out
+        self.standard = "jic"
         v = QVBoxLayout(self)
         v.setContentsMargins(2, 2, 2, 2)
         self.search = QLineEdit()
@@ -247,6 +250,14 @@ class LibraryPanel(QWidget):
         self.refresh()
 
     # ---- filling ---------------------------------------------------------------------------
+    def set_standard(self, standard):
+        """Offer the program's own symbols of this standard ("jic" or "iec"): those of the
+        other one are left out (yours are always shown). True when it changed."""
+        if standard == self.standard:
+            return False
+        self.standard = standard
+        return True
+
     def _fill_filter(self, box, everything, values):
         """A filter's list: "All ..." then the values; the one picked stays picked if it
         is still there (else All)."""
@@ -285,12 +296,16 @@ class LibraryPanel(QWidget):
                           sorted(fams.values(), key=str.lower))
         family = self.family_filter.currentData()
         phase = self.phase_filter.currentData()
+        from .symbols_iec import hidden_builtins
+        other = hidden_builtins(self.standard)
         for kind, tree in self.trees.items():
             tree.clear()
             blocks = loaded[kind]
             cats = {}
             for name in sorted(blocks, key=str.lower):
                 b = blocks[name]
+                if b.builtin and kind == "symbol" and name in other:
+                    continue
                 if not _maker_match(b, mfr, family):
                     continue
                 if phase is not None and M.phases_of(b) != phase:
@@ -326,7 +341,8 @@ class LibraryPanel(QWidget):
                 continue
             if mfr is not None and p.manufacturer.strip().lower() != mfr.lower():
                 continue
-            it = QTreeWidgetItem([p.label() + ("  (second library)" if p.id in
+            it = QTreeWidgetItem([p.label() + ("  (built in)" if p.builtin else
+                                                "  (second library)" if p.id in
                                                 self.library.second_parts else ""),
                                   p.symbol or "-", p.footprint or "-"])
             it.setData(0, Qt.UserRole, p.id)
@@ -420,6 +436,11 @@ class LibraryPanel(QWidget):
             return
         if kind == "part":
             part = self.library.part(key)
+            if part is not None and part.builtin:
+                QMessageBox.information(self, "Delete", "%s is one of the program's own parts "
+                                        "and can't be deleted (changed, your copy takes its "
+                                        "place)." % part.label())
+                return
             if part and QMessageBox.question(self, "Delete part", "Delete the part %s from your "
                                              "library?" % part.label()) == QMessageBox.Yes:
                 self.library.delete_part(key)
@@ -446,6 +467,9 @@ class LibraryPanel(QWidget):
             if kind != "part" or key is None:
                 return
             part = self.library.part(key)
+            if part is not None and part.builtin:
+                # (a built-in part changed: your copy, of its id, takes its place)
+                part = Part.from_dict(part.to_dict())
         else:
             # started from a selected symbol or footprint: it, and who makes it
             got = self.current_block()

@@ -111,6 +111,12 @@ def read_folder(folder, subfolders=False):
     return rows
 
 
+def as_read(rows):
+    """Everything a Found row holds, to compare two readings."""
+    return [(r.name, r.path, r.error, r.whole, r.kind, r.ticked,
+             None if r.defn is None else r.defn.to_dict()) for r in rows]
+
+
 class ReadingTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -186,6 +192,35 @@ class ReadingTest(unittest.TestCase):
         self.assertEqual(sts[self.rows.index(bad)], "error")
         self.assertEqual(sts.count("new"), 5)
 
+    def test_read_from_its_bytes_as_from_the_file(self):
+        # (0.29: the bytes read on a thread, block_import.load, the blocks made from them on
+        # the event loop: the same rows as reading the file, for every kind of file)
+        d = tempfile.mkdtemp()
+        paths = BI.drawing_files(self.folder, True)
+        doc = ezdxf.readfile(os.path.join(self.folder, "HCR1.dxf"))
+        binary = os.path.join(d, "binary coil.dxf")
+        doc.saveas(binary, fmt="bin")
+        with open(os.path.join(self.folder, "my blocks.dxf"), "rb") as f:
+            text = f.read()
+        broken = os.path.join(d, "broken.dxf")          # (read by ezdxf's recover mode)
+        with open(broken, "wb") as f:
+            f.write(text.replace(b"ENDSEC", b"ENDSEX", 1))
+        crlf = os.path.join(d, "windows lines.dxf")
+        with open(crlf, "wb") as f:
+            f.write(text.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+        latin = os.path.join(d, "latin.dxf")           # (an older drawing's code page)
+        doc = ezdxf.new("R2000")
+        doc.header["$DWGCODEPAGE"] = "ANSI_1252"
+        doc.modelspace().add_attdef("TAG1", (0, 0), text="caf\xe9")
+        doc.modelspace().add_line((0, 0), (1, 0))
+        doc.saveas(latin, encoding="cp1252")
+        missing = os.path.join(d, "gone.dxf")
+        for p in paths + [binary, broken, crlf, latin, missing]:
+            self.assertEqual(as_read(BI.read_blocks(p, BI.load(p))), as_read(BI.read_blocks(p)),
+                             p)
+        self.assertIsNotNone(BI.read_blocks(binary, BI.load(binary))[0].defn)
+        self.assertEqual(BI.load(missing)[0], "error")
+
     def test_dwg(self):
         # (ezdwg writes DWG: a coil kept as one block, read through the DWG reader)
         import ezdwg
@@ -200,6 +235,7 @@ class ReadingTest(unittest.TestCase):
         path = os.path.join(tempfile.mkdtemp(), "HFU1.dwg")
         d.save(path, strict=False)
         rows = BI.read_blocks(path)
+        self.assertEqual(as_read(BI.read_blocks(path, BI.load(path))), as_read(rows))
         self.assertEqual(len(rows), 1, [r.error for r in rows])
         self.assertIsNone(rows[0].error)
         self.assertEqual(rows[0].name, "HFU1")
@@ -211,6 +247,7 @@ class ReadingTest(unittest.TestCase):
         with open(bad, "wb") as f:
             f.write(b"AC1032 not really")
         rows = BI.read_blocks(bad)
+        self.assertEqual(as_read(BI.read_blocks(bad, BI.load(bad))), as_read(rows))
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0].error)
 
@@ -587,6 +624,20 @@ class WindowTest(unittest.TestCase):
         self.assertFalse(done)
         self.assertLess(longest, 0.1)
         self.assertEqual(snapshot(self.lib.folder), before)
+
+    def test_reading_never_waits_on_the_disk(self):
+        # (0.29's Windows build: one step of 0.12 s between two turns of the event loop while
+        # the drawings were read, the others 0.01 s: a file just written opened slowly, the
+        # virus scanner looking at it first. Now the threads read the files, a few ahead, and
+        # the event loop makes the blocks from what they read)
+        APP.processEvents()
+        with self.slow_disk():
+            rows, longest = IB.scan(self.win, BI.drawing_files(self.folder, True))
+        self.assertLess(longest, 0.1)
+        self.assertEqual(as_read(rows), as_read(read_folder(self.folder, True)))
+        self.assertEqual(sorted({r.name for r in rows}),
+                         ["HCR1", "HCR9", "HLS11", "HPB11", "RELAY BASE", "damaged",
+                          "metric coil"])
 
     def test_imported_symbol_takes_a_wire(self):
         IB.ImportBlocksDialog.exec = lambda dlg: QDialog.Accepted
