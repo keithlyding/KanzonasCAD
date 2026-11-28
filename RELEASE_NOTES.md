@@ -32,6 +32,9 @@ build fails without them.
   place from where the strip puts it.
 - Sheets at a large scale (such as 1/4" = 1'-0") open much faster and use far less memory: a
   project with many of them could use hundreds of megabytes just to open.
+- A circuit a hair off the grid (copied from an odd point): a bus landed on its pins now runs
+  in line with its wires instead of a few thousandths beside them, and a position typed in the
+  Properties panel keeps it in line with them too.
 
 ## 0.29
 

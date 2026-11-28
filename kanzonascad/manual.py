@@ -1187,7 +1187,10 @@ to float it; where it is and whether it is open are kept for next time.</p>
 few colors, or Other... for any), and where it makes sense its <b>Position X</b> and <b>Y</b>
 (its insertion point, in drawing inches) and <b>Rotation</b> (turned about that point; a symbol
 moved this way takes its wires with it). For a symbol or footprint, Position X and Y are where
-it is placed: type a value and it moves there, its wires with it, in one step of Undo. The
+it is placed: type a value and it moves there, its wires with it, in one step of Undo. They
+show four decimals, and what is finer than that is kept: something off the grid by a hair (a
+circuit copied from an odd point) moves by what you changed, so it stays in line with the
+wires it is drawn with. The
 status bar shows the same while the mouse is over a symbol or footprint, beside the cursor's
 coordinates: its tag (or its block's name) and its insertion point, <code>CR101  X 6.250
 Y 4.500</code>.</li>

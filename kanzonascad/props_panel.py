@@ -111,9 +111,17 @@ def _angle(e):
     return e.angle if isinstance(e, (M.Insert, M.Text, M.MText)) else NA
 
 
+POS_DECIMALS = 4        # (Position X and Y as the panel shows them)
+
+
 def _moved_to(cur, axis, value):
-    q = _position(cur)
-    return cur.moved(value - q[0], 0.0) if axis == 0 else cur.moved(0.0, value - q[1])
+    """cur moved so its position along axis shows as value: by what was changed from what the
+    panel showed, so the part of the position finer than it shows is kept (a circuit copied by
+    an odd base point sits off the grid, its wires with it: a coil typed 0.5 over, from the
+    68.7582 shown to 69.2582, went to exactly that, 0.000008" beside the wire it was put on;
+    the long battery, 0.30, seed 5223)."""
+    d = value - round(_position(cur)[axis], POS_DECIMALS)
+    return cur.moved(d, 0.0) if axis == 0 else cur.moved(0.0, d)
 
 
 def general_fields(project):
@@ -132,7 +140,7 @@ def general_fields(project):
 
     def pos_put(axis):
         def put(ed, s, cur, value):
-            if abs(_position(cur)[axis] - value) > 1e-12:
+            if abs(round(_position(cur)[axis], POS_DECIMALS) - value) > 1e-12:
                 ed.change(s, _moved_to(cur, axis, value))
         return put
 
@@ -148,8 +156,10 @@ def general_fields(project):
         Field("color", "Color", "choice", lambda e: e.color, put_color, choices=COLORS,
               tip="ByLayer: its layer's color; or a color of its own (Other...: any)"),
         Field("x", "Position X", "number", pos_get(0), pos_put(0), suffix=" in",
+              decimals=POS_DECIMALS,
               tip="Where it is on the sheet, in drawing inches (its insertion point)"),
-        Field("y", "Position Y", "number", pos_get(1), pos_put(1), suffix=" in"),
+        Field("y", "Position Y", "number", pos_get(1), pos_put(1), suffix=" in",
+              decimals=POS_DECIMALS),
         Field("rotation", "Rotation", "number", _angle, put_angle, lo=0.0, hi=359.99,
               step=90.0, decimals=2, suffix=" deg",
               tip="Its angle on the sheet; turned about its insertion point"),

@@ -1844,6 +1844,19 @@ def _into_symbol(sheet, p, pin, way):
     return False
 
 
+def _grid_round(v, g, ref):
+    """v on the 1/8" grid of step g that ref (a pin's coordinate) is on: the sheet's grid, or
+    the same grid moved off it with ref when the drawing ref is part of is off it (a circuit
+    copied by an odd base point: a bus landing there put its runs on the sheet's grid, 0.0082"
+    beside the circuit's wires; the long battery, 0.30, seed 5223)."""
+    if g <= 0:
+        return v
+    off = ref - round(ref / g) * g
+    if abs(off) <= 1e-9 * max(1.0, abs(ref)):
+        return round(v / g) * g
+    return ref + round((v - ref) / g) * g
+
+
 def pin_side(sheet, p, tol=1e-6):
     """The pins of a symbol on one side of it, in a line through the pin at p and evenly
     spaced (a 3-pole device's L1, L2, L3; a VFD's T1-T3): ([world points] in the block's pin
@@ -2648,7 +2661,7 @@ class BusCmd(Command):
                         break
                     offs = [q[-1][m] - S[m] for q in paths]
                     want = sum(q[m] for q in pins) / n - sum(offs) / n
-                    want = round(want / g) * g if g > 0 else want
+                    want = _grid_round(want, g, pins[0][m])
                     if abs(want - stage[m]) <= 1e-9:
                         break
                     stage[m] = want
@@ -2730,8 +2743,7 @@ class BusCmd(Command):
         c1[m], c1[k] = S[m], a[k]
         n = self.count
         g = 0.125 * sheet.k()
-        mid = (a[k] + S[k]) / 2
-        mid = round(mid / g) * g if g > 0 else mid
+        mid = _grid_round((a[k] + S[k]) / 2, g, S[k])
         z1, z2 = [None, None], [None, None]
         z1[k], z1[m] = mid, a[m]
         z2[k], z2[m] = mid, S[m]
@@ -2785,9 +2797,9 @@ class BusCmd(Command):
         for across in (True, False):
             m = (a[0] + b[0]) / 2 if across else (a[1] + b[1]) / 2
             k = 0.125 * sheet.k()
-            if k > 0 and abs(round(m / k) * k - m) < abs((b[0] - a[0]) if across
-                                                         else (b[1] - a[1])) / 2:
-                m = round(m / k) * k
+            on = _grid_round(m, k, b[0] if across else b[1])
+            if abs(on - m) < abs((b[0] - a[0]) if across else (b[1] - a[1])) / 2:
+                m = on
             z = [(m, a[1]), (m, b[1]), b] if across else [(a[0], m), (b[0], m), b]
             z = [q for i, q in enumerate(z) if G.dist(q, ([a] + z)[i]) > 1e-9]
             cands.append(z)
