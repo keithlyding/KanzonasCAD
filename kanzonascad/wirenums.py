@@ -742,6 +742,39 @@ def name_refused(ed, project, sheet, iid, typed):
     return "numbering names it %s" % now
 
 
+def name_taken_text(project, sheet, arrow, num):
+    """Why the source arrow on sheet can't be named num with its wire numbered num: connectors
+    of that name (in any case) on another wire, which the name would join to it (a wire number
+    6010a, its arrows named 6010A: the long battery, 0.30, seed 5243)."""
+    key = (num or "").strip().upper()
+    mine = linked_pair(project, sheet, arrow)
+    there = [(s, c) for s, c in connectors(project).get(key, ())
+             if (s.id, c.id) not in mine]
+    where = ""
+    if there:
+        s, c = there[0]
+        where = " (at %s)" % (project.zone_text(s, c.pos[0], c.pos[1]) or
+                               "sheet %s" % project.sheet_number(s))
+    return ("%s is the name of connectors on another wire%s: the source arrow can't take it "
+            "without joining the two wires. Answer Source or Destination when asked to make "
+            "it a cross-reference, or type another name." % (key, where))
+
+
+def linked_pair(project, sheet, arrow):
+    """{(sheet id, id)} of the source arrow on sheet and the connectors paired with it: its
+    name's, and destination arrows linked to it by hand."""
+    name = (arrow.attrs.get("TAG") or "").strip().upper()
+    link = link_to(sheet, arrow)
+    out = {(sheet.id, arrow.id)}
+    for s, c in connectors(project).get(name, ()):
+        out.add((s.id, c.id))
+    for s in project.sheets:
+        for d in s.inserts():
+            if d.block == ARROWS[1] and d.attrs.get("FROM") == link:
+                out.add((s.id, d.id))
+    return out
+
+
 def sync(ed, project, renumber=None):
     """Give every group its number (see the module's notes); renumber: a sheet (or several:
     Update numbers and cross-references, 0.18) whose

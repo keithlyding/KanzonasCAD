@@ -41,6 +41,9 @@ ICONS = {
     "edit_block": "vector-square-edit", "save_block": "content-save-check-outline", "add_pin": "vector-point-plus", "add_attr": "text-box-plus-outline", "pins": "order-numeric-ascending",
     "block_props": "card-text-outline",
     "insert_circuit": "package-down", "save_circuit": "package-variant-plus",
+    "insert_udt": "puzzle-outline", "make_udt": "puzzle-plus-outline",
+    "udt_props": "puzzle-edit-outline", "update_udt": "puzzle-check-outline",
+    "detach_udt": "link-variant-off",
     # (every ribbon button has an icon: one without showed its name even as "icons alone",
     # 75 pixels for Wire color label, and the Schematic tab didn't fit a 1000-pixel window
     # on CI's fonts, 0.29: tests/test_018_ribbon_fit.py)

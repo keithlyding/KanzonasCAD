@@ -495,7 +495,17 @@ class Layout:
             return picked
         for i in (picked if delta < 0 else reversed(picked)):
             self.rows[i + delta], self.rows[i] = self.rows[i], self.rows[i + delta]
-        return [i + delta for i in picked]
+        return self._loose_last([i + delta for i in picked])
+
+    def _loose_last(self, keep=()):
+        """The terminals with no number yet kept after the numbered ones, as the drawing puts
+        them (find: a strip's order is kept by number, so one with none can't be placed among
+        them; 0.30: a UDT's terminals placed on no strip are three such, and one numbered in
+        the middle of them read back at the top). Returns where the rows at keep are now."""
+        rows = [self.rows[i] for i in keep]
+        self.rows = [r for r in self.rows if r["num"] or r["spare"]] + \
+            [r for r in self.rows if not (r["num"] or r["spare"])]
+        return [next(j for j, x in enumerate(self.rows) if x is r) for r in rows]
 
     def renumber(self, start=1):
         """Every terminal (spares too) numbered start, start + 1... in the order shown."""
@@ -516,7 +526,7 @@ class Layout:
         at = len(self.rows) if after is None or not 0 <= after < len(self.rows) else after + 1
         self.rows.insert(at, {"num": self.free_number(), "orig": None, "spare": True,
                               "places": [], "jumper": None, "row": None})
-        return at
+        return self._loose_last([at])[0]
 
     def remove_spares(self, picked):
         """The picked spare terminals taken off the strip (a drawn one stays: erase it on the
@@ -536,6 +546,7 @@ class Layout:
         if any(j != i and r["num"] == num for j, r in enumerate(self.rows)):
             return "%s-%s is already on the strip." % (self.tag, num)
         self.rows[i]["num"] = num
+        self._loose_last()
         return None
 
     def add_jumper(self, picked):
@@ -588,11 +599,17 @@ class Layout:
         return [g for g in out if len(g) >= 2]
 
     def jumper_names(self):
-        """{row index: "J1"...} as jumpers() names them."""
+        """{row index: "J1"...} as jumpers() names them: only a jumper on two or more numbered
+        terminals, the ones kept (0.30: a jumper from a numbered terminal to a TB? one showed
+        J1 on the numbered one, and Save kept no jumper)."""
+        count = {}
+        for r in self.rows:
+            if r["jumper"] is not None and r["num"]:
+                count[r["jumper"]] = count.get(r["jumper"], 0) + 1
         names, out = {}, {}
         for i, r in enumerate(self.rows):
             j = r["jumper"]
-            if j is None or not r["num"]:
+            if j is None or not r["num"] or count[j] < 2:
                 continue
             if j not in names:
                 names[j] = jumper_name(len(names))

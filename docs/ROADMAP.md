@@ -490,6 +490,78 @@ nobody understands).
      marked to check against the code edition in force.
    - Two phases: choices, optional parts and rebuild in place first; values and ratings
      second.
+   - **Ratings per placed UDT, all of them only when asked** (the owner, Nov 26 2026:
+     "ratings of the motor ckts should have the option of being applied to all instances but
+     not by default, as most will have at minimum, subtle differences"): a placed UDT's
+     values, rating rules and ratings are its own; UDT properties' "Apply these values and
+     ratings to all ... other placed ..." (off to start) gives the others the same, showing
+     what will change first, in one step, leaving their overridden ratings alone unless
+     "Also replace the ratings overridden on those" is ticked too; a change to the UDT's
+     rules or defaults reaches placed ones only through Update from UDT's "Also give them
+     the UDT's values and rating rules" (off to start).
+   Done in 0.30, both phases (the proposed points above taken as the design; decisions marked
+   "decided here" are open to the owner's change):
+   - A placed UDT is kept on its sheet with the sheet (Sheet.udts, as arrays are): its UDT
+     (the sheet keeps its own copy, so the project opens the same anywhere), where it was
+     put, its choices, values, rating rules, overridden ratings and which object plays each
+     role. Decided here: kept on the sheet rather than a group id on each object, and a wire
+     of it cut in two by a symbol dropped on it leaves the UDT (its pieces are plain wires).
+   - Rebuilt in place (UDT properties...) in one step: what stays isn't touched (tags, wire
+     numbers kept); what goes is erased; what comes is placed as a saved circuit is, linked
+     to the devices that stayed. Decided here: the alternatives of a choice line up with the
+     circuit's wires by their pins (the editor's Add alternative adds a short wire from each
+     pin to where the first one's pin of that name was), and an optional part left out is
+     bridged by straight wires from each pin to the pin across (L1 to T1). Moved or turned
+     whole, it is rebuilt where most of its symbols say it now is.
+   - Edited by hand (moved on its own, an attribute typed): decided here, where a rebuild
+     would erase or replace it, it is left as it is and stops being the UDT's (never erased),
+     and the window lists it before anything changes; erased by hand, not put back. A
+     rating typed on the drawing is an override, not a hand edit.
+   - Update from UDT... lists what will change first; each placed one keeps its own values
+     and rules unless asked (above). Detach UDT makes plain parts.
+   - Built-in UDTs: Motor circuit, VFD (disconnect, manual motor starter or fuses, line
+     reactor optional, VFD, load reactor optional, terminals, motor) and Motor circuit,
+     full-voltage starter (disconnect, fuses or breaker, contactor, overload, terminals,
+     motor, and the coil and overload contact on a control rung); a Reactor 3-pole symbol
+     drawn for them. Their reactors start left out, and the ribbon's labels are short
+     (Insert UDT, Make UDT, UDT props, Update UDTs, Detach UDT): both kept as built (the
+     owner, Nov 27 2026).
+   - **The owner's answers (Nov 27 2026):**
+     - "Copy/paste of a placed UDT makes a new instance": the same UDT type and the same
+       ratings as the one copied, with its own new tags and wire numbers; Update UDTs and
+       Apply to all treat it as any other. Done for Copy, Ctrl+C/Ctrl+V, paste in place
+       (Enter), Ctrl+drag, Duplicate sheet and pasting into another sheet or project (the
+       clipboard carries the placed UDT and its UDT: udts.copied, udts.adopt_copies): its
+       choices, values, rating rules and overrides too; its contacts follow the copies of
+       its devices (a plain copy's stay on the originals); its terminals take the next free
+       numbers of their strip. Decided here: a copy is a new placed UDT when it holds all of
+       the UDT's symbols (its wires left behind count as erased by hand, not put back); a
+       copy of only some of them, Mirror and Array copies stay plain parts.
+     - Insert UDT asks for the terminal strip of its terminals (the built-in motor circuits'
+       field terminals): one of the project's strips, a new one, or none (TB?, X? in IEC,
+       for later); on a strip they take its lowest free numbers (spares' too) in the UDT's
+       order, linked to its Terminal strip symbol when it has one. The last choice is kept
+       in the project's settings (udt_strip) and offered first. Decided here: a new strip's
+       tag is made as a device's is (TB101 on page 1: the strip prefix, the page, the lowest
+       free count), with no Terminal strip symbol placed.
+     - In an IEC project each UDT device takes its IEC 60617 symbol where the project's set
+       has one, else the JIC symbol (the drive, the manual motor starter, the reactors);
+       tags take the project's letters (tags.prefix_for; a reactor R, added to
+       IEC_LETTERS). Checked: every IEC stand-in of a built-in UDT's symbols (disconnector,
+       fuses, breaker, contactor main contacts, thermal overload, motor, terminal, contactor
+       coil, overload contact) has the same pin names in the same places as the JIC symbol,
+       so nothing needed mapping; udts.swaps swaps only a symbol whose pins line up (one of
+       your own that doesn't stays JIC). Decided here: done when it is placed (and by
+       Update from UDT..., which brings one placed before the standard changed to the new
+       symbols, keeping its tags), and the other way round in a JIC project.
+   - Ratings (nec_tables.py): Tables 430.248 and 430.250 (the 2300 V and synchronous columns
+     left out), 430.6(A)(1)'s voltage columns, Table 430.52's percents as where the built-in
+     rules start (fuses 175 %, inverse-time breakers 250 %), 240.6(A)'s standard sizes, a
+     disconnect at 115 % (430.110(A)) rounded up to a switch size (decided here: 30, 60,
+     100, 200... A, the common safety switch sizes, not a table of the code); a manual
+     starter, overload and reactors at the motor's FLA (typed, else the table's). Marked
+     "check against the code edition in force". Not done: conductor sizes (Table 310.16 and
+     its corrections need more than the motor's current to be right).
 
 ## Next, in build order (each its own pull request with tests)
 Owner, Nov 2026: "do it all", schematic work first (contacts linked to their coil,

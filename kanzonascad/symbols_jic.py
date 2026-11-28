@@ -571,6 +571,17 @@ def builtin_symbols():
                   _three_pins(), tag=(0.0, TAG3_Y),
                   description="Thermal overload heaters, three poles",
                   attr_texts=_rating(y=RATING3_Y, fields=("AMPS",))))
+    # (0.30, for the motor-circuit UDTs: a line or load reactor, three inductors, each three
+    # turns between L and T, with the iron core above them)
+    def reactor_pole():
+        return [Line((-PIN, 0), (-0.1875, 0)), Line((0.1875, 0), (PIN, 0)),
+                Arc((-0.125, 0), 0.0625, 0, 180), Arc((0.0, 0), 0.0625, 0, 180),
+                Arc((0.125, 0), 0.0625, 0, 180), Line((-0.1875, 0.11), (0.1875, 0.11))]
+
+    S.append(_sym("Reactor 3-pole", "JIC/Power", _three(reactor_pole), "device", "", "LR",
+                  _three_pins(), tag=(0.0, TAG3_Y),
+                  description="Line or load reactor, three phases (L1-L3 in, T1-T3 out)",
+                  attr_texts=_rating(y=RATING3_Y, fields=("AMPS",))))
     # two devices in one symbol, as they're bought and wired (the owner, 0.16.2: "Please add
     # 3ph disconnect with fuses and 3phase starter with overloads as symbols"): the second
     # half drawn 1/2" on, L1-L3 in on the left, T1-T3 out 1" away

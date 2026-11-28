@@ -83,5 +83,34 @@ class SpatialIndexTest(unittest.TestCase):
         self.assertNotIn((1250.0, 1500.0), set(map(tuple, wires.junctions(s))))
 
 
+class BigTextsTest(unittest.TestCase):
+    def test_a_quarter_inch_scale_sheet_keeps_its_index_small(self):
+        # (0.30: on a sheet at 1/4" = 1'-0" texts are 48 times as big in drawing units, and each
+        # filled hundreds of half-inch buckets: a battery project of 33 such sheets took 480 MB
+        # to open, and the long battery, seed 5211, ran out of memory. Big entities go in
+        # coarse buckets: still found by every query)
+        rnd = random.Random(11)
+        s = M.Sheet("S")
+        ents = []
+        for i in range(300):
+            x, y = rnd.uniform(0, 800), rnd.uniform(0, 500)
+            e = M.Text((x, y), "TITLE %d" % i, 0.125 * 48)
+            e.id = i + 1
+            s._put(e)
+            ents.append(e)
+        idx = s.index
+        kept = sum(len(v) for v in idx.cells.values()) + \
+            sum(len(v) for v in getattr(idx, "coarse", {}).values())
+        self.assertLess(kept, 300 * 20, "the index keeps %d bucket entries" % kept)
+        for e in ents[:60]:
+            b = e.bbox()
+            p = ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
+            self.assertIn(e.id, set(idx.query_point(p, 1e-6)))
+            self.assertIn(e.id, idx.query((p[0] - 0.01, p[1] - 0.01, p[0] + 0.01, p[1] + 0.01)))
+        for e in ents[:100]:
+            s._drop(e.id)
+        self.assertFalse(idx.query((-1e6, -1e6, 1e6, 1e6)) & {e.id for e in ents[:100]})
+
+
 if __name__ == "__main__":
     unittest.main()

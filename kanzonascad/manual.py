@@ -520,7 +520,8 @@ height above the wire (all the three-pole devices at one, all the one-line symbo
 another), so the tags of symbols side by side line up; a project started before 0.16 takes
 the new heights with <b>Update blocks from library...</b>. A symbol turned sideways shows its
 tag beside it, read across, starting at its spot and running away from the symbol (clear of
-its poles). Select a symbol to see a grip on its tag (and on a Rating or other attribute it
+its poles), and its ratings (Rating, Amps, Volts...) one under the other from their first
+spot, read across too. Select a symbol to see a grip on its tag (and on a Rating or other attribute it
 shows at one spot): drag it anywhere, and it stays there on that copy, following the symbol
 when it is moved or turned (Undo puts it back). In the Parts tab, Insert asks whether to place
 the part's symbol or its footprint.</p>
@@ -556,6 +557,111 @@ off-sheet connectors and source and destination arrows take new names, the same 
 circuit, so a pair in it stays a pair and none joins a wire of the drawing by accident; its
 terminals number themselves on their strips; its tags and footprint labels take this
 project's heights; and the sheet's wires under its symbols are cut to them, as Paste does. A block the project already has keeps its own drawing.</p>
+<h3>UDTs</h3>
+<p>A <b>UDT</b> (a user-defined type, as in PLCs and Ignition) is a circuit type: a whole motor
+circuit, say, with <b>choices</b> (a manual motor starter or fuses), <b>optional parts</b> (a
+line reactor, a load reactor), <b>values</b> (horsepower, volts, phase, the motor's FLA) and
+<b>ratings</b> worked out for its devices. Placed, it is ordinary devices, wires and text, "as
+if it was a bunch of individual parts like normal": each device has its own tag, its wires
+their numbers, its contacts their cross-references, and reports, terminal strips and parts see
+them as any others. What ties them together is kept with the sheet, so the UDT can be changed
+and rebuilt in place. Two styles of motor circuit are two UDTs.</p>
+<p>Two come with the program (read-only, as the built-in symbols are: editing one saves your
+own copy, which takes its place): <b>Motor circuit, VFD</b> (disconnect; manual motor starter
+or fuses; line reactor, optional; variable frequency drive; load reactor, optional; terminals;
+three-phase motor) and <b>Motor circuit, full-voltage starter</b> (disconnect; fuses or a
+circuit breaker; contactor; overload; terminals; motor; and the contactor's coil and the
+overload's contact on a control rung, linked to them). Both are drawn for power running left
+to right, L1, L2 and L3 1/2" apart, their base point at the incoming end of L1.</p>
+<ul>
+<li><b>Insert UDT...</b> (Library menu, and Insert symbol's button menu on the Schematic tab;
+typed INSERTUDT or UDT) lists the UDTs by category with a picture. Pick its choices (a list
+for each, a tick for an optional part) and values: the picture shows it as it will be.
+<b>Insert</b>: it follows the mouse; type R to turn it 90 degrees (any way round: its tags and
+ratings stay readable), S then a number to scale it, and click where its base point goes. It
+is placed as a saved circuit is (new tags of the sheet, contacts linked to their own coil, the
+sheet's wire numbers, wires under its symbols cut), in one step. Its contacts are numbered on
+their devices as any contact placed is (the overload's 95-96).</li>
+<li><b>Terminal strip</b> (in Insert UDT, for a UDT with terminals, such as the motor
+circuits' field terminals): one of the project's strips (TB101, X101... with how many
+terminals each has), <b>New strip</b> (the next free strip tag of the sheet's page), or
+<b>None yet</b> (the terminals show TB?, X? in an IEC project, for a strip given later). On a
+strip, its terminals take that strip's lowest free numbers, in the UDT's order (L1, L2, L3), a
+spare's number taken too, and are linked to its Terminal strip symbol when it has one. The
+project remembers the choice: the next Insert UDT offers it first.</li>
+<li>In a project of <b>IEC 60617</b> symbols (Project properties), each device of a UDT is
+placed as the IEC symbol standing for its JIC one (disconnector, fuses, breaker, contactor,
+thermal overload, motor, terminals, the coil and its contact), where that symbol has the same
+pins in the same places, so every wire still lands on its pin (all of the built-in ones do);
+a device with no IEC symbol here (the drive, the manual motor starter, the reactors) stays JIC.
+Its tags take the project's IEC 81346-2 letters (Q101, F101, M101, T101 for the drive, R101 for
+a reactor). Update from UDT... brings a UDT placed before the project's standard changed to
+the new symbols, each keeping its tag.</li>
+<li><b>UDT properties...</b> (Library menu; typed UDTPROPS): select any object of a placed
+UDT, then change its choices, its values and its ratings. It is rebuilt in place, in one step
+(Undo takes it back): devices that stay keep their tags and wires their numbers; those of a
+choice no longer made are erased; those added take the sheet's next tags; an optional part
+left out is bridged by straight wires, so the circuit stays connected. Moved or turned whole
+(Move, Rotate), it is rebuilt where it now is.</li>
+<li>A member <b>edited by hand</b> (moved on its own, an attribute typed, a part assigned) keeps
+the edit: where the rebuild would take it away or replace it, it is left as it is, no longer
+part of the UDT, and the window says so before anything changes (erase it if it isn't wanted).
+A member erased by hand isn't put back.</li>
+<li><b>Copies</b> of a placed UDT (Copy, Ctrl+C and Ctrl+V, Paste with Enter where it was
+copied from, Ctrl+drag, Duplicate sheet, into another sheet or another project) make a new
+placed UDT: the same UDT, the same choices, values and ratings (those overridden too) as the
+one copied, with its own new tags, wire numbers and terminal numbers (on the same strip), its
+contacts on its own devices. UDT properties..., Update from UDT... and applying to all treat
+it as any other. A copy needs all of the UDT's symbols (its wires may be left behind: those
+count as erased by hand); a copy of only some of them, Mirror and Array copies are plain
+parts.</li>
+<li><b>Detach UDT</b> (Library menu; typed DETACHUDT): the selected placed UDTs become plain
+parts, nothing changed on the drawing.</li>
+<li><b>Make UDT...</b> (Library menu; typed MAKEUDT): select a circuit you drew, click its base
+point (Enter: the lower left corner of what is selected) and give it a name, a category and a
+description; the <b>UDT editor</b> opens. Insert UDT's <b>New from saved circuit...</b> makes
+one from a circuit saved with Save circuit..., and <b>Edit...</b> opens the editor on any UDT.
+In the editor, select objects under Members and choices, then:
+<b>Make optional...</b> (left out, straight wires bridge each pin to the pin across, L1 to T1);
+<b>Make a choice...</b> (what is selected becomes its first alternative); with the choice
+selected, <b>Add alternative...</b> (a symbol of the library put where the first one is, held
+by its first pin, with a short wire from each of its pins to where the first one's pin of the
+same name was); <b>Default</b> (the alternative chosen to start); <b>Remove</b>. The Values tab
+lists its values and their defaults; the Rating rules tab, each device's rated attributes
+(RATING, AMPS, HP, VOLTS, FLA) and how each is worked out. Save keeps it in the library's
+<b>udts</b> folder (the second library, with Save new blocks and parts to the second library
+ticked); Delete in Insert UDT takes one of yours out (drawings it was placed in keep what it
+put there).</li>
+<li><b>Update from UDT...</b> (Library menu; typed UPDATEUDT): a change to a UDT in the library
+never reaches placed ones by itself. This brings the placed UDTs (those with an object
+selected, else all of the project) to their UDT as it now is, listing what will change first:
+members added, removed or replaced (a device replaced keeps its tag). Each keeps its own
+values, rating rules and ratings unless <b>Also give them the UDT's values and rating
+rules</b> is ticked; even then, their overridden ratings stay unless <b>...and replace their
+overridden ratings</b> is ticked too.</li>
+</ul>
+<p><b>Ratings</b> are worked out automatically and can be overridden. From the horsepower,
+volts and phase, the motor's full-load current is taken from the NEC's tables (Table 430.250
+for three-phase motors at 200, 208, 230, 460 and 575 V; Table 430.248 for single-phase motors at
+115, 200, 208 and 230 V; a nameplate voltage takes its table column, 480 V the 460 V one, as
+430.6(A)(1) says). Each device's rating then follows its rule: a value copied (HP, VOLTS), the
+motor's table current, its FLA (typed as a value, else the table's), or a percent of the table
+current rounded up to the next standard size (240.6(A); fuses also 1, 3, 6 and 10 A). The
+built-in UDTs start at Table 430.52's most: dual-element fuses 175% of the table current,
+inverse-time breakers 250%; the disconnect at 115% (430.110(A)) rounded up to a switch size (30,
+60, 100, 200 A); the manual motor starter, overload and reactors at the motor's FLA. The percent
+is the UDT's own: type 150 for your shop's rule, or a drive maker's in its place. A motor size
+or voltage the tables don't have gives no current: type the FLA, or the rating. <b>Check the
+ratings against the code edition in force</b>; conductor sizes are not worked out.</p>
+<p>In UDT properties, type over a rating's value to override it: it is kept through every
+rebuild, shown as overridden, until <b>Back to automatic</b>. A rating typed on the drawing
+(double-click the device) counts as overridden too. Values and ratings are each placed UDT's
+own (the owner: "ratings of the motor ckts should have the option of being applied to all
+instances but not by default, as most will have at minimum, subtle differences"): changing the
+horsepower of one changes only that one. Tick <b>Apply these values and ratings to all ...
+other placed ...</b> to give every other placed UDT of the same name this one's values, rules
+and overridden ratings; what will change is listed first, and it is one step. Their own
+overridden ratings stay unless <b>Also replace the ratings overridden on those</b> is ticked.</p>
 <h3>Making your own</h3>
 <ol>
 <li>Draw it, or open the manufacturer's DXF and copy the view you want into your drawing
@@ -1081,7 +1187,10 @@ to float it; where it is and whether it is open are kept for next time.</p>
 few colors, or Other... for any), and where it makes sense its <b>Position X</b> and <b>Y</b>
 (its insertion point, in drawing inches) and <b>Rotation</b> (turned about that point; a symbol
 moved this way takes its wires with it). For a symbol or footprint, Position X and Y are where
-it is placed: type a value and it moves there, its wires with it, in one step of Undo. The
+it is placed: type a value and it moves there, its wires with it, in one step of Undo. They
+show four decimals, and what is finer than that is kept: something off the grid by a hair (a
+circuit copied from an odd point) moves by what you changed, so it stays in line with the
+wires it is drawn with. The
 status bar shows the same while the mouse is over a symbol or footprint, beside the cursor's
 coordinates: its tag (or its block's name) and its insertion point, <code>CR101  X 6.250
 Y 4.500</code>.</li>
@@ -1577,7 +1686,7 @@ wire. So a name typed for a source arrow on a numbered wire (its attributes wind
 the Properties panel) renumbers the wire, as that number typed on the wire does: the wire takes
 it, locked, its destination arrows and their wires follow, and a number another wire already
 has asks whether it is a cross-reference, as there (cancelled, the name stays as it was); one
-step, with the rest of the window's answer, that Undo takes back. A name another pair already goes by is left alone, so two pairs never join. A destination arrow
+step, with the rest of the window's answer, that Undo takes back. A name the arrows of another wire already go by (6010A, for a wire numbered 6010a or 6010A) would join the two wires: typed for a source arrow it is refused, with a message, and nothing changes, unless you answer Source or Destination to the cross-reference question. A name another pair already goes by is left alone, so two pairs never join. A destination arrow
 offers the name of a source still waiting for it (or <b>List...</b> on the command line picks the one it continues from a list of them, wire number and place, waiting ones first; <b>Pick on drawing</b> lets you go to its sheet and click it, and comes back; a destination paired either way is <b>linked</b> to that source arrow: it shows that one whatever the order of the others, and follows it when its wire is renumbered, until that source arrow is deleted. Double-click a destination arrow to change it: <b>Comes from</b> lists every source arrow, or <b>Automatic</b> pairs it by order; a name typed for a linked destination, with Comes from left as it was, or its Tag in the Properties panel, pairs it by that name instead, no longer linked); placed, its wire takes the source's number
 and its layer (480V BRN, with its color and gauge). Each arrow shows only its other half's
 place: a destination its source, a source its destination. A wire carried on over several
@@ -1665,7 +1774,9 @@ with how many terminals each has; on the right the one picked, terminal by termi
 order:</p>
 <ul>
 <li><b>Terminal</b>: its number (? while it has none). Double-click it to type another; a
-number already on the strip is refused.</li>
+number already on the strip is refused. Terminals without a number (a UDT's placed on no
+strip yet) stay after the numbered ones: the order is kept by number, so one numbered moves up
+to them, and one can't be moved down among them.</li>
 <li><b>Internal wire</b> and <b>Internal to</b>, <b>External wire</b> and <b>External to</b>:
 the wire numbers on each side and the devices' pins they go to (<b>CR1:A1</b>; another terminal
 as <b>TB2-4</b>), worked out from the schematic each time, across sheets through off-sheet
@@ -2663,7 +2774,7 @@ closes it) with every place the selected device, wire or PLC point is used; Ente
 double-click on a row goes there</td></tr>
 <tr><td>Ctrl+F1</td><td>Collapse ribbon</td></tr>
 <tr><td>Enter / Space</td><td>Finish a step; repeat the last command (Insert: the same
-symbol; Insert circuit: the same circuit)</td></tr>
+symbol; Insert circuit: the same circuit; Insert UDT: the same UDT, with the same choices)</td></tr>
 <tr><td>Esc</td><td>Cancel the command; clear the selection (anywhere in the window)</td></tr>
 <tr><td>Right-click</td><td>In a command: Enter (Bus: a menu of its options, Enter first); with
 none: the drawing's menu</td></tr>

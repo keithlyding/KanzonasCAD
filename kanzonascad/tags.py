@@ -59,6 +59,8 @@ def is_device(e):
 #   M providing mechanical energy: motors, actuating solenoids (MA, MB);
 #   T converting energy, keeping its kind: transformers, power supplies (AC/DC), drives
 #     (frequency converters) (TA, TB);
+#   R restricting or stabilizing a flow of energy: line and load reactors (RA; 0.30, the
+#     motor-circuit UDTs' Reactor 3-pole, tagged LR in a JIC project);
 #   X connecting: terminal strips, distribution blocks (XD).
 # A prefix not here (one of your own) is kept as it is in an IEC project too.
 IEC_LETTERS = {"CR": "K", "TR": "K", "PLC": "K",
@@ -68,7 +70,7 @@ IEC_LETTERS = {"CR": "K", "TR": "K", "PLC": "K",
                "FU": "F", "OL": "F",
                "LT": "P",
                "MTR": "M", "SOL": "M",
-               "T": "T", "PS": "T", "VFD": "T",
+               "T": "T", "PS": "T", "VFD": "T", "LR": "R",
                "TB": "X", "DB": "X", "PDB": "X"}
 # (PS is both a power supply and a pressure switch's prefix: the switch, the one with contacts
 # of its own, a parent, is a sensor)

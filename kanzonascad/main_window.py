@@ -708,6 +708,26 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self.acts["save_circuit"].setToolTip(
             "Keep the selected objects (symbols, wires, text, a ladder...) in your library as "
             "a circuit, with a name and a category, to place again with Insert circuit...")
+        A("insert_udt", "Insert &UDT...", lambda: self.insert_udt(), icon="insert_udt",
+          label="Insert UDT",
+          tip="Place a UDT (a circuit type: a whole motor circuit with its choices, optional "
+              "parts and ratings) as ordinary devices and wires that stay tied together")
+        self._cmd_act("make_udt", "Make U&DT...", C.MakeUdtCmd, "Make UDT")
+        self.acts["make_udt"].setProperty("icon_key", "make_udt")
+        self.acts["make_udt"].setToolTip(
+            "Make the selected objects a UDT of your own: its base point, then its choices, "
+            "optional parts, values and rating rules in the UDT editor")
+        A("udt_props", "UDT propert&ies...", lambda: self.udt_properties(), icon="udt_props",
+          label="UDT props",
+          tip="Change the selected placed UDT's choices, values and ratings: it is rebuilt "
+              "in place, its devices keeping their tags")
+        A("update_udt", "Update from UD&T...", lambda: self.update_from_udt(),
+          icon="update_udt", label="Update UDTs",
+          tip="Bring placed UDTs (those selected, else all) to their UDT as it now is in the "
+              "library, showing what will change first")
+        A("detach_udt", "Detac&h UDT", lambda: self.detach_udt(), icon="detach_udt",
+          label="Detach UDT",
+          tip="The selected placed UDTs become plain parts, no longer tied together")
         A("library_panel", "&Library...", lambda: self.show_library(None), icon="library",
           label="Library")
         A("new_part", "New &part...", lambda: self.library_panel.edit_part(new=True),
@@ -870,7 +890,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             m.addSeparator() if k is None else m.addAction(a[k])
         m = mb.addMenu("&Library")
         for k in ("insert_symbol", "insert_footprint", "library_panel", None,
-                  "insert_circuit", "save_circuit", None, "make_block",
+                  "insert_circuit", "save_circuit", None, "insert_udt", "make_udt",
+                  "udt_props", "update_udt", "detach_udt", None, "make_block",
                   "explode", "attr_vis", None, "block_props", "edit_block", "dup_block", "save_block",
                   "save_block_as", "add_pin", "pins", "add_attr", "update_blocks", None,
                   "new_part", "assign_part", "save_as_part", None, "import_blocks",
@@ -955,8 +976,11 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             # decision; a crowded tab shrinks its groups from the right, Ribbon.fit)
             # (Insert circuit and Save circuit on Insert symbol's button menu: the tab as
             # wide as before, 0.29)
+            # (and the UDTs, 0.30)
             ("Symbols", "small", [split_button([a["insert_symbol"], a["insert_circuit"],
-                                                a["save_circuit"]]),
+                                                a["save_circuit"], a["insert_udt"],
+                                                a["make_udt"], a["udt_props"],
+                                                a["update_udt"], a["detach_udt"]]),
                                   a["make_block"], a["edit_block"],
                                   a["block_props"], a["explode"], a["attr_vis"], a["del_comp"],
                                   a["new_part"]]),
@@ -2414,7 +2438,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
     def _other_command(self, what):
         {"undo": self.undo, "redo": self.redo, "save": self.save, "open": self.open_dialog,
          "new": self.new_project, "quit": self.close,
-         "insert_circuit": self.insert_circuit}[what]()
+         "insert_circuit": self.insert_circuit, "insert_udt": self.insert_udt,
+         "udt_props": self.udt_properties, "update_udt": self.update_from_udt,
+         "detach_udt": self.detach_udt}[what]()
 
     def undo(self):
         d = self.doc()
@@ -2456,9 +2482,12 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             if isinstance(e, M.Insert) and e.defn is not None:
                 used.update(x.layer for x in e.defn.entities)
         lays = v.project.layers
+        from . import udts
         data = {"base": [bb[0], bb[1]], "entities": [e.to_dict() for e in ents],
                 "blocks": list(blocks.values()),
-                "layers": [lays[n].to_dict() for n in sorted(used) if n in lays]}
+                "layers": [lays[n].to_dict() for n in sorted(used) if n in lays],
+                # (placed UDTs copied whole: pasted, each a placed UDT of its own, 0.30)
+                "udts": udts.copied(v.sheet(), [e.id for e in ents])}
         mime = QMimeData()
         mime.setData(CLIP_MIME, json.dumps(data).encode("utf-8"))
         mime.setText("%d KanzonasCAD object(s)" % len(ents))
@@ -2493,7 +2522,9 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             return
         layers = {d["name"]: d for d in data.get("layers", []) or []
                   if isinstance(d, dict) and d.get("name")}
-        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks, layers)
+        found = data.get("udts") if isinstance(data.get("udts"), list) else []
+        v.run(C.PasteCmd, ents, tuple(data["base"]), blocks, layers,
+              [f for f in found if isinstance(f, dict) and "inst" in f and "type" in f])
         v.setFocus()
 
     def select_all(self):
@@ -2973,7 +3004,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             return
         from . import tags
         meta = cur.meta_dict()
-        for k in ("id", "number", "xref_shown", "xref_frozen", "no_dots", "number_from"):
+        for k in ("id", "number", "xref_shown", "xref_frozen", "no_dots", "number_from",
+                  "udts", "udt_types"):
             meta.pop(k, None)
         meta["title"] = copy_title(cur.title, [x.title for x in p.sheets])
         s = p.make_sheet(meta["title"])
@@ -2986,8 +3018,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             while str(n) in used:
                 n += 1
             s.number = str(n)
-        ents = []
-        for e in cur.entities.values():
+        ents, src = [], list(cur.entities.values())
+        for e in src:
             c = e.copy()
             c.id = None
             if isinstance(c, M.Wire):
@@ -3000,10 +3032,14 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                 c = c.copy(attrs=attrs)
                 c.id = None
             ents.append(c)
+        from . import udts
+        found = udts.copied(cur, cur.entities)
         with p.edit("Duplicate sheet") as ed:
             ed.add_sheet(s, p.sheets.index(cur) + 1)
-            for e in tags.retag_copies(p, s, ents):
-                ed.add(s, e)
+            made = {o.id: ed.add(s, e) for o, e in zip(src, tags.retag_copies(p, s, ents))}
+            # (its placed UDTs: each one of its own on the copy, its members the copies,
+            # 0.30)
+            udts.adopt_copies(ed, p, s, found, made)
         v.show_sheet(s.id)
         self._fill_sheets()
         self.cmdline.add_history("Duplicated %s as %s (page %s)" % (
@@ -3398,6 +3434,228 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         cmd = v.run(C.InsertCircuitCmd, c)
         v.setFocus()
         return cmd
+
+    # ---- UDTs (udts.py, udt_window.py) ------------------------------------------------------
+    def ask_udt(self):
+        """Insert UDT's browser: (UDT, choices, values, terminal strip) picked, or None."""
+        from .udt_window import UdtBrowser
+        v = self.view()
+        dlg = UdtBrowser(self, self.library, theme.is_dark(), editor=self.edit_udt_definition,
+                         circuits=self.ask_circuit,
+                         project=v.project if v is not None else None,
+                         sheet=v.sheet() if v is not None else None,
+                         shown=(lambda u: self.udt_for_project(v.project, u))
+                         if v is not None else None)
+        got = dlg.chosen if dlg.exec() else None
+        dlg.deleteLater()
+        return got
+
+    def udt_for_project(self, project, udt):
+        """udt with the project's symbols (an IEC 60617 project: IEC symbols where they
+        stand in pin for pin, udts.for_standard)."""
+        from . import udts
+        from .symbols_iec import standard_of
+        return udts.for_standard(udt, standard_of(project),
+                                 lambda n: self.library.get("symbol", n))
+
+    def insert_udt(self):
+        """Library > Insert UDT...: pick a UDT, its choices and its terminals' strip, then
+        where it goes."""
+        v = self.view()
+        if v is None:
+            return None
+        got = self.ask_udt()
+        if got is None:
+            return None
+        got = (self.udt_for_project(v.project, got[0]),) + tuple(got[1:])
+        cmd = v.run(C.InsertUdtCmd, *got)
+        v.setFocus()
+        return cmd
+
+    def edit_udt_definition(self, udt):
+        """The UDT editor on udt; saved to the library (a built-in one as your own copy).
+        The UDT saved, or None."""
+        from .udt_window import UdtEditor
+        v = self.view()
+        blocks, _bad = self.library.blocks("symbol")
+        dlg = UdtEditor(self, udt, blocks, v.project if v is not None else None,
+                        theme.is_dark())
+        got = dlg.result_udt if dlg.exec() else None
+        dlg.deleteLater()
+        if got is None:
+            return None
+        return self.save_udt(got, old_name=udt.name if not udt.builtin else None)
+
+    def save_udt(self, udt, old_name=None):
+        """udt written to the library (asking first before replacing another of its name).
+        The UDT, or None."""
+        try:
+            have, _bad = self.library.udts()
+            where = self.library.udt_where(udt.name)
+            if udt.name != old_name and where in ("first", "second") and udt.name in have \
+                    and QMessageBox.question(self, APP, "A UDT named %s is already in the "
+                                             "library. Replace it?" % udt.name) \
+                    != QMessageBox.Yes:
+                return None
+            self.library.save_udt(udt, old_name)
+        except OSError as ex:
+            QMessageBox.warning(self, APP, "Couldn't save the UDT to the library (%s):\n%s"
+                                % (self.library.folder, ex))
+            return None
+        self._say("Saved UDT %s to your library: Library > Insert UDT... places it; Update "
+                  "from UDT... brings placed ones to it" % udt.name)
+        return udt
+
+    def ask_udt_details(self):
+        """Make UDT asks this: (name, category, description), or None."""
+        from .circuit_window import circuit_details
+        got, _bad = self.library.udts()
+        return circuit_details(self, {u.category for u in got.values()}, title="Make UDT",
+                               hint="Next, the UDT editor: make choices (a manual starter "
+                                    "or fuses) and optional parts (a line reactor) of its "
+                                    "objects, its values (HP, volts) and rating rules.")
+
+    def make_udt_from(self, ents, base):
+        """Make UDT's last step (commands.MakeUdtCmd): the objects made a UDT, its choices
+        set in the editor, kept in the library. The UDT, or None."""
+        from . import udts
+        v = self.view()
+        if v is None or not ents:
+            return None
+        details = self.ask_udt_details()
+        if details is None:
+            return None
+        return self.edit_udt_definition(udts.make(v.project, ents, base, *details))
+
+    def _udt_selected(self):
+        """(view, [(sheet, group id)] of the placed UDTs an object selected is part of)."""
+        from . import udts
+        v = self.view()
+        if v is None:
+            return None, []
+        s = v.sheet()
+        out = []
+        for eid in sorted(v.selection()):
+            gid = udts.find(s, eid)
+            if gid is not None and (s, gid) not in out:
+                out.append((s, gid))
+        return v, out
+
+    def ask_udt_properties(self, project, sheet, gid, others):
+        """UDT properties' window: its result, or None."""
+        from .udt_window import UdtPropertiesDialog
+        dlg = UdtPropertiesDialog(self, project, sheet, gid, others)
+        got = dlg.result if dlg.exec() else None
+        dlg.deleteLater()
+        return got
+
+    def confirm_udt_changes(self, title, intro, plans, options=(), recompute=None):
+        """What plans will change, shown first: (plans, options ticked), or None."""
+        from .udt_window import ChangesDialog
+        dlg = ChangesDialog(self, title, intro, plans, options, recompute)
+        got = (dlg.plans, dlg.options()) if dlg.exec() else None
+        dlg.deleteLater()
+        return got
+
+    def _apply_udt_plans(self, v, name, plans):
+        from . import udts
+        with v.project.edit(name) as ed:
+            for p in plans:
+                udts.apply(ed, v.project, p)
+        warn = [w for p in plans for w in p.warnings]
+        self._say("%s: %d placed UDT(s) rebuilt%s" % (name, len(plans), (" - " + warn[0] +
+                                                                          (" (and %d more)" %
+                                                                           (len(warn) - 1)
+                                                                           if len(warn) > 1
+                                                                           else ""))
+                                                       if warn else ""))
+        v.update()
+
+    def udt_properties(self):
+        """UDT properties...: the selected placed UDT's choices, values and ratings changed,
+        and it rebuilt in place (one undo step); the others of its UDT given the same only
+        when asked."""
+        from . import udts
+        v, picked = self._udt_selected()
+        if not picked:
+            self._say("UDT properties: select an object of a placed UDT first")
+            return None
+        s, gid = picked[0]
+        others = len([x for x in udts.instances(v.project, s.udts[gid]["udt"])
+                      if x != (s, gid)])
+        got = self.ask_udt_properties(v.project, s, gid, others)
+        if got is None:
+            return None
+        first = udts.plan(v.project, s, gid, got["choices"], got["values"],
+                          overrides=got["overrides"])
+        plans = [first]
+        if got["all"]:
+            plans += udts.apply_all_plans(v.project, s, gid, first.inst["values"],
+                                          first.inst["ratings"], first.inst["overrides"],
+                                          got["replace"])
+        if got["all"] or first.warnings:
+            ok = self.confirm_udt_changes(
+                "UDT properties", "These changes will be made (one step: Undo takes them "
+                "all back):", plans)
+            if ok is None:
+                return None
+        self._apply_udt_plans(v, "UDT properties", plans)
+        return plans
+
+    def update_from_udt(self):
+        """Update from UDT...: placed UDTs (those selected, else all of the project) brought
+        to their UDT as it now is in the library, what will change shown first; each keeps
+        its own values and ratings unless asked."""
+        from . import udts
+        v, picked = self._udt_selected()
+        if v is None:
+            return None
+        picked = picked or udts.instances(v.project)
+        if not picked:
+            self._say("Update from UDT: no placed UDTs in this project")
+            return None
+        lib, _bad = self.library.udts()
+        names = sorted({s.udts[g]["udt"] for s, g in picked})
+        # (in the project's symbols, as Insert UDT places them: an IEC project's IEC ones)
+        lib = {n: self.udt_for_project(v.project, lib[n]) for n in names if n in lib}
+        missing = [n for n in names if n not in lib]
+
+        def make(opts):
+            out = []
+            for n in names:
+                if n in lib:
+                    out += udts.update_plans(v.project, lib[n], opts.get("rules", False),
+                                             opts.get("replace", False),
+                                             only=[(s, g) for s, g in picked
+                                                   if s.udts[g]["udt"] == n])
+            return out
+        plans = make({})
+        if not plans and not missing:
+            self._say("Update from UDT: the placed UDTs are as their UDTs are")
+        got = self.confirm_udt_changes(
+            "Update from UDT", "The placed UDTs brought to their UDT as it is in the library "
+            "(one step: Undo takes it all back)." + (" Not in the library: %s." %
+                                                     ", ".join(missing) if missing else ""),
+            plans, [("rules", "Also give them the UDT's values and rating rules (unticked: "
+                              "each keeps its own)"),
+                    ("replace", "...and replace their overridden ratings")], make)
+        if got is None or not got[0]:
+            return None
+        self._apply_udt_plans(v, "Update from UDT", got[0])
+        return got[0]
+
+    def detach_udt(self):
+        """Detach UDT: the selected placed UDTs become plain parts (one undo step)."""
+        from . import udts
+        v, picked = self._udt_selected()
+        if not picked:
+            self._say("Detach UDT: select an object of a placed UDT first")
+            return 0
+        with v.project.edit("Detach UDT") as ed:
+            for s, gid in picked:
+                udts.detach(ed, s, gid)
+        self._say("Detach UDT: %d placed UDT(s) are now plain parts" % len(picked))
+        return len(picked)
 
     def insert_block(self, defn, attrs):
         v = self.view()
@@ -4141,14 +4399,14 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         self.apply_wire_number(v, cur, num, lock, own, was, style, on_pin)
 
     def apply_wire_number(self, v, cur, num, lock, own="", was="", style=None, on_pin=False,
-                          before=(), name="Wire number"):
+                          before=(), name="Wire number", arrow=None):
         """A wire's number as the Wire number window answers it (num, locked or not; own:
         "own", "same" or "" for how it numbers as a tap, was: as it did; style: its tap
         suffix's), one step; a number another wire has asks whether it is a cross-reference.
         The Properties panel's Wire number goes through it too, and a name typed for a source
         arrow on a numbered wire (arrow_renumbers): before, [(sheet, changed copy)] made in
-        the same step (the rest of an attributes window's answer). Returns whether it
-        changed."""
+        the same step (the rest of an attributes window's answer); arrow: that source arrow,
+        which must take num as its name. Returns whether it changed."""
         from . import wirenums
         if style is None:
             style = cur.tap_style
@@ -4156,7 +4414,7 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
             (cur.num_lock or not num or own != was)
         if same and own == was and style == cur.tap_style:
             return False
-        go_same = False
+        go_same, said = False, ""
         if num and num != (cur.num or ""):
             go = self._cross_reference(v, cur, num, lock, before)
             go_same = go == "lock"
@@ -4166,8 +4424,25 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                 # (two wires with one number: only a locked one stays, numbering gives an
                 # unlocked one a free number again; the battery, 0.17.5, seed 77)
                 lock = True
-                self._say("Wire %s locked: another wire has that number, and numbering "
-                          "would change an unlocked one" % num)
+                said = "Wire %s locked: another wire has that number, and numbering would " \
+                    "change an unlocked one" % num
+        try:
+            self._wire_number_step(v, cur, num, lock, own, was, style, on_pin, before, name,
+                                   same, go_same, arrow)
+        except wirenums.NameRefused as ex:
+            QMessageBox.information(self, "Source arrow", str(ex))
+            return False
+        if said:
+            self._say(said)
+        return True
+
+    def _wire_number_step(self, v, cur, num, lock, own, was, style, on_pin, before, name,
+                          same, go_same, arrow):
+        """apply_wire_number's step; with arrow, undone (NameRefused, saying why) when that
+        source arrow doesn't take num as its name: connectors of that name on another wire
+        would join the two (wirenums._follow_numbers leaves it alone; the long battery, 0.30,
+        seed 5243: it kept its old name, its destinations with it, on a wire renumbered)."""
+        from . import wirenums
         with v.project.edit(name) as ed:
             for sh, e in before:
                 ed.change(sh, e)
@@ -4193,7 +4468,10 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
                 kept = list(v.project.settings.get("same_numbers") or [])
                 if num not in kept:
                     ed.project_settings({"same_numbers": kept + [num]})
-        return True
+            if arrow is not None and wirenums.name_refused(ed, v.project, v.sheet(), arrow.id,
+                                                          num):
+                raise wirenums.NameRefused(wirenums.name_taken_text(v.project, v.sheet(),
+                                                                    arrow, num))
 
     def arrow_renumbers(self, v, ins, typed, before=()):
         """A name typed for a source arrow on a numbered wire (its attributes window, or Tag in
@@ -4209,7 +4487,8 @@ class MainWindow(BlockEditing, TitleBlockEditing, Tracing, Properties, Locking, 
         num = (typed or "").strip()
         was = "own" if wire.own_num else "same" if wire.same_num else ""
         return self.apply_wire_number(v, wire, num, bool(num), was, was, before=before,
-                                      name="Attributes" if before else "Wire number")
+                                      name="Attributes" if before else "Wire number",
+                                      arrow=ins if num else None)
 
     def _cross_reference(self, v, cur, num, lock, before=()):
         """A number typed that another wire already has: asked whether this is a cross-

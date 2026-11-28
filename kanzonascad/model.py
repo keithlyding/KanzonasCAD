@@ -2869,6 +2869,16 @@ class Insert(Entity):
         if d is None:
             return []
         stack = [a["pos"] for a in d.attr_texts if a.get("stack")]
+        # (turned sideways, the stack's lines would sit side by side, each over the next: the
+        # motor-circuit UDT turned 90 degrees showed its motor's "5HP460V FLA" in one
+        # blur. Then they go one under the other on the drawing from the stack's first spot,
+        # read across, as the tag is, 0.30)
+        across = None
+        if len(stack) > 1:
+            a0, a1 = self.to_world(stack[0]), self.to_world(stack[1])
+            dx, dy = a1[0] - a0[0], a1[1] - a0[1]
+            if abs(dx) > abs(dy):
+                across = (a0, math.hypot(dx, dy))
         out, k = [], 0
         for a in d.attr_texts:
             name = a["attr"]
@@ -2887,7 +2897,11 @@ class Insert(Entity):
                 ang = at[2] if at else a.get("angle", 0.0)
                 if at or "angle" in a:
                     ang = (ang + self.angle) % 360.0      # (turned with the block)
-            out.append((name, self.to_world(pos), ang, a))
+            if across is not None and not at and a.get("stack"):
+                q = (across[0][0], across[0][1] - across[1] * (k - 1))
+            else:
+                q = self.to_world(pos)
+            out.append((name, q, ang, a))
         return out
 
     def attr_angle(self, name):
@@ -3304,40 +3318,60 @@ class SpatialIndex:
     frame, a block the size of the sheet) is kept with its box in a short list of its own, and
     any query, however big, is answered whole: up to 0.15.5 both were cut to 64 x 64 buckets
     (32") from their lower left corner, so a window around an imported drawing found nothing
-    outside that corner."""
+    outside that corner.
+
+    Two sizes of bucket (0.30): an entity over FINE_MAX half-inch buckets goes in buckets of
+    COARSE inches instead. On a sheet at 1/4" = 1'-0" a title's text is 48 times as big in
+    drawing units and filled hundreds of half-inch buckets: a battery project of 33 such
+    sheets took 480 MB to open (the long battery, seed 5211, ran out of memory)."""
     CELL = 0.5          # inches
-    MAX_CELLS = 4096    # an entity over this many buckets goes in the list of big ones
+    FINE_MAX = 64       # an entity over this many buckets goes in the coarse ones
+    COARSE = 16.0       # inches
+    MAX_CELLS = 4096    # an entity over this many coarse buckets goes in the list of big ones
 
     def __init__(self):
         self.cells = {}
-        self.where = {}
+        self.coarse = {}
+        self.where = {}     # {id: (fine keys, coarse keys)}
         self.big = {}       # {id: box} of the entities too big for the buckets
 
-    def _span(self, bb):
-        c = self.CELL
+    @staticmethod
+    def _span_of(bb, c):
         return (int(math.floor(bb[0] / c)), int(math.floor(bb[1] / c)),
                 int(math.floor(bb[2] / c)), int(math.floor(bb[3] / c)))
+
+    def _span(self, bb):
+        return self._span_of(bb, self.CELL)
 
     def add(self, ent):
         bb = ent.bbox()
         x0, y0, x1, y1 = self._span(bb)
-        if (x1 - x0 + 1) * (y1 - y0 + 1) > self.MAX_CELLS:
-            self.where[ent.id] = ()
-            self.big[ent.id] = tuple(bb)
-            return
-        keys = [(i, j) for i in range(x0, x1 + 1) for j in range(y0, y1 + 1)]
-        self.where[ent.id] = keys
+        if (x1 - x0 + 1) * (y1 - y0 + 1) <= self.FINE_MAX:
+            cells, keys = self.cells, [(i, j) for i in range(x0, x1 + 1)
+                                       for j in range(y0, y1 + 1)]
+            self.where[ent.id] = (keys, ())
+        else:
+            x0, y0, x1, y1 = self._span_of(bb, self.COARSE)
+            if (x1 - x0 + 1) * (y1 - y0 + 1) > self.MAX_CELLS:
+                self.where[ent.id] = ((), ())
+                self.big[ent.id] = tuple(bb)
+                return
+            cells, keys = self.coarse, [(i, j) for i in range(x0, x1 + 1)
+                                        for j in range(y0, y1 + 1)]
+            self.where[ent.id] = ((), keys)
         for k in keys:
-            self.cells.setdefault(k, set()).add(ent.id)
+            cells.setdefault(k, set()).add(ent.id)
 
     def remove(self, eid):
         self.big.pop(eid, None)
-        for k in self.where.pop(eid, ()):
-            s = self.cells.get(k)
-            if s is not None:
-                s.discard(eid)
-                if not s:
-                    del self.cells[k]
+        fine, coarse = self.where.pop(eid, ((), ()))
+        for cells, keys in ((self.cells, fine), (self.coarse, coarse)):
+            for k in keys:
+                s = cells.get(k)
+                if s is not None:
+                    s.discard(eid)
+                    if not s:
+                        del cells[k]
 
     def _big_in(self, rect, out):
         x0, y0, x1, y1 = rect
@@ -3346,11 +3380,9 @@ class SpatialIndex:
                 out.add(eid)
         return out
 
-    def query(self, rect):
-        """Ids whose buckets meet rect (a big entity: whose box does)."""
-        x0, y0, x1, y1 = self._span(rect)
-        out = set()
-        cells = self.cells
+    @staticmethod
+    def _cells_in(cells, span, out):
+        x0, y0, x1, y1 = span
         if (x1 - x0 + 1) * (y1 - y0 + 1) > len(cells):
             # (a big window: the filled buckets, fewer than the ones it covers)
             for (i, j), s in cells.items():
@@ -3362,6 +3394,13 @@ class SpatialIndex:
                     s = cells.get((i, j))
                     if s:
                         out |= s
+        return out
+
+    def query(self, rect):
+        """Ids whose buckets meet rect (a big entity: whose box does)."""
+        out = self._cells_in(self.cells, self._span(rect), set())
+        if self.coarse:
+            self._cells_in(self.coarse, self._span_of(rect, self.COARSE), out)
         if self.big:
             self._big_in(rect, out)
         return out
@@ -3375,9 +3414,15 @@ class SpatialIndex:
         t = tol / c
         if fx - i > t and i + 1 - fx > t and fy - j > t and j + 1 - fy > t:
             got = self.cells.get((i, j), ())
+            if not self.big and not self.coarse:
+                return got
+            out = set(got)
+            rect = (p[0] - tol, p[1] - tol, p[0] + tol, p[1] + tol)
+            if self.coarse:
+                self._cells_in(self.coarse, self._span_of(rect, self.COARSE), out)
             if self.big:
-                return self._big_in((p[0] - tol, p[1] - tol, p[0] + tol, p[1] + tol), set(got))
-            return got
+                self._big_in(rect, out)
+            return out
         return self.query((p[0] - tol, p[1] - tol, p[0] + tol, p[1] + tol))
 
 
@@ -3476,6 +3521,11 @@ class Sheet:
         self.no_dots = []                   # junction dots deleted (Delete dot): [(x, y)]
         # arrays that stay arrays (arrays.py): {id: {mode, vals, center, source, items}}
         self.arrays = {}
+        # UDTs placed here (udts.py): {group id: the placed UDT (its UDT's key, where it was
+        # put, its choices, values, ratings and which object is each of its members)}, and
+        # the copies of the UDTs they were made from, {key: UDT dict}
+        self.udts = {}
+        self.udt_types = {}
         self.report = ""                    # (a report sheet: which report, report_sheets.py)
         self.pin_order = []                 # a block editor's sheet: its pin markers' ids in
                                             # the order set in Pins... (block_editor.to_block)
@@ -3724,6 +3774,13 @@ class Sheet:
                                "source": list(a["source"]),
                                "items": {i: list(ids) for i, ids in a["items"].items()}}
                            for k, a in self.arrays.items()}
+        if self.udts:
+            # (each placed UDT's dict, and each UDT's, is never changed once kept here: a
+            # change puts a new one in its place, udts._keep; so they are shared, not copied,
+            # as a step remembers the sheet before and after: copied, a value applied to 100
+            # placed UDTs took 2 s)
+            d["udts"] = dict(self.udts)
+            d["udt_types"] = dict(self.udt_types)
         if self.report:
             d["report"] = self.report
         if self.terminal_labels:
@@ -3737,6 +3794,20 @@ class Sheet:
     def to_dict(self):
         d = self.meta_dict()
         d["entities"] = [e.to_dict() for e in self.entities.values()]
+        if self.udts:
+            # (a placed UDT's members gone from the sheet forgotten as it is kept: their ids
+            # can be given again to other objects once it is opened)
+            udts = {}
+            for k, u in d["udts"].items():
+                live = {r: i for r, i in u["members"].items() if i in self.entities}
+                if live:
+                    udts[k] = dict(u, members=live)
+            used = {u["type"] for u in udts.values()}
+            d["udts"] = udts
+            d["udt_types"] = {k: v for k, v in d["udt_types"].items() if k in used}
+            if not udts:
+                d.pop("udts")
+                d.pop("udt_types")
         return d
 
     def set_meta(self, d):
@@ -3785,6 +3856,8 @@ class Sheet:
         self.pin_layers = {int(k): str(v) for k, v in (d.get("pin_layers") or {}).items()
                            if v}
         self.arrays = _arrays(d.get("arrays"))
+        self.udts = dict(d.get("udts") or {})
+        self.udt_types = dict(d.get("udt_types") or {})
         self.report = str(d.get("report", "") or "")
         self.terminal_labels = bool(d.get("terminal_labels", False))
         self.version += 1
@@ -4394,6 +4467,14 @@ class Project:
         return p
 
 
+def _only_udts(op):
+    """A sheet's meta change (Edit.sheet_meta) of nothing but its placed UDTs: its pages, tags
+    and numbers stay as they were."""
+    before, after = op[2], op[3]
+    keys = (set(before) | set(after)) - {"udts", "udt_types"}
+    return all(before.get(k) == after.get(k) for k in keys)
+
+
 class _EditContext:
     def __init__(self, project, name):
         self.ed = Edit(project, name)
@@ -4410,7 +4491,8 @@ class _EditContext:
             if self.ed.pin_moves:
                 from .wires import follow_pins
                 follow_pins(self.ed)
-            sheets = any(op[0] in ("sheet", "order", "meta") for op in self.ed.ops)
+            sheets = any(op[0] in ("sheet", "order") or op[0] == "meta" and
+                         not _only_udts(op) for op in self.ed.ops)
             if sheets:
                 # sheets added, removed, moved or renumbered: device tags follow their pages
                 from .tags import sync_pages

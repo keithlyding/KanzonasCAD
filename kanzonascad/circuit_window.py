@@ -20,7 +20,7 @@ PICTURE = (360, 260)
 
 
 def circuit_details(parent, categories=(), name="", category="", description="",
-                    title="Save circuit"):
+                    title="Save circuit", hint=None):
     """(name, category, description) typed, or None when cancelled."""
     dlg = QDialog(parent)
     dlg.setObjectName("circuit_details")
@@ -39,9 +39,9 @@ def circuit_details(parent, categories=(), name="", category="", description="",
     form.addRow("Name", n)
     form.addRow("Category", c)
     form.addRow("Description", d)
-    hint = QLabel("Placed with Library > Insert circuit...: its devices take new tags of the "
-                  "sheet, its contacts stay linked to its own devices, its wires take the "
-                  "sheet's numbers (numbers you locked stay).")
+    hint = QLabel(hint or "Placed with Library > Insert circuit...: its devices take new tags "
+                  "of the sheet, its contacts stay linked to its own devices, its wires take "
+                  "the sheet's numbers (numbers you locked stay).")
     hint.setWordWrap(True)
     hint.setStyleSheet("color: gray")
     form.addRow(hint)
@@ -55,6 +55,39 @@ def circuit_details(parent, categories=(), name="", category="", description="",
         if n.text().strip():
             return n.text().strip(), c.currentText().strip(), d.text().strip()
         QMessageBox.information(dlg, title, "Give the circuit a name.")
+
+
+def browser_parts(dlg, prefix, picture):
+    """What the circuit and UDT browsers share, made on dlg: its search box, its tree of them
+    by category (a double-click inserts), and on the tree's right their picture and what it
+    holds. Returns (dlg's layout, the splitter, the right side's layout)."""
+    v = QVBoxLayout(dlg)
+    dlg.search = QLineEdit()
+    dlg.search.setObjectName(prefix + "_search")
+    dlg.search.setPlaceholderText("Search (name, category, description)")
+    dlg.search.textChanged.connect(lambda _t: dlg.refresh(reload=False))
+    v.addWidget(dlg.search)
+    split = QSplitter(Qt.Horizontal)
+    dlg.tree = QTreeWidget()
+    dlg.tree.setObjectName(prefix + "_tree")
+    dlg.tree.setHeaderHidden(True)
+    dlg.tree.setIconSize(QSize(THUMB, THUMB))
+    dlg.tree.currentItemChanged.connect(lambda _a, _b: dlg._show())
+    dlg.tree.itemDoubleClicked.connect(lambda it, _c: dlg.insert())
+    split.addWidget(dlg.tree)
+    right = QWidget()
+    rv = QVBoxLayout(right)
+    dlg.picture = QLabel()
+    dlg.picture.setObjectName(prefix + "_picture")
+    dlg.picture.setMinimumSize(*picture)
+    dlg.picture.setAlignment(Qt.AlignCenter)
+    rv.addWidget(dlg.picture, 1)
+    dlg.info = QLabel()
+    dlg.info.setObjectName(prefix + "_info")
+    dlg.info.setWordWrap(True)
+    rv.addWidget(dlg.info)
+    split.addWidget(right)
+    return v, split, rv
 
 
 class CircuitBrowser(QDialog):
@@ -71,32 +104,7 @@ class CircuitBrowser(QDialog):
         self._pictures = {}             # (name, width, height) -> pixmap, until read again
         self.bad = []
         self.resize(760, 480)
-        v = QVBoxLayout(self)
-        self.search = QLineEdit()
-        self.search.setObjectName("circuit_search")
-        self.search.setPlaceholderText("Search (name, category, description)")
-        self.search.textChanged.connect(lambda _t: self.refresh(reload=False))
-        v.addWidget(self.search)
-        split = QSplitter(Qt.Horizontal)
-        self.tree = QTreeWidget()
-        self.tree.setObjectName("circuit_tree")
-        self.tree.setHeaderHidden(True)
-        self.tree.setIconSize(QSize(THUMB, THUMB))
-        self.tree.currentItemChanged.connect(lambda _a, _b: self._show())
-        self.tree.itemDoubleClicked.connect(lambda it, _c: self.insert())
-        split.addWidget(self.tree)
-        right = QWidget()
-        rv = QVBoxLayout(right)
-        self.picture = QLabel()
-        self.picture.setObjectName("circuit_picture")
-        self.picture.setMinimumSize(*PICTURE)
-        self.picture.setAlignment(Qt.AlignCenter)
-        rv.addWidget(self.picture, 1)
-        self.info = QLabel()
-        self.info.setObjectName("circuit_info")
-        self.info.setWordWrap(True)
-        rv.addWidget(self.info)
-        split.addWidget(right)
+        v, split, _rv = browser_parts(self, "circuit", PICTURE)
         split.setSizes([300, 440])
         v.addWidget(split, 1)
         row = QHBoxLayout()

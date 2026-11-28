@@ -1111,6 +1111,26 @@ def pdf_links_right(project, path, sheets):
 
 
 # ---- a source arrow's wire number (0.19.11) ----------------------------------------------------
+def _beside_outlet_wire(project, sheet, wire, q, want):
+    """Whether wire, on an outlet's terminal at q, is a group of its own beside another wire on
+    that terminal numbered want (the outlet's): with the taps kept apart (Tap numbers: suffix
+    or own), a wire passing over the terminal and one ending on it aren't joined (two wires
+    ending there are, and wires crossing there never), and the outlet's letter goes to one."""
+    from kanzonascad import wirenums
+    taps = wirenums.tap_mode(project) == "same"
+
+    def end(w):
+        return any(abs(a[0] - q[0]) <= 1e-6 and abs(a[1] - q[1]) <= 1e-6
+                   for a in (w.points[0], w.points[-1]))
+    for o in sheet.wires():
+        if o.id == wire.id or o.num != want or not o.touches(q):
+            continue
+        joined = (end(o) and end(wire)) or (taps and (end(o) or end(wire)))
+        if not joined:
+            return True
+    return False
+
+
 def own_wire_number_wrong(project, sheet, wire, split, page=None):
     """Why the number of a wire of its own (not a tap) at a source arrow is wrong, or None:
     a number of its page; but a wire on a distribution block outlet's T pin takes its block's
@@ -1145,9 +1165,17 @@ def own_wire_number_wrong(project, sheet, wire, split, page=None):
             if len(phase) != 1:
                 return None             # (no block, or its phase not numbered: nothing to say)
             want = phase.pop() + letter
+            if num != want and _beside_outlet_wire(project, sheet, wire, q, want):
+                break
             CHECKED["a source's wire on a distribution outlet takes its phase's number"] += 1
             return None if num == want else "a source arrow's wire on outlet %s's %s took %s, " \
                 "not %s" % (k, n, num, want)
+        else:
+            continue
+        # (a second wire on the outlet's terminal, kept apart from the outlet's own: numbered
+        # as a wire of its own, below)
+        CHECKED["a source's wire beside an outlet's wire on its terminal: its own number"] += 1
+        break
     got = split(num)
     if got is None or got[0] != (page or project.sheet_number(sheet)):
         return "a source arrow's wire on page %s took %s from a destination's page" % (
@@ -1356,6 +1384,482 @@ def circuit_placed(project, sheet, circuit, at, angle, scale, before):
     assert len(project.undo_stack) == before["undo"] + 1, "a circuit placed in %d steps" % (
         len(project.undo_stack) - before["undo"])
     CHECKED["circuit placed"] += 1
+
+
+# ---- UDTs (0.30) -------------------------------------------------------------------------------
+# (worked out here from the UDT's own drawing and the NEC table values typed again below, not by
+# udts.py or nec_tables.py)
+# Table 430.250 (three-phase motors), a few rows: (HP, volts) -> amps
+FLC_CHECK = {("5", "460"): 7.6, ("10", "460"): 14.0, ("3", "230"): 9.6, ("7-1/2", "208"): 24.2,
+             ("1/2", "575"): 0.9, ("25", "460"): 34.0}
+FUSE_SIZES = (1, 3, 6, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 125, 150,
+              175, 200, 225, 250, 300)
+
+
+def next_fuse(amps):
+    """The next standard fuse size at or above amps (240.6(A), typed again here)."""
+    return min(s for s in FUSE_SIZES if s >= amps - 1e-9)
+
+
+def _pass_through(e):
+    """The pins of a symbol a current goes through: L1-T1, L2-T2, L3-T3, 1-2."""
+    pins = dict(e.pin_points())
+    out = []
+    for n, q in pins.items():
+        if n.startswith("L") and n[1:].isdigit() and ("T" + n[1:]) in pins:
+            out.append((q, pins["T" + n[1:]]))
+    if not out and "1" in pins and "2" in pins:
+        out.append((pins["1"], pins["2"]))
+    return out
+
+
+def connected(sheet, box):
+    """A function telling whether two points are joined by the wires and symbols in box: wires
+    join at their points and where an end lands on another wire; a symbol joins each pin to
+    the pin across (L1 to T1, 1 to 2)."""
+    parent = {}
+
+    def k(q):
+        return (round(q[0], 5), round(q[1], 5))
+
+    def find(a):
+        parent.setdefault(a, a)
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def join(a, b):
+        parent[find(k(a))] = find(k(b))
+    near = sheet.query(box)
+    wires = [w for w in near if isinstance(w, M.Wire)]
+    for w in wires:
+        for a, b in zip(w.points, w.points[1:]):
+            join(a, b)
+    for w in wires:
+        for q in (w.points[0], w.points[-1]):
+            for o in wires:
+                if o is not w and o.distance(q) <= 1e-6:
+                    join(q, o.points[0])
+    for e in near:
+        if isinstance(e, M.Insert) and e.defn is not None:
+            for a, b in _pass_through(e):
+                join(a, b)
+    return lambda a, b: find(k(a)) == find(k(b))
+
+
+def _jic_name(name):
+    """A built-in symbol's name with its IEC 60617 stand-in's " (IEC)" taken off."""
+    return name[:-len(" (IEC)")] if name.endswith(" (IEC)") else name
+
+
+def udt_motor_circuit(project, sheet, udt, inst, motor_block="Motor 3-phase"):
+    """What a placed motor-circuit UDT must be, from its UDT's drawing: each member of the
+    choices made where its base point puts it (none of the alternatives not chosen there),
+    each phase joined from its incoming end (L1, L2, L3 at the base point, 1/2" apart) to its
+    motor terminal (T1, T2, T3) and to no other phase's, and the motor's FLA and the fuses'
+    rating as the NEC table gives (unless overridden). An IEC 60617 stand-in (" (IEC)", in an
+    IEC project) counts as the JIC symbol it stands for."""
+    at, angle, scale = inst["at"], inst["angle"], inst["scale"]
+    defs = udt.defs()
+    by_spot = {}
+    for e in sheet.inserts():
+        by_spot.setdefault(_key(e.block_name, e.pos), []).append(e)
+    choices = inst["choices"]
+    gone = set(inst.get("gone", ()))
+    pts = []
+    motor = None
+    for m in udt.members:
+        d = m["entity"]
+        if d.get("kind") == "wire":
+            pts += [_placed_at(q, at, angle, scale) for q in d["points"]]
+        if d.get("kind") != "insert":
+            continue
+        name = M.library_block_name(d["block"], defs[d["block"]].kind)
+        q = _placed_at(d["pos"], at, angle, scale)
+        pts.append(q)
+        here = by_spot.get(_key(name, q), [])
+        slot = next((s for s in udt.slots if s["name"] == m["slot"]), None)
+        chosen = slot is None or choices.get(slot["name"], slot["default"]) == m["alt"]
+        if m["role"] in gone:
+            continue
+        if chosen:
+            assert here, "%s of the UDT isn't where it goes (%s)" % (name, _key(name, q))
+            if _jic_name(name) == motor_block:
+                motor = here[0]
+        else:
+            shared = [x for x in udt.members if x is not m and x["entity"].get("kind") ==
+                      "insert" and x["entity"]["block"] == d["block"] and
+                      _key(name, _placed_at(x["entity"]["pos"], at, angle, scale)) ==
+                      _key(name, q)]
+            if not shared:
+                assert not here, "%s left on the sheet for %s not chosen" % (name, m["alt"])
+    CHECKED["UDT: members of the choices where they go"] += 1
+    if motor is None:
+        return
+    xs, ys = [q[0] for q in pts], [q[1] for q in pts]
+    pad = 0.1 * max(scale, 1e-3)
+    joined = connected(sheet, (min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad))
+    ends = dict(motor.pin_points())
+    starts = [_placed_at((0.0, -0.5 * i), at, angle, scale) for i in range(3)]
+    for i, a in enumerate(starts):
+        for j in range(3):
+            got = joined(a, ends["T%d" % (j + 1)])
+            assert got == (i == j), "L%d %s the motor's T%d" % (
+                i + 1, "doesn't reach" if i == j else "is joined to", j + 1)
+    CHECKED["UDT: every phase reaches its motor terminal, none another's"] += 1
+    vals = inst["values"]
+    flc = FLC_CHECK.get((vals.get("HP"), vals.get("VOLTS")))
+    if flc is None or vals.get("FLA") or vals.get("PHASE", "3") != "3":
+        return
+    ov = inst["overrides"]
+    role_of = {i: r for r, i in inst["members"].items()}
+    for e in sheet.inserts():
+        r = role_of.get(e.id)
+        if r is None or ov.get(r):
+            continue
+        if _jic_name(e.block_name) == motor_block:
+            assert float(e.attrs.get("FLA", "nan")) == flc, (e.attrs, flc)
+            CHECKED["UDT: motor FLA from the NEC table"] += 1
+        elif _jic_name(e.block_name) == "Fuses 3-pole":
+            pct = [x["percent"] for x in inst["ratings"] if x["role"] == r and
+                   x["attr"] == "RATING"]
+            if pct:
+                want = "%dA" % next_fuse(flc * pct[0] / 100.0)
+                assert e.attrs.get("RATING") == want, (e.attrs.get("RATING"), want)
+                CHECKED["UDT: fuses at the next standard size"] += 1
+
+
+
+# ---- UDTs and the owner's answers (Nov 27 2026): strips, copies, an IEC project ------------
+def _is_terminal(e):
+    return isinstance(e, M.Insert) and e.defn is not None and \
+        any(a.get("attr") == "TERM" for a in e.defn.attr_texts)
+
+
+def _strip_devices(project, tag):
+    """{hidden id: device} of the devices tagged tag (a Terminal strip, or any device its
+    terminals belong to: a distribution block's, say)."""
+    from kanzonascad import tags
+    return {e.attrs["DEV"]: e for s in project.sheets for e in s.inserts()
+            if tags.is_device(e) and e.attrs.get("DEV") and
+            (e.attrs.get("TAG") or "").upper() == tag.upper()}
+
+
+def strip_numbers(project, tag):
+    """The numbers taken on the strip tagged tag: its drawn terminals' (those belonging to a
+    device of that tag, and those of that tag belonging to no device) and the spares kept
+    for it in the project's settings: a strip device's under its hidden id, or, while it has
+    nothing kept there, those kept by the tag (from before it had the device); terminals of
+    the tag on no device, those kept by the tag. Spares kept by the tag for a strip that has
+    since got a device with its own are no longer on any strip (the long battery, 0.30, seed
+    5242: TB101's device kept spare 29, the tag still 17 and 18 from before, which the
+    Terminal strips window doesn't show: new terminals rightly took 17 and 18)."""
+    from kanzonascad import tags
+    devs = _strip_devices(project, tag)
+    every = {e.attrs["DEV"] for s in project.sheets for e in s.inserts()
+             if tags.is_device(e) and e.attrs.get("DEV")}
+    out, loose = set(), False
+    # (a device of the tag is a strip when it is a Terminal strip symbol, or terminals belong
+    # to it: a distribution block's)
+    strips = {d for d, e in devs.items() if e.defn is not None and
+              e.defn.role == "parent" and e.defn.prefix == "TB"}
+    for s in project.sheets:
+        for e in s.inserts():
+            if not _is_terminal(e) or not e.attrs.get("TERM"):
+                continue
+            par = e.attrs.get("PARENT")
+            if par in devs:
+                out.add(e.attrs["TERM"])
+                strips.add(par)
+            elif par not in every and (e.attrs.get("TAG") or "").upper() == tag.upper():
+                out.add(e.attrs["TERM"])
+                loose = True
+    kept = project.settings.get("strips") or {}
+    by_tag = kept.get("tag:" + tag.upper())
+    held = [kept[d] if kept.get(d) is not None else by_tag for d in strips]
+    if loose:
+        held.append(by_tag)
+    for got in held:
+        out.update(str(n) for n in (got or {}).get("spares") or ())
+    return out
+
+
+def _udt_order(udt, on):
+    """A placed UDT's members ({role: object}) in its UDT's order."""
+    return [on[m["role"]] for m in udt.members if m["role"] in on]
+
+
+def udt_strip(project, sheet, gid, tag, was):
+    """Insert UDT with the strip tag picked ("" none yet): its terminals on that strip (its
+    device's, linked to it), each taking the lowest number free there before (was), in the
+    UDT's order; none: no strip, no number. The project remembers the choice."""
+    from kanzonascad import udts as U
+    inst = sheet.udts[gid]
+    terms = [e for e in _udt_order(U.type_of(sheet, inst), U.members(sheet, gid))
+             if _is_terminal(e)]
+    assert (project.settings.get("udt_strip") or "") == tag, "the strip picked not remembered"
+    if not tag:
+        assert all(not e.attrs.get("TAG") and not e.attrs.get("TERM") for e in terms), \
+            "terminals put on a strip with none picked"
+        CHECKED["UDT: terminals left on no strip"] += 1
+        return
+    want, n = [], 1
+    for _e in terms:
+        while str(n) in was:
+            n += 1
+        want.append(str(n))
+        n += 1
+    got = [e.attrs.get("TERM") for e in terms]
+    assert got == want, "the UDT's terminals on %s numbered %s, not %s" % (tag, got, want)
+    devs = _strip_devices(project, tag)
+    for e in terms:
+        assert (e.attrs.get("TAG") or "").upper() == tag.upper(), (e.attrs, tag)
+        if devs:
+            assert e.attrs.get("PARENT") in devs, "not linked to the strip's device"
+    if terms:
+        CHECKED["UDT: terminals on the strip picked, its next numbers"] += 1
+
+
+def _iec_stand_ins(lib):
+    """{JIC symbol: its IEC 60617 stand-in} of the library's built-in symbols whose pins are
+    the same names in the same places (worked out here from the blocks)."""
+    from kanzonascad.symbols_iec import IEC_FOR
+
+    def pins(d):
+        return sorted((q["name"], round(q["pos"][0], 6), round(q["pos"][1], 6))
+                      for q in d.pins)
+    out = {}
+    for iec, jic in IEC_FOR.items():
+        a, b = lib.get("symbol", iec), lib.get("symbol", jic)
+        if a is not None and b is not None and pins(a) == pins(b):
+            out[jic] = iec
+    return out
+
+
+def udt_standard(project, sheet, gid, lib):
+    """A UDT placed in a project of IEC 60617 symbols: each of its symbols that has an IEC
+    stand-in with the same pins is that stand-in (in a JIC project, the other way round), and
+    every device's tag is made of the project's letters."""
+    from kanzonascad import tags, udts as U
+    iec = project.settings.get("symbol_standard", "jic") == "iec"
+    swap = _iec_stand_ins(lib)
+    if not iec:
+        swap = {b: a for a, b in swap.items()}
+    on = U.members(sheet, gid)
+    for e in on.values():
+        if not isinstance(e, M.Insert):
+            continue
+        assert e.block_name not in swap, "%s placed in a%s project instead of %s" % (
+            e.block_name, "n IEC" if iec else " JIC", swap[e.block_name])
+        if tags.is_device(e) and not tags.locked(e) and e.defn.prefix:
+            pre = tags.IEC_LETTERS.get(e.defn.prefix, e.defn.prefix) if iec else \
+                e.defn.prefix
+            if (e.defn.prefix, e.defn.role) == ("PS", "parent") and iec:
+                pre = "B"
+            assert tags.split(e.attrs.get("TAG", ""), pre), "%s tagged %s in a%s project" % (
+                e.block_name, e.attrs.get("TAG"), "n IEC" if iec else " JIC")
+    CHECKED["UDT: symbols and letters of the project's standard" +
+            (" (IEC)" if iec else "")] += 1
+
+
+def udt_snapshot(project, sheet, gid):
+    """What a copy of a placed UDT is checked against: the placed UDT, its UDT, its devices'
+    tags and hidden ids, its terminals' numbers, and every group id (its wires' numbers are
+    taken after: a sheet's wires are numbered again in their order as it changes)."""
+    from kanzonascad import udts as U
+    on = U.members(sheet, gid)
+    return {"inst": sheet.udts[gid], "type": sheet.udt_types[sheet.udts[gid]["type"]],
+            "gids": {g for s in project.sheets for g in s.udts},
+            "roles": set(on), "ids": {e.id for e in on.values()},
+            "tags": {e.attrs.get("TAG") for e in on.values() if isinstance(e, M.Insert) and
+                     e.attrs.get("DEV") and e.attrs.get("TAG")},
+            "devs": {e.attrs["DEV"] for e in on.values() if isinstance(e, M.Insert) and
+                     e.attrs.get("DEV")},
+            "terms": {((e.attrs.get("PARENT") or e.attrs.get("TAG") or "").upper(),
+                       e.attrs.get("TERM")) for e in on.values()
+                      if _is_terminal(e) and e.attrs.get("TERM") and e.attrs.get("TAG")}}
+
+
+def _joined_locked(sheet, start, taps):
+    """The numbers of the locked wires on sheet joined to the wires start (them included),
+    worked out from their points: two wires join where an end of one is an end of the other,
+    and, a tap numbered as the wire it taps (taps), where an end of one lands on the other."""
+    def same(a, b):
+        return abs(a[0] - b[0]) <= 1e-6 and abs(a[1] - b[1]) <= 1e-6
+
+    def joined(w, o):
+        ends_w, ends_o = (w.points[0], w.points[-1]), (o.points[0], o.points[-1])
+        if any(same(a, b) for a in ends_w for b in ends_o):
+            return True
+        return taps and (any(o.distance(a) <= 1e-6 for a in ends_w) or
+                         any(w.distance(b) <= 1e-6 for b in ends_o))
+    seen = {w.id for w in start}
+    todo = list(start)
+    out = set()
+    while todo:
+        w = todo.pop()
+        if w.num_lock and w.num:
+            out.add(w.num)
+        x0, y0, x1, y1 = w.bbox()
+        for o in sheet.query((x0 - 1e-6, y0 - 1e-6, x1 + 1e-6, y1 + 1e-6)):
+            if isinstance(o, M.Wire) and o.id not in seen and joined(w, o):
+                seen.add(o.id)
+                todo.append(o)
+    return out
+
+
+def _onto_itself(sheet, to, gid, on):
+    """Whether a copy of placed UDT gid of sheet, its members on ({role: object} on sheet
+    to), was pasted onto the original itself, worked out from the drawing: on the same sheet,
+    each of its symbols lying exactly on the original's symbol of the same role (the same
+    block, place, turn and mirror). (Not from the placed UDTs' base points: the original's
+    is where it was put, and a Move of all of it since leaves it there; the long battery,
+    0.30, seeds 523 and 5233: the copy pasted in place onto a moved original, its wires
+    joined to the original's and sharing their numbers.)"""
+    from kanzonascad import udts as U
+    if to is not sheet or gid not in sheet.udts:
+        return False
+    theirs = U.members(sheet, gid)
+    syms = [(r, e) for r, e in on.items() if isinstance(e, M.Insert)]
+    if not syms:
+        return False
+    for r, e in syms:
+        o = theirs.get(r)
+        if not isinstance(o, M.Insert) or o.block != e.block or \
+                o.mirror != e.mirror or abs((o.angle - e.angle + 180.0) % 360.0 - 180.0) > 1e-6 or \
+                math.hypot(o.pos[0] - e.pos[0], o.pos[1] - e.pos[1]) > 1e-6:
+            return False
+    return True
+
+
+def udt_copied(project, sheet, was, to, gid, intact=False):
+    """A placed UDT copied whole (was: udt_snapshot of it on sheet) is a new placed UDT gid on
+    sheet to: the same UDT, choices, values, rating rules and overrides; all of its members
+    that were on the sheet, new objects (intact: the one copied as its UDT draws it; else
+    edited by hand, a wire of the copy may have been joined to another by the sheet's
+    clean-up, kept as erased by hand); its own tags, hidden ids, wire numbers and terminal
+    numbers; its contacts linked to its own devices."""
+    from kanzonascad import udts as U
+    a, b = was["inst"], to.udts[gid]
+    for k in ("udt", "type", "choices", "values", "ratings", "overrides"):
+        assert b.get(k) == a.get(k), "a copied UDT's %s: %r, not %r" % (k, b.get(k), a.get(k))
+    assert to.udt_types[b["type"]] == was["type"], "a copied UDT's UDT changed"
+    on = U.members(to, gid)
+    udt = U.Udt.from_dict(was["type"])
+    # (the members it had on the sheet: one erased by hand since it was placed isn't copied)
+    left = was["roles"] - set(on)
+    onto = _onto_itself(sheet, to, a["id"], on)
+    if not intact or onto:
+        # (pasted in place onto the original itself: its wires lie on the original's, which
+        # the sheet's clean-up joins; or the original edited by hand, its wires joined when
+        # copied; every symbol is still copied, and each wire not there is kept as erased by
+        # hand, not put back)
+        kinds = {r: udt.member(r)["entity"].get("kind") for r in left}
+        assert all(k == "wire" for k in kinds.values()), \
+            "a UDT copied lost its symbols %s" % sorted(
+                r for r, k in kinds.items() if k != "wire")
+        assert left <= set(b["gone"]) | set(b["members"]), \
+            "a copied UDT's wires %s neither its members nor gone" % sorted(
+                left - set(b["gone"]) - set(b["members"]))
+    else:
+        assert set(on) == was["roles"], \
+            "a copied UDT's members: %s, not %s" % (sorted(on), sorted(was["roles"]))
+    if to is sheet:
+        assert not ({e.id for e in on.values()} & was["ids"]), "a copy shares an object"
+    devs = {e.attrs["DEV"]: e for e in on.values() if isinstance(e, M.Insert) and
+            e.attrs.get("DEV")}
+    assert not (set(devs) & was["devs"]), "a copy's device kept the original's hidden id"
+    new_tags = {e.attrs.get("TAG") for e in devs.values() if e.attrs.get("TAG_LOCK") != "1"}
+    assert not (new_tags & was["tags"]), "a copy took the original's tags %s" % (
+        new_tags & was["tags"])
+    # (numbered as the project numbers wires, the original's as they are now: a sheet's
+    # wires are numbered again in their order, the copy's may come first; a number typed and
+    # locked is copied as typed, and the wires joined to that wire share it; a copy pasted
+    # onto the original itself is joined to its wires, and shares their numbers)
+    from kanzonascad import wirenums
+    if wirenums.enabled(project) and not onto:
+        def numbers(objs):
+            return {e.num for e in objs if isinstance(e, M.Wire) and e.num and not e.num_lock}
+        # (the locked numbers its wires are joined to on its sheet, its own or not: a wire of
+        # the original edited by hand, cut up by the clean-up when pasted, may leave its typed
+        # number on a piece that is no member, still joined to the copy's wire; seed 5201)
+        locked = _joined_locked(to, [e for e in on.values() if isinstance(e, M.Wire)],
+                                wirenums.tap_mode(project) == "same")
+        nums = numbers(on.values()) - locked
+        theirs = numbers(U.members(sheet, a["id"]).values()) if a["id"] in sheet.udts else set()
+        assert not (nums & theirs), "a copy has the original's wire numbers %s" % (
+            sorted(nums & theirs)[:3])
+    for e in on.values():
+        if isinstance(e, M.Insert) and e.attrs.get("PARENT") in was["devs"]:
+            raise AssertionError("a copy's contact %s left on the original's device" %
+                                 e.block_name)
+    terms = {((e.attrs.get("PARENT") or e.attrs.get("TAG") or "").upper(),
+              e.attrs.get("TERM")) for e in on.values()
+             if _is_terminal(e) and e.attrs.get("TERM") and e.attrs.get("TAG")}
+    assert not (terms & was["terms"]), "a copy's terminals took the original's numbers"
+    CHECKED["UDT copied: a placed UDT of its own" + (" (another sheet)" if to is not sheet
+                                                     else "")] += 1
+
+
+def udt_others_alone(sheet, ed, was, now):
+    """After UDT properties (edit ed) rebuilt a placed UDT of sheet, another one's members,
+    was and now ({id: to_dict()} of those on the sheet before and after), are as they were,
+    save for one thing the drawing asks for: a wire of it under a symbol the rebuild put down,
+    two or more of the symbol's pins on it, is cut between them as any symbol placed on a
+    wire cuts it (wires.break_under), its pieces beyond the pins left (the long battery, 0.30,
+    seed 5222: one of its wires stretched by hand across the other's place, a fuse put on
+    it); and a contact of it whose device had been erased, kept with its tag, links itself
+    to a device the rebuild put down that took that tag, as the manual says a contact with a
+    tag no device has does (the long battery, 0.30, seed 5252: an overload contact F2502 left
+    without its overload relay; the rebuild of another put down fuses, the next free F2502).
+    Returns how many were cut."""
+    from kanzonascad import tags
+    put = [sheet.entities[op[2]] for op in ed.ops
+           if op[0] == "ent" and op[1] == sheet.id and op[4] is not None and
+           op[4].get("kind") == "insert" and op[2] in sheet.entities]
+    gone = {op[2] for op in ed.ops if op[0] == "ent" and op[1] == sheet.id and op[4] is None}
+    # (the hidden ids of the devices before the edit: those now, less those of what it put
+    # down or changed, and those of what it erased or changed as they were)
+    devs = set(tags.devices(ed.project))
+    devs -= {(op[4].get("attrs") or {}).get("DEV") for op in ed.ops
+             if op[0] == "ent" and op[4] is not None}
+    devs |= {(op[3].get("attrs") or {}).get("DEV") for op in ed.ops
+             if op[0] == "ent" and op[3] is not None}
+    cut = 0
+    for i, d in was.items():
+        if now.get(i) == d:
+            continue
+        a, b = d.get("attrs") or {}, (now.get(i) or {}).get("attrs") or {}
+        if d.get("kind") == "insert" and tags.is_child(sheet.entities.get(i)) and \
+                a.get("TAG") and a.get("PARENT") not in devs and \
+                dict(now[i], attrs=dict(b, PARENT=a.get("PARENT"))) == d:
+            new = [e for e in put if tags.is_device(e) and e.attrs.get("DEV") == b.get("PARENT")]
+            assert new and new[0].attrs.get("TAG", "").upper() == a["TAG"].upper(), \
+                "another placed UDT's contact %s linked to a device it wasn't tagged for" % i
+            CHECKED["UDT: another's contact without its device links to the new one of its "
+                    "tag"] += 1
+            continue
+        assert d.get("kind") == "wire" and i not in now and i in gone, \
+            "UDT properties changed another placed UDT's %s %s" % (d.get("kind"), i)
+        w = M.Entity.from_dict(d)
+        pins = [[q for _n, q in e.pin_points() if w.distance(q) <= 1e-6] for e in put]
+        pins = [q for on in pins if len(on) >= 2 for q in on]
+        assert pins, "UDT properties took away another placed UDT's wire %s: no symbol put " \
+                     "on it" % i
+        # (its ends beyond the symbol's pins are still wire ends: the pieces left)
+        x0, y0 = min(q[0] for q in pins) - 1e-6, min(q[1] for q in pins) - 1e-6
+        x1, y1 = max(q[0] for q in pins) + 1e-6, max(q[1] for q in pins) + 1e-6
+        for x, y in (w.points[0], w.points[-1]):
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                continue
+            assert any(isinstance(o, M.Wire) and
+                       any(math.hypot(x - p[0], y - p[1]) <= 1e-6
+                           for p in (o.points[0], o.points[-1]))
+                       for o in sheet.query((x - 1e-6, y - 1e-6, x + 1e-6, y + 1e-6))), \
+                "another placed UDT's wire %s, cut by a symbol, lost its end %s" % (i, (x, y))
+        cut += 1
+    return cut
 
 
 # ---- contact pin numbers (0.28): worked out here from the attributes, not pinnumbers.py -------
@@ -1714,6 +2218,12 @@ def panel_wiring_right(project):
                 for nums, to in got or [(None, None)]:
                     want[(u["name"], name, nums, ", ".join(to) if to is not None else None,
                           u["loc"])] += 1
+
+    # (a pin left out is left out of both: the list's rows say only the unit's name and the
+    # pin's, so a terminal drawn in two places, one of them with a wire numbered on its own,
+    # can't be told apart; the long battery, 0.30, seed 5201)
+    for k in [k for k in want if (k[0], k[1]) in skip]:
+        del want[k]
 
     def split(t):
         return frozenset(x for x in t.split(", ") if x) if t else frozenset()

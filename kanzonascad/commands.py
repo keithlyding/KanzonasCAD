@@ -779,6 +779,8 @@ class CopyCmd(_TwoPoint):
         from .tags import retag_copies
         from .wires import pull_on
         sheet = self.ctx.sheet()
+        from . import udts
+        found = udts.copied(sheet, [e.id for e in self.ents])
         with self.ctx.edit("Copy") as ed:
             made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet,
                                                            self.result(p))]
@@ -787,6 +789,9 @@ class CopyCmd(_TwoPoint):
             # Stretch does: the long battery, seed 5052, 0.0037" from a wire)
             pull_on(ed, sheet, [(e.id, i) for e in made if isinstance(e, M.Wire)
                                 for i in (0, -1)])
+            # (a placed UDT copied whole: a placed UDT of its own, 0.30)
+            udts.adopt_copies(ed, self.ctx.project, sheet, found,
+                              {e.id: c for e, c in zip(self.ents, made)})
         self.last = p
 
 
@@ -1211,11 +1216,12 @@ class PasteCmd(Command):
     name, title = "PASTE", "Paste"
     repeatable = False
 
-    def __init__(self, ctx, ents, base, blocks=None, layers=None):
+    def __init__(self, ctx, ents, base, blocks=None, layers=None, udts=None):
         super().__init__(ctx)
         self.ents, self.base_pt = ents, base
         self.blocks = blocks or {}
         self.layers = layers or {}          # {name: Layer dict} copied with them
+        self.udts = udts or []              # (the placed UDTs copied whole: udts.copied)
 
     def begin(self):
         self.ctx.prompt("Specify insertion point (Enter: where they were copied from)")
@@ -1271,6 +1277,10 @@ class PasteCmd(Command):
             made = [ed.add(sheet, e) for e in retag_copies(self.ctx.project, sheet, placed)]
             ids.update(e.id for e in made)
             _cut_under(self.ctx, ed, sheet, made)
+            # (a placed UDT copied whole: a placed UDT of its own here, 0.30)
+            from .udts import adopt_copies
+            adopt_copies(ed, self.ctx.project, sheet, self.udts,
+                         {e.id: c for e, c in zip(self.ents, made) if e.id is not None})
         self.ctx.set_selection(ids)
         self.finish()
 
@@ -1832,6 +1842,19 @@ def _into_symbol(sheet, p, pin, way):
             inward = (c[0] - pin[0], c[1] - pin[1])
             return inward[0] * way[0] + inward[1] * way[1] > 1e-9
     return False
+
+
+def _grid_round(v, g, ref):
+    """v on the 1/8" grid of step g that ref (a pin's coordinate) is on: the sheet's grid, or
+    the same grid moved off it with ref when the drawing ref is part of is off it (a circuit
+    copied by an odd base point: a bus landing there put its runs on the sheet's grid, 0.0082"
+    beside the circuit's wires; the long battery, 0.30, seed 5223)."""
+    if g <= 0:
+        return v
+    off = ref - round(ref / g) * g
+    if abs(off) <= 1e-9 * max(1.0, abs(ref)):
+        return round(v / g) * g
+    return ref + round((v - ref) / g) * g
 
 
 def pin_side(sheet, p, tol=1e-6):
@@ -2638,7 +2661,7 @@ class BusCmd(Command):
                         break
                     offs = [q[-1][m] - S[m] for q in paths]
                     want = sum(q[m] for q in pins) / n - sum(offs) / n
-                    want = round(want / g) * g if g > 0 else want
+                    want = _grid_round(want, g, pins[0][m])
                     if abs(want - stage[m]) <= 1e-9:
                         break
                     stage[m] = want
@@ -2720,8 +2743,7 @@ class BusCmd(Command):
         c1[m], c1[k] = S[m], a[k]
         n = self.count
         g = 0.125 * sheet.k()
-        mid = (a[k] + S[k]) / 2
-        mid = round(mid / g) * g if g > 0 else mid
+        mid = _grid_round((a[k] + S[k]) / 2, g, S[k])
         z1, z2 = [None, None], [None, None]
         z1[k], z1[m] = mid, a[m]
         z2[k], z2[m] = mid, S[m]
@@ -2775,9 +2797,9 @@ class BusCmd(Command):
         for across in (True, False):
             m = (a[0] + b[0]) / 2 if across else (a[1] + b[1]) / 2
             k = 0.125 * sheet.k()
-            if k > 0 and abs(round(m / k) * k - m) < abs((b[0] - a[0]) if across
-                                                         else (b[1] - a[1])) / 2:
-                m = round(m / k) * k
+            on = _grid_round(m, k, b[0] if across else b[1])
+            if abs(on - m) < abs((b[0] - a[0]) if across else (b[1] - a[1])) / 2:
+                m = on
             z = [(m, a[1]), (m, b[1]), b] if across else [(a[0], m), (b[0], m), b]
             z = [q for i, q in enumerate(z) if G.dist(q, ([a] + z)[i]) > 1e-9]
             cands.append(z)
@@ -3309,6 +3331,65 @@ class InsertCircuitCmd(Command):
             _cut_under(self.ctx, ed, sheet, made)
         self.ctx.set_selection({e.id for e in made if e.id in sheet.entities})
         self.ctx.message("Circuit %s placed: %d object(s)" % (self.circuit.name, len(made)))
+        self.finish()
+
+
+class InsertUdtCmd(InsertCircuitCmd):
+    """Place a UDT (Insert UDT...) with the choices and values picked for it, by its base
+    point: R turns it 90 degrees, S gives it a scale. One undoable step: its members placed
+    as a circuit's are, then kept together as a placed UDT (udts.place)."""
+    name, title = "INSERTUDT", "Insert UDT"
+
+    def __init__(self, ctx, udt, choices=None, values=None, strip=None):
+        super().__init__(ctx, udt.circuit(choices))
+        self.repeat_args = (udt, choices, values, strip)
+        self.udt, self.choices, self.values = udt, choices, values
+        self.strip = strip      # (its terminals' strip: a tag, "" none yet, None not asked)
+
+    def _ask(self):
+        if self.asking_scale:
+            return InsertCircuitCmd._ask(self)
+        self.ctx.prompt("Specify insertion point for UDT %s" % self.udt.name,
+                        [("Rotate 90", "R"), ("Scale", "S")])
+
+    def point(self, p):
+        if self.asking_scale:
+            return
+        from .udts import STRIP_SETTING, place
+        sheet = self.ctx.sheet()
+        project = self.ctx.project
+        with self.ctx.edit("Insert UDT %s" % self.udt.name) as ed:
+            _gid, made = place(ed, project, sheet, self.udt, p, self.angle,
+                               self.scale, self.choices, self.values, self.strip or "")
+            _cut_under(self.ctx, ed, sheet, made)
+            if self.strip is not None and project.settings.get(STRIP_SETTING, "") != \
+                    self.strip:
+                # (the project's last choice of strip: offered first at the next insert)
+                ed.project_settings({STRIP_SETTING: self.strip})
+        self.ctx.set_selection({e.id for e in made if e.id in sheet.entities})
+        self.ctx.message("UDT %s placed: %d object(s); UDT properties... changes its "
+                         "choices, values and ratings" % (self.udt.name, len(made)))
+        self.finish()
+
+
+class MakeUdtCmd(SaveCircuitCmd):
+    """Make UDT: the selected objects made a UDT (a circuit type with choices, optional parts
+    and ratings): its base point (Enter: the lower left corner of what is selected), then
+    the UDT editor."""
+    name, title = "MAKEUDT", "Make UDT"
+
+    def begin(self):
+        self.ents = _selected(self.ctx)
+        if not self.ents:
+            self.finish()
+            return
+        self.ctx.prompt("Specify base point (the point the UDT is placed by; Enter: its "
+                        "lower left corner)")
+
+    def point(self, p):
+        host = getattr(self.ctx, "host", None)
+        if host is not None and hasattr(host, "make_udt_from"):
+            host.make_udt_from(self.ents, p)
         self.finish()
 
 
@@ -6308,13 +6389,15 @@ COMMANDS = {
     "WIRECLEAN": (CleanWiresCmd, ["CLEANWIRES"]),
     "DELCOMP": (DeleteComponentCmd, ["AEERASECOMP"]),
     "SAVECIRCUIT": (SaveCircuitCmd, ["CIRCSAVE", "AECIRCSAVE"]),
+    "MAKEUDT": (MakeUdtCmd, ["UDTMAKE"]),
 }
 
 # commands the command line runs that aren't drawing commands (the window handles them)
 OTHER = {"U": "undo", "UNDO": "undo", "REDO": "redo", "QSAVE": "save", "SAVE": "save",
          "OPEN": "open", "NEW": "new", "QUIT": "quit", "EXIT": "quit",
          "INSERTCIRCUIT": "insert_circuit", "CIRCUIT": "insert_circuit",
-         "AECIRCUIT": "insert_circuit"}
+         "AECIRCUIT": "insert_circuit", "INSERTUDT": "insert_udt", "UDT": "insert_udt",
+         "UDTPROPS": "udt_props", "UPDATEUDT": "update_udt", "DETACHUDT": "detach_udt"}
 
 
 def lookup(text):

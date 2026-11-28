@@ -6,6 +6,41 @@ Short, plain-language notes for each version. The full details are in
 Every version gets a section `## <version>` (a few lines under **New** and **Fixed**). The
 build fails without them.
 
+## 0.30
+
+**New**
+- UDTs: circuit types such as a whole motor circuit, with choices (a manual motor starter or
+  fuses), optional parts (line and load reactors) and ratings. Library > Insert UDT... places
+  one as ordinary devices and wires, each with its own tag and wire numbers. UDT properties...
+  changes its choices, horsepower and ratings and rebuilds it in place; what stays keeps its
+  tags.
+- Two motor circuits are built in (VFD, and full-voltage starter). Make your own with Make
+  UDT..., or from a saved circuit.
+- Ratings are worked out from the NEC motor tables (full-load current; fuse, breaker and
+  disconnect sizes). You can type over any of them, and each placed circuit keeps its own
+  unless you apply them to all. Update from UDT... brings placed circuits up to a changed UDT,
+  showing what will change first.
+- Copying a placed UDT (Copy, Ctrl+C and Ctrl+V, Ctrl+drag, Duplicate sheet, or into another
+  project) makes a new one with the same choices and ratings and its own tags and wire numbers.
+- Insert UDT asks which terminal strip its terminals go on (one of the project's, a new one, or
+  none yet) and numbers them from that strip's next free numbers. It remembers your choice.
+- In an IEC project, UDTs are placed with IEC symbols wherever one exists, tagged with IEC
+  letters (Q, F, M, T...).
+
+**Fixed**
+- Terminal strips: numbering a terminal that had no number no longer shows it in a different
+  place from where the strip puts it.
+- Sheets at a large scale (such as 1/4" = 1'-0") open much faster and use far less memory: a
+  project with many of them could use hundreds of megabytes just to open.
+- A circuit a hair off the grid (copied from an odd point): a bus landed on its pins now runs
+  in line with its wires instead of a few thousandths beside them, and a position typed in the
+  Properties panel keeps it in line with them too.
+- A name typed for a source arrow that the arrows of another wire already have (in capitals or
+  not) is now refused with a message, unless you make it a cross-reference. Before, its wire
+  took the number but the arrow and its destinations kept their old name.
+- Terminal strips: a jumper to a terminal that has no number yet is no longer shown as if it
+  were kept (a jumper takes two numbered terminals).
+
 ## 0.29
 
 **New**

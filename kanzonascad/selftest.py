@@ -102,6 +102,14 @@ BUDGET = {
     "circuit_move": 0.03,       # a mouse move while it follows the mouse (the preview slid)
     "circuit_undo": 1.0,        # the placing undone, then drawn
     "circuit_browse": 2.0,      # Insert circuit's window listing 100 circuits, pictures drawn
+    # (0.30: UDTs) on a sheet of 2,100 devices with 100 placed motor-circuit UDTs (3,700
+    # objects of theirs):
+    "udt_place": 0.3,           # one more placed (Insert UDT's step), the slowest of the 100
+    "udt_rebuild": 0.3,         # one rebuilt with another choice and value (UDT properties)
+    "udt_undo": 0.3,            # that undone
+    "udt_all": 1.5,             # a value applied to all 100 (one step)
+    "udt_copy": 1.5,            # 10 of them copied (Copy's step: each a placed UDT of its own)
+    "udt_copy_undo": 1.0,       # that undone
 }
 
 
@@ -1650,17 +1658,13 @@ def run(log_path):
                     dt, parts, step, read_step, listed, put_step))
     log.check("speed budget (import blocks)", block_folder)
 
-    def saved_circuits():
-        from . import circuits as CI
-        from .circuit_window import CircuitBrowser
-        from .library import Library
-        w = state["win"]
-        lib = Library(os.path.join(tmp, "circuits"))
+    def device_sheet(w):
+        """A project whose sheet has 700 devices, each with two contacts, on rungs of their
+        own: (project, sheet, the coil's block, the contact's)."""
         coil, no = w.library.get("symbol", "Relay coil"), w.library.get("symbol", "Contact NO")
         p = M.Project.new()
         s = p.sheets[0]
         p.blocks[coil.name], p.blocks[no.name] = coil, no
-        # (the sheet: 700 devices, each with two contacts, on rungs of their own)
         for i in range(700):
             x, y = 40.0 + (i % 20) * 6.0, 2.0 + (i // 20) * 0.5
             s._put(M.Insert(coil.name, (x + 4.25, y), defn=coil,
@@ -1668,6 +1672,15 @@ def run(log_path):
             for dx in (0.25, 1.25):
                 s._put(M.Insert(no.name, (x + dx, y), defn=no,
                                 attrs={"TAG": "CR%d" % (5000 + i), "PARENT": "d%d" % i}))
+        return p, s, coil, no
+
+    def saved_circuits():
+        from . import circuits as CI
+        from .circuit_window import CircuitBrowser
+        from .library import Library
+        w = state["win"]
+        lib = Library(os.path.join(tmp, "circuits"))
+        p, s, coil, no = device_sheet(w)
         ents = []
         for i in range(100):
             y = 2.0 + i * 0.5
@@ -1739,6 +1752,65 @@ def run(log_path):
                 "%.2f s, a mouse move with it %.1f ms, undone %.2f s; 101 circuits listed "
                 "with pictures %.2f s" % (dsave, dplace, dmove * 1000, dundo, dbrowse))
     log.check("speed budget (saved circuits)", saved_circuits)
+
+    def udt_speed():
+        from . import udts as U
+        w = state["win"]
+        p, s, _coil, _no = device_sheet(w)
+        u = w.library.udts()[0]["Motor circuit, VFD"]
+        slow = 0.0
+        for i in range(100):
+            t0 = time.perf_counter()
+            # (each on a terminal strip, taking its next numbers: 300 on it by the last)
+            with p.edit("Insert UDT") as ed:
+                U.place(ed, p, s, u, (-200.0 + (i % 10) * 12.0, 2.0 + (i // 10) * 3.0),
+                        strip="TB101")
+            slow = max(slow, time.perf_counter() - t0)
+        nums = sorted(int(e.attrs["TERM"]) for e in s.inserts() if e.attrs.get("TAG") ==
+                      "TB101")
+        assert nums == list(range(1, 301)), "the UDTs' terminals not numbered on their strip"
+        gid = sorted(s.udts)[0]
+        t0 = time.perf_counter()
+        with p.edit("UDT properties") as ed:
+            U.apply(ed, p, U.plan(p, s, gid, {"Protection": "Fuses", "Line reactor":
+                                              U.INCLUDED}, {"HP": "25"}))
+        drebuild = time.perf_counter() - t0
+        assert any(e.block == "Fuses 3-pole" for e in U.members(s, gid).values()
+                   if isinstance(e, M.Insert)), "the UDT wasn't rebuilt"
+        t0 = time.perf_counter()
+        p.undo()
+        dundo = time.perf_counter() - t0
+        t0 = time.perf_counter()
+        first = U.plan(p, s, gid, values={"HP": "15"})
+        with p.edit("UDT properties") as ed:
+            for pl in [first] + U.apply_all_plans(p, s, gid, first.inst["values"],
+                                                  first.inst["ratings"], {}):
+                U.apply(ed, p, pl)
+        dall = time.perf_counter() - t0
+        assert all(s.udts[g]["values"]["HP"] == "15" for g in s.udts), "not applied to all"
+        # 10 copied in one step, as Copy does it: each a placed UDT of its own
+        from .tags import retag_copies
+        src = [e for g in sorted(s.udts)[:10] for e in U.members(s, g).values()]
+        t0 = time.perf_counter()
+        found = U.copied(s, [e.id for e in src])
+        with p.edit("Copy") as ed:
+            made = [ed.add(s, e) for e in retag_copies(p, s, [e.moved(0.0, -40.0)
+                                                              for e in src])]
+            U.adopt_copies(ed, p, s, found, {e.id: c for e, c in zip(src, made)})
+        dcopy = time.perf_counter() - t0
+        assert len(s.udts) == 110, "copies not placed UDTs of their own: %d" % len(s.udts)
+        t0 = time.perf_counter()
+        p.undo()
+        dcundo = time.perf_counter() - t0
+        assert len(s.udts) == 100
+        for key, dt in (("udt_place", slow), ("udt_rebuild", drebuild), ("udt_undo", dundo),
+                        ("udt_all", dall), ("udt_copy", dcopy), ("udt_copy_undo", dcundo)):
+            assert dt < BUDGET[key], "%s took %.3f s" % (key, dt)
+        return ("on a sheet of 2,100 devices, 100 UDTs placed on a strip (the slowest "
+                "%.3f s), one rebuilt %.3f s, undone %.3f s; a value applied to all 100 "
+                "%.2f s; 10 copied %.2f s, undone %.2f s" % (slow, drebuild, dundo, dall,
+                                                             dcopy, dcundo))
+    log.check("speed budget (UDTs)", udt_speed)
 
     w = state.get("win")
     if w is not None:

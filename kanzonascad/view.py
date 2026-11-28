@@ -1203,9 +1203,16 @@ class CadView(QWidget):
                         moved = [ent.moved(dx, dy) for ent in d["ents"]]
                         if copy:
                             from .tags import retag_copies
-                            for c in retag_copies(self.project, sheet, moved):
+                            from . import udts
+                            found = udts.copied(sheet, [ent.id for ent in d["ents"]])
+                            made = {}
+                            for ent, c in zip(d["ents"], retag_copies(self.project, sheet,
+                                                                      moved)):
                                 c.id = None
-                                new.add(ed.add(sheet, c).id)
+                                made[ent.id] = ed.add(sheet, c)
+                                new.add(made[ent.id].id)
+                            # (a placed UDT copied whole: one of its own, 0.30)
+                            udts.adopt_copies(ed, self.project, sheet, found, made)
                         else:
                             for c in moved:
                                 ed.change(sheet, c)
