@@ -4752,6 +4752,31 @@ def random_editing(log, out, ops, seed, drawing=None):
                                 got[g] = None if a is None else cur | ({a} if a else set())
         return {g: (a, any(w.num_lock for _s, w in gs[g])) for g, a in got.items()}, gs
 
+    def off_typed_number(g, n, gs):
+        """Is n, group g's number, a tap's number off a wire with a number typed by hand,
+        worked out from the drawing: a wire of another group touching an end of one of g's
+        on its sheet (or g touching one of its ends), numbered m, with n m and a tap's ending
+        (-1, a, -a, 1a...), and n's root (every tap ending taken off) a locked number? A tap
+        is numbered from the wire it taps, whatever that number is (manual: Taps): a tap off
+        a source arrow's wire, renumbered CR995 by the name typed for the arrow, is CR995-1
+        (the long battery, 0.30, seed 5252, step 465: the tap on a PLC point, numbering by
+        address turned off)."""
+        root = TAP_END.sub("", n)
+        if not any(w.num == root and w.num_lock for sh in p.sheets for w in sh.wires()):
+            return False
+        mine = {(sh.id, w.id) for sh, w in gs[g]}
+        tol = 1e-6 * max(1.0, s.k())
+        for sh, a in gs[g]:
+            for b in sh.wires():
+                if (sh.id, b.id) in mine or not b.num or not n.startswith(b.num) or \
+                        not TAP_END.fullmatch(n[len(b.num):]):
+                    continue
+                if any(b.touches(q, tol) for q in (a.points[0], a.points[-1])) or \
+                        any(a.touches(q, tol) for q in (b.points[0], b.points[-1])):
+                    BC.CHECKED["a tap on a PLC point off a number typed"] += 1
+                    return True
+        return False
+
     def op_io_numbers():
         # (0.21: Number wires on PLC I/O points by their address, turned on and off as the
         # owner would in Schematic settings, on a module with wires on some of its points:
@@ -4802,7 +4827,8 @@ def random_editing(log, out, ops, seed, drawing=None):
                     BC.CHECKED["wire on a PLC point numbered by its address"] += 1
                 else:
                     assert not nums & addrs and all(
-                        n and wirenums.split(TAP_END.sub("", n)) for n in nums), \
+                        n and (wirenums.split(TAP_END.sub("", n)) or
+                               off_typed_number(g, n, gs)) for n in nums), \
                         "with I/O numbering off, a wire on PLC point %s is %s" % (
                             sorted(addrs), nums)
                     BC.CHECKED["wire on a PLC point numbered again when turned off"] += 1

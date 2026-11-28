@@ -125,6 +125,22 @@ class IoWireNumbersTest(unittest.TestCase):
         self.set_io(True)
         self.assertEqual(self.num(w), "MY1")
 
+    def test_tap_off_a_typed_number_follows_it_when_turned_off(self):
+        # (the long battery, 0.30, seed 5252: a tap on a PLC point off a wire whose number
+        # was typed, CR995 (a source arrow's name typed renumbers its wire): on, the point's
+        # address; off, numbered as a tap is, from the wire it taps: CR995-1)
+        mod = self.place("1734-OB8E module", "8,9", {"SLOT": "3"})
+        q = dict(mod.pin_points())["0"]
+        with self.p.edit("wires") as ed:
+            bus = ed.add(self.s, M.Wire([(q[0] - 2.0, q[1] - 3.0), (q[0] - 2.0, q[1] + 3.0)],
+                                        num="CR995", num_lock=True))
+            tap = ed.add(self.s, M.Wire([q, (q[0] - 2.0, q[1])]))
+        self.assertEqual(self.num(tap.id), "CR995-1")
+        self.set_io(True)
+        self.assertEqual((self.num(tap.id), self.num(bus.id)), ("O:3/0", "CR995"))
+        self.set_io(False)
+        self.assertEqual((self.num(tap.id), self.num(bus.id)), ("CR995-1", "CR995"))
+
     def test_point_symbol_takes_its_addr(self):
         pt = self.place("PLC output", "8,9", {"ADDR": "O:4/2"})
         w = self.wire_to(pt, "OUT", run=-2.0)
