@@ -159,6 +159,66 @@ class ArrowNameTypedTest(unittest.TestCase):
         finally:
             self.win.__dict__.pop("ask_cross_reference", None)
 
+    def other_pair(self, num):
+        """Another wire numbered num, a source arrow on it (named num in capitals)."""
+        with self.p.edit("w") as ed:
+            other = ed.add(self.s1, M.Wire([(2.0, 1.0), (6.0, 1.0)]))
+        with self.p.edit("n") as ed:
+            wirenums.set_number(ed, self.p, self.s1, self.s1.entities[other.id], num)
+        arrow = self.place(self.s1, SRC, (6.0, 1.0))
+        self.assertEqual(self.s1.entities[arrow.id].attrs["TAG"], num.upper())
+        return self.s1.entities[other.id]
+
+    def typed_beside_other_connectors(self, num, typed, how):
+        """typed in the Properties panel for the source arrow, with connectors named typed on
+        another wire (numbered num), the cross-reference question answered how: what was
+        asked and told."""
+        from PySide6.QtWidgets import QMessageBox
+        self.other_pair(num)
+        src, dst = self.linked()
+        asked, told = [], []
+        self.win.ask_cross_reference = lambda n, where: asked.append(n) or how
+        real = QMessageBox.information
+        QMessageBox.information = staticmethod(lambda *a, **k: told.append(a[2]))
+        n = len(self.p.undo_stack)
+        try:
+            self.panel_tag(self.s1, src, typed)
+        finally:
+            QMessageBox.information = real
+            self.win.__dict__.pop("ask_cross_reference", None)
+        return src, dst, n, asked, told
+
+    def test_panel_source_given_other_connectors_name_refused_said(self):
+        # (the long battery, 0.30, seed 5243: a wire numbered 6010a, its arrows named 6010A;
+        # a source arrow given 6010A renumbered its wire, but kept its old name, its
+        # destinations with it: that name would join the two wires. Now refused, said)
+        src, dst, n, asked, told = self.typed_beside_other_connectors("x1077", "X1077", None)
+        self.assertEqual(asked, [])                         # (no wire has X1077 itself)
+        self.assertEqual(len(told), 1)
+        self.assertIn("X1077 is the name of connectors on another wire", told[0])
+        self.assertEqual(self.s1.entities[src.id].to_dict(), src.to_dict())
+        self.assertEqual(self.s2.entities[dst.id].to_dict(), dst.to_dict())
+        self.assertEqual(self.num(), src.attrs["TAG"])
+        self.assertEqual(len(self.p.undo_stack), n)
+
+    def test_panel_source_given_other_connectors_name_just_the_same_refused(self):
+        # ("just the same number" for a number whose wire has connectors of that name: the
+        # source arrow can't take it, so nothing changes, and why is said)
+        src, dst, n, asked, told = self.typed_beside_other_connectors("X1077", "X1077", "same")
+        self.assertEqual(asked, ["X1077"])
+        self.assertEqual(len(told), 1)
+        self.assertEqual(self.s1.entities[src.id].to_dict(), src.to_dict())
+        self.assertEqual(self.s2.entities[dst.id].to_dict(), dst.to_dict())
+        self.assertEqual(len(self.p.undo_stack), n)
+
+    def test_panel_source_given_other_connectors_name_as_a_cross_reference(self):
+        # (answered Source: the two wires joined by a pair of connectors, the name taken)
+        _src, _dst, n, asked, told = self.typed_beside_other_connectors("X1077", "X1077",
+                                                                        "source")
+        self.assertEqual((asked, told), (["X1077"], []))
+        self.renumbered("X1077")
+        self.assertEqual(len(self.p.undo_stack), n + 1)
+
     def test_panel_several_selected_with_a_source_says_why(self):
         # (its name is its wire's number: one at a time, as a wire's number is typed)
         src, dst = self.linked()

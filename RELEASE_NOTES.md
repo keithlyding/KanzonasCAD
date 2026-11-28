@@ -35,6 +35,9 @@ build fails without them.
 - A circuit a hair off the grid (copied from an odd point): a bus landed on its pins now runs
   in line with its wires instead of a few thousandths beside them, and a position typed in the
   Properties panel keeps it in line with them too.
+- A name typed for a source arrow that the arrows of another wire already have (in capitals or
+  not) is now refused with a message, unless you make it a cross-reference. Before, its wire
+  took the number but the arrow and its destinations kept their old name.
 
 ## 0.29
 

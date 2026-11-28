@@ -570,6 +570,24 @@ class UdtTest(unittest.TestCase):
         st = [x for x in strips.find(self.p) if x.tag == dev.attrs["TAG"]][0]
         self.assertIs(st.dev[1].id, dev.id)
 
+    def test_terminals_skip_the_strip_devices_spares_not_its_tags_old_ones(self):
+        # (the long battery, 0.30, seed 5242: spares kept by the tag from before the strip had
+        # its device, which keeps its own, aren't on the strip, as the Terminal strips window
+        # shows it: their numbers are free; the device's spares are taken)
+        from kanzonascad import strips, tags
+        sd = self.lib.get("symbol", "Terminal strip")
+        with self.p.edit("strip") as ed:
+            ed.block(sd)
+            dev = ed.add(self.s, M.Insert(sd.name, (1, 1), defn=self.p.blocks[sd.name],
+                                          attrs=tags.new_attrs(self.p, self.s, sd, {})))
+            key = strips.TAG_KEY + dev.attrs["TAG"].upper()
+            ed.project_settings({strips.SETTING: {dev.attrs["DEV"]: {"spares": ["2"]},
+                                                  key: {"spares": ["1", "3"]}}})
+        st = [x for x in strips.find(self.p, wires=False) if x.tag == dev.attrs["TAG"]][0]
+        self.assertEqual([(r.num, r.spare) for r in st.rows], [("2", True)])
+        gid = self.insert_on(self.udt(), (2.0, 10.0), dev.attrs["TAG"])
+        self.assertEqual([t.attrs["TERM"] for t in self.terms(gid)], ["1", "3", "4"])
+
     def test_terminals_on_a_tag_two_strips_share(self):
         # (two strips of one tag, a strip symbol's typed twice, say: the numbers of both taken)
         from kanzonascad import tags

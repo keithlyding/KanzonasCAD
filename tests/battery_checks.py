@@ -1549,23 +1549,39 @@ def _strip_devices(project, tag):
 def strip_numbers(project, tag):
     """The numbers taken on the strip tagged tag: its drawn terminals' (those belonging to a
     device of that tag, and those of that tag belonging to no device) and the spares kept
-    for it in the project's settings."""
+    for it in the project's settings: a strip device's under its hidden id, or, while it has
+    nothing kept there, those kept by the tag (from before it had the device); terminals of
+    the tag on no device, those kept by the tag. Spares kept by the tag for a strip that has
+    since got a device with its own are no longer on any strip (the long battery, 0.30, seed
+    5242: TB101's device kept spare 29, the tag still 17 and 18 from before, which the
+    Terminal strips window doesn't show: new terminals rightly took 17 and 18)."""
     from kanzonascad import tags
     devs = _strip_devices(project, tag)
     every = {e.attrs["DEV"] for s in project.sheets for e in s.inserts()
              if tags.is_device(e) and e.attrs.get("DEV")}
-    out = set()
+    out, loose = set(), False
+    # (a device of the tag is a strip when it is a Terminal strip symbol, or terminals belong
+    # to it: a distribution block's)
+    strips = {d for d, e in devs.items() if e.defn is not None and
+              e.defn.role == "parent" and e.defn.prefix == "TB"}
     for s in project.sheets:
         for e in s.inserts():
             if not _is_terminal(e) or not e.attrs.get("TERM"):
                 continue
             par = e.attrs.get("PARENT")
-            if par in devs or (par not in every and
-                               (e.attrs.get("TAG") or "").upper() == tag.upper()):
+            if par in devs:
                 out.add(e.attrs["TERM"])
+                strips.add(par)
+            elif par not in every and (e.attrs.get("TAG") or "").upper() == tag.upper():
+                out.add(e.attrs["TERM"])
+                loose = True
     kept = project.settings.get("strips") or {}
-    for key in list(devs) + ["tag:" + tag.upper()]:
-        out.update(str(n) for n in (kept.get(key) or {}).get("spares") or ())
+    by_tag = kept.get("tag:" + tag.upper())
+    held = [kept[d] if kept.get(d) is not None else by_tag for d in strips]
+    if loose:
+        held.append(by_tag)
+    for got in held:
+        out.update(str(n) for n in (got or {}).get("spares") or ())
     return out
 
 
