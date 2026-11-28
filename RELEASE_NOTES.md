@@ -38,6 +38,8 @@ build fails without them.
 - A name typed for a source arrow that the arrows of another wire already have (in capitals or
   not) is now refused with a message, unless you make it a cross-reference. Before, its wire
   took the number but the arrow and its destinations kept their old name.
+- Terminal strips: a jumper to a terminal that has no number yet is no longer shown as if it
+  were kept (a jumper takes two numbered terminals).
 
 ## 0.29
 

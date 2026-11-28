@@ -178,6 +178,19 @@ class StripTest(unittest.TestCase):
         self.assertEqual(self.p.settings["strips"][st.key]["order"], ["2", "1", "3"])
 
     # ---- edited ---------------------------------------------------------------------------
+    def test_a_jumper_to_an_unnumbered_terminal_is_not_shown(self):
+        # (0.30, the battery, seed 526: a jumper from a numbered terminal to a TB? one showed
+        # J1 on the numbered one in the window, and the strip kept no jumper)
+        self.three()
+        lay = strips.Layout(self.only())
+        lay.rows[2]["num"] = None                   # (a terminal not numbered yet)
+        self.assertTrue(lay.add_jumper([0, 2]))
+        self.assertEqual(lay.jumpers(), [])
+        self.assertEqual(lay.jumper_names(), {})
+        self.assertTrue(lay.add_jumper([0, 1]))     # (two numbered: shown and kept)
+        self.assertEqual(lay.jumper_names(), {0: "J1", 1: "J1"})
+        self.assertEqual(lay.jumpers(), [[lay.rows[0]["num"], lay.rows[1]["num"]]])
+
     def test_reorder_renumber_spare_jumper_in_one_step(self):
         got = self.three()
         before = self.p.to_dict()

@@ -599,11 +599,17 @@ class Layout:
         return [g for g in out if len(g) >= 2]
 
     def jumper_names(self):
-        """{row index: "J1"...} as jumpers() names them."""
+        """{row index: "J1"...} as jumpers() names them: only a jumper on two or more numbered
+        terminals, the ones kept (0.30: a jumper from a numbered terminal to a TB? one showed
+        J1 on the numbered one, and Save kept no jumper)."""
+        count = {}
+        for r in self.rows:
+            if r["jumper"] is not None and r["num"]:
+                count[r["jumper"]] = count.get(r["jumper"], 0) + 1
         names, out = {}, {}
         for i, r in enumerate(self.rows):
             j = r["jumper"]
-            if j is None or not r["num"]:
+            if j is None or not r["num"] or count[j] < 2:
                 continue
             if j not in names:
                 names[j] = jumper_name(len(names))
