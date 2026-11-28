@@ -1693,6 +1693,30 @@ def _joined_locked(sheet, start, taps):
     return out
 
 
+def _onto_itself(sheet, to, gid, on):
+    """Whether a copy of placed UDT gid of sheet, its members on ({role: object} on sheet
+    to), was pasted onto the original itself, worked out from the drawing: on the same sheet,
+    each of its symbols lying exactly on the original's symbol of the same role (the same
+    block, place, turn and mirror). (Not from the placed UDTs' base points: the original's
+    is where it was put, and a Move of all of it since leaves it there; the long battery,
+    0.30, seeds 523 and 5233: the copy pasted in place onto a moved original, its wires
+    joined to the original's and sharing their numbers.)"""
+    from kanzonascad import udts as U
+    if to is not sheet or gid not in sheet.udts:
+        return False
+    theirs = U.members(sheet, gid)
+    syms = [(r, e) for r, e in on.items() if isinstance(e, M.Insert)]
+    if not syms:
+        return False
+    for r, e in syms:
+        o = theirs.get(r)
+        if not isinstance(o, M.Insert) or o.block != e.block or \
+                o.mirror != e.mirror or abs((o.angle - e.angle + 180.0) % 360.0 - 180.0) > 1e-6 or \
+                math.hypot(o.pos[0] - e.pos[0], o.pos[1] - e.pos[1]) > 1e-6:
+            return False
+    return True
+
+
 def udt_copied(project, sheet, was, to, gid, intact=False):
     """A placed UDT copied whole (was: udt_snapshot of it on sheet) is a new placed UDT gid on
     sheet to: the same UDT, choices, values, rating rules and overrides; all of its members
@@ -1709,7 +1733,8 @@ def udt_copied(project, sheet, was, to, gid, intact=False):
     udt = U.Udt.from_dict(was["type"])
     # (the members it had on the sheet: one erased by hand since it was placed isn't copied)
     left = was["roles"] - set(on)
-    if not intact or (to is sheet and b["at"] == a["at"] and b["angle"] == a["angle"]):
+    onto = _onto_itself(sheet, to, a["id"], on)
+    if not intact or onto:
         # (pasted in place onto the original itself: its wires lie on the original's, which
         # the sheet's clean-up joins; or the original edited by hand, its wires joined when
         # copied; every symbol is still copied, and each wire not there is kept as erased by
@@ -1737,8 +1762,7 @@ def udt_copied(project, sheet, was, to, gid, intact=False):
     # locked is copied as typed, and the wires joined to that wire share it; a copy pasted
     # onto the original itself is joined to its wires, and shares their numbers)
     from kanzonascad import wirenums
-    if wirenums.enabled(project) and not (to is sheet and b["at"] == a["at"] and
-                                          b["angle"] == a["angle"]):
+    if wirenums.enabled(project) and not onto:
         def numbers(objs):
             return {e.num for e in objs if isinstance(e, M.Wire) and e.num and not e.num_lock}
         # (the locked numbers its wires are joined to on its sheet, its own or not: a wire of
