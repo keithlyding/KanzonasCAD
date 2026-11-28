@@ -5054,6 +5054,14 @@ def random_editing(log, out, ops, seed, drawing=None):
         have = UDT.members(sh, gid)
         if set(have) != set(inst["members"]):
             return False
+        # (a member of its choices erased or left by hand is kept as gone, not put back: a
+        # copy of it has no such member at all, so all of its members are there, and still it
+        # isn't as its UDT draws it; the long battery, 0.30, seed 5251: a copy of a copy
+        # whose L3 wire from the disconnect had been erased)
+        ch = u.choices(inst["choices"])
+        if any(u.member(r) is not None and u.is_active(u.member(r), ch)
+               for r in inst.get("gone", ())):
+            return False
         bb = None
         for e in have.values():
             bb = G.bbox_union(bb, e.bbox())
