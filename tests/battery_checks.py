@@ -1809,14 +1809,36 @@ def udt_others_alone(sheet, ed, was, now):
     two or more of the symbol's pins on it, is cut between them as any symbol placed on a
     wire cuts it (wires.break_under), its pieces beyond the pins left (the long battery, 0.30,
     seed 5222: one of its wires stretched by hand across the other's place, a fuse put on
-    it). Returns how many were cut."""
+    it); and a contact of it whose device had been erased, kept with its tag, links itself
+    to a device the rebuild put down that took that tag, as the manual says a contact with a
+    tag no device has does (the long battery, 0.30, seed 5252: an overload contact F2502 left
+    without its overload relay; the rebuild of another put down fuses, the next free F2502).
+    Returns how many were cut."""
+    from kanzonascad import tags
     put = [sheet.entities[op[2]] for op in ed.ops
            if op[0] == "ent" and op[1] == sheet.id and op[4] is not None and
            op[4].get("kind") == "insert" and op[2] in sheet.entities]
     gone = {op[2] for op in ed.ops if op[0] == "ent" and op[1] == sheet.id and op[4] is None}
+    # (the hidden ids of the devices before the edit: those now, less those of what it put
+    # down or changed, and those of what it erased or changed as they were)
+    devs = set(tags.devices(ed.project))
+    devs -= {(op[4].get("attrs") or {}).get("DEV") for op in ed.ops
+             if op[0] == "ent" and op[4] is not None}
+    devs |= {(op[3].get("attrs") or {}).get("DEV") for op in ed.ops
+             if op[0] == "ent" and op[3] is not None}
     cut = 0
     for i, d in was.items():
         if now.get(i) == d:
+            continue
+        a, b = d.get("attrs") or {}, (now.get(i) or {}).get("attrs") or {}
+        if d.get("kind") == "insert" and tags.is_child(sheet.entities.get(i)) and \
+                a.get("TAG") and a.get("PARENT") not in devs and \
+                dict(now[i], attrs=dict(b, PARENT=a.get("PARENT"))) == d:
+            new = [e for e in put if tags.is_device(e) and e.attrs.get("DEV") == b.get("PARENT")]
+            assert new and new[0].attrs.get("TAG", "").upper() == a["TAG"].upper(), \
+                "another placed UDT's contact %s linked to a device it wasn't tagged for" % i
+            CHECKED["UDT: another's contact without its device links to the new one of its "
+                    "tag"] += 1
             continue
         assert d.get("kind") == "wire" and i not in now and i in gone, \
             "UDT properties changed another placed UDT's %s %s" % (d.get("kind"), i)

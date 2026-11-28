@@ -865,6 +865,40 @@ class UdtTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             BC.udt_others_alone(self.s, self.p.undo_stack[-1], was, now)
 
+    def test_another_ones_contact_without_its_device_links_to_the_new_one(self):
+        # (the long battery, 0.30, seed 5252: in an IEC project a starter circuit's overload
+        # relay F102 erased by hand, its contact kept, tagged F102; another circuit rebuilt
+        # with fuses, which took the next free F102: the contact links itself to them, as a
+        # contact with a tag no device has does; nothing else of the first was touched)
+        self.iec()
+        a = self.insert_on(self.udt(DOL), (2.0, 10.0), "")
+        ol = [e for e in self.by_role(a).values()
+              if getattr(e, "block", "") == "Thermal overload 3-pole (IEC)"][0]
+        contact = [e for e in self.by_role(a).values()
+                   if getattr(e, "block", "") == "Overload contact NC (IEC)"][0]
+        self.assertEqual((ol.attrs["TAG"], contact.attrs["TAG"]), ("F102", "F102"))
+        with self.p.edit("erased") as ed:
+            ed.remove(self.s, ol.id)
+        b = self.insert_on(self.udt(VFD), (2.0, 4.0), "", {"Protection": "Manual motor starter"})
+        was = {i: self.s.entities[i].to_dict() for i in self.s.udts[a]["members"].values()
+               if i in self.s.entities}
+        self.props(b, {"Protection": "Fuses"})
+        fuses = [e for e in self.by_role(b).values()
+                 if getattr(e, "block", "") == "Fuses 3-pole (IEC)"][0]
+        self.assertEqual(fuses.attrs["TAG"], "F102")
+        now = {i: self.s.entities[i].to_dict() for i in self.s.udts[a]["members"].values()
+               if i in self.s.entities}
+        self.assertEqual({i for i in was if was[i] != now.get(i)}, {contact.id})
+        self.assertEqual(now[contact.id]["attrs"]["PARENT"], fuses.attrs["DEV"])
+        self.assertEqual(BC.udt_others_alone(self.s, self.p.undo_stack[-1], was, now), 0)
+        # (the battery's check catches a contact taken from a device that was there)
+        coil = [e for e in self.by_role(a).values()
+                if getattr(e, "block", "") == "Contactor coil (IEC)"][0]
+        was[contact.id] = dict(was[contact.id], attrs=dict(was[contact.id]["attrs"],
+                                                           PARENT=coil.attrs["DEV"]))
+        with self.assertRaises(AssertionError):
+            BC.udt_others_alone(self.s, self.p.undo_stack[-1], was, now)
+
     def test_cancelled_apply_to_all_changes_nothing(self):
         a = self.place(self.udt(DOL), (2.0, 10.0))
         self.place(self.udt(DOL), (2.0, 4.0))
