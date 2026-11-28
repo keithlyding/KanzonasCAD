@@ -30,6 +30,8 @@ build fails without them.
 **Fixed**
 - Terminal strips: numbering a terminal that had no number no longer shows it in a different
   place from where the strip puts it.
+- Sheets at a large scale (such as 1/4" = 1'-0") open much faster and use far less memory: a
+  project with many of them could use hundreds of megabytes just to open.
 
 ## 0.29
 
