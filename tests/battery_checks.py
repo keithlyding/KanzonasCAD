@@ -1762,6 +1762,44 @@ def udt_copied(project, sheet, was, to, gid, intact=False):
                                                      else "")] += 1
 
 
+def udt_others_alone(sheet, ed, was, now):
+    """After UDT properties (edit ed) rebuilt a placed UDT of sheet, another one's members,
+    was and now ({id: to_dict()} of those on the sheet before and after), are as they were,
+    save for one thing the drawing asks for: a wire of it under a symbol the rebuild put down,
+    two or more of the symbol's pins on it, is cut between them as any symbol placed on a
+    wire cuts it (wires.break_under), its pieces beyond the pins left (the long battery, 0.30,
+    seed 5222: one of its wires stretched by hand across the other's place, a fuse put on
+    it). Returns how many were cut."""
+    put = [sheet.entities[op[2]] for op in ed.ops
+           if op[0] == "ent" and op[1] == sheet.id and op[4] is not None and
+           op[4].get("kind") == "insert" and op[2] in sheet.entities]
+    gone = {op[2] for op in ed.ops if op[0] == "ent" and op[1] == sheet.id and op[4] is None}
+    cut = 0
+    for i, d in was.items():
+        if now.get(i) == d:
+            continue
+        assert d.get("kind") == "wire" and i not in now and i in gone, \
+            "UDT properties changed another placed UDT's %s %s" % (d.get("kind"), i)
+        w = M.Entity.from_dict(d)
+        pins = [[q for _n, q in e.pin_points() if w.distance(q) <= 1e-6] for e in put]
+        pins = [q for on in pins if len(on) >= 2 for q in on]
+        assert pins, "UDT properties took away another placed UDT's wire %s: no symbol put " \
+                     "on it" % i
+        # (its ends beyond the symbol's pins are still wire ends: the pieces left)
+        x0, y0 = min(q[0] for q in pins) - 1e-6, min(q[1] for q in pins) - 1e-6
+        x1, y1 = max(q[0] for q in pins) + 1e-6, max(q[1] for q in pins) + 1e-6
+        for x, y in (w.points[0], w.points[-1]):
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                continue
+            assert any(isinstance(o, M.Wire) and
+                       any(math.hypot(x - p[0], y - p[1]) <= 1e-6
+                           for p in (o.points[0], o.points[-1]))
+                       for o in sheet.query((x - 1e-6, y - 1e-6, x + 1e-6, y + 1e-6))), \
+                "another placed UDT's wire %s, cut by a symbol, lost its end %s" % (i, (x, y))
+        cut += 1
+    return cut
+
+
 # ---- contact pin numbers (0.28): worked out here from the attributes, not pinnumbers.py -------
 _SECOND = {"NC": "12", "NO": "34", "NCTO": "56", "NCTC": "56", "NOTC": "78", "NOTO": "78"}
 

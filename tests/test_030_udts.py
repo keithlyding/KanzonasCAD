@@ -822,6 +822,31 @@ class UdtTest(unittest.TestCase):
         self.p.undo()
         self.assertEqual(fuse(c)[1].attrs["RATING"], "40A")
 
+    def test_another_ones_wire_under_a_part_added_is_cut_by_it(self):
+        # (the long battery, 0.30, seed 5222: a wire of one placed UDT stretched by hand across
+        # another's place; UDT properties there put a part on it, which cut it between its
+        # pins as any symbol placed on a wire does; nothing else of the first was touched)
+        a = self.place(self.udt(), (2.0, 10.0))
+        b = self.place(self.udt(), (2.0, 30.0))
+        w = [e for e in self.by_role(b).values() if isinstance(e, M.Wire)][0]
+        # (the Line reactor goes at x 5.25-5.75: run down its pins' left side, at x 5.25)
+        with self.p.edit("stretched") as ed:
+            ed.change(self.s, w.copy(points=[w.points[0], (5.25, w.points[0][1]),
+                                             (5.25, 7.0)]))
+        was = {i: self.s.entities[i].to_dict() for i in self.s.udts[b]["members"].values()
+               if i in self.s.entities}
+        self.props(a, {"Line reactor": U.INCLUDED})
+        now = {i: self.s.entities[i].to_dict() for i in self.s.udts[b]["members"].values()
+               if i in self.s.entities}
+        self.assertEqual({i for i in was if was[i] != now.get(i)}, {w.id})
+        self.assertNotIn(w.id, self.s.entities)
+        self.assertEqual(BC.udt_others_alone(self.s, self.p.undo_stack[-1], was, now), 1)
+        # (the battery's check catches anything else: a wire of b changed in that step)
+        other = [i for i, d in now.items() if d["kind"] == "wire"][0]
+        now[other] = dict(now[other], num="9999")
+        with self.assertRaises(AssertionError):
+            BC.udt_others_alone(self.s, self.p.undo_stack[-1], was, now)
+
     def test_cancelled_apply_to_all_changes_nothing(self):
         a = self.place(self.udt(DOL), (2.0, 10.0))
         self.place(self.udt(DOL), (2.0, 4.0))

@@ -3954,9 +3954,14 @@ def random_editing(log, out, ops, seed, drawing=None):
             BC.CHECKED["properties: a source arrow's name with others, refused, said"] += 1
             return
         now = [s.entities.get(e.id) for e in pick]
-        for e in now:
+        for old, e in zip(pick, now):
             assert e is not None, "setting %s took an object away" % key
             got = model_value(key, e, s)
+            if key in ("x", "y"):
+                # (moved by what was changed from the 4 decimals shown: the part finer than
+                # that kept, the circuit it is drawn with off the grid by it; seed 5223)
+                was = model_value(key, old, s)
+                want = value + (was - round(was, 4))
             if key == "wire_lock" and not e.num:
                 continue
             if key[5:] in tags_mod.NUMBER_ATTRS and key.startswith("attr_") and not value:
@@ -5224,7 +5229,13 @@ def random_editing(log, out, ops, seed, drawing=None):
             now = {i: sh.entities[i].to_dict() for i in sh.udts[g]["members"].values()
                    if i in sh.entities}
             if not answer["all"] or sh.udts[g]["udt"] != sh.udts[gid]["udt"]:
-                assert now == was[g], "UDT properties changed another placed UDT"
+                # (as they were; only a wire of theirs under a symbol the rebuild put down is
+                # cut by it, as any symbol placed on a wire cuts it)
+                if len(p.undo_stack) == n_undo + 1 and \
+                        BC.udt_others_alone(sh, p.undo_stack[-1], was[g], now):
+                    BC.CHECKED["UDT: another's wire under a symbol put down, cut"] += 1
+                assert len(p.undo_stack) == n_undo + 1 or now == was[g], \
+                    "UDT properties changed another placed UDT"
                 BC.CHECKED["UDT: the others left alone"] += 1
             elif hp:
                 assert sh.udts[g]["values"]["HP"] == hp, "applied to all: HP not given"
